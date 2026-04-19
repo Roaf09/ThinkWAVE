@@ -545,7 +545,7 @@ export default function StudentPlay() {
           <div className="countdown-card">
             <h3 className="countdown-title" style={{ color: dark ? "#fff" : "#17305f" }}>Get Ready</h3>
             <div key={countdown} className="countdown-number">{countdown}</div>
-            <p className="countdown-sub" style={{ color: dark ? "rgba(255,255,255,0.75)" : "#5a6a9a" }}>Quiz is about to start</p>
+            <p className="countdown-sub" style={{ color: dark ? "rgba(255,255,255,0.75)" : "#5a6a9a" }}>Session is about to start</p>
           </div>
         </div>
       </div>
