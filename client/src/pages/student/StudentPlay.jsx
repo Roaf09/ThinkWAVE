@@ -57,23 +57,54 @@ function ThemeTogglePill({ dark, onClick, style, className = "" }) {
       type="button"
       style={{
         padding: "7px 14px",
-        borderRadius: 14,
-        fontSize: 12,
+        borderRadius: 20,
+        fontSize: 13,
         fontWeight: 700,
-        color: dark ? "#dbe7ff" : "#17305f",
-        border: dark ? "1px solid rgba(191,208,255,0.18)" : "1px solid rgba(43,108,255,0.18)",
-        background: dark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.88)",
+        color: dark ? "#bfd0ff" : "#5a6a9a",
+        border: dark ? "1px solid rgba(191,208,255,0.18)" : "1px solid rgba(43,108,255,0.16)",
+        background: dark ? "rgba(255,255,255,0.04)" : "transparent",
         cursor: "pointer",
-        transition: "background 0.25s, color 0.25s, border-color 0.25s, transform 0.18s, box-shadow 0.25s",
+        transition: "background 0.25s, color 0.25s, border-color 0.25s, transform 0.18s",
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
+        gap: 8,
         whiteSpace: "nowrap",
         ...(style || {}),
       }}
     >
-      <span style={{ fontSize: 13 }}>{dark ? "☀️" : "🌙"}</span>
+      <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
       <span>{dark ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
+
+function SoundTogglePill({ muted, onClick, style, className = "" }) {
+  return (
+    <button
+      className={`sp-inline-sound-toggle ${className}`.trim()}
+      onClick={onClick}
+      type="button"
+      style={{
+        padding: "7px 14px",
+        borderRadius: 20,
+        fontSize: 13,
+        fontWeight: 800,
+        color: muted ? "#ffd4d4" : "#d8ffe8",
+        border: muted ? "1px solid rgba(255,120,120,0.28)" : "1px solid rgba(120,255,180,0.24)",
+        background: muted ? "rgba(127, 29, 29, 0.26)" : "rgba(18, 96, 63, 0.22)",
+        cursor: "pointer",
+        transition: "background 0.25s, color 0.25s, border-color 0.25s, transform 0.18s",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        whiteSpace: "nowrap",
+        ...(style || {}),
+      }}
+      title={muted ? "Unmute sounds" : "Mute sounds"}
+      aria-label={muted ? "Unmute sounds" : "Mute sounds"}
+    >
+      <span style={{ fontSize: 14 }}>{muted ? "🔇" : "🔊"}</span>
+      <span>{muted ? "Muted" : "Sound"}</span>
     </button>
   );
 }
@@ -127,19 +158,63 @@ export default function StudentPlay() {
   const [postAnswerPhase, setPostAnswerPhase] = useState(null);
   const [exiting, setExiting] = useState(false);
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
+  const [waitingForFinalFx, setWaitingForFinalFx] = useState(false);
+  const [feedbackPulse, setFeedbackPulse] = useState("");
+  const [feedbackFxKey, setFeedbackFxKey] = useState(0);
 
   const socketRef = useRef(null);
   const currentQRef = useRef(null);
   const renameTimer = useRef(null);
   const completeTimer = useRef(null);
+  const feedbackHideTimer = useRef(null);
+  const feedbackPulseTimer = useRef(null);
   const participantId = Number(localStorage.getItem("qz_participantId") || "0");
   const reconnectKey = localStorage.getItem("qz_reconnectKey") || "";
 
-  const pageBg = dark ? "radial-gradient(circle at top left, rgba(43,108,255,0.18), transparent 32%), radial-gradient(circle at bottom right, rgba(34,197,94,0.10), transparent 26%), linear-gradient(180deg, #07111f 0%, #0b1530 46%, #0e1733 100%)" : "radial-gradient(circle at top left, rgba(43,108,255,0.15), transparent 34%), radial-gradient(circle at bottom right, rgba(56,189,248,0.12), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #edf4ff 48%, #e6eeff 100%)";
+  const pageBg = dark ? "#0a4eb4" : "#6db9f1";
   const cardBg = dark ? "#0e1733" : "#ffffff";
   const cardBor = dark ? "#1e2d55" : "#c7d2fe";
   const textC = dark ? "#e7e9ee" : "#0f172a";
   const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
+  const currentSoundMode = state?.status === "LIVE"
+    ? "playing"
+    : (!state?.status || state?.status === "LOBBY" || state?.status === "PAUSED")
+      ? "lobby"
+      : null;
+
+  function handleToggleMute() {
+    const nextMuted = soundManager.toggleMute();
+    setIsMuted(nextMuted);
+    if (!nextMuted && currentSoundMode) {
+      void soundManager.startBGM(currentSoundMode);
+    }
+  }
+
+  useEffect(() => {
+    function unlockAudio() {
+      void soundManager.unlock().then(() => {
+        if (currentSoundMode) {
+          void soundManager.startBGM(currentSoundMode);
+        }
+      });
+    }
+
+    window.addEventListener("pointerdown", unlockAudio, { passive: true });
+    window.addEventListener("keydown", unlockAudio);
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [currentSoundMode]);
+
+  useEffect(() => {
+    if (!currentSoundMode) {
+      soundManager.stopBGM();
+      return;
+    }
+    void soundManager.startBGM(currentSoundMode);
+  }, [currentSoundMode, isMuted]);
 
   useEffect(() => {
     function onVis() {
@@ -160,36 +235,31 @@ export default function StudentPlay() {
     const s = makeSocket();
     socketRef.current = s;
     s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey }));
-    s.on("student:connected", () => { void soundManager.startBGM(); });
+    s.on("student:connected", () => { void soundManager.startBGM("lobby"); });
     s.on("student:error", (e) => setMsg(e?.message || "Could not join the session."));
     s.on("session:state", (payload) => {
       setState((prev) => {
         const prevIdx = prev?.current_question_index;
         const newIdx = payload.state?.current_question_index;
         if (prevIdx !== undefined && prevIdx !== newIdx) {
-          setShowFeedback(true);
           setPostAnswerPhase(null);
-          setTimeout(() => {
-            setShowFeedback(false);
-            setFeedbackQ(null);
-            setAnswerText("");
-            setSelectedChoice("");
-            setMatchingMap({});
-            setSpell({ built: "", bank: [] });
-            setSubmittedQId(null);
-            setSubmitLabel("Submit");
-            setProposalStatus("");
-            setGroupProposal(null);
-          }, 2000);
+          setAnswerText("");
+          setSelectedChoice("");
+          setMatchingMap({});
+          setSpell({ built: "", bank: [] });
+          setSubmittedQId(null);
+          setSubmitLabel("Submit");
+          setProposalStatus("");
+          setGroupProposal(null);
         }
         return payload.state;
       });
       setQuestions(payload.questions || []);
       if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
-      if (payload.state?.status === "LIVE") void soundManager.startBGM();
+      if (payload.state?.status === "LIVE") void soundManager.startBGM("playing");
+      if (payload.state?.status === "LOBBY" || payload.state?.status === "PAUSED") void soundManager.startBGM("lobby");
       if (payload.state?.status === "ENDED") {
         soundManager.stopBGM();
-        setPostAnswerPhase(null);
       }
     });
     s.on("scores:update", (sc) => setScores(sc || []));
@@ -224,20 +294,39 @@ export default function StudentPlay() {
         setSubmitLabel(a.message);
         return;
       }
+
+      clearTimeout(feedbackHideTimer.current);
+      clearTimeout(feedbackPulseTimer.current);
+
       setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
+      setShowFeedback(true);
+      setFeedbackFxKey((v) => v + 1);
+      setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
+      feedbackHideTimer.current = setTimeout(() => {
+        setShowFeedback(false);
+        setFeedbackQ(null);
+      }, 1650);
+      feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
+
       setSubmitLabel(a.viaGroup ? "Group Submitted ✓" : a.isCorrect ? "Submitted ✓" : "Submitted");
       const isLast = currentQRef.current && stateRef.current && Number(stateRef.current.current_question_index || 0) >= Math.max(0, questionCountRef.current - 1);
+      const effectPromise = a.isCorrect ? soundManager.play("correct") : soundManager.play("wrong");
+
       if (isLast) {
-        setPostAnswerPhase("complete");
-        clearTimeout(completeTimer.current);
-        completeTimer.current = setTimeout(() => setPostAnswerPhase("wait"), 4000);
+        setWaitingForFinalFx(true);
+        Promise.resolve(effectPromise).finally(() => {
+          setWaitingForFinalFx(false);
+          setPostAnswerPhase("complete");
+          clearTimeout(completeTimer.current);
+          completeTimer.current = setTimeout(() => setPostAnswerPhase("wait"), 4000);
+        });
       }
-      if (a.isCorrect) void soundManager.play("correct");
-      else void soundManager.play("wrong");
     });
 
     return () => {
       clearTimeout(completeTimer.current);
+      clearTimeout(feedbackHideTimer.current);
+      clearTimeout(feedbackPulseTimer.current);
       soundManager.stopBGM();
       s.disconnect();
     };
@@ -344,7 +433,7 @@ export default function StudentPlay() {
       ? "Groups update in real time as the teacher prepares the session."
       : "The teacher will start the session soon.";
 
-  if (state?.status === "ENDED") {
+  if (state?.status === "ENDED" && !waitingForFinalFx && !showFeedback) {
     const myScore = scores.find((s) => s.participant_id === participantId);
     const myRank = scores.findIndex((s) => s.participant_id === participantId) + 1;
     return (
@@ -354,6 +443,10 @@ export default function StudentPlay() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
               <div style={{ fontSize: 52 }}>🏆</div>
                           </div>
+            {/* <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              <SoundTogglePill muted={isMuted} onClick={handleToggleMute} />
+              <ThemeTogglePill dark={dark} onClick={toggleTheme} />
+            </div> */}
             <h2 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 8px", color: textC }}>Complete!</h2>
             {myScore && <p style={{ fontSize: 15, color: mutedC }}>You scored <b style={{ color: "#2b6cff" }}>{myScore.total_points} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
           </div>
@@ -387,6 +480,10 @@ export default function StudentPlay() {
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
             <h3 className="sp-wait-title" style={{ color: textC, margin: 0 }}>{waitingTitle}<LoadingDots color={mutedC} /></h3>
+            {/* <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              <SoundTogglePill muted={isMuted} onClick={handleToggleMute} />
+              <ThemeTogglePill dark={dark} onClick={toggleTheme} />
+            </div> */}
           </div>
           <p className="sp-wait-subtitle" style={{ color: mutedC }}>{waitingSubtitle}</p>
           {msg && <p style={{ color: "#ef4444", fontWeight: 800 }}>{msg}</p>}
@@ -484,10 +581,20 @@ export default function StudentPlay() {
   return (
     <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
       {showFeedback && feedbackQ && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: feedbackQ.isCorrect ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "twFadeOut 2s ease forwards" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 80, marginBottom: 10 }}>{feedbackQ.isCorrect ? "✅" : "❌"}</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: feedbackQ.isCorrect ? "#22c55e" : "#ef4444" }}>{feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}</div>
+        <div className={`sp-feedback-overlay ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
+          <div className="sp-feedback-burst" aria-hidden="true">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <span key={i} style={{ "--i": i }} />
+            ))}
+          </div>
+          <div key={feedbackFxKey} className={`sp-feedback-card ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
+            <div className="sp-feedback-icon">{feedbackQ.isCorrect ? "✅" : "❌"}</div>
+            <div className="sp-feedback-title">
+              {feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}
+            </div>
+            <div className="sp-feedback-subtitle">
+              {feedbackQ.isCorrect ? "Nice one — keep the streak going!" : "No worries — the next question is yours."}
+            </div>
           </div>
         </div>
       )}
@@ -511,19 +618,23 @@ export default function StudentPlay() {
         </div>
       )}
 
-      <div className="qn-header" style={{ background: dark ? "#0d1428" : "#1e2d55" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div className="qn-subject">{state.quiz_title || "ThinkWAVE"}</div>
-          <ThemeTogglePill dark={dark} onClick={toggleTheme} style={{ padding: "6px 11px", fontSize: 12, color: dark ? "#dbe7ff" : "#17305f", border: dark ? "1px solid rgba(219,231,255,0.25)" : "1px solid rgba(43,108,255,0.18)", background: dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)", boxShadow: dark ? "0 12px 22px rgba(0,0,0,0.26)" : "0 12px 22px rgba(43,108,255,0.14)" }} />
+      <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"} ${feedbackPulse ? `feedback-hit-${feedbackPulse}` : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
+        <div className="qn-header">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div className="qn-subject">{state.quiz_title || "ThinkWAVE"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <SoundTogglePill muted={isMuted} onClick={handleToggleMute} style={{ padding: "6px 11px", fontSize: 12 }} />
+              <ThemeTogglePill dark={dark} onClick={toggleTheme} style={{ padding: "6px 11px", fontSize: 12, color: dark ? "#dbe7ff" : "#17305f", border: dark ? "1px solid rgba(219,231,255,0.25)" : "1px solid rgba(43,108,255,0.18)", background: dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)", boxShadow: dark ? "0 12px 22px rgba(0,0,0,0.26)" : "0 12px 22px rgba(43,108,255,0.14)" }} />
+            </div>
+          </div>
+          <div className="qn-meta">
+            <div className="qn-qcount">{state?.template_type === "MATCHING" ? "Batch" : "Q"} {(state.current_question_index || 0) + 1}/{questions.length}</div>
+            <div className="qn-timer" style={{ background: timerRed ? "#ef4444" : undefined }}>⏱ {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
+          </div>
         </div>
-        <div className="qn-meta">
-          <div className="qn-qcount">{state?.template_type === "MATCHING" ? "Batch" : "Q"} {(state.current_question_index || 0) + 1}/{questions.length}</div>
-          <div className="qn-timer" style={{ background: timerRed ? "#ef4444" : undefined }}>⏱ {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
-        </div>
-      </div>
-      <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
+        <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
 
-      <div className="qn-body" style={{ flex: 1 }}>
+        <div className="qn-body" style={{ flex: 1 }}>
         {isGroupMode && myGroup && (
           <div style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center", padding: "10px 14px", borderRadius: 16, background: dark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.75)", border: `1px solid ${cardBor}` }}>
             <div>
@@ -536,11 +647,26 @@ export default function StudentPlay() {
         <div className="qn-prompt-box"><span className="qn-prompt-text">{currentQ.prompt}</span></div>
         <TemplateBody disabled={interactionLocked} templateType={state.template_type} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} answerText={answerText} setAnswerText={setAnswerText} matchingMap={matchingMap} setMatchingMap={setMatchingMap} spell={spell} setSpell={setSpell} />
         <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
-          <button onClick={submit} disabled={isLocked} style={{ padding: "14px 56px", borderRadius: 50, border: "none", background: isLocked ? (dark ? "#1e2d55" : "#c7d7ff") : "#2b6cff", color: isLocked ? mutedC : "#fff", fontSize: 16, fontWeight: 800, cursor: isLocked ? "not-allowed" : "pointer", boxShadow: isLocked ? "none" : "0 10px 28px rgba(43,108,255,0.35)", transition: "all 0.25s" }}>{submitLabel}</button>
+          <button
+            onClick={submit}
+            disabled={isLocked}
+            className="submit-btn"
+            style={{
+              opacity: isLocked ? 0.72 : 1,
+              cursor: isLocked ? "not-allowed" : "pointer",
+              background: isLocked
+                ? (dark ? "linear-gradient(180deg, #27457c 0%, #1b3260 100%)" : "linear-gradient(180deg, #8ec9ff 0%, #73b3f4 100%)")
+                : undefined,
+              boxShadow: isLocked ? "none" : undefined,
+            }}
+          >
+            {submitLabel}
+          </button>
         </div>
         {msg && <div style={{ textAlign: "center", color: "#ef4444", fontWeight: 700, marginTop: 12 }}>{msg}</div>}
         {state?.template_type === "MATCHING" && isMatchingIncomplete && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>Match every pair to enable Submit.</div>}
         {isLastQuestion && submittedQId === currentQ?.id && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>You have reached the end.</div>}
+        </div>
       </div>
     </div>
   );
@@ -742,4 +868,67 @@ function ThinkSpellTemplate({ disabled, cfg, spell, setSpell }) {
   return (<div className="spell-wrap"><div className="spell-display">{(spell.built || "").split("").map((ch, i) => <div key={i} className="spell-char">{ch}</div>)}<div className="spell-cursor" /></div><p className="spell-hint">Tap the letters to spell your answer</p><div className="spell-bank">{bank.map(({ id, ch }) => <button key={id} type="button" className={`spell-tile${us.has(id) ? " used" : ""}`} onClick={() => tap(id, ch)} disabled={disabled || us.has(id)}>{ch}</button>)}</div><div className="spell-controls"><button type="button" className="spell-ctrl back" onClick={bs} disabled={disabled || !spell.built}>⌫ Back</button><button type="button" className="spell-ctrl clr" onClick={clr} disabled={disabled || !spell.built}>Clear</button></div></div>);
 }
 function TypeAnswerTemplate({ disabled, answerText, setAnswerText }) { const MAX = 255; return (<div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={answerText} onChange={e => setAnswerText(e.target.value.slice(0, MAX))} placeholder="Start typing..." disabled={disabled} autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && answerText && <button type="button" className="type-clear-btn" onClick={() => setAnswerText("")}>✕</button>}</div>{answerText.length > 0 && <div className="type-charboxes">{answerText.split("").map((ch, i) => <div key={i} className="type-charbox">{ch === " " ? "\u00A0" : ch}</div>)}</div>}<div className="type-count">{answerText.length} / {MAX}</div></div></div>); }
-function TemplateBody({ disabled, templateType, q, selectedChoice, setSelectedChoice, answerText, setAnswerText, matchingMap, setMatchingMap, spell, setSpell }) { const cfg = q?.config_json || {}; if (templateType === "MCQ") { const opts = Array.isArray(cfg.options) ? cfg.options : [], labels = "ABCDEFGHIJ".split(""); return (<div className="quiz-choices">{opts.map((o, i) => <button key={i} className={`choice-btn ${selectedChoice === o ? "active" : ""} ${disabled && selectedChoice !== o ? "dimmed" : ""}`} onClick={() => !disabled && setSelectedChoice(o)} type="button" disabled={disabled && selectedChoice !== o}><span className="choice-badge">{labels[i] || ""}</span><span>{o}</span></button>)}</div>); } if (templateType === "TRUE_FALSE") { const opts = Array.isArray(cfg.options) ? cfg.options : []; return (<div className="quiz-choices">{opts.map((o, i) => <button key={i} className={`choice-btn ${selectedChoice === o ? "active" : ""} ${disabled && selectedChoice !== o ? "dimmed" : ""}`} onClick={() => !disabled && setSelectedChoice(o)} type="button" disabled={disabled && selectedChoice !== o}><span className="choice-badge"></span><span>{o}</span></button>)}</div>); } if (templateType === "MATCHING") return <MatchingTemplate disabled={disabled} q={q} cfg={cfg} matchingMap={matchingMap} setMatchingMap={setMatchingMap} />; if (templateType === "GUESS_WORD_4PICS") return <GuessWord4PicsTemplate disabled={disabled} cfg={cfg} answerText={answerText} setAnswerText={setAnswerText} />; if (templateType === "THINK_SPELL") return <ThinkSpellTemplate disabled={disabled} cfg={cfg} spell={spell} setSpell={setSpell} />; return <TypeAnswerTemplate disabled={disabled} answerText={answerText} setAnswerText={setAnswerText} />; }
+function TemplateBody({
+  disabled,
+  templateType,
+  q,
+  selectedChoice,
+  setSelectedChoice,
+  answerText,
+  setAnswerText,
+  matchingMap,
+  setMatchingMap,
+  spell,
+  setSpell
+}) {
+  const cfg = q?.config_json || {};
+
+  if (templateType === "MCQ") {
+    const opts = Array.isArray(cfg.options) ? cfg.options : [];
+    const labels = "ABCDEFGHIJ".split("");
+
+    return (
+      <div className="quiz-choices">
+        {opts.map((o, i) => (
+          <button
+            key={i}
+            className={`choice-btn ${selectedChoice === o ? "active" : ""} ${disabled && selectedChoice !== o ? "dimmed" : ""}`}
+            onClick={() => !disabled && setSelectedChoice(o)}
+            type="button"
+            disabled={disabled && selectedChoice !== o}
+          >
+            <span className="choice-badge">{labels[i] || ""}</span>
+            <span className="choice-text">{o}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (templateType === "TRUE_FALSE") {
+    const opts = Array.isArray(cfg.options) ? cfg.options : [];
+    const labels = ["T", "F"];
+
+    return (
+      <div className="quiz-choices">
+        {opts.map((o, i) => (
+          <button
+            key={i}
+            className={`choice-btn ${selectedChoice === o ? "active" : ""} ${disabled && selectedChoice !== o ? "dimmed" : ""}`}
+            onClick={() => !disabled && setSelectedChoice(o)}
+            type="button"
+            disabled={disabled && selectedChoice !== o}
+          >
+            <span className="choice-badge">{labels[i] || o?.charAt(0)?.toUpperCase() || ""}</span>
+            <span className="choice-text">{o}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (templateType === "MATCHING") return <MatchingTemplate disabled={disabled} q={q} cfg={cfg} matchingMap={matchingMap} setMatchingMap={setMatchingMap} />;
+  if (templateType === "GUESS_WORD_4PICS") return <GuessWord4PicsTemplate disabled={disabled} cfg={cfg} answerText={answerText} setAnswerText={setAnswerText} />;
+  if (templateType === "THINK_SPELL") return <ThinkSpellTemplate disabled={disabled} cfg={cfg} spell={spell} setSpell={setSpell} />;
+  return <TypeAnswerTemplate disabled={disabled} answerText={answerText} setAnswerText={setAnswerText} />;
+}
