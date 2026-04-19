@@ -1,322 +1,800 @@
 /* FILE GUIDE:
  * client/src/pages/superadmin/SuperadminDashboard.jsx
- * Purpose: Superadmin dashboard shell and management screens.
+ * Purpose: Superadmin dashboard for platform overview, institution oversight, notifications, and system health.
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../lib/api";
-import { clearToken, clearRole } from "../../lib/auth";
-import { setAuthToken } from "../../lib/api";
-import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
+import { api, setAuthToken } from "../../lib/api";
+import { clearRole, clearToken } from "../../lib/auth";
+import { ThemedModal, useColors, useTheme } from "../../context/ThemeContext";
 
 const NAV = [
-  { id: "overview",      label: "Overview",           icon: "◉"  },
-  { id: "accounts",      label: "Account Management", icon: "👥" },
-  { id: "notifications", label: "Notifications",      icon: "🔔" },
+  { id: "overview", label: "Overview", icon: "◉" },
+  { id: "institutions", label: "Institutions", icon: "🏫" },
+  { id: "notifications", label: "Notifications", icon: "🔔" },
+  { id: "health", label: "System Health", icon: "🩺" },
 ];
 
-// Shared helpers
-const card = (c, override = {}) => ({
-  background: c.cardBg, border: `1px solid ${c.border}`,
-  borderRadius: 14, padding: 16,
-  transition: "background 0.3s, border-color 0.3s",
-  ...override,
+const sectionCard = (c, style = {}) => ({
+  background: c.cardBg,
+  border: `1px solid ${c.border}`,
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+  ...style,
 });
 
-function Badge({ label, c, green = false, style = {} }) {
+const quietCard = (c, style = {}) => ({
+  background: c.cardBg2,
+  border: `1px solid ${c.border}`,
+  borderRadius: 16,
+  padding: 14,
+  ...style,
+});
+
+function fmtDate(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtDateTime(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function badge(c, palette, label) {
   return (
-    <span style={{
-      padding: "3px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
-      border: `1px solid ${green ? c.greenBorder : c.border}`,
-      background: green ? c.greenBg : c.cardBg2,
-      color: green ? c.greenFg : c.text,   // ← always readable text
-      transition: "background 0.3s, color 0.3s",
-      ...style,
-    }}>{label}</span>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "5px 11px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 800,
+        border: `1px solid ${palette.border}`,
+        background: palette.background,
+        color: palette.color,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function semanticBadge(c, variant, label) {
+  if (variant === "flagged") return badge(c, { background: c.redBg, color: c.redFg, border: c.redBorder }, label);
+  if (variant === "warning") return badge(c, { background: c.yellowBg, color: c.yellowFg, border: c.yellowBorder }, label);
+  if (variant === "success") return badge(c, { background: c.greenBg, color: c.greenFg, border: c.greenBorder }, label);
+  return badge(c, { background: c.cardBg3 || c.cardBg2, color: c.text, border: c.border }, label);
+}
+
+function shellCard(c, style = {}) {
+  return {
+    background: c.cardBg,
+    border: `1px solid ${c.border}`,
+    borderRadius: 18,
+    padding: 18,
+    ...style,
+  };
+}
+
+function PageShell({ activeTab, setActiveTab, dark, toggleTheme, onLogout, children }) {
+  const c = useColors();
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: c.pageBg }}>
+      <aside
+        style={{
+          width: 232,
+          minWidth: 232,
+          background: c.sidebarBg,
+          borderRight: `1px solid ${c.sidebarBorder}`,
+          display: "flex",
+          flexDirection: "column",
+          position: "fixed",
+          inset: "0 auto 0 0",
+          zIndex: 40,
+        }}
+      >
+        <div style={{ padding: "22px 18px 16px", borderBottom: `1px solid ${c.sidebarBorder}` }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "#eef4ff" }}>Think</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "#60a5fa" }}>WAVE</span>
+            <span
+              style={{
+                marginLeft: 4,
+                borderRadius: 6,
+                padding: "2px 8px",
+                fontSize: 10,
+                fontWeight: 900,
+                letterSpacing: "0.08em",
+                background: "#450a0a",
+                color: "#fca5a5",
+              }}
+            >
+              SUPER
+            </span>
+          </div>
+          <div style={{ marginTop: 12, color: "#c7d2fe", fontSize: 12, lineHeight: 1.5 }}>
+            <div style={{ opacity: 0.78 }}>Platform control center</div>
+            <div style={{ fontWeight: 700, color: "#eff6ff" }}>Superadmin access</div>
+          </div>
+        </div>
+
+        <nav style={{ padding: 12, display: "grid", gap: 6, flex: 1 }}>
+          {NAV.map(item => {
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: active ? "1px solid rgba(252,165,165,0.22)" : "1px solid transparent",
+                  background: active ? "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(59,130,246,0.92))" : "transparent",
+                  color: active ? "#fff" : "#c7d2fe",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ width: 20, textAlign: "center" }}>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div style={{ padding: 12, display: "grid", gap: 8 }}>
+          <button
+            onClick={toggleTheme}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              padding: "11px 14px",
+              borderRadius: 14,
+              border: `1px solid ${c.sidebarBorder}`,
+              background: "rgba(255,255,255,0.03)",
+              color: "#dbeafe",
+              fontWeight: 700,
+            }}
+          >
+            <span>{dark ? "☀️" : "🌙"}</span>
+            <span>{dark ? "Light Mode" : "Dark Mode"}</span>
+          </button>
+          <button
+            onClick={onLogout}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              padding: "11px 14px",
+              borderRadius: 14,
+              border: `1px solid ${c.sidebarBorder}`,
+              background: "rgba(255,255,255,0.03)",
+              color: "#dbeafe",
+              fontWeight: 700,
+            }}
+          >
+            <span>⏻</span>
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      <main
+        style={{
+          marginLeft: 232,
+          width: "calc(100% - 232px)",
+          minHeight: "100vh",
+          padding: "24px 28px 28px",
+        }}
+      >
+        <div key={activeTab} className="dashboard-tab-panel">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function HeaderBlock({ title, subtitle, right }) {
+  const c = useColors();
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 22 }}>
+      <div>
+        <h2 style={{ margin: 0, color: c.text, fontSize: 28, lineHeight: 1.1 }}>{title}</h2>
+        <p style={{ margin: "8px 0 0", color: c.textMuted, fontSize: 14 }}>{subtitle}</p>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function SummaryCard({ title, value, tone = "blue", helper }) {
+  const c = useColors();
+  const tones = {
+    blue: { bg: "linear-gradient(135deg, rgba(43,108,255,0.18), rgba(14,165,233,0.12))", color: "#60a5fa" },
+    green: { bg: "linear-gradient(135deg, rgba(16,185,129,0.16), rgba(74,222,128,0.10))", color: "#34d399" },
+    yellow: { bg: "linear-gradient(135deg, rgba(251,191,36,0.18), rgba(250,204,21,0.12))", color: "#f59e0b" },
+    red: { bg: "linear-gradient(135deg, rgba(248,113,113,0.18), rgba(244,63,94,0.12))", color: "#f87171" },
+    violet: { bg: "linear-gradient(135deg, rgba(139,92,246,0.18), rgba(99,102,241,0.12))", color: "#a78bfa" },
+  };
+  const palette = tones[tone] || tones.blue;
+  return (
+    <div style={{ ...shellCard(c, { padding: 0, overflow: "hidden" }) }}>
+      <div style={{ padding: 18, background: palette.bg }}>
+        <div style={{ fontSize: 30, fontWeight: 900, color: palette.color }}>{value}</div>
+        <div style={{ marginTop: 8, color: c.text, fontWeight: 700 }}>{title}</div>
+        {helper && <div style={{ marginTop: 6, color: c.textMuted, fontSize: 12 }}>{helper}</div>}
+      </div>
+    </div>
+  );
+}
+
+function InsightRow({ label, value }) {
+  const c = useColors();
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: `1px solid ${c.border}` }}>
+      <span style={{ color: c.textMuted, fontSize: 13 }}>{label}</span>
+      <span style={{ color: c.text, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{value || "—"}</span>
+    </div>
+  );
+}
+
+function SearchControls({ search, setSearch, status, setStatus, sort, setSort }) {
+  const c = useColors();
+  return (
+    <div style={{ ...shellCard(c), display: "grid", gap: 12, gridTemplateColumns: "minmax(220px, 1.4fr) repeat(2, minmax(140px, 0.8fr))" }}>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search institutions or admin"
+        style={{
+          width: "100%",
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: `1px solid ${c.inputBorder}`,
+          background: c.inputBg,
+          color: c.text,
+          fontSize: 14,
+        }}
+      />
+      <select
+        value={status}
+        onChange={e => setStatus(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: `1px solid ${c.inputBorder}`,
+          background: c.inputBg,
+          color: c.text,
+          fontSize: 14,
+        }}
+      >
+        <option value="all">All statuses</option>
+        <option value="active">Active only</option>
+        <option value="inactive">Inactive only</option>
+      </select>
+      <select
+        value={sort}
+        onChange={e => setSort(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: `1px solid ${c.inputBorder}`,
+          background: c.inputBg,
+          color: c.text,
+          fontSize: 14,
+        }}
+      >
+        <option value="name">Sort: Name</option>
+        <option value="teachers">Sort: Teacher count</option>
+        <option value="recent">Sort: Recent activity</option>
+      </select>
+    </div>
+  );
+}
+
+function NotificationItem({ item }) {
+  const c = useColors();
+  const variant = item.type === "INSTITUTION_SETUP" ? "success" : "info";
+  return (
+    <div style={{ ...quietCard(c), display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ fontSize: 22 }}>{item.type === "INSTITUTION_SETUP" ? "🏫" : "🔔"}</div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ color: c.text, fontWeight: 700 }}>{item.name}</div>
+          {semanticBadge(c, variant, item.type === "INSTITUTION_SETUP" ? "Institution setup" : "Registration")}
+        </div>
+        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 4 }}>
+          {item.type === "INSTITUTION_SETUP"
+            ? `${item.role || "Admin"} completed institution setup for ${item.institution_name || "their institution"}.`
+            : `${item.role || "User"} registered with ${item.email || "no email details"}.`}
+        </div>
+        <div style={{ color: c.textSub, fontSize: 12, marginTop: 8 }}>{fmtDateTime(item.created_at)}</div>
+      </div>
+    </div>
   );
 }
 
 export default function SuperadminDashboard() {
-  const [activeTab,  setActiveTab]  = useState("overview");
-  const [showLogout, setShowLogout] = useState(false);
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
-  const c = useColors();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [showLogout, setShowLogout] = useState(false);
 
-  function doLogout() { clearToken(); clearRole(); setAuthToken(""); navigate("/"); }
+  function doLogout() {
+    clearToken();
+    clearRole();
+    setAuthToken("");
+    navigate("/");
+  }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background 0.3s" }}>
-      <aside style={{
-        width: 220, minWidth: 220, background: c.sidebarBg,
-        borderRight: `1px solid ${c.sidebarBorder}`,
-        display: "flex", flexDirection: "column", padding: "0 0 24px",
-        position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100,
-        transition: "background 0.3s, border-color 0.3s",
-      }}>
-        <div style={{ padding: "22px 20px 18px", display: "flex", alignItems: "baseline", gap: 4, borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
-          <span style={{ fontSize: 18, fontWeight: 900, color: "#e7e9ee" }}>Think</span>
-          <span style={{ fontSize: 18, fontWeight: 900, color: "#2b6cff" }}>WAVE</span>
-          <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", background: "#450a0a", color: "#f87171", padding: "2px 6px", borderRadius: 4, marginLeft: 4 }}>SUPER</span>
-        </div>
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
-          {NAV.map(item => (
-            <button key={item.id} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 14px", borderRadius: 10, border: "none",
-              background: activeTab === item.id ? "#2b6cff" : "transparent",
-              color: activeTab === item.id ? "#fff" : c.navColor,
-              fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left", width: "100%",
-              transition: "background 0.2s, color 0.2s",
-            }} onClick={() => setActiveTab(item.id)}>
-              <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div style={{ padding: "0 12px", marginBottom: 8 }}>
-          <button onClick={toggleTheme} style={{
-            display: "flex", alignItems: "center", gap: 10, width: "100%",
-            padding: "10px 14px", borderRadius: 10, border: `1px solid ${c.sidebarBorder}`,
-            background: "transparent", color: c.navColor, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            transition: "color 0.2s, border-color 0.2s",
-          }}>
-            <span>{dark ? "☀️" : "🌙"}</span>
-            <span>{dark ? "Light Mode" : "Dark Mode"}</span>
-          </button>
-        </div>
-
-        <div style={{ padding: "0 12px" }}>
-          <button onClick={() => setShowLogout(true)} style={{
-            display: "flex", alignItems: "center", gap: 10, width: "100%",
-            padding: "10px 14px", borderRadius: 10, border: `1px solid ${c.sidebarBorder}`,
-            background: "transparent", color: c.navColor, fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>⏻ &nbsp;Logout</button>
-        </div>
-      </aside>
-
-      <main style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
-        <div key={activeTab} className="dashboard-tab-panel">
-          {activeTab === "overview"      && <OverviewTab />}
-          {activeTab === "accounts"      && <AccountManagementTab />}
-          {activeTab === "notifications" && <NotificationsTab />}
-        </div>
-      </main>
+    <>
+      <PageShell activeTab={activeTab} setActiveTab={setActiveTab} dark={dark} toggleTheme={toggleTheme} onLogout={() => setShowLogout(true)}>
+        {activeTab === "overview" && <OverviewTab />}
+        {activeTab === "institutions" && <InstitutionsTab />}
+        {activeTab === "notifications" && <NotificationsTab />}
+        {activeTab === "health" && <HealthTab />}
+      </PageShell>
 
       {showLogout && (
-        <ThemedModal icon="⏻" title="Log out?" message="Are you sure you want to log out of the Superadmin dashboard?" onClose={() => setShowLogout(false)}>
+        <ThemedModal
+          icon="⏻"
+          title="Log out?"
+          message="Are you sure you want to log out of the superadmin dashboard?"
+          onClose={() => setShowLogout(false)}
+        >
           <button className="btn secondary" onClick={() => setShowLogout(false)}>Cancel</button>
-          <button className="btn" style={{ background: "#7f1d1d", color: "#fca5a5" }} onClick={doLogout}>Yes, Log Out</button>
+          <button className="btn" style={{ background: "#7f1d1d", color: "#fca5a5" }} onClick={doLogout}>
+            Yes, Log Out
+          </button>
         </ThemedModal>
       )}
-    </div>
+    </>
   );
 }
 
 function OverviewTab() {
+  const c = useColors();
   const [stats, setStats] = useState(null);
-  const c = useColors();
-  useEffect(() => { api.get("/superadmin/stats").then(({ data }) => setStats(data)).catch(console.error); }, []);
-  return (
-    <div className="container">
-      <h2 style={{ marginBottom: 4, color: c.text }}>Overview</h2>
-      <p style={{ color: c.textMuted, marginTop: 0, marginBottom: 24, fontSize: 14 }}>System-wide snapshot.</p>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        {[
-          { label: "Total Admins",      value: stats?.totalAdmins      ?? "…", color: "#60a5fa" },
-          { label: "Total Teachers",    value: stats?.totalTeachers    ?? "…", color: "#34d399" },
-          { label: "Currently Online",  value: stats?.currentlyOnline  ?? "…", color: "#fbbf24" },
-          { label: "Live Sessions Now", value: stats?.liveSessionCount ?? "…", color: "#f87171" },
-        ].map(s => (
-          <div key={s.label} style={{ ...card(c), flex: 1, minWidth: 180, textAlign: "center", padding: 24 }}>
-            <div style={{ fontSize: 40, fontWeight: 900, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 13, color: c.textMuted, marginTop: 6 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AccountManagementTab() {
   const [institutions, setInstitutions] = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [editModal,    setEditModal]    = useState(null);
-  const [confirmModal, setConfirmModal] = useState(null);
-  const c = useColors();
+  const [notifications, setNotifications] = useState([]);
+  const [health, setHealth] = useState(null);
 
-  const load = useCallback(async () => {
-    try { const { data } = await api.get("/superadmin/accounts"); setInstitutions(data || []); }
-    catch (e) { console.error(e); }
-    finally { setLoading(false); }
+  useEffect(() => {
+    Promise.all([
+      api.get("/superadmin/stats"),
+      api.get("/superadmin/accounts"),
+      api.get("/superadmin/notifications"),
+      api.get("/superadmin/health"),
+    ])
+      .then(([statsRes, institutionsRes, notificationsRes, healthRes]) => {
+        setStats(statsRes.data);
+        setInstitutions(institutionsRes.data || []);
+        setNotifications((notificationsRes.data || []).slice(0, 6));
+        setHealth(healthRes.data || null);
+      })
+      .catch(() => {});
   }, []);
-  useEffect(() => { load(); }, [load]);
 
-  async function setActive(id, active) { await api.post(`/superadmin/accounts/${id}/active`, { active }); setConfirmModal(null); setEditModal(null); load(); }
-  async function del(id)               { await api.delete(`/superadmin/accounts/${id}`); setConfirmModal(null); setEditModal(null); load(); }
+  const insights = useMemo(() => {
+    const rankedByTeachers = [...institutions].sort((a, b) => Number(b.teacherCount || 0) - Number(a.teacherCount || 0));
+    const rankedBySessions = [...institutions].sort((a, b) => Number(b.recentSessions || 0) - Number(a.recentSessions || 0));
+    const rankedByActivity = [...institutions].sort((a, b) => new Date(b.lastActivity || 0).getTime() - new Date(a.lastActivity || 0).getTime());
 
-  if (loading) return <div className="container"><div style={card(c)}>Loading…</div></div>;
+    return {
+      busiestByTeachers: rankedByTeachers[0],
+      busiestBySessions: rankedBySessions[0],
+      mostRecent: rankedByActivity[0],
+      averageTeachers: institutions.length
+        ? (institutions.reduce((sum, row) => sum + Number(row.teacherCount || 0), 0) / institutions.length).toFixed(1)
+        : "0.0",
+    };
+  }, [institutions]);
+
+  const alerts = [
+    health?.summary?.disconnectCount
+      ? { level: "flagged", title: `${health.summary.disconnectCount} disconnect-led session${health.summary.disconnectCount === 1 ? "" : "s"}`, detail: "Review sessions that auto-ended because a host did not reconnect." }
+      : null,
+    health?.summary?.tabSwitchCount
+      ? { level: "warning", title: `${health.summary.tabSwitchCount} tab-monitoring flag${health.summary.tabSwitchCount === 1 ? "" : "s"}`, detail: "Students leaving the active tab repeatedly may need review." }
+      : null,
+    health?.summary?.inactiveAccountCount
+      ? { level: "info", title: `${health.summary.inactiveAccountCount} inactive account${health.summary.inactiveAccountCount === 1 ? "" : "s"}`, detail: "These users are currently deactivated platform-wide." }
+      : null,
+  ].filter(Boolean);
 
   return (
     <div className="container">
-      <h2 style={{ marginBottom: 4, color: c.text }}>Account Management</h2>
-      <p style={{ color: c.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14 }}>Schools / institutions, their admins, and teachers.</p>
+      <HeaderBlock
+        title="Superadmin Overview"
+        subtitle="Monitor platform-wide activity, institution usage, and system-level concerns."
+      />
 
-      {institutions.length === 0 && (
-        <div style={{ ...card(c), textAlign: "center", padding: "48px 24px", color: c.textMuted }}>No accounts created yet.</div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {institutions.map(inst => (
-          <InstitutionBlock key={inst.name} inst={inst} onEdit={u => setEditModal({ user: u })} c={c} />
-        ))}
+      <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 22 }}>
+        <SummaryCard title="Total Institutions" value={stats?.totalInstitutions ?? "…"} tone="blue" helper="Institutions with an assigned admin" />
+        <SummaryCard title="Total Admins" value={stats?.totalAdmins ?? "…"} tone="violet" helper="Admin accounts across the platform" />
+        <SummaryCard title="Total Teachers" value={stats?.totalTeachers ?? "…"} tone="green" helper="Teacher accounts across all institutions" />
+        <SummaryCard title="Sessions This Week" value={stats?.sessionsThisWeek ?? "…"} tone="yellow" helper="Sessions created or finished in the last 7 days" />
+        <SummaryCard title="Flagged Incidents" value={stats?.flaggedIncidents ?? "…"} tone="red" helper="Disconnects and strong tab-switching patterns" />
       </div>
 
-      {editModal && !confirmModal && (
-        <ThemedModal icon="✏️" title={`${editModal.user.last_name}, ${editModal.user.first_name}`} message={editModal.user.email} onClose={() => setEditModal(null)}>
-          <button className="btn" style={{ background: editModal.user.is_active ? "#854d0e" : "#166534" }}
-            onClick={() => setConfirmModal({ type: editModal.user.is_active ? "deactivate" : "reactivate", user: editModal.user })}>
-            {editModal.user.is_active ? "Deactivate Account" : "Reactivate Account"}
-          </button>
-          <button className="btn" style={{ background: "#7f1d1d" }} onClick={() => setConfirmModal({ type: "delete", user: editModal.user })}>Delete Account</button>
-          <button className="btn secondary" onClick={() => setEditModal(null)}>Cancel</button>
-        </ThemedModal>
-      )}
-
-      {confirmModal && (
-        <ThemedModal
-          icon={confirmModal.type === "delete" ? "🗑" : confirmModal.type === "deactivate" ? "⚠️" : "✓"}
-          title={confirmModal.type === "delete" ? "Delete Account?" : confirmModal.type === "deactivate" ? "Deactivate Account?" : "Reactivate Account?"}
-          message={`${confirmModal.type === "delete" ? "Delete" : confirmModal.type === "deactivate" ? "Deactivate" : "Reactivate"} ${confirmModal.user.first_name} ${confirmModal.user.last_name}?`}
-          onClose={() => setConfirmModal(null)}>
-          <button className="btn secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
-          <button className="btn"
-            style={{ background: confirmModal.type === "delete" ? "#7f1d1d" : confirmModal.type === "deactivate" ? "#854d0e" : "#166534" }}
-            onClick={() => {
-              if (confirmModal.type === "delete") del(confirmModal.user.id);
-              else setActive(confirmModal.user.id, confirmModal.type !== "deactivate");
-            }}>Confirm</button>
-        </ThemedModal>
-      )}
-    </div>
-  );
-}
-
-function InstitutionBlock({ inst, onEdit, c }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div style={card(c)}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontWeight: 800, fontSize: 17, color: c.text }}>🏫 {inst.name}</div>
-        <button onClick={() => setOpen(v => !v)} style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, fontSize: 12, cursor: "pointer" }}>
-          {open ? "▲" : "▼"}
-        </button>
-      </div>
-      <div className={`collapsible-content ${open ? "open" : ""}`} style={{ marginTop: open ? 14 : 0 }}>
-        <div className="collapsible-inner">
-          {inst.admins?.map(admin => (
-            <div key={admin.id}>
-              <UserRow user={admin} roleLabel="Admin" onEdit={onEdit} c={c} />
-              {admin.teachers?.map(t => <UserRow key={t.id} user={t} roleLabel="Teacher" indent onEdit={onEdit} c={c} />)}
+      <div style={{ display: "grid", gap: 18, gridTemplateColumns: "minmax(320px, 1.15fr) minmax(280px, 0.85fr)", alignItems: "start" }}>
+        <div style={{ display: "grid", gap: 18 }}>
+          <div style={shellCard(c)}>
+            <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Global Alerts</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {alerts.length ? alerts.map((item, idx) => (
+                <div key={`${item.title}-${idx}`} style={{ ...quietCard(c), display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <div style={{ color: c.text, fontWeight: 700 }}>{item.title}</div>
+                    {semanticBadge(c, item.level, item.level === "flagged" ? "Flagged" : item.level[0].toUpperCase() + item.level.slice(1))}
+                  </div>
+                  <div style={{ color: c.textMuted, fontSize: 13 }}>{item.detail}</div>
+                </div>
+              )) : <div style={{ ...quietCard(c), color: c.textMuted }}>No urgent platform alerts right now.</div>}
             </div>
-          ))}
-          {inst.orphanTeachers?.map(t => <UserRow key={t.id} user={t} roleLabel="Teacher" indent onEdit={onEdit} c={c} />)}
+          </div>
+
+          <div style={shellCard(c)}>
+            <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Recent Platform Activity</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {notifications.length ? notifications.map(item => (
+                <NotificationItem key={item.id} item={item} />
+              )) : <div style={{ ...quietCard(c), color: c.textMuted }}>Recent platform activity will appear here.</div>}
+            </div>
+          </div>
+        </div>
+
+        <div style={shellCard(c)}>
+          <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Platform Insights</div>
+          <InsightRow label="Most active institution this week" value={insights.busiestBySessions?.name || "—"} />
+          <InsightRow label="Largest teacher population" value={insights.busiestByTeachers ? `${insights.busiestByTeachers.name} (${insights.busiestByTeachers.teacherCount})` : "—"} />
+          <InsightRow label="Most recent platform activity" value={insights.mostRecent?.name || "—"} />
+          <InsightRow label="Average teachers per institution" value={insights.averageTeachers} />
+          <InsightRow label="Last notification" value={notifications[0] ? fmtDateTime(notifications[0].created_at) : "—"} />
         </div>
       </div>
     </div>
   );
 }
 
-function UserRow({ user, roleLabel, indent, onEdit, c }) {
-  const fmtDate = d => d ? new Date(d).toLocaleDateString("en-PH") : "—";
-  const isOnline = user.last_active_at && (Date.now() - new Date(user.last_active_at).getTime()) < 30 * 60 * 1000;
+function InstitutionsTab() {
+  const c = useColors();
+  const [institutions, setInstitutions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedName, setSelectedName] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("name");
+  const [confirm, setConfirm] = useState(null);
+
+  const load = async () => {
+    try {
+      const { data } = await api.get("/superadmin/accounts");
+      setInstitutions(data || []);
+      if (!selectedName && data?.length) setSelectedName(data[0].name);
+    } catch (_) {
+      setInstitutions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  async function setAdminActive(id, active) {
+    await api.post(`/superadmin/accounts/${id}/active`, { active });
+    await load();
+    setConfirm(null);
+  }
+
+  async function removeAdmin(id) {
+    await api.delete(`/superadmin/accounts/${id}`);
+    await load();
+    setConfirm(null);
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = [...institutions];
+    if (q) {
+      rows = rows.filter(row =>
+        row.name.toLowerCase().includes(q) ||
+        `${row.admin?.first_name || ""} ${row.admin?.last_name || ""}`.toLowerCase().includes(q) ||
+        String(row.admin?.email || "").toLowerCase().includes(q)
+      );
+    }
+    if (status !== "all") {
+      rows = rows.filter(row => (status === "active" ? row.admin?.is_active : !row.admin?.is_active));
+    }
+    if (sort === "teachers") {
+      rows.sort((a, b) => Number(b.teacherCount || 0) - Number(a.teacherCount || 0));
+    } else if (sort === "recent") {
+      rows.sort((a, b) => new Date(b.lastActivity || 0).getTime() - new Date(a.lastActivity || 0).getTime());
+    } else {
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return rows;
+  }, [institutions, search, status, sort]);
+
+  const selected = filtered.find(row => row.name === selectedName) || filtered[0] || null;
+
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-      padding: "8px 12px", marginTop: 6, borderRadius: 10,
-      background: indent ? c.cardBg2 : c.cardBg,
-      border: `1px solid ${c.border}`,
-      marginLeft: indent ? 24 : 0,
-      transition: "background 0.3s",
-    }}>
-      {/* Role badge — always readable */}
-      <span style={{
-        padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-        background: c.accent + "22", border: `1px solid ${c.accent}55`,
-        color: c.accent,   // accent blue is readable in both modes
-      }}>{roleLabel}</span>
+    <div className="container">
+      <HeaderBlock
+        title="Institutions"
+        subtitle="Review institution profiles, their assigned admin, and joined teachers."
+      />
 
-      <span style={{ fontWeight: 600, fontSize: 14, flex: 1, minWidth: 140, color: c.text }}>{user.last_name}, {user.first_name}</span>
-      <span style={{ fontSize: 12, color: c.textMuted, flex: 1 }}>{user.email}</span>
-      <span style={{ fontSize: 12, color: c.textMuted }}>Joined {fmtDate(user.created_at)}</span>
+      <SearchControls search={search} setSearch={setSearch} status={status} setStatus={setStatus} sort={sort} setSort={setSort} />
 
-      <span style={{
-        padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
-        background: isOnline ? c.greenBg : c.cardBg2,
-        color: isOnline ? c.greenFg : c.textMuted,
-        border: `1px solid ${isOnline ? c.greenBorder : c.border}`,
-      }}>
-        {user.is_active ? (isOnline ? "● Online" : "Active") : "Inactive"}
-      </span>
+      <div style={{ display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)", marginTop: 18, alignItems: "start" }}>
+        <div style={shellCard(c)}>
+          <div style={{ display: "grid", gap: 10 }}>
+            {loading && <div style={{ ...quietCard(c), color: c.textMuted }}>Loading institutions…</div>}
+            {!loading && !filtered.length && <div style={{ ...quietCard(c), color: c.textMuted }}>No institutions match the current filters.</div>}
+            {filtered.map(row => {
+              const active = selected?.name === row.name;
+              const adminName = row.admin ? `${row.admin.last_name}, ${row.admin.first_name}` : "No admin assigned";
+              return (
+                <div
+                  key={row.name}
+                  style={{
+                    ...quietCard(c, {
+                      border: `1px solid ${active ? c.accent : c.border}`,
+                      boxShadow: active ? "0 0 0 1px rgba(43,108,255,0.15)" : "none",
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                      gap: 12,
+                      alignItems: "center",
+                    }),
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: c.text, fontWeight: 800 }}>{row.name}</div>
+                    <div style={{ color: c.textMuted, fontSize: 13, marginTop: 4 }}>{adminName}</div>
+                    <div style={{ color: c.textSub, fontSize: 12, marginTop: 6 }}>
+                      {row.teacherCount} teacher{Number(row.teacherCount || 0) === 1 ? "" : "s"} · {row.recentSessions || 0} recent session{Number(row.recentSessions || 0) === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  {row.admin?.is_active ? semanticBadge(c, "success", "Active") : semanticBadge(c, "info", "Inactive")}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn secondary" style={{ padding: "10px 14px", borderRadius: 12 }} onClick={() => setSelectedName(row.name)}>View</button>
+                    {row.admin && (
+                      <button
+                        className="btn"
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: 12,
+                          background: row.admin.is_active ? c.yellowBg : c.greenBg,
+                          color: row.admin.is_active ? c.yellowFg : c.greenFg,
+                          border: `1px solid ${row.admin.is_active ? c.yellowBorder : c.greenBorder}`,
+                        }}
+                        onClick={() => setConfirm({ type: row.admin.is_active ? "deactivate" : "activate", row })}
+                      >
+                        {row.admin.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-      <button onClick={() => onEdit(user)} style={{
-        background: "none", border: `1px solid ${c.border}`, borderRadius: 8,
-        padding: "4px 8px", color: c.textMuted, cursor: "pointer", fontSize: 14, flexShrink: 0,
-        transition: "border-color 0.2s",
-      }}>✏</button>
+        <div style={shellCard(c)}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 14 }}>
+            <div style={{ color: c.text, fontWeight: 800, fontSize: 18 }}>Institution Details</div>
+            {selected?.admin?.is_active ? semanticBadge(c, "success", "Active") : semanticBadge(c, "info", "Inactive")}
+          </div>
+          {selected ? (
+            <>
+              <div style={{ ...quietCard(c, { marginBottom: 14 }) }}>
+                <div style={{ color: c.text, fontWeight: 800, fontSize: 18 }}>{selected.name}</div>
+                <div style={{ color: c.textMuted, marginTop: 4 }}>
+                  {selected.admin ? `${selected.admin.first_name} ${selected.admin.last_name} · ${selected.admin.email}` : "No admin account found"}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 0, marginBottom: 16 }}>
+                <InsightRow label="Teacher count" value={selected.teacherCount} />
+                <InsightRow label="Recent sessions" value={selected.recentSessions} />
+                <InsightRow label="Last activity" value={fmtDateTime(selected.lastActivity)} />
+                <InsightRow label="Admin joined" value={fmtDate(selected.admin?.created_at)} />
+              </div>
+
+              <div style={{ color: c.text, fontWeight: 800, marginBottom: 10 }}>Joined Teachers</div>
+              <div style={{ display: "grid", gap: 8, marginBottom: 16, maxHeight: 240, overflow: "auto" }}>
+                {selected.teachers?.length ? selected.teachers.map(t => (
+                  <div key={t.id} style={{ ...quietCard(c), display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 10, alignItems: "center" }}>
+                    <div>
+                      <div style={{ color: c.text, fontWeight: 700 }}>{t.last_name}, {t.first_name}</div>
+                      <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>{t.email}</div>
+                    </div>
+                    {t.is_active ? semanticBadge(c, "success", "Active") : semanticBadge(c, "info", "Inactive")}
+                  </div>
+                )) : <div style={{ ...quietCard(c), color: c.textMuted }}>No teachers linked to this institution.</div>}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {selected.admin && (
+                  <>
+                    <button
+                      className="btn"
+                      style={{
+                        background: selected.admin.is_active ? c.yellowBg : c.greenBg,
+                        color: selected.admin.is_active ? c.yellowFg : c.greenFg,
+                        border: `1px solid ${selected.admin.is_active ? c.yellowBorder : c.greenBorder}`,
+                      }}
+                      onClick={() => setConfirm({ type: selected.admin.is_active ? "deactivate" : "activate", row: selected })}
+                    >
+                      {selected.admin.is_active ? "Deactivate Admin" : "Activate Admin"}
+                    </button>
+                    <button
+                      className="btn secondary"
+                      style={{ borderColor: c.redBorder, color: c.redFg }}
+                      onClick={() => setConfirm({ type: "remove", row: selected })}
+                    >
+                      Remove Admin
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{ ...quietCard(c), color: c.textMuted }}>Select an institution to view details.</div>
+          )}
+        </div>
+      </div>
+
+      {confirm && (
+        <ThemedModal
+          icon={confirm.type === "remove" ? "🗑️" : confirm.type === "deactivate" ? "⚠️" : "✓"}
+          title={
+            confirm.type === "remove"
+              ? "Remove Admin?"
+              : confirm.type === "deactivate"
+                ? "Deactivate Admin?"
+                : "Activate Admin?"
+          }
+          message={
+            confirm.type === "remove"
+              ? `Remove the admin account assigned to ${confirm.row.name}?`
+              : `${confirm.type === "deactivate" ? "Deactivate" : "Activate"} the admin for ${confirm.row.name}?`
+          }
+          onClose={() => setConfirm(null)}
+        >
+          <button className="btn secondary" onClick={() => setConfirm(null)}>Cancel</button>
+          <button
+            className="btn"
+            style={{ background: confirm.type === "remove" ? "#7f1d1d" : confirm.type === "deactivate" ? "#854d0e" : "#166534" }}
+            onClick={() => {
+              if (!confirm.row.admin) return setConfirm(null);
+              if (confirm.type === "remove") return removeAdmin(confirm.row.admin.id);
+              return setAdminActive(confirm.row.admin.id, confirm.type !== "deactivate");
+            }}
+          >
+            Confirm
+          </button>
+        </ThemedModal>
+      )}
     </div>
   );
 }
 
 function NotificationsTab() {
-  const [logs, setLogs]       = useState([]);
-  const [loading, setLoading] = useState(true);
   const c = useColors();
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     api.get("/superadmin/notifications")
-      .then(({ data }) => setLogs(data || []))
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
+      .then(({ data }) => setNotifications(data || []))
+      .catch(() => setNotifications([]));
   }, []);
-
-  const fmtTime = d => d ? new Date(d).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "—";
-
-  function logMsg(log) {
-    if (log.type === "INSTITUTION_SETUP")
-      return <><b style={{ color: c.text }}>{log.name}</b><span style={{ color: c.textMuted }}> (Admin) set up institution as </span><b style={{ color: c.text }}>{log.institution_name}</b>.</>;
-    const roleLabel =
-      log.role === "SUPERADMIN" ? "Super Admin"
-      : log.role === "ADMIN" ? "Administrator"
-      : "Teacher";
-    return <><b style={{ color: c.text }}>{log.name}</b><span style={{ color: c.textMuted }}> registered as </span><b style={{ color: c.text }}>{roleLabel}</b>{log.email && <span style={{ color: c.textMuted }}> ({log.email})</span>}.</>;
-  }
 
   return (
     <div className="container">
-      <h2 style={{ marginBottom: 4, color: c.text }}>Notifications</h2>
-      <p style={{ color: c.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14 }}>Recent registrations and institution setup activity.</p>
+      <HeaderBlock
+        title="Notifications"
+        subtitle="Recent platform-wide notices and account-related events."
+      />
+      <div style={{ ...shellCard(c), display: "grid", gap: 10 }}>
+        {notifications.length ? notifications.map(item => <NotificationItem key={item.id} item={item} />) : (
+          <div style={{ ...quietCard(c), color: c.textMuted }}>No notifications yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-      {loading && <div style={card(c)}>Loading…</div>}
+function HealthTab() {
+  const c = useColors();
+  const [health, setHealth] = useState(null);
 
-      {!loading && logs.length === 0 && (
-        <div style={{ ...card(c), textAlign: "center", padding: "48px 24px", color: c.textMuted }}>No notifications yet.</div>
-      )}
+  useEffect(() => {
+    api.get("/superadmin/health")
+      .then(({ data }) => setHealth(data))
+      .catch(() => setHealth(null));
+  }, []);
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {logs.map(log => (
-          <div key={log.id} style={{ ...card(c), display: "flex", gap: 14, alignItems: "flex-start" }}>
-            <div style={{ fontSize: 24, flexShrink: 0 }}>{log.type === "INSTITUTION_SETUP" ? "🏫" : "👤"}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, lineHeight: 1.6 }}>{logMsg(log)}</div>
-              <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{fmtTime(log.created_at)}</div>
-            </div>
+  return (
+    <div className="container">
+      <HeaderBlock
+        title="System Health"
+        subtitle="Review platform-wide disconnect trends, tab-monitoring spikes, and inactive accounts."
+      />
+
+      <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", marginBottom: 22 }}>
+        <SummaryCard title="Disconnect-led sessions" value={health?.summary?.disconnectCount ?? "…"} tone="red" helper="Sessions auto-ended after teacher disconnects" />
+        <SummaryCard title="Tab monitoring flags" value={health?.summary?.tabSwitchCount ?? "…"} tone="yellow" helper="Participant sessions with repeated tab leaves" />
+        <SummaryCard title="Inactive accounts" value={health?.summary?.inactiveAccountCount ?? "…"} tone="blue" helper="Currently deactivated platform accounts" />
+      </div>
+
+      <div style={{ display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", alignItems: "start" }}>
+        <div style={shellCard(c)}>
+          <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Disconnect Incidents</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {(health?.disconnects || []).length ? health.disconnects.map(item => (
+              <div key={`${item.id}-${item.event_at}`} style={{ ...quietCard(c), display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ color: c.text, fontWeight: 700 }}>{item.quiz_title}</div>
+                  {semanticBadge(c, "flagged", "Disconnected")}
+                </div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>{item.institution_name || "No institution"} · {item.teacher_name}</div>
+                <div style={{ color: c.textSub, fontSize: 12 }}>{fmtDateTime(item.event_at)}</div>
+              </div>
+            )) : <div style={{ ...quietCard(c), color: c.textMuted }}>No recent disconnect-led sessions.</div>}
           </div>
-        ))}
+        </div>
+
+        <div style={shellCard(c)}>
+          <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Tab Monitoring Flags</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {(health?.tabSwitch || []).length ? health.tabSwitch.map(item => (
+              <div key={`${item.session_id}-${item.participant_name}`} style={{ ...quietCard(c), display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ color: c.text, fontWeight: 700 }}>{item.quiz_title}</div>
+                  {semanticBadge(c, "warning", `${item.switch_count} switches`)}
+                </div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>{item.institution_name || "No institution"} · {item.participant_name}</div>
+                <div style={{ color: c.textSub, fontSize: 12 }}>{fmtDateTime(item.event_at)}</div>
+              </div>
+            )) : <div style={{ ...quietCard(c), color: c.textMuted }}>No strong tab-switching spikes were detected.</div>}
+          </div>
+        </div>
+
+        <div style={shellCard(c)}>
+          <div style={{ color: c.text, fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Inactive Accounts</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {(health?.inactiveAccounts || []).length ? health.inactiveAccounts.map(item => (
+              <div key={item.id} style={{ ...quietCard(c), display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div style={{ color: c.text, fontWeight: 700 }}>{item.name}</div>
+                  {semanticBadge(c, "info", item.role)}
+                </div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>{item.email}</div>
+                <div style={{ color: c.textSub, fontSize: 12 }}>{item.institution_name || "No institution"} · {fmtDateTime(item.event_at)}</div>
+              </div>
+            )) : <div style={{ ...quietCard(c), color: c.textMuted }}>No inactive accounts to review right now.</div>}
+          </div>
+        </div>
       </div>
     </div>
   );
