@@ -24,12 +24,12 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || "dev_secret_change_me",
 
   DB_HOST: process.env.DB_HOST || "127.0.0.1",
-  DB_PORT: Number(process.env.DB_PORT || 3306),
-  DB_USER: process.env.DB_USER || "root",
-  DB_PASS: process.env.DB_PASS || "",
-  DB_NAME: process.env.DB_NAME || "thinkwave",
-  DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
-  DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
+DB_PORT: Number(process.env.DB_PORT || 3306),
+DB_USER: process.env.DB_USER || "root",
+DB_PASS: process.env.DB_PASS || "",
+DB_NAME: process.env.DB_NAME || "thinkwave",
+DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
+DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
 
   SMTP_SERVICE: process.env.SMTP_SERVICE || "",
   SMTP_HOST: process.env.SMTP_HOST || "",
@@ -37,12 +37,6 @@ export const env = {
   SMTP_USER: process.env.SMTP_USER || "",
   SMTP_PASS: process.env.SMTP_PASS || "",
   SMTP_FROM: process.env.SMTP_FROM || "ThinkWAVE <no-reply@thinkwave.local>",
-
-  // Brevo HTTP email API (sends over HTTPS/443, unaffected by Render free-tier
-  // SMTP port blocking on 25/465/587). Used instead of raw SMTP when set.
-  BREVO_API_KEY: process.env.BREVO_API_KEY || "",
-  BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || "",
-  BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "ThinkWAVE Team",
 
   TEACHER_GRACE_SEC: Number(process.env.TEACHER_GRACE_SEC || 30),
 };

@@ -7,16 +7,7 @@
 import nodemailer from "nodemailer";
 import { env } from "../env.js";
 
-// Render's free-tier web services block outbound traffic on SMTP ports
-// 25/465/587 (platform change effective Sept 26, 2025). Raw Gmail SMTP below
-// still works for local dev / non-Render hosts, but on Render's free tier it
-// will hang until ETIMEDOUT. Brevo's HTTP API sends over HTTPS (443), which
-// Render does not block, so we use it whenever BREVO_API_KEY is configured.
-function hasBrevoConfig() {
-  return Boolean(env.BREVO_API_KEY && env.BREVO_SENDER_EMAIL);
-}
-
-function hasSmtpConfig() {
+function hasMailConfig() {
   return Boolean((env.SMTP_HOST || env.SMTP_SERVICE) && env.SMTP_USER && env.SMTP_PASS);
 }
 
@@ -36,48 +27,19 @@ function buildTransporter() {
   );
 }
 
-async function sendViaBrevo({ to, subject, text, html }) {
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "api-key": env.BREVO_API_KEY,
-    },
-    body: JSON.stringify({
-      sender: { email: env.BREVO_SENDER_EMAIL, name: env.BREVO_SENDER_NAME },
-      to: [{ email: to }],
-      subject,
-      textContent: text,
-      htmlContent: html,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Brevo send failed (${res.status}): ${body}`);
-  }
-}
-
 export async function sendMail({ to, subject, text, html }) {
-  // Preferred path on Render: HTTPS API, not subject to the SMTP port block.
-  if (hasBrevoConfig()) {
-    await sendViaBrevo({ to, subject, text, html });
+  if (!hasMailConfig()) {
+    console.log("[OTP EMAIL NOT SENT - configure Gmail/SMTP in server/.env]", { to, subject, text });
     return;
   }
 
-  // Fallback path: raw Gmail SMTP — works locally, will time out on Render free tier.
-  if (hasSmtpConfig()) {
-    const transporter = buildTransporter();
-    await transporter.sendMail({
-      from: env.SMTP_FROM,
-      to,
-      subject,
-      text,
-      html
-    });
-    return;
-  }
+  const transporter = buildTransporter();
 
-  console.log("[OTP EMAIL NOT SENT - configure BREVO_API_KEY or SMTP in server/.env]", { to, subject, text });
+  await transporter.sendMail({
+    from: env.SMTP_FROM,
+    to,
+    subject,
+    text,
+    html
+  });
 }
