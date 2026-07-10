@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
+import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -70,7 +71,8 @@ export default function SessionHistoryTab({ setActiveTab }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const rows = [...sessions].filter((session) => {
-      if (modeFilter !== "ALL" && session.join_mode !== modeFilter) return false;
+      const sessionType = isAssignedSession(session) ? "ASSIGNED" : "LIVE";
+      if (modeFilter !== "ALL" && sessionType !== modeFilter) return false;
       if (!q) return true;
       return [session.quiz_title, session.template_type, session.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
@@ -94,15 +96,17 @@ export default function SessionHistoryTab({ setActiveTab }) {
     }, {});
   }, [filtered]);
 
-  async function download(sessionId, format) {
-    setExporting(`${sessionId}:${format}`);
+  async function download(session, format) {
+    setExporting(`${session.id}:${format}`);
     try {
-      const resp = await api.get(`/analytics/sessions/${sessionId}/export/${format}`, { responseType: "blob" });
+      const assigned = isAssignedSession(session);
+      const urlPath = assigned ? `/classes/${session.class_id}/async-results/${session.quiz_id}/export/${format}` : `/analytics/sessions/${session.id}/export/${format}`;
+      const resp = await api.get(urlPath, { responseType: "blob" });
       const mime = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       const url = URL.createObjectURL(new Blob([resp.data], { type: mime }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `session-${sessionId}.${format}`;
+      a.download = `${isAssignedSession(session) ? "assigned" : "session"}-${session.quiz_id || session.id}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -119,7 +123,6 @@ export default function SessionHistoryTab({ setActiveTab }) {
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
         <h2 style={{ marginBottom: 4, color: c.text }}>Session History</h2>
-        <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>Review finished sessions, reopen analytics, export reports, or jump back into reusable content.</p>
       </section>
 
       <section style={{ ...card(c), display: "grid", gap: 14 }}>
@@ -131,9 +134,9 @@ export default function SessionHistoryTab({ setActiveTab }) {
             style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}
           />
           <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
-            <option value="ALL">All modes</option>
-            <option value="SOLO">Solo only</option>
-            <option value="GROUP">Group only</option>
+            <option value="ALL">All sessions</option>
+            <option value="LIVE">Live session</option>
+            <option value="ASSIGNED">Assigned session</option>
           </select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
             <option value="recent">Newest first</option>
@@ -152,7 +155,7 @@ export default function SessionHistoryTab({ setActiveTab }) {
             {rows.map((session) => {
               const insight = buildInsight(session);
               return (
-                <div key={session.id} style={card(c)}>
+                <div key={`${session.session_type || "LIVE"}-${session.id}`} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
                   <div style={{ display: "grid", gap: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
                       <div>
@@ -160,18 +163,19 @@ export default function SessionHistoryTab({ setActiveTab }) {
                         <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{new Date(session.ended_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <span style={badge(c)}>{session.join_mode === "GROUP" ? "Groups" : "Solo"}</span>
-                        <span style={badge(c)}>{session.participant_count} {session.join_mode === "GROUP" ? "groups" : "students"}</span>
+                        <span style={badge(c, { borderColor: templateTone(session.template_type, c, false).border, background: templateTone(session.template_type, c, false).softBg, color: templateTone(session.template_type, c, false).accent })}>{templateLabel(session.template_type)}</span>
+                        <span style={badge(c)}>{isAssignedSession(session) ? "Assigned session" : "Live session"}</span>
+                        <span style={badge(c)}>{session.participant_count} {isAssignedSession(session) ? "submitted" : session.join_mode === "GROUP" ? "groups" : "students"}</span>
                         <span style={badge(c)}>{session.avg_score ?? 0} avg</span>
                         <span style={badge(c)}>{session.top_score ?? 0} top</span>
                       </div>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-                      <MiniInfo label="Template" value={session.template_type} c={c} />
+                      <MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} />
                       <MiniInfo label="Category" value={session.category} c={c} />
                       <MiniInfo label="Questions" value={session.question_count} c={c} />
-                      <MiniInfo label={session.join_mode === "GROUP" ? "Groups" : "Students"} value={session.participant_count} c={c} />
+                      <MiniInfo label={isAssignedSession(session) ? "Submitted" : session.join_mode === "GROUP" ? "Groups" : "Students"} value={session.participant_count} c={c} />
                     </div>
 
                     <div style={{ padding: "12px 13px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted, fontSize: 13, lineHeight: 1.6 }}>
@@ -179,10 +183,10 @@ export default function SessionHistoryTab({ setActiveTab }) {
                     </div>
 
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button style={btn(c, true)} onClick={() => navigate(`/teacher/analytics/${session.id}`)}>Open Analytics</button>
+                      {!isAssignedSession(session) && <button style={btn(c, true)} onClick={() => navigate(`/teacher/analytics/${session.id}`)}>Open Analytics</button>}
                       <button style={btn(c)} onClick={() => setActiveTab?.("bank")}>Reuse</button>
-                      <button style={btn(c)} disabled={exporting === `${session.id}:pdf`} onClick={() => download(session.id, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</button>
-                      <button style={btn(c)} disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session.id, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</button>
+                      <button style={btn(c)} disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</button>
+                      <button style={btn(c)} disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</button>
                     </div>
                   </div>
                 </div>
@@ -204,8 +208,12 @@ function MiniInfo({ label, value, c }) {
   );
 }
 
+function isAssignedSession(session) {
+  return session?.session_type === "ASSIGNED" || session?.join_mode === "ASSIGNED";
+}
+
 function buildInsight(session) {
-  const modeText = session.join_mode === "GROUP" ? "group activity" : "individual session";
+  const modeText = isAssignedSession(session) ? "assigned quiz" : session.join_mode === "GROUP" ? "group activity" : "individual session";
   if (Number(session.avg_score || 0) < 40) return `This ${modeText} may need a reteach or review activity because the average score stayed low.`;
   if (Number(session.avg_score || 0) >= 80) return `This ${modeText} performed strongly overall. It may be a good candidate for reuse or a faster follow-up lesson.`;
   return `This ${modeText} landed in the middle range, so the analytics may be useful for spotting which questions slowed students down.`;

@@ -19,6 +19,7 @@ import { adminRouter }          from "./modules/users/admin.routes.js";
 import { questionBankRouter }   from "./modules/question_bank/question_bank.routes.js";
 import { superadminRouter }     from "./modules/superadmin/superadmin.routes.js";
 import { adminDashboardRouter } from "./modules/admin/admin_dashboard.routes.js";
+import { studentRouter }        from "./modules/student/student.routes.js";
 
 export function makeApp() {
   const app = express();
@@ -41,5 +42,6 @@ export function makeApp() {
   app.use("/api/question-bank",   questionBankRouter);
   app.use("/api/superadmin",      superadminRouter);
   app.use("/api/admin-dashboard", adminDashboardRouter);
+  app.use("/api/student",         studentRouter);
   return app;
 }

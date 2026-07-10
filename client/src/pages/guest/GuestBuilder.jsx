@@ -328,7 +328,7 @@ function SimpleTemplateEditor({ templateType, category, q, onChange }) {
 }
 
 function safeJson(v){if(!v)return null;if(typeof v==="object")return v;try{return JSON.parse(v);}catch{return null;}}
-function defaultConfig(t,c){switch(t){case"MCQ":return{options:c==="K12"?["","",""]:["","","",""]};case"TRUE_FALSE":return{options:["True","False"]};case"MATCHING":return{colA:[{text:"A1"}],colB:[{text:"B1"}]};case"GUESS_WORD_4PICS":return{images:["","","",""]};case"THINK_SPELL":return{dummyLetters:6,target:""};default:return{};}}
+function defaultConfig(t,c){switch(t){case"MCQ":return{options:c==="K12"?["","",""]:["","","",""]};case"TRUE_FALSE":return{options:["True","False"]};case"MATCHING":return{colA:[{text:"A1"}],colB:[{text:"B1"}]};case"GUESS_WORD_4PICS":return{images:["","","",""]};case"THINK_SPELL":return{gridSize:8,answers:[],minWordLength:3,pointsPerWord:1,lengthBonusPerLetter:1};default:return{};}}
 function defaultCorrect(t){switch(t){case"MCQ":case"TRUE_FALSE":return{choice:""};case"MATCHING":return{pairs:[]};default:return{text:""};}}
 
 const styles = {

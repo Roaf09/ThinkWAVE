@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { IconBubble, TwIcon } from "../components/TwUI";
 
 export default function Landing() {
   const nav = useNavigate();
@@ -53,6 +54,12 @@ export default function Landing() {
 
   function goJoinRole(mode) {
     setModalMsg("");
+    if (mode === "student") {
+      // Revision 6: student join now requires a registered student account first.
+      setModalOpen(false);
+      nav("/student-login");
+      return;
+    }
     setEntryMode(mode);
     setModalStep("joinCode");
   }
@@ -118,7 +125,7 @@ export default function Landing() {
         </nav>
         <div style={styles.headerActions}>
           <button onClick={toggleTheme} style={styles.themeBtn(c, themeTransition)}>
-            {dark ? "☀️ Light" : "🌙 Dark"}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><TwIcon name={dark ? "sun" : "moon"} size={16} /> {dark ? "Light" : "Dark"}</span>
           </button>
           {!isFirstRun && <Link to="/superadmin-login" style={styles.headerBtnSuper(dark, themeTransition)}>SUPER</Link>}
           <Link to="/login" style={styles.headerBtnOutline(c, themeTransition)}>Login</Link>
@@ -132,6 +139,19 @@ export default function Landing() {
           <p style={styles.heroSub(c, themeTransition)}>
             A template-driven, web-based gamified learning system for real-time classroom quizzes and interactive learning activities.
           </p>
+          <div className="tw-hero-visual" aria-hidden="true">
+            <div className="tw-hero-row">
+              <IconBubble name="live" c={c} size={38} iconSize={19} />
+              <div style={{ flex: 1 }}>
+                <div style={{ height: 9, borderRadius: 99, background: dark ? "rgba(255,255,255,0.14)" : "rgba(43,108,255,0.14)", marginBottom: 8 }}><div className="tw-hero-bar" /></div>
+                <div style={{ height: 8, width: "58%", borderRadius: 99, background: dark ? "rgba(255,255,255,0.12)" : "rgba(43,108,255,0.12)" }} />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="tw-hero-row"><TwIcon name="mcq" size={20} /><span style={{ fontWeight: 800, color: c.text }}>Templates</span></div>
+              <div className="tw-hero-row"><TwIcon name="chart" size={20} /><span style={{ fontWeight: 800, color: c.text }}>Analytics</span></div>
+            </div>
+          </div>
           <div style={styles.heroBtns}>
             {!isFirstRun && (
               <button style={styles.btnSecondary(c, themeTransition)} onClick={() => nav("/login?role=admin")}>
@@ -174,12 +194,12 @@ export default function Landing() {
               {modalStep === "root" && (
                 <div style={styles.roleRowStack}>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={() => { setModalMsg(""); setModalStep("joinRole"); }}>
-                    <span style={styles.roleIcon}>🎓</span>
+                    <IconBubble name="join" c={c} size={56} iconSize={28} />
                     <span style={styles.roleLabel(c, themeTransition)}>JOIN SESSION</span>
                     <span style={styles.roleHint(c, themeTransition)}>Enter a live session with a session code</span>
                   </button>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={() => { setModalMsg(""); setModalStep("hostRole"); }}>
-                    <span style={styles.roleIcon}>📋</span>
+                    <IconBubble name="host" c={c} size={56} iconSize={28} />
                     <span style={styles.roleLabel(c, themeTransition)}>HOST SESSION</span>
                     <span style={styles.roleHint(c, themeTransition)}>Create or host a live ThinkWAVE activity</span>
                   </button>
@@ -189,14 +209,14 @@ export default function Landing() {
               {modalStep === "joinRole" && (
                 <div style={styles.roleRow}>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={() => goJoinRole("guest")}>
-                    <span style={styles.roleIcon}>👤</span>
+                    <IconBubble name="guest" c={c} size={56} iconSize={28} tone="neutral" />
                     <span style={styles.roleLabel(c, themeTransition)}>GUEST JOIN</span>
-                    <span style={styles.roleHint(c, themeTransition)}>Join quickly without a student account</span>
+                    <span style={styles.roleHint(c, themeTransition)}>Join quickly without an account</span>
                   </button>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={() => goJoinRole("student")}>
-                    <span style={styles.roleIcon}>🎒</span>
+                    <IconBubble name="student" c={c} size={56} iconSize={28} />
                     <span style={styles.roleLabel(c, themeTransition)}>STUDENT JOIN</span>
-                    <span style={styles.roleHint(c, themeTransition)}>Continue as a student participant</span>
+                    <span style={styles.roleHint(c, themeTransition)}>Login or register before joining classes</span>
                   </button>
                 </div>
               )}
@@ -204,12 +224,12 @@ export default function Landing() {
               {modalStep === "hostRole" && (
                 <div style={styles.roleRow}>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={goTeacherHost}>
-                    <span style={styles.roleIcon}>🧑‍🏫</span>
+                    <IconBubble name="teacher" c={c} size={56} iconSize={28} />
                     <span style={styles.roleLabel(c, themeTransition)}>TEACHER HOST</span>
                     <span style={styles.roleHint(c, themeTransition)}>Log in and host using your teacher account</span>
                   </button>
                   <button style={styles.roleBox(c, dark, themeTransition)} onClick={goGuestHost}>
-                    <span style={styles.roleIcon}>✨</span>
+                    <IconBubble name="spark" c={c} size={56} iconSize={28} tone="yellow" />
                     <span style={styles.roleLabel(c, themeTransition)}>GUEST HOST</span>
                     <span style={styles.roleHint(c, themeTransition)}>Go straight to the guest dashboard</span>
                   </button>
@@ -281,7 +301,8 @@ const styles = {
     justifyContent: "space-between",
     padding: "16px 40px",
     borderBottom: `1px solid ${c.border}`,
-    background: c.pageBg,
+    background: c.cardBg,
+    backdropFilter: "blur(18px)",
     position: "relative",
     zIndex: 1,
     transition,
@@ -341,7 +362,7 @@ const styles = {
   }),
   main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 40px", position: "relative", zIndex: 1 },
   heroContent: { textAlign: "center", maxWidth: 680, display: "flex", flexDirection: "column", alignItems: "center", gap: 20 },
-  heroTitle: (c, transition) => ({ fontSize: 56, fontWeight: 900, margin: 0, letterSpacing: "-2px", color: c.text, transition }),
+  heroTitle: (c, transition) => ({ fontSize: 64, fontWeight: 950, margin: 0, letterSpacing: "-2.8px", color: c.text, transition, lineHeight: 0.95 }),
   heroSub: (c, transition) => ({ fontSize: 16, lineHeight: 1.7, color: c.textMuted, margin: 0, maxWidth: 540, transition }),
   heroBtns: { display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" },
   btnPrimary: (transition) => ({
@@ -425,8 +446,8 @@ const styles = {
     color: c.text,
     transition,
     boxShadow: dark ? "0 12px 26px rgba(0,0,0,0.12)" : "0 14px 28px rgba(43,108,255,0.08)",
+    minHeight: 148,
   }),
-  roleIcon: { fontSize: 34 },
   roleLabel: (c, transition) => ({ fontSize: 17, fontWeight: 900, letterSpacing: "0.04em", color: c.text, transition }),
   roleHint: (c, transition) => ({ fontSize: 12, opacity: 0.8, color: c.textMuted, textAlign: "center", lineHeight: 1.5, transition }),
   joinForm: { width: "100%", display: "flex", flexDirection: "column", gap: 14, alignItems: "center" },

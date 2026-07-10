@@ -74,6 +74,8 @@ export default function SuperadminLogin({ onLoginSuccess }) {
 
             {msg && <p style={s.msgBox}>{msg}</p>}
 
+            <button type="button" style={s.forgotBtn} onClick={() => nav("/forgot-password")}>Forgot password?</button>
+
             <div style={s.btnWrap}>
               <button type="submit" style={s.loginBtn}>Authorize and Enter</button>
             </div>
@@ -109,6 +111,7 @@ const s = {
   input: (c) => ({ padding: "11px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box" }),
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
+  forgotBtn: { alignSelf: "flex-end", background: "none", border: "none", color: "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   msgBox: { fontSize: 13, color: "#fecaca", background: "rgba(127,29,29,0.4)", borderRadius: 8, padding: "10px 14px", margin: 0 },
   btnWrap: { display: "flex", justifyContent: "center", marginTop: 4 },
   loginBtn: { width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#dc2626", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.25)" },

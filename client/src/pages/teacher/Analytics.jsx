@@ -64,9 +64,10 @@ export default function Analytics() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
               <button onClick={() => navigate(-1)} style={secondaryBtn(C)}>← Back</button>
-              <h2 style={{ margin: "12px 0 4px", color: C.text, fontWeight: 900 }}>Session Analytics</h2>
+              <h2 style={{ margin: "12px 0 4px", color: C.text, fontWeight: 900 }}>{analytics?.session?.quiz_title || `Session #${sessionId}`}</h2>
+              {/* Revision 1: quiz title appears first, followed by template, folder, date, and analytics label. */}
               <div style={{ color: C.muted, fontSize: 13, fontWeight: 700 }}>
-                {analytics?.session?.quiz_title || `Session #${sessionId}`} · {analytics?.session?.join_mode === "GROUP" ? "Group mode" : "Solo mode"}
+                Session Analytics · {analytics?.session?.template_label || analytics?.session?.template_type || "Template"} · {analytics?.session?.folder_name || "Unassigned"} · {analytics?.session?.display_date || "No date"} · {analytics?.session?.join_mode === "GROUP" ? "Group mode" : "Solo mode"}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -160,14 +161,14 @@ function AnalyticsPanel({ C, analytics, tabMonitoring, joinMode }) {
         </div>
       </div>
       <div style={{ ...card(C), boxShadow: "none", padding: 16, background: C.cardBg2 }}>
-        <div style={{ color: C.text, fontWeight: 900, marginBottom: 12 }}>Per-question Difficulty</div>
+        <div style={{ color: C.text, fontWeight: 900, marginBottom: 12 }}>Per-question Percentage</div>
         <div style={{ display: "grid", gap: 10 }}>
           {questions.map((q, idx) => (
             <div key={q.question_id || idx} style={{ display: "grid", gridTemplateColumns: "72px 1fr 110px 120px", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: 14, background: C.cardBg, border: `1px solid ${C.border}` }}>
-              <div style={{ color: C.muted, fontWeight: 800 }}>Q{Number(q.question_order || idx)}</div>
+              <div style={{ color: C.muted, fontWeight: 800 }}>Q{Number(q.question_order ?? idx) + 1}</div>
               <div style={{ color: C.text, fontWeight: 700 }}>{q.prompt}</div>
               <div style={{ color: C.text, fontWeight: 900 }}>{q.pct_correct ?? 0}%</div>
-              <StatusPill C={C} label={q.difficulty} kind={q.difficulty === "Difficult" ? "red" : "green"} />
+              <StatusPill C={C} label={`${q.pct_correct ?? 0}% correct / ${q.pct_incorrect ?? Math.max(0, 100 - Number(q.pct_correct || 0))}% incorrect`} kind="blue" />
             </div>
           ))}
           {questions.length === 0 && <div style={{ color: C.muted, fontWeight: 700 }}>No question analytics recorded.</div>}

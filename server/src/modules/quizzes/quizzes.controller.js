@@ -5,6 +5,12 @@
  */
 
 import { pool } from "../../db.js";
+import { normalizeTemplateType } from "./templates.js";
+
+function toMysqlDateTime(value) {
+  // Revision 6: datetime-local inputs arrive as YYYY-MM-DDTHH:mm.
+  return value ? String(value).replace("T", " ") : null;
+}
 
 export async function listQuizzes(req, res) {
   const [rows] = await pool.query(
@@ -17,18 +23,22 @@ export async function listQuizzes(req, res) {
 export async function createQuiz(req, res) {
   const b = req.body;
   const [r] = await pool.query(
-    `INSERT INTO quizzes(teacher_id,class_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers)
-     VALUES(:tid,:cid,:title,:cat,:tt,:tls,:ppq,:rq,:sa)`,
+    `INSERT INTO quizzes(teacher_id,class_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,delivery_mode,available_from,available_until)
+     VALUES(:tid,:cid,:title,:cat,:tt,:tls,:ppq,:rq,:sa,:mode,:fromDt,:untilDt)`,
     {
       tid: req.user.sub,
       cid: b.classId ?? null,
       title: b.title,
       cat: b.category,
-      tt: b.templateType,
+      tt: normalizeTemplateType(b.templateType),
       tls: b.timeLimitSec,
       ppq: b.pointsPerQuestion,
       rq: b.randomizeQuestions ? 1 : 0,
-      sa: b.shuffleAnswers ? 1 : 0
+      sa: b.shuffleAnswers ? 1 : 0,
+      // Revision 6: supports asynchronous quiz scheduling.
+      mode: b.deliveryMode === "ASYNCHRONOUS" ? "ASYNCHRONOUS" : "SYNCHRONOUS",
+      fromDt: b.deliveryMode === "ASYNCHRONOUS" ? toMysqlDateTime(b.availableFrom) : null,
+      untilDt: b.deliveryMode === "ASYNCHRONOUS" ? toMysqlDateTime(b.availableUntil) : null
     }
   );
   res.status(201).json({ id: r.insertId });
@@ -42,13 +52,15 @@ export async function getQuiz(req, res) {
   );
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
+  const quiz = { ...q[0], template_type: normalizeTemplateType(q[0].template_type) };
+
   const [questions] = await pool.query(
     `SELECT id, question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
 
-  res.json({ quiz: q[0], questions });
+  res.json({ quiz, questions });
 }
 
 export async function upsertQuestions(req, res) {
@@ -198,6 +210,55 @@ export async function duplicateQuiz(req, res) {
         cfg: q.config_json,
         corr: q.correct_json,
       }
+    );
+  }
+
+  res.status(201).json({ ok: true, id: created.insertId });
+}
+
+// Revision 7: create an asynchronous assignment copy from an existing quiz.
+export async function assignQuiz(req, res) {
+  const quizId = Number(req.params.id);
+  const teacherId = req.user.sub;
+  const { availableFrom, availableUntil } = req.body;
+
+  const [[quiz]] = await pool.query(
+    `SELECT * FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
+    { id: quizId, tid: teacherId }
+  );
+  if (!quiz) return res.status(404).json({ message: "Quiz not found." });
+  if (!quiz.class_id) return res.status(400).json({ message: "Assign this quiz to a class folder first." });
+  if (!availableFrom || !availableUntil) return res.status(400).json({ message: "Start and end time are required." });
+
+  const [created] = await pool.query(
+    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
+     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
+    {
+      tid: teacherId,
+      cid: quiz.class_id,
+      sourceId: quizId,
+      title: quiz.title,
+      cat: quiz.category,
+      tt: quiz.template_type,
+      tls: quiz.time_limit_sec,
+      ppq: quiz.points_per_question,
+      rq: quiz.randomize_questions ? 1 : 0,
+      sa: quiz.shuffle_answers ? 1 : 0,
+      fromDt: toMysqlDateTime(availableFrom),
+      untilDt: toMysqlDateTime(availableUntil),
+    }
+  );
+
+  const [questions] = await pool.query(
+    `SELECT question_order, prompt, config_json, correct_json
+     FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
+    { qid: quizId }
+  );
+  for (const q of questions) {
+    await pool.query(
+      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
+      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: q.config_json, corr: q.correct_json }
     );
   }
 

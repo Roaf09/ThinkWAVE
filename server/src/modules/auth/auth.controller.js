@@ -34,6 +34,9 @@ export async function register(req, res) {
       role = "SUPERADMIN"; approvalStatus = "APPROVED";
     } else if (requestedRole === "ADMIN") {
       role = "ADMIN";      approvalStatus = "APPROVED";
+    } else if (requestedRole === "STUDENT") {
+      // Revision 6: students now register their own accounts.
+      role = "STUDENT";    approvalStatus = "APPROVED";
     } else {
       role = "TEACHER";    approvalStatus = "APPROVED";
     }
@@ -109,10 +112,41 @@ export async function login(req, res) {
   if (loginPortal === "SUPERADMIN" && u.role !== "SUPERADMIN") {
     return res.status(403).json({ message: "Only superadmin accounts can use the superadmin login page." });
   }
+  if (loginPortal === "STUDENT" && u.role !== "STUDENT") {
+    // Revision 6: keep the student portal separate from teacher/admin logins.
+    return res.status(403).json({ message: "Only student accounts can use the student login page." });
+  }
 
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
   const token = jwt.sign({ sub: u.id, role: u.role }, env.JWT_SECRET, { expiresIn: "8h" });
   res.json({ token, role: u.role });
+}
+
+export async function requestPasswordReset(req, res) {
+  const { email } = req.body;
+  const cleanEmail = normalizeEmail(email);
+  const [rows] = await pool.query(
+    `SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+    { email: cleanEmail }
+  );
+  // Revision 1: password changes use OTP verification only, no admin approval.
+  if (rows.length) await sendOtpForUser(rows[0].id, cleanEmail);
+  res.json({ message: "If the email exists, an OTP has been sent." });
+}
+
+export async function confirmPasswordReset(req, res) {
+  const { email, code, newPassword } = req.body;
+  const cleanEmail = normalizeEmail(email);
+  const [rows] = await pool.query(
+    `SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+    { email: cleanEmail }
+  );
+  if (!rows.length) return res.status(404).json({ message: "User not found" });
+  const ok = await verifyOtpCode(rows[0].id, code);
+  if (!ok) return res.status(400).json({ message: "Invalid or expired OTP" });
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await pool.query(`UPDATE users SET password_hash=:ph WHERE id=:id`, { ph: passwordHash, id: rows[0].id });
+  res.json({ message: "Password changed successfully." });
 }
 
 export async function me(req, res) {

@@ -432,7 +432,7 @@ export default function AdminDashboard() {
           onClose={() => setShowLogout(false)}
         >
           <button className="btn secondary" onClick={() => setShowLogout(false)}>Cancel</button>
-          <button className="btn" style={{ background: "#7f1d1d", color: "#fca5a5" }} onClick={doLogout}>
+          <button className="btn" style={{ background: dark ? "#7f1d1d" : "#dc2626", color: dark ? "#fca5a5" : "#ffffff" }} onClick={doLogout}>
             Yes, Log Out
           </button>
         </ThemedModal>

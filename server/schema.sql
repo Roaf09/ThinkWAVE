@@ -13,7 +13,7 @@ USE thinkwave;
 -- -----------------------------------------------------------
 CREATE TABLE users (
   id                     BIGINT PRIMARY KEY AUTO_INCREMENT,
-  role                   ENUM('SUPERADMIN','ADMIN','TEACHER') NOT NULL,
+  role                   ENUM('SUPERADMIN','ADMIN','TEACHER','STUDENT') NOT NULL,
   email                  VARCHAR(190) NOT NULL UNIQUE,
   password_hash          VARCHAR(255) NOT NULL,
   first_name             VARCHAR(100) NOT NULL,
@@ -32,6 +32,20 @@ CREATE TABLE users (
   INDEX idx_users_role_deleted (role, deleted_at),
   INDEX idx_users_institution (institution_name)
 );
+
+-- Revision 6: stores one-time student profile details after first class join.
+CREATE TABLE student_profiles (
+  user_id        BIGINT PRIMARY KEY,
+  last_name      VARCHAR(100) NOT NULL,
+  first_name     VARCHAR(100) NOT NULL,
+  middle_initial VARCHAR(10) NULL,
+  student_id     VARCHAR(80) NOT NULL,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_student_profiles_user FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE KEY uq_student_profiles_student_id (student_id)
+);
+
 
 -- -----------------------------------------------------------
 -- 2. otp_codes
@@ -60,6 +74,7 @@ CREATE TABLE classes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL,
+  class_code VARCHAR(16) NULL UNIQUE, -- Revision 6: teacher-generated code students use to join a class.
   CONSTRAINT fk_classes_teacher
     FOREIGN KEY (teacher_id) REFERENCES users(id),
   CONSTRAINT fk_classes_parent
@@ -85,6 +100,9 @@ CREATE TABLE quizzes (
   randomize_questions  TINYINT(1) NOT NULL DEFAULT 0,
   shuffle_answers      TINYINT(1) NOT NULL DEFAULT 0,
   status               ENUM('DRAFT','PUBLISHED','IN_SESSION','BANKED') NOT NULL DEFAULT 'DRAFT',
+  delivery_mode        ENUM('SYNCHRONOUS','ASYNCHRONOUS') NOT NULL DEFAULT 'SYNCHRONOUS', -- Revision 6
+  available_from       DATETIME NULL, -- Revision 6: async start time
+  available_until      DATETIME NULL, -- Revision 6: async end time
   created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at           TIMESTAMP NULL,
@@ -258,7 +276,7 @@ CREATE TABLE responses (
   question_id     BIGINT NOT NULL,
   answer_json     JSON NULL,
   is_correct      TINYINT(1) NULL,
-  points_awarded  INT NOT NULL DEFAULT 0,
+  points_awarded  DECIMAL(6,2) NOT NULL DEFAULT 0.00, -- Revision 3: supports 50% MCQ scoring
   answered_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_responses_session
     FOREIGN KEY (session_id) REFERENCES sessions(id),
@@ -277,7 +295,7 @@ CREATE TABLE scores (
   id              BIGINT PRIMARY KEY AUTO_INCREMENT,
   session_id      BIGINT NOT NULL,
   participant_id  BIGINT NOT NULL,
-  total_points    INT NOT NULL DEFAULT 0,
+  total_points    DECIMAL(6,2) NOT NULL DEFAULT 0.00, -- Revision 3: supports partial/decimal scores
   updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_scores_session
     FOREIGN KEY (session_id) REFERENCES sessions(id),
@@ -285,6 +303,52 @@ CREATE TABLE scores (
     FOREIGN KEY (participant_id) REFERENCES session_participants(id),
   UNIQUE KEY uq_score (session_id, participant_id),
   INDEX idx_scores_session_points (session_id, total_points)
+);
+
+-- -----------------------------------------------------------
+-- 14. class_enrollments
+-- Revision 6: connects student accounts to teacher class/section folders.
+-- -----------------------------------------------------------
+CREATE TABLE class_enrollments (
+  id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+  class_id        BIGINT NOT NULL,
+  teacher_id      BIGINT NOT NULL,
+  student_user_id BIGINT NOT NULL,
+  student_id      VARCHAR(80) NOT NULL,
+  first_name      VARCHAR(100) NOT NULL,
+  last_name       VARCHAR(100) NOT NULL,
+  middle_initial  VARCHAR(10) NULL,
+  joined_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  removed_at      TIMESTAMP NULL,
+  CONSTRAINT fk_class_enrollments_class FOREIGN KEY (class_id) REFERENCES classes(id),
+  CONSTRAINT fk_class_enrollments_teacher FOREIGN KEY (teacher_id) REFERENCES users(id),
+  CONSTRAINT fk_class_enrollments_student FOREIGN KEY (student_user_id) REFERENCES users(id),
+  UNIQUE KEY uq_class_student (class_id, student_user_id),
+  INDEX idx_class_enrollments_student (student_user_id, removed_at),
+  INDEX idx_class_enrollments_teacher (teacher_id, class_id)
+);
+
+-- -----------------------------------------------------------
+-- 15. async_quiz_submissions
+-- Revision 6: one-submit records for asynchronous quizzes.
+-- -----------------------------------------------------------
+CREATE TABLE async_quiz_submissions (
+  id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+  quiz_id         BIGINT NOT NULL,
+  class_id        BIGINT NOT NULL,
+  teacher_id      BIGINT NOT NULL,
+  student_user_id BIGINT NOT NULL,
+  answers_json    JSON NULL,
+  score           DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  max_score       DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  submitted_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_async_submissions_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
+  CONSTRAINT fk_async_submissions_class FOREIGN KEY (class_id) REFERENCES classes(id),
+  CONSTRAINT fk_async_submissions_teacher FOREIGN KEY (teacher_id) REFERENCES users(id),
+  CONSTRAINT fk_async_submissions_student FOREIGN KEY (student_user_id) REFERENCES users(id),
+  UNIQUE KEY uq_async_quiz_student (quiz_id, student_user_id),
+  INDEX idx_async_quiz_class (class_id, quiz_id),
+  INDEX idx_async_student (student_user_id, submitted_at)
 );
 
 -- -----------------------------------------------------------

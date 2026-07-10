@@ -11,6 +11,7 @@ import { makeSocket } from "../../lib/socket";
 import { QRCodeCanvas } from "qrcode.react";
 import { useTheme } from "../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
+import { normalizeTemplateType } from "../../lib/templateTypes";
 
 // HostLive is the teacher's live-control screen. It manages session status, question flow, roster/groups, and analytics.
 export default function HostLive() {
@@ -206,6 +207,10 @@ export default function HostLive() {
             <span style={{ fontSize: 12, color: C.muted }}>Session #{state.id}</span>
             <StatusPill label={state.status} kind={state.status === "LIVE" ? "green" : state.status === "ENDED" ? "neutral" : "yellow"} />
             <StatusPill label={joinMode === "GROUP" ? "👥 Group Mode" : "👤 Solo Mode"} kind="blue" />
+            <StatusPill
+              label={`👨‍🎓 ${connectedStudents}${roster.length > connectedStudents ? `/${roster.length}` : ""} joined`}
+              kind={connectedStudents > 0 ? "green" : "neutral"}
+            />
             {state.max_participants ? <StatusPill label={`Cap ${state.max_participants}`} kind="blue" /> : null}
             {msg && <span style={{ fontSize: 11, color: C.sub }}>· {msg}</span>}
             {state.teacher_disconnected_deadline ? <span style={{ fontSize: 11, color: '#f59e0b' }}>· reconnect before {new Date(state.teacher_disconnected_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
@@ -249,9 +254,12 @@ export default function HostLive() {
                 {currentQ ? (
                   <>
                     <div style={{ background: dark ? "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))" : "linear-gradient(135deg, rgba(255,255,255,0.96), rgba(237,243,255,0.95))", borderRadius: 22, padding: "34px 22px", border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : C.border}`, marginBottom: 18 }}>
-                      <div style={{ fontSize: 20, fontWeight: 900, color: C.text, textAlign: "center", lineHeight: 1.6 }}>{currentQ.prompt}</div>
+                      <div style={{ display: "grid", gap: 12, justifyItems: "center", textAlign: "center" }}>
+                        {currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 16, objectFit: "contain" }} /> : null}
+                        <div style={{ fontSize: 20, fontWeight: 900, color: C.text, lineHeight: 1.6 }}>{currentQ.prompt}</div>
+                      </div>
                     </div>
-                    <QuestionPreview q={currentQ} templateType={state.template_type} C={C} />
+                    <QuestionPreview q={currentQ} templateType={normalizeTemplateType(state.template_type)} C={C} />
                   </>
                 ) : (
                   <div style={{ padding: 28, color: C.muted, textAlign: "center", fontWeight: 800 }}>You have reached the end.</div>
@@ -270,8 +278,16 @@ export default function HostLive() {
               </div>
             </div>
             {analyticsOpen && isEnded ? (
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,0.72fr) minmax(420px,1.28fr)", gap: 18, alignItems: "start", marginTop: 8 }}>
-                <div>
+              <div style={{ display: "grid", gap: 16, marginTop: 8 }}>
+                {/* Revision 1: ended-session analytics starts with quiz title, then template, folder, and date. */}
+                <div style={{ padding: "12px 14px", borderRadius: 16, background: C.cardBg2, border: `1px solid ${C.border}` }}>
+                  <h3 style={{ margin: "0 0 4px", color: C.text, fontWeight: 900 }}>{analytics?.session?.quiz_title || state.quiz_title || "Untitled Quiz"}</h3>
+                  <div style={{ color: C.muted, fontSize: 13, fontWeight: 700 }}>
+                    Session Analytics · {analytics?.session?.template_label || analytics?.session?.template_type || state.template_type || "Template"} · {analytics?.session?.folder_name || "Unassigned"} · {analytics?.session?.display_date || "No date"}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,0.72fr) minmax(420px,1.28fr)", gap: 18, alignItems: "start" }}>
+                  <div>
                   {scores.length === 0 ? <p style={{ color: C.muted, textAlign: "center", fontSize: 14 }}>No answers yet.</p> : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {scores.map((s, i) => (
@@ -290,6 +306,7 @@ export default function HostLive() {
                   {analyticsLoading ? <div style={{ color: C.muted, fontWeight: 700 }}>Loading analytics…</div> : analytics && (
                     <AnalyticsPanel C={C} analytics={analytics} tabMonitoring={tabMonitoring} joinMode={joinMode} />
                   )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -316,7 +333,18 @@ export default function HostLive() {
           <div style={{ maxHeight: isEnded ? 0 : 1400, opacity: isEnded ? 0 : 1, overflow: "hidden", transform: isEnded ? "translateY(-18px)" : "translateY(0)", transition: "max-height 420ms cubic-bezier(0.22,1,0.36,1), opacity 320ms ease, transform 320ms ease" }}>
           <div style={card(C)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0, color: C.text, fontWeight: 900 }}>👥 Students</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <h3 style={{ margin: 0, color: C.text, fontWeight: 900 }}>👥 Students</h3>
+                <StatusPill
+                  label={`${connectedStudents} online${roster.length > connectedStudents ? ` · ${roster.length - connectedStudents} offline` : ""}`}
+                  kind={connectedStudents > 0 ? "green" : "neutral"}
+                />
+                {roster.length > 0 && (
+                  <span style={{ fontSize: 12, color: C.muted, fontWeight: 700 }}>
+                    {roster.length} total
+                  </span>
+                )}
+              </div>
               {joinMode === "GROUP" && !isEnded && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", opacity: groupsLocked ? 0.45 : 1, transition: "opacity 240ms ease" }}>
                   <button onClick={() => !groupsLocked && socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} disabled={groupsLocked} style={{ ...btnStyle(C, "ghost"), cursor: groupsLocked ? "not-allowed" : "pointer" }}>＋ Add Group</button>
@@ -495,14 +523,14 @@ function AnalyticsPanel({ C, analytics, tabMonitoring, joinMode }) {
         </div>
       </div>
       <div style={{ ...card(C), boxShadow: "none", padding: 16, background: C.cardBg2 }}>
-        <div style={{ color: C.text, fontWeight: 900, marginBottom: 12 }}>Per-question Difficulty</div>
+        <div style={{ color: C.text, fontWeight: 900, marginBottom: 12 }}>Per-question Percentage</div>
         <div style={{ display: "grid", gap: 10 }}>
           {questions.map((q) => (
             <div key={q.question_id} style={{ display: "grid", gridTemplateColumns: "72px 1fr 110px 120px", gap: 12, alignItems: "center", padding: "10px 12px", borderRadius: 14, background: C.cardBg, border: `1px solid ${C.border}` }}>
               <div style={{ color: C.muted, fontWeight: 800 }}>Q{Number(q.question_order || 0) + 1}</div>
               <div style={{ color: C.text, fontWeight: 700 }}>{q.prompt}</div>
               <div style={{ color: C.text, fontWeight: 900 }}>{q.pct_correct ?? 0}%</div>
-              <StatusPill label={q.difficulty} kind={q.difficulty === "Difficult" ? "red" : "green"} />
+              <StatusPill label={`${q.pct_correct ?? 0}% correct / ${q.pct_incorrect ?? Math.max(0, 100 - Number(q.pct_correct || 0))}% incorrect`} kind="blue" />
             </div>
           ))}
         </div>
@@ -523,20 +551,27 @@ function MetricCard({ C, label, value }) {
 function QuestionPreview({ q, templateType, C }) {
   const cfg = q?.config_json || {};
   const labels = "ABCDEFGHIJ".split("");
-  if (templateType === "MCQ" || templateType === "TRUE_FALSE") {
+  const tt = normalizeTemplateType(templateType);
+  if (tt === "MCQ" || tt === "TRUE_FALSE") {
     const opts = Array.isArray(cfg.options) ? cfg.options : [];
     return (
       <div style={{ display: "grid", gap: 10 }}>
-        {opts.map((opt, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 16, background: C.cardBg2, border: `1px solid ${C.border}` }}>
-            <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: C.cardBg, border: `1px solid ${C.border}`, color: C.accent, fontWeight: 900 }}>{labels[i] || ""}</span>
-            <span style={{ color: C.text, fontWeight: 700 }}>{opt}</span>
-          </div>
-        ))}
+        {opts.map((opt, i) => {
+          const optText = typeof opt === "object" ? (opt?.text || "") : String(opt || "");
+          const optImage = typeof opt === "object" ? (opt?.image || "") : "";
+          const optLabel = optText || (optImage ? "Image option" : `Option ${i + 1}`);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 16, background: C.cardBg2, border: `1px solid ${C.border}` }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", flexShrink: 0, background: C.cardBg, border: `1px solid ${C.border}`, color: C.accent, fontWeight: 900 }}>{labels[i] || ""}</span>
+              {optImage ? <img src={optImage} alt={optText || `Option ${i + 1}`} style={{ height: 52, maxWidth: 90, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : null}
+              {optLabel ? <span style={{ color: C.text, fontWeight: 700, minWidth: 0, wordBreak: "break-word" }}>{optLabel}</span> : null}
+            </div>
+          );
+        })}
       </div>
     );
   }
-  if (templateType === "MATCHING") {
+  if (tt === "MATCHING") {
     const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
     const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
     return (
@@ -554,7 +589,27 @@ function QuestionPreview({ q, templateType, C }) {
           {colB.map((item, i) => (
             <div key={`b-${i}`} style={{ padding: "14px 16px", borderRadius: 16, background: C.cardBg2, border: `1px solid ${C.border}` }}>
               <div style={{ color: C.accent, fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Column B · {i + 1}</div>
-              <div style={{ color: C.text, fontWeight: 700 }}>{item?.text || `Match ${i + 1}`}</div>
+              {item?.image ? <img src={item.image} alt={item.text || `B${i + 1}`} style={{ maxWidth: "100%", maxHeight: 84, borderRadius: 12, display: "block", marginBottom: item?.text ? 8 : 0 }} /> : null}
+              <div style={{ color: C.text, fontWeight: 700 }}>{item?.text || (item?.image ? "Image answer" : `Match ${i + 1}`)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (tt === "GUESS_WORD_4PICS") {
+    const images = Array.isArray(cfg.images) ? cfg.images : [];
+    return (
+      <div>
+        <div style={{ color: C.muted, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Students see a 2×2 image board and type the word.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, maxWidth: 360 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ aspectRatio: "1", borderRadius: 14, overflow: "hidden", background: C.cardBg2, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {images[i] ? (
+                <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <span style={{ color: C.muted, fontWeight: 900, fontSize: 24 }}>?</span>
+              )}
             </div>
           ))}
         </div>

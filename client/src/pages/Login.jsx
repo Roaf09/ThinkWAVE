@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { IconBubble, TwIcon } from "../components/TwUI";
 
 export default function Login({ onLoginSuccess }) {
   const nav = useNavigate();
@@ -67,13 +68,32 @@ export default function Login({ onLoginSuccess }) {
         </Link>
         <div style={s.headerRight}>
           <button onClick={toggleTheme} style={s.themeBtn(c)}>
-            {dark ? "☀️ Light" : "🌙 Dark"}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><TwIcon name={dark ? "sun" : "moon"} size={16} /> {dark ? "Light" : "Dark"}</span>
           </button>
           <Link to={isAdminLogin ? "/register?role=admin" : "/register"} style={s.headerBtn(c)}>Register</Link>
         </div>
       </header>
 
       <main style={s.main}>
+        <section style={s.visualPanel(c)} aria-hidden="true">
+          <IconBubble name={isAdminLogin ? "classes" : "teacher"} c={c} size={58} iconSize={30} />
+          <div>
+            <div style={s.visualKicker(c)}>{isAdminLogin ? "Institution Control" : "Teacher Workspace"}</div>
+            <h2 style={s.visualTitle(c)}>Plan, host, and review learning activities in one calm dashboard.</h2>
+          </div>
+          <div className="tw-dashboard-visual">
+            <div className="tw-mini-chart" style={{ background: c.cardBg2, border: `1px solid ${c.border}` }}>
+              <span style={{ height: "38%" }} /><span style={{ height: "68%" }} /><span style={{ height: "48%" }} /><span style={{ height: "82%" }} />
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {["Live quiz ready", "Reports organized", "Class folders synced"].map((item) => (
+                <div key={item} style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 10px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted, fontSize: 12, fontWeight: 800 }}>
+                  <TwIcon name="check" size={15} /> {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
         <div style={s.card(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminLogin ? "Admin Login" : "Welcome back"}</h1>
@@ -127,7 +147,7 @@ export default function Login({ onLoginSuccess }) {
               <button
                 type="button"
                 style={s.forgotBtn}
-                onClick={() => setError("Ask your administrator to reset your account password.")}
+                onClick={() => nav("/forgot-password")}
               >
                 Forgot password?
               </button>
@@ -184,8 +204,11 @@ const s = {
   headerRight: { display: "flex", alignItems: "center", gap: 10 },
   themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
   headerBtn: (c) => ({ padding: "8px 20px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, color: c.text, fontSize: 13, fontWeight: 700, textDecoration: "none" }),
-  main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "36px 20px", zIndex: 1 },
-  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "40px 44px 36px", width: "min(100%, 460px)", boxShadow: "0 24px 80px rgba(0,0,0,0.28)" }),
+  main: { flex: 1, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 460px))", alignItems: "center", justifyContent: "center", gap: 28, padding: "36px 20px", zIndex: 1 },
+  visualPanel: (c) => ({ display: "grid", gap: 18, background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 28, padding: 28, boxShadow: "0 24px 80px rgba(43,108,255,0.14)", backdropFilter: "blur(16px)" }),
+  visualKicker: (c) => ({ color: c.accent, textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 12, fontWeight: 950, marginBottom: 8 }),
+  visualTitle: (c) => ({ color: c.text, margin: 0, fontSize: 30, lineHeight: 1.12, letterSpacing: "-0.05em" }),
+  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 24, padding: "40px 44px 36px", width: "min(100%, 460px)", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", backdropFilter: "blur(16px)" }),
   cardTop: { marginBottom: 28, textAlign: "center" },
   title: (c) => ({ margin: "0 0 8px", fontSize: 28, fontWeight: 900, letterSpacing: "-0.5px", color: c.text }),
   subtitle: (c) => ({ margin: 0, fontSize: 13, color: c.textMuted, lineHeight: 1.6 }),

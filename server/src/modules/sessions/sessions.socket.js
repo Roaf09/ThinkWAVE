@@ -6,7 +6,8 @@
 
 import { env } from "../../env.js";
 import { pool } from "../../db.js";
-import { scoreAnswer } from "../quizzes/templates.js";
+import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
+import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/thinkSpell.js";
 
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
@@ -239,6 +240,38 @@ export function registerSessionSockets(io) {
           return socket.emit("student:error", { message: "Join a group before answering." });
         }
         const groupId = membership.group_id;
+        const tt = normalizeTemplateType(session.template_type);
+
+        if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
+          const timeUp = await isQuestionTimeUp(session);
+          if (timeUp) {
+            return socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up", templateType: tt });
+          }
+
+          const [[pending]] = await pool.query(
+            `SELECT * FROM group_answer_proposals WHERE session_id=:sid AND group_id=:gid AND question_id=:qid AND status='PENDING' ORDER BY id DESC LIMIT 1`,
+            { sid: sessionId, gid: groupId, qid: questionId }
+          );
+          if (pending) {
+            return socket.emit("student:error", { message: "Your group already has a pending word. Vote on it first." });
+          }
+
+          const [result] = await pool.query(
+            `INSERT INTO group_answer_proposals(session_id, group_id, question_id, proposer_participant_id, answer_json, status)
+             VALUES(:sid,:gid,:qid,:pid,:ans,'PENDING')`,
+            { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(answer ?? null) }
+          );
+
+          await pool.query(
+            `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
+             VALUES(:proposalId,:participantId,'AGREE')`,
+            { proposalId: result.insertId, participantId }
+          );
+
+          await emitGroupProposal(io, sessionId, groupId, result.insertId);
+          await resolveGroupProposalIfReady(io, result.insertId, sessionId);
+          return;
+        }
 
         const [[existingResponse]] = await pool.query(
           `SELECT r.id
@@ -278,8 +311,6 @@ export function registerSessionSockets(io) {
 
       await handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
     });
-
-    // Disconnect handling is critical for classroom stability. Students are marked offline; teacher disconnect pauses the session.
     socket.on("disconnect", async () => {
       const { role, sessionId, participantId } = socket.data || {};
       if (!sessionId) return;
@@ -313,7 +344,23 @@ function roomTeacher(sessionId) { return `session:${sessionId}:teacher`; }
 function roomParticipant(participantId) { return `participant:${participantId}`; }
 function roomGroup(sessionId, groupId) { return `session:${sessionId}:group:${groupId}`; }
 
+async function isQuestionTimeUp(session) {
+  const [[quizMeta]] = await pool.query(`SELECT time_limit_sec FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
+  const timeLimitSec = Number(quizMeta?.time_limit_sec || 0);
+  if (timeLimitSec <= 0 || !session.question_started_at) return false;
+  const [[t]] = await pool.query(`SELECT TIMESTAMPDIFF(SECOND, :started, NOW()) AS elapsed_sec`, { started: session.question_started_at });
+  const elapsed = Number(t?.elapsed_sec || 0);
+  return elapsed > timeLimitSec;
+}
+
 async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
+  const tt = normalizeTemplateType(session.template_type);
+  if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
+    // Revision 1: keep legacy single-word Think & Spell support, but use batch scoring for new one-submit gameplay.
+    await handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
+    return;
+  }
+
   const [[existing]] = await pool.query(
     `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
     { sid: sessionId, pid: participantId, qid: questionId }
@@ -323,22 +370,16 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
     return;
   }
 
-  const [[quizMeta]] = await pool.query(`SELECT time_limit_sec FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
-  const timeLimitSec = Number(quizMeta?.time_limit_sec || 0);
-  if (timeLimitSec > 0 && session.question_started_at) {
-    const [[t]] = await pool.query(`SELECT TIMESTAMPDIFF(SECOND, :started, NOW()) AS elapsed_sec`, { started: session.question_started_at });
-    const elapsed = Number(t?.elapsed_sec || 0);
-    if (elapsed > timeLimitSec) {
-      try {
-        await pool.query(
-          `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
-           VALUES(:sid,:pid,:qid,:ans,0,0)`,
-          { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(answer ?? null) }
-        );
-      } catch {}
-      socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up" });
-      return;
-    }
+  if (await isQuestionTimeUp(session)) {
+    try {
+      await pool.query(
+        `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
+         VALUES(:sid,:pid,:qid,:ans,0,0)`,
+        { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(answer ?? null) }
+      );
+    } catch {}
+    socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up" });
+    return;
   }
 
   const [[q]] = await pool.query(
@@ -368,6 +409,133 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   await recalcParticipantScore(sessionId, participantId);
   socket.emit("answer:ack", { isCorrect, points, locked: true });
   io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points });
+  await broadcastScores(io, sessionId);
+}
+
+async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
+  if (await isQuestionTimeUp(session)) {
+    socket.emit("answer:ack", {
+      isCorrect: false,
+      points: 0,
+      locked: true,
+      message: "Time's up",
+      templateType: TEMPLATE_TYPES.THINK_SPELL,
+    });
+    return;
+  }
+
+  const [[q]] = await pool.query(
+    `SELECT id, correct_json, config_json FROM quiz_questions WHERE id=:qid AND quiz_id=:quizId AND deleted_at IS NULL`,
+    { qid: questionId, quizId: session.quiz_id }
+  );
+  if (!q) return;
+
+  const correct = safeJson(q.correct_json);
+  const config = { ...(safeJson(q.config_json) || {}), questionId: q.id };
+  const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
+
+  const [[existing]] = await pool.query(
+    `SELECT id, answer_json, points_awarded FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
+    { sid: sessionId, pid: participantId, qid: questionId }
+  );
+  const priorPayload = existing ? safeJson(existing.answer_json) : null;
+  const priorWords = Array.isArray(priorPayload?.words) ? priorPayload.words : [];
+  const priorPoints = Number(existing?.points_awarded || 0);
+
+  const scored = scoreThinkSpellWord({
+    correct,
+    answer,
+    config,
+    basePoints,
+    questionId: q.id,
+    priorWords,
+    priorPayload,
+  });
+  const isCorrect = !!scored.isCorrect;
+  const points = Number(scored.pointsAwarded || 0);
+  const canonical = scored.canonicalWord || null;
+  const nextWords = isCorrect && canonical ? [...priorWords, canonical] : priorWords;
+  const nextPayload = {
+    words: nextWords,
+    lastAttempt: answer?.text || "",
+    path: Array.isArray(answer?.path) ? answer.path : [],
+    grid: scored.grid || priorPayload?.grid || null,
+    gridSize: scored.gridSize || priorPayload?.gridSize || null,
+    refillCounter: Number(scored.refillCounter ?? priorPayload?.refillCounter ?? 0),
+    streak: isCorrect ? Number(scored.streak || 0) : 0,
+  };
+  const nextPoints = priorPoints + points;
+  const wordBank = resolveThinkSpellWordBank({ config, correct });
+  const allFound = isThinkSpellRoundComplete({ foundWords: nextWords, wordBank });
+  const requiredWords = wordBank.length;
+  const remainingWords = Math.max(0, requiredWords - nextWords.length);
+
+  const ackPayload = {
+    isCorrect,
+    points,
+    locked: allFound,
+    message: allFound ? "All words found!" : undefined,
+    templateType: TEMPLATE_TYPES.THINK_SPELL,
+    thinkSpell: {
+      totalWords: nextWords.length,
+      totalPoints: nextPoints,
+      requiredWords,
+      remainingWords,
+      reason: scored.reason,
+      words: nextWords,
+      grid: nextPayload.grid,
+      gridSize: nextPayload.gridSize,
+      refillCounter: nextPayload.refillCounter,
+      streak: nextPayload.streak,
+    },
+  };
+
+  if (!isCorrect && priorWords.length === 0 && !existing) {
+    socket.emit("answer:ack", { ...ackPayload, locked: false });
+    return;
+  }
+
+  try {
+    if (existing) {
+      await pool.query(
+        `UPDATE responses
+         SET answer_json=:ans, is_correct=:ic, points_awarded=:pts, answered_at=NOW()
+         WHERE id=:id`,
+        {
+          id: existing.id,
+          ans: JSON.stringify(nextPayload),
+          ic: nextWords.length > 0 ? 1 : 0,
+          pts: nextPoints,
+        }
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
+         VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
+        {
+          sid: sessionId,
+          pid: participantId,
+          qid: questionId,
+          ans: JSON.stringify(nextPayload),
+          ic: isCorrect ? 1 : 0,
+          pts: nextPoints,
+        }
+      );
+    }
+  } catch {
+    socket.emit("answer:ack", { isCorrect: null, points: 0, locked: true, message: "Could not save word" });
+    return;
+  }
+
+  await recalcParticipantScore(sessionId, participantId);
+  socket.emit("answer:ack", ackPayload);
+  io.to(roomTeacher(sessionId)).emit("answer:received", {
+    participantId,
+    questionId,
+    isCorrect,
+    points,
+    thinkSpell: { totalWords: nextWords.length, totalPoints: nextPoints },
+  });
   await broadcastScores(io, sessionId);
 }
 
@@ -454,9 +622,123 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   if (!session || !q) return;
 
   const correct = safeJson(q.correct_json);
-  const config = safeJson(q.config_json) || {};
+  const config = { ...(safeJson(q.config_json) || {}), questionId: q.id };
   const answer = safeJson(proposal.answer_json);
   const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
+  const tt = normalizeTemplateType(session.template_type);
+
+  if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
+    const wordBank = resolveThinkSpellWordBank({ config, correct });
+    let groupWords = [];
+    let groupPoints = 0;
+
+    const [[sampleExisting]] = await pool.query(
+      `SELECT answer_json, points_awarded FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
+      { sid: sessionId, pid: members[0]?.id, qid: proposal.question_id }
+    );
+    const priorPayload = sampleExisting ? safeJson(sampleExisting.answer_json) : null;
+    groupWords = Array.isArray(priorPayload?.words) ? priorPayload.words : [];
+    groupPoints = Number(sampleExisting?.points_awarded || 0);
+
+    const scored = scoreThinkSpellWord({
+      correct,
+      answer,
+      config,
+      basePoints,
+      questionId: q.id,
+      priorWords: groupWords,
+      priorPayload,
+    });
+    const isCorrect = !!scored.isCorrect;
+    const points = Number(scored.pointsAwarded || 0);
+    const canonical = scored.canonicalWord || null;
+    const nextWords = isCorrect && canonical ? [...groupWords, canonical] : groupWords;
+    const nextPayload = {
+      words: nextWords,
+      lastAttempt: answer?.text || "",
+      path: Array.isArray(answer?.path) ? answer.path : [],
+      grid: scored.grid || priorPayload?.grid || null,
+      gridSize: scored.gridSize || priorPayload?.gridSize || null,
+      refillCounter: Number(scored.refillCounter ?? priorPayload?.refillCounter ?? 0),
+      streak: isCorrect ? Number(scored.streak || 0) : 0,
+    };
+    const nextPoints = groupPoints + points;
+    const allFound = isThinkSpellRoundComplete({ foundWords: nextWords, wordBank });
+    const requiredWords = wordBank.length;
+    const remainingWords = Math.max(0, requiredWords - nextWords.length);
+    const memberAck = {
+      isCorrect,
+      points,
+      locked: allFound,
+      viaGroup: true,
+      message: allFound ? "All words found!" : undefined,
+      templateType: tt,
+      thinkSpell: {
+        totalWords: nextWords.length,
+        totalPoints: nextPoints,
+        requiredWords,
+        remainingWords,
+        reason: scored.reason,
+        words: nextWords,
+        grid: nextPayload.grid,
+        gridSize: nextPayload.gridSize,
+        refillCounter: nextPayload.refillCounter,
+        streak: nextPayload.streak,
+      },
+    };
+
+    if (!isCorrect && groupWords.length === 0 && !sampleExisting) {
+      for (const member of members) {
+        io.to(roomParticipant(member.id)).emit("answer:ack", { ...memberAck, locked: false });
+      }
+      io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
+        proposalId,
+        approved: true,
+        isCorrect,
+        points,
+      });
+      return;
+    }
+
+    for (const member of members) {
+      const [[existing]] = await pool.query(
+        `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
+        { sid: sessionId, pid: member.id, qid: proposal.question_id }
+      );
+      if (existing) {
+        await pool.query(
+          `UPDATE responses SET answer_json=:ans, is_correct=:ic, points_awarded=:pts, answered_at=NOW() WHERE id=:id`,
+          { id: existing.id, ans: JSON.stringify(nextPayload), ic: nextWords.length > 0 ? 1 : 0, pts: nextPoints }
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
+           VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
+          { sid: sessionId, pid: member.id, qid: proposal.question_id, ans: JSON.stringify(nextPayload), ic: isCorrect ? 1 : 0, pts: nextPoints }
+        );
+      }
+      await recalcParticipantScore(sessionId, member.id);
+      io.to(roomParticipant(member.id)).emit("answer:ack", memberAck);
+    }
+
+    io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
+      proposalId,
+      approved: true,
+      isCorrect,
+      points,
+    });
+    io.to(roomTeacher(sessionId)).emit("answer:received", {
+      participantId: proposal.proposer_participant_id,
+      questionId: proposal.question_id,
+      isCorrect,
+      points,
+      viaGroup: true,
+      thinkSpell: { totalWords: nextWords.length, totalPoints: nextPoints },
+    });
+    await broadcastScores(io, sessionId);
+    return;
+  }
+
   const scored = scoreAnswer({ templateType: session.template_type, correct, answer, config, basePoints });
   const isCorrect = !!scored.isCorrect;
   const points = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));

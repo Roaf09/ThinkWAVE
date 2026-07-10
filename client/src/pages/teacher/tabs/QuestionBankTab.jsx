@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/ActionDialog";
+import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -152,7 +153,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
       <div className="container" style={{ display: 'grid', gap: 18 }}>
         <section>
           <h2 style={{ marginBottom: 4, color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
-          <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>{view === 'quiz' ? 'Finished live-session quizzes and saved bank copies appear here. Reuse them when you need another live run.' : 'Saved questions stay here for future use in the Quiz Builder.'}</p>
+          {view === 'question' && <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>Saved questions stay here for future use in the Quiz Builder.</p>}
         </section>
 
         <section style={card(c, { padding: 10 })}>
@@ -182,7 +183,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 
         {view === 'quiz' ? (
           <div style={{ display: 'grid', gap: 12 }}>
-            {filteredQuizBankItems.length === 0 && <div style={card(c)}>No quizzes in the quiz bank yet. Finish a live session or use <b>Add to Quiz Bank</b> from Live Sessions.</div>}
+            {filteredQuizBankItems.length === 0 && <div style={card(c)}>No quizzes in the quiz bank yet.</div>}
             {filteredQuizBankItems.map((quiz) => (
               <QuizBankCard key={quiz.id} quiz={quiz} folderLabel={folderPathMap.get(Number(quiz.class_id)) || 'No folder assigned'} folderOptions={folderOptions} onPreview={() => setPreviewQuiz(quiz)} onDelete={() => setModal({ type: 'deleteQuiz', quiz })} onReuse={(classId) => setModal({ type: 'reuseQuiz', quiz, classId })} c={c} />
             ))}
@@ -205,19 +206,21 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 }
 
 function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, onReuse, c }) {
+  const tone = templateTone(quiz.template_type, c, false);
   const [reuseFolderId, setReuseFolderId] = useState(Number(quiz.class_id) || Number(folderOptions[0]?.id) || '');
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
   const currentFolderLabel = folderOptions.find((folder) => Number(folder.id) === Number(reuseFolderId))?.pathLabel || folderLabel;
   return (
-    <div style={card(c)}>
+    <div style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false) }}>
       <div style={{ display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
-            <div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>{quiz.template_type} · {quiz.category}</div>
+            <div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>{templateLabel(quiz.template_type)} · {quiz.category}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Badge label={templateLabel(quiz.template_type)} c={c} tone='blue' />
             <Badge label='In Quiz Bank' c={c} tone='blue' />
             <Badge label={currentFolderLabel} c={c} />
           </div>
@@ -250,10 +253,11 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
 }
 
 function QuestionCard({ question: q, onRemove, c }) {
+  const tone = templateTone(q.template_type, c, false);
   return (
-    <div style={{ ...card(c, { width: 'min(100%, 780px)' }), display: 'grid', gap: 12, justifyItems: 'center', textAlign: 'center' }}>
+    <div style={{ ...card(c, { width: 'min(100%, 780px)' }), ...templateCardChrome(q.template_type, c, false), display: 'grid', gap: 12, justifyItems: 'center', textAlign: 'center' }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Badge label={q.template_type} c={c} />
+        <Badge label={templateLabel(q.template_type)} c={c} tone='blue' />
         <Badge label={q.category} c={c} />
       </div>
       <div style={{ fontWeight: 700, lineHeight: 1.6, color: c.text, maxWidth: 620 }}>{q.prompt}</div>
@@ -293,9 +297,8 @@ function PreviewModal({ quiz, onClose }) {
   const cfg = currentQ ? safeJson(currentQ.config_json) || {} : {};
 
   return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(0,0,0,0.7)' : 'rgba(30,45,85,0.28)', backdropFilter: 'blur(6px)', zIndex: 3000 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 3001, width: 'min(95vw, 760px)', maxHeight: '90vh', background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div onClick={onClose} style={previewOverlay(dark)}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(95vw, 760px)', maxHeight: '90vh', background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.30)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', background: c.cardBg2, borderBottom: `1px solid ${c.border}` }}>
           <span style={{ fontWeight: 800, fontSize: 15, color: c.text }}>👁 Preview — {quiz.title}</span>
           <button onClick={onClose} style={btn(c)}>✕ Close</button>
@@ -309,7 +312,7 @@ function PreviewModal({ quiz, onClose }) {
                 <span style={{ color: c.text, fontWeight: 700 }}>{quiz.title}</span>
                 <span style={{ color: c.textMuted, fontSize: 13 }}>Q {qIndex + 1} of {totalQ}</span>
               </div>
-              <div style={{ background: c.pageBg, border: `1px solid ${c.border}`, borderRadius: 14, padding: '18px 20px', fontSize: 16, fontWeight: 800, lineHeight: 1.6, color: c.text, marginBottom: 14, textAlign: 'center' }}>{currentQ.prompt}</div>
+              <div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: '18px 20px', fontSize: 16, fontWeight: 800, lineHeight: 1.6, color: c.text, marginBottom: 14, textAlign: 'center' }}>{currentQ.prompt}</div>
               <PreviewBody templateType={quiz.template_type} cfg={cfg} c={c} />
             </div>
           )}
@@ -322,8 +325,13 @@ function PreviewModal({ quiz, onClose }) {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
+}
+
+function previewOverlay(dark) {
+  // Revision 10: shared preview overlay removes the visible page container seam behind modals.
+  return { position: 'fixed', inset: 0, zIndex: 9200, display: 'grid', placeItems: 'center', padding: 20, background: dark ? 'rgba(0,0,0,.68)' : 'rgba(15,23,42,.46)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', isolation: 'isolate' };
 }
 
 function PreviewBody({ templateType, cfg, c }) {

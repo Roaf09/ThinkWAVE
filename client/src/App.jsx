@@ -29,6 +29,7 @@ import AdminRegister       from "./pages/AdminRegister.jsx";
 import AdminLogin          from "./pages/AdminLogin.jsx";
 import VerifyOtp           from "./pages/VerifyOtp.jsx";
 import Login               from "./pages/Login.jsx";
+import ForgotPassword      from "./pages/ForgotPassword.jsx";
 import TeacherDashboard    from "./pages/teacher/TeacherDashboard.jsx";
 import QuizBuilder         from "./pages/teacher/QuizBuilder.jsx";
 import HostLive            from "./pages/teacher/HostLive.jsx";
@@ -39,9 +40,13 @@ import GuestDashboard      from "./pages/guest/GuestDashboard.jsx";
 import GuestBuilder        from "./pages/guest/GuestBuilder.jsx";
 import StudentJoin         from "./pages/student/StudentJoin.jsx";
 import StudentPlay         from "./pages/student/StudentPlay.jsx";
+import StudentAuth         from "./pages/student/StudentAuth.jsx";
+import StudentDashboard    from "./pages/student/StudentDashboard.jsx";
+import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
 
 import { getRole, getToken } from "./lib/auth";
 import { setAuthToken, api } from "./lib/api";
+import { TwIcon } from "./components/TwUI";
 
 function Guard({ role, children }) {
   const token = getToken();
@@ -60,7 +65,7 @@ function WelcomeToast({ name, onDone }) {
   }, [onDone]);
   return (
     <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#0f2a1a", border:"1px solid #22c55e", color:"#86efac", padding:"12px 28px", borderRadius:12, fontSize:15, fontWeight:700, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", pointerEvents:"none", transition:"opacity 0.5s ease", opacity:visible?1:0, whiteSpace:"nowrap" }}>
-      👋 Welcome back, {name}!
+      <span style={{ display:"inline-flex", alignItems:"center", gap:8 }}><TwIcon name="spark" size={17} /> Welcome back, {name}!</span>
     </div>
   );
 }
@@ -70,6 +75,7 @@ function Shell({ children, toast, setToast }) {
   const hideHeader =
     loc.pathname === "/" ||
     loc.pathname === "/login" ||
+    loc.pathname === "/forgot-password" ||
     loc.pathname === "/register" ||
     loc.pathname === "/verify" ||
     loc.pathname === "/superadmin-register" ||
@@ -80,6 +86,7 @@ function Shell({ children, toast, setToast }) {
     loc.pathname.startsWith("/superadmin") ||
     loc.pathname.startsWith("/admin") ||
     loc.pathname.startsWith("/guest") ||
+    loc.pathname.startsWith("/student") ||
     loc.pathname.startsWith("/play");
   return (
     <div>
@@ -104,7 +111,7 @@ export default function App() {
 
   async function handleLoginSuccess(token, role) {
     setAuthToken(token);
-    if (["TEACHER","SUPERADMIN","ADMIN"].includes(role)) {
+    if (["TEACHER","SUPERADMIN","ADMIN","STUDENT"].includes(role)) {
       try { const { data } = await api.get("/auth/me"); if (data?.first_name) setToast(data.first_name); }
       catch {}
     }
@@ -121,6 +128,7 @@ export default function App() {
         <Route path="/admin-login"         element={<Navigate to="/login?role=admin" replace />} />
         <Route path="/verify"              element={<VerifyOtp />} />
         <Route path="/login"               element={<Login onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/forgot-password"     element={<ForgotPassword />} />
 
         {/* Guest — no auth, session-based */}
         <Route path="/guest"                            element={<GuestDashboard />} />
@@ -140,6 +148,9 @@ export default function App() {
         <Route path="/teacher/analytics/:sessionId" element={<Guard role="TEACHER"><Analytics /></Guard>} />
 
         {/* Student */}
+        <Route path="/student-login"    element={<StudentAuth onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/student"          element={<Guard role="STUDENT"><StudentDashboard /></Guard>} />
+        <Route path="/student/async/:quizId" element={<Guard role="STUDENT"><StudentAsyncPlay /></Guard>} />
         <Route path="/play"            element={<StudentJoin />} />
         <Route path="/play/:sessionId" element={<StudentPlay />} />
 

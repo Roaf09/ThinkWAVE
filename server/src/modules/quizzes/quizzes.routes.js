@@ -18,6 +18,7 @@ import {
   copyQuizToBank,
   duplicateQuiz,
   reuseQuiz,
+  assignQuiz,
 } from "./quizzes.controller.js";
 
 export const quizzesRouter = Router();
@@ -31,6 +32,9 @@ const QuizSchema = z.object({
   pointsPerQuestion:  z.coerce.number().int().min(1).max(100).default(1),
   randomizeQuestions: z.boolean().default(false),
   shuffleAnswers:     z.boolean().default(false),
+  deliveryMode:       z.enum(["SYNCHRONOUS","ASYNCHRONOUS"]).default("SYNCHRONOUS"),
+  availableFrom:      z.string().optional().nullable(),
+  availableUntil:     z.string().optional().nullable(),
 });
 
 const QuestionsSchema = z.object({
@@ -58,6 +62,11 @@ const ReuseSchema = z.object({
   classId: z.coerce.number().int().positive(),
 });
 
+const AssignSchema = z.object({
+  availableFrom: z.string().min(1),
+  availableUntil: z.string().min(1),
+});
+
 quizzesRouter.get("/",    requireAuth, requireRole("TEACHER"), listQuizzes);
 quizzesRouter.post("/",   requireAuth, requireRole("TEACHER"), validateBody(QuizSchema), createQuiz);
 quizzesRouter.get("/:id", requireAuth, requireRole("TEACHER"), getQuiz);
@@ -69,6 +78,7 @@ quizzesRouter.put("/:id/meta",      requireAuth, requireRole("TEACHER"), validat
 quizzesRouter.post("/:id/publish",      requireAuth, requireRole("TEACHER"), publishQuiz);
 quizzesRouter.post("/:id/copy-to-bank", requireAuth, requireRole("TEACHER"), copyQuizToBank);
 quizzesRouter.post("/:id/duplicate",    requireAuth, requireRole("TEACHER"), duplicateQuiz);
+quizzesRouter.post("/:id/assign",       requireAuth, requireRole("TEACHER"), validateBody(AssignSchema), assignQuiz);
 quizzesRouter.post("/:id/reuse",        requireAuth, requireRole("TEACHER"), validateBody(ReuseSchema), reuseQuiz);
 quizzesRouter.delete("/:id",            requireAuth, requireRole("TEACHER"), softDeleteQuiz);
 quizzesRouter.post("/:id/restore",      requireAuth, requireRole("TEACHER","ADMIN"), restoreQuiz);

@@ -8,14 +8,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
+import { EmptyState, IconBubble, TwIcon } from "../../../components/TwUI";
+import { normalizeTemplateType } from "../../../lib/templateTypes";
+import { templateTone, templateCardChrome } from "../../../lib/templatePalette";
 
 const ALL_TEMPLATES = [
-  { value: "MCQ", label: "Multiple Choice", icon: "📝" },
-  { value: "TRUE_FALSE", label: "True / False", icon: "✅" },
-  { value: "TYPE_ANSWER", label: "Type Answer", icon: "⌨️" },
-  { value: "MATCHING", label: "Matching", icon: "🧩" },
-  { value: "FOUR_PICS_ONE_WORD", label: "4 Pics 1 Word", icon: "🖼️" },
-  { value: "THINK_AND_SPELL", label: "Think-and-Spell", icon: "🔡" },
+  { value: "MCQ", label: "Multiple Choice", icon: "mcq" },
+  { value: "TRUE_FALSE", label: "True / False", icon: "truefalse" },
+  { value: "TYPE_ANSWER", label: "Identification", icon: "identification" },
+  { value: "MATCHING", label: "Matching", icon: "matching" },
+  { value: "GUESS_WORD_4PICS", label: "4 Pics 1 Word", icon: "image" },
+  { value: "THINK_SPELL", label: "Think-and-Spell", icon: "spell" },
 ];
 
 function buildFolderPathMap(rows) {
@@ -111,6 +114,10 @@ export default function CreateTab({ setActiveTab }) {
         pointsPerQuestion: 1,
         randomizeQuestions: false,
         shuffleAnswers: false,
+        // Revision 7: create tab always creates a normal synchronous quiz; assignments are handled in Live Sessions.
+        deliveryMode: "SYNCHRONOUS",
+        availableFrom: null,
+        availableUntil: null,
       });
       navigate(`/teacher/quizzes/${data.id}/builder`);
     } catch (err) {
@@ -122,7 +129,6 @@ export default function CreateTab({ setActiveTab }) {
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
         <h2 style={{ marginBottom: 4, color: c.text }}>Create</h2>
-        <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>Start a new quiz and choose where its finished session reports should be stored later.</p>
       </section>
 
       <section style={card(c, { maxWidth: 720 })}>
@@ -137,7 +143,9 @@ export default function CreateTab({ setActiveTab }) {
               <label style={labelStyle(c)}>Category</label>
               <div style={{ display: "flex", gap: 10 }}>
                 {['K12', 'COLLEGE'].map((cat) => (
-                  <button key={cat} type="button" onClick={() => patch({ category: cat })} style={segmentBtn(c, form.category === cat)}>{cat === 'K12' ? '🏫 K-12' : '🎓 College'}</button>
+                  <button key={cat} type="button" onClick={() => patch({ category: cat })} style={segmentBtn(c, form.category === cat)}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><TwIcon name={cat === 'K12' ? 'classes' : 'student'} size={16} /> {cat === 'K12' ? 'K-12' : 'College'}</span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -148,28 +156,33 @@ export default function CreateTab({ setActiveTab }) {
                   <option value="">{loadingFolders ? 'Loading folders...' : 'Select a folder'}</option>
                   {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.pathLabel}</option>)}
                 </select>
-                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: c.textMuted }}>▼</span>
+                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: c.textMuted }}><TwIcon name="folder" size={16} /></span>
               </div>
             </div>
           </div>
 
+          {/* Revision 7: synchronous/asynchronous selection moved to Live Sessions assignment setup. */}
+
           <div>
             <label style={labelStyle(c)}>Question Template</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-              {ALL_TEMPLATES.map((template) => (
-                <button key={template.value} type="button" onClick={() => patch({ templateType: template.value })} style={{ ...segmentBtn(c, form.templateType === template.value), minHeight: 90, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
-                  <div style={{ fontSize: 20 }}>{template.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800 }}>{template.label}</div>
-                </button>
-              ))}
+              {ALL_TEMPLATES.map((template) => {
+                const active = form.templateType === template.value;
+                const tone = templateTone(template.value, c, active);
+                return (
+                  <button key={template.value} type="button" className={`tw-template-card${active ? ' is-active' : ''}`} onClick={() => patch({ templateType: template.value })} style={templateCard(c, active, template.value)}>
+                    <IconBubble name={template.icon} c={c} size={42} iconSize={21} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: tone.accent }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: active ? tone.accent : c.text }}>{template.label}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {!loadingFolders && !hasFolders && (
-            <div style={{ padding: '12px 14px', borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>Create a folder first in the Classes tab before creating a quiz.</span>
-              <button type="button" onClick={() => setActiveTab?.('classes')} style={{ padding: '7px 10px', borderRadius: 10, border: `1px solid ${c.redBorder}`, background: 'transparent', color: c.redFg, fontWeight: 800, cursor: 'pointer' }}>Open Classes →</button>
-            </div>
+            <EmptyState c={c} icon="folder" title="Create a folder first" message="A destination folder keeps reports organized after live sessions." action={<button type="button" onClick={() => setActiveTab?.('classes')} style={{ padding: '8px 11px', borderRadius: 10, border: `1px solid ${c.redBorder}`, background: 'transparent', color: c.redFg, fontWeight: 800, cursor: 'pointer' }}>Open Classes</button>} />
           )}
 
           {msg && <div style={{ padding: '12px 14px', borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
@@ -185,14 +198,18 @@ export default function CreateTab({ setActiveTab }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
           {recentTemplates.length === 0 ? (
-            <div style={card(c, { padding: 16, boxShadow: 'none' })}>Recent templates will appear here after you create a few quizzes.</div>
-          ) : recentTemplates.map((quiz) => (
-            <button key={quiz.id} type="button" onClick={() => patch({ templateType: quiz.template_type, category: quiz.category, classId: quiz.class_id || form.classId })} style={{ ...card(c, { padding: 16, boxShadow: 'none', textAlign: 'left', cursor: 'pointer' }) }}>
-              <div style={{ fontWeight: 800, color: c.text }}>{templateLabel(quiz.template_type)}</div>
-              <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{quiz.title}</div>
-              <div style={{ color: c.accent, fontSize: 12, marginTop: 10, fontWeight: 800 }}>Use this structure</div>
-            </button>
-          ))}
+            <EmptyState c={c} icon="spark" title="No template shortcuts yet" message="Recent templates will appear here after you create a few quizzes." />
+          ) : recentTemplates.map((quiz) => {
+            const tone = templateTone(quiz.template_type, c, false);
+            return (
+              <button key={quiz.id} type="button" className="tw-template-card" onClick={() => patch({ templateType: quiz.template_type, category: quiz.category, classId: quiz.class_id || form.classId })} style={templateCard(c, false, quiz.template_type)}>
+                <IconBubble name={templateIcon(quiz.template_type)} c={c} size={40} iconSize={20} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: tone.accent }} />
+                <div style={{ fontWeight: 900, color: tone.accent }}>{templateLabel(quiz.template_type)}</div>
+                <div style={{ color: c.textMuted, fontSize: 13 }}>{quiz.title}</div>
+                <div style={{ color: tone.accent, fontSize: 12, fontWeight: 900 }}>Use this structure</div>
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>
@@ -200,7 +217,20 @@ export default function CreateTab({ setActiveTab }) {
 }
 
 function templateLabel(value) {
-  return ALL_TEMPLATES.find((item) => item.value === value)?.label || value;
+  const normalized = normalizeTemplateType(value);
+  return ALL_TEMPLATES.find((item) => item.value === normalized)?.label || value;
+}
+
+function templateIcon(value) {
+  const normalized = normalizeTemplateType(value);
+  return ALL_TEMPLATES.find((item) => item.value === normalized)?.icon || "spark";
+}
+
+function templateCard(c, active, templateType) {
+  return {
+    ...templateCardChrome(templateType, c, active),
+    color: c.text,
+  };
 }
 
 function labelStyle(c) {

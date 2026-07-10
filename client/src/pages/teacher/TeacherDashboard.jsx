@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { clearToken, clearRole } from "../../lib/auth";
 import { setAuthToken } from "../../lib/api";
 import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
+import { TwIcon } from "../../components/TwUI";
 
 import HomeTab           from "./tabs/HomeTab";
 import CreateTab         from "./tabs/CreateTab";
@@ -16,7 +17,6 @@ import QuestionBankTab   from "./tabs/QuestionBankTab";
 import LiveSessionsTab   from "./tabs/LiveSessionsTab";
 import ClassesTab        from "./tabs/ClassesTab";
 import SessionHistoryTab from "./tabs/SessionHistoryTab";
-import InvitationTab     from "./tabs/InvitationTab";
 
 export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = useState("home");
@@ -34,13 +34,12 @@ export default function TeacherDashboard() {
   }
 
   const navItems = [
-    { id: "home", label: "Home", icon: "⌂" },
-    { id: "create", label: "Create", icon: "＋" },
-    { id: "bank", label: bankLabel, icon: "◈" },
-    { id: "live", label: "Live Sessions", icon: "▶" },
-    { id: "classes", label: "Classes", icon: "⊞" },
-    { id: "history", label: "Session History", icon: "◷" },
-    { id: "invitation", label: "Invitation", icon: "✉" },
+    { id: "home", label: "Home", icon: "home" },
+    { id: "create", label: "Create", icon: "create" },
+    { id: "bank", label: bankLabel, icon: "bank" },
+    { id: "live", label: "Live Sessions", icon: "live" },
+    { id: "classes", label: "Classes", icon: "classes" },
+    { id: "history", label: "Session History", icon: "history" },
   ];
 
   function renderTab() {
@@ -57,8 +56,6 @@ export default function TeacherDashboard() {
         return <ClassesTab setActiveTab={setActiveTab} />;
       case "history":
         return <SessionHistoryTab setActiveTab={setActiveTab} />;
-      case "invitation":
-        return <InvitationTab setActiveTab={setActiveTab} />;
       default:
         return <HomeTab setActiveTab={setActiveTab} />;
     }
@@ -111,7 +108,7 @@ export default function TeacherDashboard() {
               }}
               onClick={() => setActiveTab(item.id)}
             >
-              <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{item.icon}</span>
+              <span style={{ width: 20, display: "inline-flex", justifyContent: "center" }}><TwIcon name={item.icon} size={18} /></span>
               <span key={item.id === "bank" ? item.label : `${item.id}-${item.label}`} className={item.id === "bank" ? "sidebar-bank-label" : undefined}>{item.label}</span>
             </button>
           ))}
@@ -136,7 +133,7 @@ export default function TeacherDashboard() {
               transition: "color 0.2s, border-color 0.2s",
             }}
           >
-            <span>{dark ? "☀️" : "🌙"}</span>
+            <TwIcon name={dark ? "sun" : "moon"} size={17} />
             <span>{dark ? "Light Mode" : "Dark Mode"}</span>
           </button>
         </div>
@@ -160,7 +157,8 @@ export default function TeacherDashboard() {
               transition: "color 0.2s, border-color 0.2s",
             }}
           >
-            ⏻ &nbsp;Logout
+            <TwIcon name="logout" size={17} />
+            <span>Logout</span>
           </button>
         </div>
       </aside>
@@ -172,9 +170,9 @@ export default function TeacherDashboard() {
       </main>
 
       {showLogout && (
-        <ThemedModal icon="⏻" title="Log out?" message="Are you sure you want to log out?" onClose={() => setShowLogout(false)}>
+        <ThemedModal icon={<TwIcon name="logout" size={30} />} title="Log out?" message="Are you sure you want to log out?" onClose={() => setShowLogout(false)}>
           <button className="btn secondary" onClick={() => setShowLogout(false)}>Cancel</button>
-          <button className="btn" style={{ background: "#7f1d1d", color: "#fca5a5" }} onClick={doLogout}>Yes, Log Out</button>
+          <button className="btn" style={{ background: dark ? "#7f1d1d" : "#dc2626", color: dark ? "#fca5a5" : "#ffffff" }} onClick={doLogout}>Yes, Log Out</button>
         </ThemedModal>
       )}
     </div>

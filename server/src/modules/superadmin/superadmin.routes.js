@@ -12,7 +12,7 @@ import { requireRole } from "../../middleware/rbac.js";
 import {
   getStats, listAccounts, listPending,
   approveAccount, rejectAccount,
-  setActive, deleteAccount, getNotifications,
+  setActive, deleteAccount, getNotifications, getHealth,
 } from "./superadmin.controller.js";
 
 export const superadminRouter = Router();
@@ -27,5 +27,5 @@ superadminRouter.post("/accounts/:id/reject",    ...SA, rejectAccount);
 superadminRouter.post("/accounts/:id/active",    ...SA, setActive);
 superadminRouter.delete("/accounts/:id",         ...SA, deleteAccount);
 superadminRouter.get('/notifications', requireAuth, requireRole('SUPERADMIN'), getNotifications);
-
-
+// Revision 7: health route is mounted so overview cards do not stay as loading ellipses.
+superadminRouter.get('/health', ...SA, getHealth);

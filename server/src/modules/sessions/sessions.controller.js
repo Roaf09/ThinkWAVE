@@ -6,6 +6,9 @@
 
 import { pool } from "../../db.js";
 import { makeJoinCode, makeReconnectKey } from "../../utils/codes.js";
+import { resolveThinkSpellWordBank } from "../quizzes/thinkSpell.js";
+import { normalizeTemplateType } from "../quizzes/templates.js";
+import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -25,13 +28,30 @@ function shuffle(arr) {
 
 // When a live session is created, we snapshot the quiz questions so later edits do not change an already-running session.
 async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers) {
+  const [[quizMeta]] = await pool.query(
+    `SELECT template_type FROM quizzes WHERE id=:qid AND deleted_at IS NULL`,
+    { qid: quizId }
+  );
+  const isThinkSpell = normalizeTemplateType(quizMeta?.template_type) === "THINK_SPELL";
+
   const [rows] = await pool.query(
-    `SELECT id, question_order, prompt, config_json
+    `SELECT id, question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
 
-  let questions = rows.map((q) => ({ ...q, config_json: safeJson(q.config_json) || {} }));
+  let questions = rows.map((q) => {
+    const config_json = safeJson(q.config_json) || {};
+    const correct_json = safeJson(q.correct_json) || {};
+    if (isThinkSpell) {
+      const answers = resolveThinkSpellWordBank({ config: config_json, correct: correct_json });
+      if (answers.length) {
+        config_json.answers = answers;
+        correct_json.answers = answers;
+      }
+    }
+    return { ...q, config_json, correct_json };
+  });
   if (randomizeQuestions) questions = shuffle(questions);
   if (shuffleAnswers) {
     questions = questions.map((q) => {
@@ -48,13 +68,14 @@ export async function createSession(req, res) {
   const { quizId, joinMode = "SOLO", maxParticipants = null } = req.body;
 
   const [[quiz]] = await pool.query(
-    `SELECT id, class_id, status, randomize_questions, shuffle_answers
+    `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode
      FROM quizzes
      WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`,
     { qid: quizId, tid: req.user.sub }
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found" });
   if (quiz.status !== "PUBLISHED") return res.status(400).json({ message: "Only published live-session quizzes can be hosted." });
+  if (quiz.delivery_mode === "ASYNCHRONOUS") return res.status(400).json({ message: "Asynchronous quizzes appear in the student dashboard instead of live sessions." });
 
   const [[active]] = await pool.query(
     `SELECT id, join_code, join_mode FROM sessions WHERE quiz_id=:qid AND teacher_id=:tid AND status IN ('LOBBY','LIVE','PAUSED') ORDER BY id DESC LIMIT 1`,
@@ -263,37 +284,72 @@ export async function getTeacherSessionHistory(req, res) {
   const teacherId = req.user.sub;
 
   const [rows] = await pool.query(
-    `SELECT
-       s.id,
-       s.quiz_id,
-       s.join_code,
-       s.join_mode,
-       s.status,
-       s.started_at,
-       s.ended_at,
-       q.title        AS quiz_title,
-       q.template_type,
-       q.category,
-       s.class_id,
-       COALESCE(sc.avg_score, 0) AS avg_score,
-       COALESCE(sc.max_score, 0) AS top_score,
-       (CASE
-          WHEN s.join_mode = 'GROUP' THEN (SELECT COUNT(*) FROM session_groups sg WHERE sg.session_id = s.id)
-          ELSE (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id)
-        END) AS participant_count,
-       JSON_LENGTH(s.questions_snapshot_json) AS question_count
-     FROM sessions s
-     JOIN quizzes q ON q.id = s.quiz_id
-     LEFT JOIN (
-       SELECT session_id,
-              ROUND(AVG(total_points), 2) AS avg_score,
-              MAX(total_points) AS max_score
-       FROM scores
-       GROUP BY session_id
-     ) sc ON sc.session_id = s.id
-     WHERE s.teacher_id = :tid
-       AND s.status = 'ENDED'
-     ORDER BY s.ended_at DESC`,
+    `SELECT * FROM (
+       SELECT
+         CAST(s.id AS CHAR) AS id,
+         s.quiz_id,
+         s.join_code,
+         s.join_mode,
+         s.status,
+         s.started_at,
+         s.ended_at,
+         q.title        AS quiz_title,
+         q.template_type,
+         q.category,
+         s.class_id,
+         c.name AS class_name,
+         COALESCE(sc.avg_score, 0) AS avg_score,
+         COALESCE(sc.max_score, 0) AS top_score,
+         (CASE
+            WHEN s.join_mode = 'GROUP' THEN (SELECT COUNT(*) FROM session_groups sg WHERE sg.session_id = s.id)
+            ELSE (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id)
+          END) AS participant_count,
+         JSON_LENGTH(s.questions_snapshot_json) AS question_count,
+         'LIVE' AS session_type
+       FROM sessions s
+       JOIN quizzes q ON q.id = s.quiz_id
+       LEFT JOIN classes c ON c.id = s.class_id
+       LEFT JOIN (
+         SELECT session_id,
+                ROUND(AVG(total_points), 2) AS avg_score,
+                MAX(total_points) AS max_score
+         FROM scores
+         GROUP BY session_id
+       ) sc ON sc.session_id = s.id
+       WHERE s.teacher_id = :tid
+         AND s.status = 'ENDED'
+
+       UNION ALL
+
+       SELECT
+         CONCAT('assigned-', q.id) AS id,
+         q.id AS quiz_id,
+         NULL AS join_code,
+         'ASSIGNED' AS join_mode,
+         'ENDED' AS status,
+         q.available_from AS started_at,
+         q.available_until AS ended_at,
+         q.title AS quiz_title,
+         q.template_type,
+         q.category,
+         q.class_id,
+         c.name AS class_name,
+         COALESCE(ROUND(AVG(a.score), 2), 0) AS avg_score,
+         COALESCE(MAX(a.score), 0) AS top_score,
+         COUNT(a.id) AS participant_count,
+         (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS question_count,
+         'ASSIGNED' AS session_type
+       FROM quizzes q
+       JOIN classes c ON c.id=q.class_id
+       LEFT JOIN async_quiz_submissions a ON a.quiz_id=q.id
+       WHERE q.teacher_id=:tid
+         AND q.delivery_mode='ASYNCHRONOUS'
+         AND q.deleted_at IS NULL
+         AND q.available_until IS NOT NULL
+         AND q.available_until <= NOW()
+       GROUP BY q.id, q.title, q.template_type, q.category, q.class_id, c.name, q.available_from, q.available_until
+     ) history_rows
+     ORDER BY ended_at DESC`,
     { tid: teacherId }
   );
 
@@ -301,74 +357,11 @@ export async function getTeacherSessionHistory(req, res) {
 }
 
 export async function getSessionFullAnalytics(req, res) {
+  // Revision 1: return the same analytics package used by PDF/XLSX exports.
   const sessionId = Number(req.params.id);
-  const teacherId = req.user.sub;
-
-  const [[session]] = await pool.query(
-    `SELECT s.id, s.join_mode, q.title AS quiz_title, q.template_type, q.category,
-            s.started_at, s.ended_at,
-            JSON_LENGTH(s.questions_snapshot_json) AS question_count
-     FROM sessions s
-     JOIN quizzes q ON q.id = s.quiz_id
-     WHERE s.id = :sid AND s.teacher_id = :tid`,
-    { sid: sessionId, tid: teacherId }
-  );
-  if (!session) return res.status(404).json({ message: "Session not found" });
-
-  const [[summary]] = await pool.query(
-    `SELECT
-       COUNT(*)                    AS participant_count,
-       ROUND(AVG(total_points), 2) AS avg_score,
-       MIN(total_points)           AS min_score,
-       MAX(total_points)           AS max_score
-     FROM scores
-     WHERE session_id = :sid`,
-    { sid: sessionId }
-  );
-
-  const [questions] = await pool.query(
-    `SELECT
-       q.id            AS question_id,
-       q.question_order,
-       q.prompt,
-       COUNT(r.id)     AS total_answers,
-       SUM(CASE WHEN r.is_correct = 1 THEN 1 ELSE 0 END) AS correct_answers,
-       ROUND(
-         100 * SUM(CASE WHEN r.is_correct = 1 THEN 1 ELSE 0 END)
-             / NULLIF(COUNT(r.id), 0),
-         2
-       )               AS pct_correct
-     FROM quiz_questions q
-     LEFT JOIN responses r ON r.question_id = q.id AND r.session_id = :sid
-     WHERE q.quiz_id = (
-       SELECT quiz_id FROM sessions WHERE id = :sid2
-     ) AND q.deleted_at IS NULL
-     GROUP BY q.id
-     ORDER BY q.question_order ASC`,
-    { sid: sessionId, sid2: sessionId }
-  );
-
-  const questionsWithDifficulty = questions.map(q => ({
-    ...q,
-    difficulty: (q.pct_correct ?? 0) < 50 ? "Difficult" : "Easy"
-  }));
-
-  const [students] = await pool.query(
-    `SELECT
-       p.id            AS participant_id,
-       p.first_name,
-       p.last_name,
-       p.joined_at,
-       p.group_name,
-       COALESCE(sc.total_points, 0) AS total_points
-     FROM session_participants p
-     LEFT JOIN scores sc ON sc.session_id = p.session_id AND sc.participant_id = p.id
-     WHERE p.session_id = :sid
-     ORDER BY p.last_name ASC, p.first_name ASC`,
-    { sid: sessionId }
-  );
-
-  res.json({ session, summary, questions: questionsWithDifficulty, students });
+  const data = await buildFullAnalyticsData(sessionId, req.user.sub);
+  if (!data) return res.status(404).json({ message: "Session not found" });
+  res.json({ session: data.session, summary: data.summary, questions: data.questions, students: data.students });
 }
 
 export async function joinSession(req, res) {

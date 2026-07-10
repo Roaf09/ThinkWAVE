@@ -10,7 +10,7 @@ import jwt        from "jsonwebtoken";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, verifyOtp, login, me } from "./auth.controller.js";
+import { register, verifyOtp, login, me, requestPasswordReset, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 
 export const authRouter = Router();
@@ -24,14 +24,16 @@ const RegisterSchema = z.object({
   password:  strongPassword,
   firstName: z.string().min(1),
   lastName:  z.string().min(1),
-  role:      z.enum(["ADMIN"]).optional(),
+  role:      z.enum(["ADMIN","STUDENT"]).optional(),
 });
 
 const VerifySchema = z.object({ email: z.string().email(), code: z.string().min(4).max(10) });
+const PasswordResetRequestSchema = z.object({ email: z.string().email() });
+const PasswordResetConfirmSchema = z.object({ email: z.string().email(), code: z.string().min(4).max(10), newPassword: strongPassword });
 const LoginSchema  = z.object({
   email: z.string().email(),
   password: z.string().min(1),
-  loginPortal: z.enum(["TEACHER", "ADMIN", "SUPERADMIN"]).optional(),
+  loginPortal: z.enum(["TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"]).optional(),
 });
 
 authRouter.get("/setup-status", async (_req, res) => {
@@ -58,5 +60,7 @@ authRouter.post("/guest-token", async (_req, res) => {
 
 authRouter.post("/register",   validateBody(RegisterSchema), register);
 authRouter.post("/verify-otp", validateBody(VerifySchema),  verifyOtp);
+authRouter.post("/password/request-reset", validateBody(PasswordResetRequestSchema), requestPasswordReset);
+authRouter.post("/password/confirm-reset", validateBody(PasswordResetConfirmSchema), confirmPasswordReset);
 authRouter.post("/login",      validateBody(LoginSchema),   login);
 authRouter.get( "/me",         requireAuth,                 me);

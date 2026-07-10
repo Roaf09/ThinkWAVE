@@ -62,6 +62,8 @@ export default function VerifyOtp() {
         ? "/login?role=admin"
         : mode === "superadmin"
         ? "/superadmin-login"
+        : mode === "student"
+        ? "/student-login"
         : "/login";
       setTimeout(() => nav(nextLogin), 2000);
     } catch (err) {
@@ -86,7 +88,7 @@ export default function VerifyOtp() {
             <div style={{ fontSize:52, marginBottom:14 }}>✅</div>
             <h2 style={s.cardTitle}>Verified!</h2>
             <p style={s.cardSub}>
-              {mode === "admin" ? "Your admin account is verified! Redirecting you to admin login…" : mode === "superadmin" ? "Your superadmin account is verified! Redirecting you to login…" : "Your account is verified! Redirecting you to login…"}
+              {mode === "admin" ? "Your admin account is verified! Redirecting you to admin login…" : mode === "superadmin" ? "Your superadmin account is verified! Redirecting you to login…" : mode === "student" ? "Your student account is verified! Redirecting you to student login…" : "Your account is verified! Redirecting you to login…"}
             </p>
           </div>
         ) : (

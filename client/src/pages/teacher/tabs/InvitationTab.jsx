@@ -65,9 +65,7 @@ export default function InvitationTab() {
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
         <h2 style={{ marginBottom: 4, color: c.text }}>Invitation</h2>
-        <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>
-          Link your teacher account to an institution using the invitation code provided by an administrator.
-        </p>
+
       </section>
 
       {!joinedInfo ? (

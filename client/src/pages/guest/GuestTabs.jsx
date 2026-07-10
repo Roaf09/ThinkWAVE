@@ -13,7 +13,7 @@ const ALL_TEMPLATES = [
   { value:"MCQ",              label:"Multiple-choice", icon:"🔤" },
   { value:"TRUE_FALSE",       label:"True / False",    icon:"✅" },
   { value:"MATCHING",         label:"Matching",        icon:"🔗" },
-  { value:"TYPE_ANSWER",      label:"Type Answer",     icon:"✏️" },
+  { value:"TYPE_ANSWER",      label:"Identification",     icon:"✏️" },
   { value:"GUESS_WORD_4PICS", label:"4Pics 1Word",     icon:"🖼️" },
   { value:"DRAW_IT",          label:"Draw-it",         icon:"🎨" },
   { value:"GRIP_GUESS",       label:"Grip-and-Guess",  icon:"🤝" },
