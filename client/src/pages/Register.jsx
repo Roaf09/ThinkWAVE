@@ -66,8 +66,9 @@ export default function Register() {
       const { data } = await api.post("/auth/register", payload);
       const label = data.role === "ADMIN" ? "Administrator" : "Teacher";
       const mode = data.role === "ADMIN" ? "admin" : "teacher";
-      setError(`✓ Registered as ${label}. OTP sent to your email.`);
-      setTimeout(() => nav(`/verify?mode=${mode}`, { state: { email: form.email, loginMode: mode } }), 850);
+      const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
+      setError(`✓ Registered as ${label}. ${otpNote}`);
+      setTimeout(() => nav(`/verify?mode=${mode}`, { state: { email: form.email, loginMode: mode } }), data.emailSent ? 850 : 2600);
     } catch (err) {
       setError(err?.response?.data?.message || "Registration failed.");
     }

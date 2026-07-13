@@ -47,14 +47,15 @@ export default function SuperadminRegister() {
     if (!isStrong) return setMsg("Please use a stronger password.");
     if (!matches) return setMsg("Passwords do not match.");
     try {
-      await api.post("/auth/register", {
+      const { data } = await api.post("/auth/register", {
         email: form.email,
         password: form.password,
         firstName: form.firstName,
         lastName: form.lastName,
       });
-      setMsg("Account created! OTP sent to your email. Redirecting…");
-      setTimeout(() => nav("/verify?mode=superadmin", { state: { email: form.email, loginMode: "superadmin" } }), 900);
+      const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
+      setMsg(`Account created! ${otpNote} Redirecting…`);
+      setTimeout(() => nav("/verify?mode=superadmin", { state: { email: form.email, loginMode: "superadmin" } }), data.emailSent ? 900 : 2600);
     } catch (err) {
       setMsg(err?.response?.data?.message || "Registration failed.");
     }

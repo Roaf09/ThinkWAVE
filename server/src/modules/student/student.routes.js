@@ -8,7 +8,7 @@ import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
-import { getStudentDashboard, getStudentClasses, joinClass, upsertProfile, getStudentQuiz, submitStudentQuiz } from "./student.controller.js";
+import { getStudentDashboard, getStudentClasses, joinClass, upsertProfile, getStudentQuiz, checkStudentQuizQuestion, submitStudentQuiz } from "./student.controller.js";
 
 export const studentRouter = Router();
 
@@ -25,4 +25,5 @@ studentRouter.get("/classes", getStudentClasses);
 studentRouter.post("/profile", validateBody(profileSchema), upsertProfile);
 studentRouter.post("/classes/join", validateBody(z.object({ classCode: z.string().min(4), profile: profileSchema.optional() })), joinClass);
 studentRouter.get("/quizzes/:quizId", getStudentQuiz);
+studentRouter.post("/quizzes/:quizId/check-question", validateBody(z.object({ questionId: z.number(), answer: z.any().optional() })), checkStudentQuizQuestion);
 studentRouter.post("/quizzes/:quizId/submit", validateBody(z.object({ answers: z.array(z.any()).default([]) })), submitStudentQuiz);

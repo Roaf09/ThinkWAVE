@@ -37,7 +37,6 @@ import Analytics           from "./pages/teacher/Analytics.jsx";
 import AdminDashboard      from "./pages/admin/AdminDashboard.jsx";
 import SuperadminDashboard from "./pages/superadmin/SuperadminDashboard.jsx";
 import GuestDashboard      from "./pages/guest/GuestDashboard.jsx";
-import GuestBuilder        from "./pages/guest/GuestBuilder.jsx";
 import StudentJoin         from "./pages/student/StudentJoin.jsx";
 import StudentPlay         from "./pages/student/StudentPlay.jsx";
 import StudentAuth         from "./pages/student/StudentAuth.jsx";
@@ -132,7 +131,7 @@ export default function App() {
 
         {/* Guest — no auth, session-based */}
         <Route path="/guest"                            element={<GuestDashboard />} />
-        <Route path="/guest/quizzes/:id/builder"        element={<GuestBuilder />} />
+        <Route path="/guest/quizzes/:id/builder"        element={<QuizBuilder guestMode />} />
         <Route path="/guest/sessions/:id/live"          element={<HostLive />} />
 
         {/* Superadmin */}

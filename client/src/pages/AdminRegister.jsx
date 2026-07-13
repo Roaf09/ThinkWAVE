@@ -45,14 +45,15 @@ export default function AdminRegister() {
     if (!matches)  return setError("Passwords do not match.");
     setLoading(true);
     try {
-      await api.post("/auth/register", {
+      const { data } = await api.post("/auth/register", {
         email:     form.email,
         password:  form.password,
         firstName: form.firstName,
         lastName:  form.lastName,
         role:      "ADMIN",  // ← this is key
       });
-      nav("/verify", { state: { email: form.email, adminPending: true } });
+      if (!data.emailSent) setError(data.devOtp ? `✓ Registered. Use dev OTP: ${data.devOtp}` : `✓ Registered. OTP email was not sent. ${data.deliveryWarning || "Check server email settings."}`);
+      setTimeout(() => nav("/verify", { state: { email: form.email, adminPending: true } }), data.emailSent ? 0 : 2600);
     } catch (err) {
       setError(err?.response?.data?.message || "Registration failed.");
     } finally { setLoading(false); }

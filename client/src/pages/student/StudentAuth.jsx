@@ -62,9 +62,10 @@ export default function StudentAuth({ onLoginSuccess }) {
       if (mode === "register") {
         if (!isStrong) return setMsg("Please use a stronger password.");
         if (!matches) return setMsg("Passwords do not match.");
-        await api.post("/auth/register", { firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password, role: "STUDENT" });
-        setMsg("✓ Registered as Student. OTP sent to your email.");
-        setTimeout(() => nav(`/verify?mode=student`, { state: { email: form.email, loginMode: "student" } }), 850);
+        const { data } = await api.post("/auth/register", { firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password, role: "STUDENT" });
+        const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
+        setMsg(`✓ Registered as Student. ${otpNote}`);
+        setTimeout(() => nav(`/verify?mode=student`, { state: { email: form.email, loginMode: "student" } }), data.emailSent ? 850 : 2600);
         return;
       }
       const { data } = await api.post("/auth/login", { email: form.email, password: form.password, loginPortal: "STUDENT" });

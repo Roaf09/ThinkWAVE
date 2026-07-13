@@ -175,6 +175,41 @@ export async function getStudentQuiz(req, res) {
   res.json({ quiz, questions: questions.map((q) => ({ ...q, config_json: safeJson(q.config_json) || {} })) });
 }
 
+
+export async function checkStudentQuizQuestion(req, res) {
+  const quizId = Number(req.params.quizId);
+  const questionId = Number(req.body.questionId);
+  const answer = req.body.answer ?? null;
+  const [[quiz]] = await pool.query(
+    `SELECT q.* FROM quizzes q
+     JOIN class_enrollments e ON e.class_id=q.class_id AND e.student_user_id=:uid AND e.removed_at IS NULL
+     WHERE q.id=:qid AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL`,
+    { uid: req.user.sub, qid: quizId }
+  );
+  if (!quiz) return res.status(404).json({ message: "Quiz not found." });
+  if (!nowWithin(quiz.available_from, quiz.available_until)) return res.status(403).json({ message: "This quiz is outside the allowed time." });
+  const [[existing]] = await pool.query(`SELECT id FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid`, { qid: quizId, uid: req.user.sub });
+  if (existing) return res.status(400).json({ message: "You already submitted this quiz." });
+
+  const [[q]] = await pool.query(
+    `SELECT id, config_json, correct_json FROM quiz_questions WHERE quiz_id=:qid AND id=:questionId AND deleted_at IS NULL LIMIT 1`,
+    { qid: quizId, questionId }
+  );
+  if (!q) return res.status(404).json({ message: "Question not found." });
+  const config = safeJson(q.config_json) || {};
+  const correct = safeJson(q.correct_json) || {};
+  const basePoints = Math.min(3, Math.max(1, Number(config.points || quiz.points_per_question || 1)));
+  const result = scoreAnswer({ templateType: normalizeTemplateType(quiz.template_type), correct, answer, config, basePoints });
+  res.json({
+    ok: true,
+    questionId,
+    isCorrect: !!result.isCorrect,
+    points: Number(result.pointsAwarded || 0),
+    explanation: String(config.explanation || ""),
+    difficulty: String(config.difficulty || ""),
+  });
+}
+
 export async function submitStudentQuiz(req, res) {
   const quizId = Number(req.params.quizId);
   const answers = Array.isArray(req.body.answers) ? req.body.answers : [];

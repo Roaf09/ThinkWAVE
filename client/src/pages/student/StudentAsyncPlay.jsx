@@ -43,6 +43,15 @@ function SoundTogglePill({ muted, onClick, style }) {
   );
 }
 
+function questionDifficulty(q) {
+  const value = String(q?.config_json?.difficulty || "").trim().toLowerCase();
+  return ["easy", "medium", "hard"].includes(value) ? value : "";
+}
+
+function currentQuestionExplanation(q) {
+  return String(q?.config_json?.explanation || "").trim();
+}
+
 export default function StudentAsyncPlay() {
   const { quizId } = useParams();
   const nav = useNavigate();
@@ -53,6 +62,11 @@ export default function StudentAsyncPlay() {
   const [answers, setAnswers] = useState({});
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
+  const [submittedByQuestion, setSubmittedByQuestion] = useState({});
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackQ, setFeedbackQ] = useState(null);
+  const [feedbackFxKey, setFeedbackFxKey] = useState(0);
+  const feedbackHideTimer = useRef(null);
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
@@ -84,6 +98,7 @@ export default function StudentAsyncPlay() {
     return () => {
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
+      clearTimeout(feedbackHideTimer.current);
       soundManager.stopBGM();
     };
   }, []);
@@ -96,6 +111,8 @@ export default function StudentAsyncPlay() {
   const progress = questions.length ? ((idx + 1) / questions.length) * 100 : 0;
   const isLast = idx >= questions.length - 1;
   const done = !!result;
+  const currentSubmitted = q?.id ? submittedByQuestion[q.id] : null;
+  const difficulty = questionDifficulty(q);
 
   function handleToggleMute() {
     const nextMuted = soundManager.toggleMute();
@@ -104,8 +121,31 @@ export default function StudentAsyncPlay() {
   }
 
   function setAnswer(answer) {
-    if (!q?.id || done) return;
+    if (!q?.id || done || currentSubmitted) return;
     setAnswers((prev) => ({ ...prev, [q.id]: answer }));
+  }
+
+  async function submitCurrentQuestion() {
+    if (!q?.id || done || currentSubmitted) return;
+    setMsg("");
+    try {
+      const { data } = await api.post(`/student/quizzes/${quizId}/check-question`, { questionId: Number(q.id), answer: currentAnswer });
+      const feedback = {
+        isCorrect: !!data.isCorrect,
+        points: Number(data.points || 0),
+        explanation: String(data.explanation || currentQuestionExplanation(q)),
+      };
+      setSubmittedByQuestion((prev) => ({ ...prev, [q.id]: feedback }));
+      setFeedbackQ(feedback);
+      setShowFeedback(true);
+      setFeedbackFxKey((v) => v + 1);
+      clearTimeout(feedbackHideTimer.current);
+      feedbackHideTimer.current = setTimeout(() => setShowFeedback(false), 2200);
+      soundManager.play(feedback.isCorrect ? "correct" : "wrong").catch(() => {});
+    } catch (err) {
+      setMsg(err?.response?.data?.message || "Could not submit this question.");
+      soundManager.play("wrong").catch(() => {});
+    }
   }
 
   async function submit() {
@@ -130,6 +170,21 @@ export default function StudentAsyncPlay() {
 
   return (
     <div style={{ minHeight: "100vh", background: pageBg, color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      {showFeedback && feedbackQ && (
+        <div className={`sp-feedback-overlay ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
+          <div key={feedbackFxKey} className={`sp-feedback-card ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
+            <div className="sp-feedback-icon">{feedbackQ.isCorrect ? "✅" : "❌"}</div>
+            <div className="sp-feedback-title">{feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}</div>
+            <div className="sp-feedback-subtitle">{feedbackQ.isCorrect ? "Nice one — keep going!" : "Review the explanation before moving on."}</div>
+            {feedbackQ.explanation && (
+              <div className="sp-explanation-panel">
+                <div className="sp-explanation-kicker">Explanation</div>
+                <p>{feedbackQ.explanation}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
         <div className="qn-header">
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -145,6 +200,7 @@ export default function StudentAsyncPlay() {
           </div>
         </div>
         <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round(progress)}%` }} /></div>
+        {difficulty && <div key={`${q.id}-${difficulty}`} className={`sp-difficulty-pop ${difficulty}`}>{difficulty}</div>}
 
         <div className="qn-body" style={{ flex: 1 }}>
           {done ? (
@@ -160,12 +216,23 @@ export default function StudentAsyncPlay() {
                 {q?.config_json?.promptImage ? <img src={q.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
                 <span className="qn-prompt-text">{q.prompt}</span>
               </div>
-              <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done} />
+              <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done || !!currentSubmitted} />
+              {currentSubmitted && (
+                <div style={{ maxWidth: 720, margin: "18px auto 0", padding: "14px 16px", borderRadius: 18, background: currentSubmitted.isCorrect ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.12)", border: `1px solid ${currentSubmitted.isCorrect ? "rgba(34,197,94,0.34)" : "rgba(239,68,68,0.28)"}`, color: textC, fontWeight: 800 }}>
+                  {currentSubmitted.isCorrect ? `Correct · +${currentSubmitted.points} pts` : "Incorrect"}
+                  {currentSubmitted.explanation ? <div style={{ marginTop: 8, color: mutedC, fontWeight: 700, lineHeight: 1.55 }}>{currentSubmitted.explanation}</div> : null}
+                </div>
+              )}
               {msg && <div style={{ textAlign: "center", color: "#ef4444", fontWeight: 700, marginTop: 12 }}>{msg}</div>}
               <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginTop: 22 }}>
                 <button type="button" className="spell-ctrl back" onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0}>Previous</button>
-                {!isLast && <button type="button" className="submit-btn" onClick={() => setIdx((i) => Math.min(questions.length - 1, i + 1))}>Next</button>}
-                <button type="button" className="submit-btn" onClick={submit}>Submit Once</button>
+                {!currentSubmitted ? (
+                  <button type="button" className="submit-btn" onClick={submitCurrentQuestion}>Submit</button>
+                ) : isLast ? (
+                  <button type="button" className="submit-btn" onClick={submit}>Finish</button>
+                ) : (
+                  <button type="button" className="submit-btn" onClick={() => setIdx((i) => Math.min(questions.length - 1, i + 1))}>Next</button>
+                )}
               </div>
             </>
           )}

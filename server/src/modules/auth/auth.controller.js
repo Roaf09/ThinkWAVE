@@ -11,6 +11,19 @@ import { pool } from "../../db.js";
 import { env  } from "../../env.js";
 import { sendOtpForUser, verifyOtpCode } from "./otp.service.js";
 
+
+function otpClientPayload(otpResult) {
+  const sent = !!otpResult?.delivery?.sent;
+  const payload = { emailSent: sent };
+  if (!sent) {
+    payload.deliveryWarning = otpResult?.delivery?.reason === "SMTP_NOT_CONFIGURED"
+      ? "Email delivery is not configured on the server. Configure Gmail/SMTP in server/.env to receive OTP emails."
+      : "The OTP email could not be sent. Check the server email settings and logs.";
+    if (process.env.NODE_ENV !== "production" && otpResult?.code) payload.devOtp = otpResult.code;
+  }
+  return payload;
+}
+
 // Always normalize emails so duplicate accounts do not appear because of casing/spaces.
 function normalizeEmail(e) { return String(e || "").trim().toLowerCase(); }
 
@@ -58,9 +71,17 @@ export async function register(req, res) {
       );
     } catch (_) {}
 
-    await sendOtpForUser(result.insertId, cleanEmail);
+    const otpResult = await sendOtpForUser(result.insertId, cleanEmail);
+    const otpPayload = otpClientPayload(otpResult);
 
-    res.status(201).json({ message: "Registered. OTP sent to email.", role, approvalStatus });
+    res.status(201).json({
+      message: otpPayload.emailSent
+        ? "Registered. OTP sent to email."
+        : "Registered. OTP email was not sent because email delivery needs server setup.",
+      role,
+      approvalStatus,
+      ...otpPayload,
+    });
   } catch (e) {
     if (String(e).toLowerCase().includes("duplicate"))
       return res.status(409).json({ message: "Email already in use." });
@@ -130,8 +151,16 @@ export async function requestPasswordReset(req, res) {
     { email: cleanEmail }
   );
   // Revision 1: password changes use OTP verification only, no admin approval.
-  if (rows.length) await sendOtpForUser(rows[0].id, cleanEmail);
-  res.json({ message: "If the email exists, an OTP has been sent." });
+  if (rows.length) {
+    const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
+    return res.json({
+      message: otpResult?.delivery?.sent
+        ? "If the email exists, an OTP has been sent."
+        : "The account exists, but the OTP email could not be sent because email delivery needs server setup.",
+      ...otpClientPayload(otpResult),
+    });
+  }
+  res.json({ message: "If the email exists, an OTP has been sent.", emailSent: false });
 }
 
 export async function confirmPasswordReset(req, res) {

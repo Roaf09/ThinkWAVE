@@ -142,6 +142,15 @@ function TitleWithTheme({ title, dark, onToggle, color, dotsColor, style, titleS
   );
 }
 
+function questionExplanation(q) {
+  return String(q?.config_json?.explanation || "").trim();
+}
+
+function questionDifficulty(q) {
+  const value = String(q?.config_json?.difficulty || "").trim().toLowerCase();
+  return ["easy", "medium", "hard"].includes(value) ? value : "";
+}
+
 // StudentPlay covers the entire student journey after joining: waiting room, current question, group flow, and leaderboard.
 export default function StudentPlay() {
   const { sessionId } = useParams();
@@ -341,7 +350,7 @@ export default function StudentPlay() {
         }
 
         if (a.isCorrect !== null && a.isCorrect !== undefined) {
-          setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
+          setFeedbackQ({ isCorrect: a.isCorrect, points: a.points, explanation: questionExplanation(currentQRef.current) });
           setShowFeedback(true);
           setFeedbackFxKey((v) => v + 1);
           setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
@@ -367,7 +376,7 @@ export default function StudentPlay() {
 
       if (a?.locked && currentQRef.current?.id) setSubmittedQId(currentQRef.current.id);
 
-      setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
+      setFeedbackQ({ isCorrect: a.isCorrect, points: a.points, explanation: questionExplanation(currentQRef.current) });
       setShowFeedback(true);
       setFeedbackFxKey((v) => v + 1);
       setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
@@ -684,6 +693,7 @@ export default function StudentPlay() {
 
   if (!currentQ) return null;
   const timerRed = (timer.remainingSec ?? 999) <= 5;
+  const difficulty = questionDifficulty(currentQ);
 
   return (
     <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
@@ -702,6 +712,12 @@ export default function StudentPlay() {
             <div className="sp-feedback-subtitle">
               {feedbackQ.isCorrect ? "Nice one — keep the streak going!" : "No worries — the next question is yours."}
             </div>
+            {feedbackQ.explanation && (
+              <div className="sp-explanation-panel">
+                <div className="sp-explanation-kicker">Explanation</div>
+                <p>{feedbackQ.explanation}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -740,6 +756,7 @@ export default function StudentPlay() {
           </div>
         </div>
         <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
+        {difficulty && <div key={`${currentQ.id}-${difficulty}`} className={`sp-difficulty-pop ${difficulty}`}>{difficulty}</div>}
 
         <div className="qn-body" style={{ flex: 1 }}>
         {isGroupMode && myGroup && (

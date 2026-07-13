@@ -7,7 +7,7 @@
 import nodemailer from "nodemailer";
 import { env } from "../env.js";
 
-function hasMailConfig() {
+export function hasMailConfig() {
   return Boolean((env.SMTP_HOST || env.SMTP_SERVICE) && env.SMTP_USER && env.SMTP_PASS);
 }
 
@@ -29,17 +29,22 @@ function buildTransporter() {
 
 export async function sendMail({ to, subject, text, html }) {
   if (!hasMailConfig()) {
-    console.log("[OTP EMAIL NOT SENT - configure Gmail/SMTP in server/.env]", { to, subject, text });
-    return;
+    console.warn("[OTP EMAIL NOT SENT - configure Gmail/SMTP in server/.env]", { to, subject });
+    return { sent: false, reason: "SMTP_NOT_CONFIGURED" };
   }
 
-  const transporter = buildTransporter();
-
-  await transporter.sendMail({
-    from: env.SMTP_FROM,
-    to,
-    subject,
-    text,
-    html
-  });
+  try {
+    const transporter = buildTransporter();
+    await transporter.sendMail({
+      from: env.SMTP_FROM || env.SMTP_USER,
+      to,
+      subject,
+      text,
+      html
+    });
+    return { sent: true };
+  } catch (error) {
+    console.error("[OTP EMAIL FAILED]", { to, subject, error: error?.message || error });
+    return { sent: false, reason: "SMTP_SEND_FAILED", error: error?.message || String(error) };
+  }
 }

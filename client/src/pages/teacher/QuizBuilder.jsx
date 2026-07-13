@@ -224,6 +224,25 @@ function choiceDisplay(option, fallback = "Choice") {
   return trimText(option?.text) || (trimText(option?.image) ? "Image choice" : fallback);
 }
 
+function supportsExplanationFields(templateType) {
+  return ["MCQ", "TRUE_FALSE", "TYPE_ANSWER"].includes(normalizeTemplateType(templateType));
+}
+
+function hasAnswerKey(q, templateType) {
+  const tt = normalizeTemplateType(templateType);
+  const cor = q?.correct || {};
+  if (tt === "MCQ") return !!((Array.isArray(cor.choices) && cor.choices.length) || trimText(cor.choice));
+  if (tt === "TRUE_FALSE") return !!trimText(cor.choice);
+  if (tt === "TYPE_ANSWER") return !!trimText(cor.text);
+  return false;
+}
+
+function difficultyLabel(value) {
+  const v = String(value || "medium").toLowerCase();
+  if (["easy", "medium", "hard"].includes(v)) return v;
+  return "medium";
+}
+
 function normalizeMatchingPayload(config, correct) {
   const cfg = config || {};
   const cor = correct || {};
@@ -342,7 +361,7 @@ function validateQuestion(q, templateType) {
 }
 
 // QuizBuilder is the main authoring page. Each template shares the same save/publish flow but renders different fields.
-export default function QuizBuilder() {
+export default function QuizBuilder({ guestMode = false } = {}) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
@@ -532,12 +551,16 @@ export default function QuizBuilder() {
             shuffleColA: !!settings.randomizeQuestions,
           }
         : {};
+      const supportExtra = supportsExplanationFields(quiz?.template_type) && hasAnswerKey(q, quiz?.template_type)
+        ? { difficulty: difficultyLabel(q.config?.difficulty) }
+        : {};
       return {
         ...q,
         order: idx,
         config: {
           ...q.config,
           ...extra,
+          ...supportExtra,
           timeLimitSec: q.timeLimitSec,
           // Revision 3: every template now stores points per individual question, capped at 3.
           points: clampQuestionPoints(q.points, 3),
@@ -607,7 +630,7 @@ export default function QuizBuilder() {
     try {
       await api.delete(`/quizzes/${id}`);
       setModal("deleted");
-      setTimeout(() => navigate("/teacher"), 1800);
+      setTimeout(() => navigate(builderHomePath), 1800);
     } catch {
       setMsg("Delete failed.");
     }
@@ -672,6 +695,8 @@ export default function QuizBuilder() {
   const isFirst = qIndex === 0;
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
   const publishDisabled = !isSaved || quiz.status === "PUBLISHED";
+  const promptMaxLength = guestMode ? 120 : 255;
+  const builderHomePath = guestMode ? "/guest" : "/teacher";
 
   return (
     <>
@@ -691,7 +716,7 @@ export default function QuizBuilder() {
       <div style={ui.page}>
         <div style={ui.topBar}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button style={ui.ghostBtn} onClick={() => navigate("/teacher")}>← Back</button>
+            <button style={ui.ghostBtn} onClick={() => navigate(builderHomePath)}>← Back</button>
             <button onClick={toggleTheme} style={ui.ghostBtn}>{dark ? "☀️ Light" : "🌙 Dark"}</button>
             <div style={{ minWidth: 260, flex: 1 }}>
               {titleEditing ? (
@@ -721,7 +746,7 @@ export default function QuizBuilder() {
                     <button style={ui.inlineEditBtn} onClick={() => setTitleEditing(true)}>✎ Edit title</button>
                   </div>
                   <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
-                    {displayTemplateName(quiz.template_type)} · {quiz.category} · {quiz.status}
+                    {guestMode ? "Guest Builder · " : ""}{displayTemplateName(quiz.template_type)} · {quiz.category} · {quiz.status}
                   </div>
                 </>
               )}
@@ -733,7 +758,7 @@ export default function QuizBuilder() {
             <button style={{ ...ui.secondaryBtn, ...(settingsOpen ? ui.secondaryBtnActive : {}) }} onClick={() => setSettingsOpen((v) => !v)}>
               Settings {settingsOpen ? "▲" : "▼"}
             </button>
-            <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>
+            {!guestMode && <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>}
             <button style={ui.secondaryBtn} onClick={addQuestion}>＋ Add Question</button>
             <button style={isSaved ? ui.savedBtn : ui.secondaryBtn} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</button>
             <button style={publishDisabled ? ui.disabledPrimaryBtn : ui.primaryBtn} onClick={publish} disabled={publishDisabled}>
@@ -782,9 +807,11 @@ export default function QuizBuilder() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: c.accent }}>{quiz?.template_type === "MATCHING" ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
-                      Save to Bank
-                    </button>
+                    {!guestMode && (
+                      <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
+                        Save to Bank
+                      </button>
+                    )}
                     <button style={{ ...ui.dangerGhostBtn, padding: "7px 12px", fontSize: 12 }} onClick={deleteCurrentQuestion}>Delete</button>
                   </div>
                 </div>
@@ -818,9 +845,9 @@ export default function QuizBuilder() {
 
                 <label style={ui.fieldLabel}>
                   Prompt
-                  <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/255</span>
+                  <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/{promptMaxLength}</span>
                 </label>
-                <textarea rows={4} maxLength={255} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value })} style={ui.textarea} />
+                <textarea rows={4} maxLength={promptMaxLength} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value.slice(0, promptMaxLength) })} style={ui.textarea} />
                 <div style={{ marginTop: 10, marginBottom: 16 }}>
                   <MediaInput
                     label="Question image (optional)"
@@ -832,7 +859,10 @@ export default function QuizBuilder() {
                   />
                 </div>
 
-                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} />
+                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} guestMode={guestMode} />
+                {supportsExplanationFields(quiz.template_type) && hasAnswerKey(currentQ, quiz.template_type) && (
+                  <QuestionSupportFields q={currentQ} onChange={updateQ} ui={ui} c={c} />
+                )}
               </div>
             </div>
           )}
@@ -994,23 +1024,124 @@ function BankModal({ templateType, onSelect, onClose, ui, c }) {
 
   return (
     <div style={ui.modalWrap} onClick={onClose}>
-      <div style={{ ...ui.modalCard, maxWidth: 560, maxHeight: "75vh", overflowY: "auto", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...ui.modalCard, maxWidth: 680, maxHeight: "78vh", overflowY: "auto", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0, color: c.text }}>Add from Question Bank</h3>
         <p style={{ fontSize: 13, color: c.textMuted, marginTop: -8, marginBottom: 16 }}>Template: <b>{templateType}</b></p>
         {loading && <p style={{ color: c.textMuted }}>Loading…</p>}
         {!loading && questions.length === 0 && <p style={{ color: c.textMuted }}>No saved questions for this template.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {questions.map((q) => (
-            <div key={q.id} style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, cursor: "pointer", padding: 14 }} onClick={() => onSelect(q)}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}><span style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{q.template_type}</span></div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: c.text }}>{q.prompt}</div>
-            </div>
-          ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {questions.map((q) => <BankQuestionCard key={q.id} q={q} onSelect={onSelect} ui={ui} c={c} />)}
         </div>
         <div style={{ marginTop: 16 }}><button style={ui.secondaryBtn} onClick={onClose}>Cancel</button></div>
       </div>
     </div>
   );
+}
+
+function BankQuestionCard({ q, onSelect, ui, c }) {
+  const [expanded, setExpanded] = useState(false);
+  const cfg = safeJson(q.config_json) || q.config_json || {};
+  const cor = safeJson(q.correct_json) || q.correct_json || {};
+  return (
+    <div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 16, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}><span style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{q.template_type}</span></div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: c.text, lineHeight: 1.45 }}>{q.prompt}</div>
+        </div>
+        <button type="button" style={{ ...ui.primaryBtn, padding: "8px 13px", fontSize: 12 }} onClick={() => onSelect(q)}>Use Question</button>
+      </div>
+      <BankQuestionPreview templateType={q.template_type} cfg={cfg} cor={cor} expanded={expanded} setExpanded={setExpanded} ui={ui} c={c} />
+    </div>
+  );
+}
+
+function MiniImage({ src, c, label = "Image" }) {
+  return src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : <div style={{ display: "grid", placeItems: "center", height: "100%", color: c.textMuted, fontSize: 11, fontWeight: 800 }}>{label}</div>;
+}
+
+function BankQuestionPreview({ templateType, cfg, cor, expanded, setExpanded, ui, c }) {
+  const tt = normalizeTemplateType(templateType);
+  const previewWrap = { marginTop: 12, border: `1px solid ${c.border}`, borderRadius: 14, background: c.cardBg, padding: 12 };
+  const answerBox = { marginTop: 10, padding: "9px 11px", borderRadius: 12, background: `${c.accent}12`, border: `1px solid ${c.accent}40`, color: c.text, fontSize: 13, fontWeight: 800 };
+
+  if (tt === "MCQ") {
+    const opts = normalizeChoiceOptions(cfg.options, "");
+    const raw = Array.isArray(cor.choices) && cor.choices.length ? cor.choices : [cor.choice].filter(Boolean);
+    const corrects = raw.filter(Boolean);
+    return (
+      <div style={previewWrap}>
+        <div style={{ display: "grid", gap: 8 }}>
+          {opts.map((opt, i) => {
+            const correct = corrects.some((choice) => choiceMatchesValue(opt, choice));
+            return <div key={opt.id || i} style={{ display: "grid", gridTemplateColumns: "32px 1fr auto", gap: 8, alignItems: "center", border: `1px solid ${correct ? c.accent : c.border}`, borderRadius: 12, padding: "8px 10px", background: correct ? `${c.accent}10` : c.cardBg2 }}><span style={{ ...ui.badge, justifyContent: "center", background: c.pageBg, color: c.text }}>{String.fromCharCode(65 + i)}</span><span style={{ color: c.text, fontWeight: correct ? 900 : 650 }}>{choiceDisplay(opt, `Choice ${i + 1}`)}</span>{correct && <span style={{ ...ui.badge, background: c.greenBg, color: c.greenFg }}>Correct</span>}</div>;
+          })}
+        </div>
+        <div style={answerBox}>Correct answer{corrects.length > 1 ? "s" : ""}: {corrects.map((choice) => choiceDisplay(opts.find((opt) => choiceMatchesValue(opt, choice)), choice)).join(" + ")}</div>
+      </div>
+    );
+  }
+
+  if (tt === "TRUE_FALSE") return <div style={previewWrap}><div style={answerBox}>Correct answer: {trimText(cor.choice) || "Not set"}</div></div>;
+  if (tt === "TYPE_ANSWER") return <div style={previewWrap}><div style={answerBox}>Correct answer: {trimText(cor.text) || "Not set"}</div></div>;
+
+  if (tt === "MATCHING") {
+    const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+    const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
+    const pairs = Array.isArray(cor.pairs) && cor.pairs.length ? cor.pairs : colA.map((_, i) => ({ aIndex: i, bIndex: i }));
+    const needsExpand = colA.length >= 3;
+    const visible = needsExpand && !expanded ? pairs.slice(0, 2) : pairs;
+    return (
+      <div style={previewWrap}>
+        <div style={{ display: "grid", gap: 8 }}>
+          {visible.map((pair, i) => {
+            const left = colA[Number(pair.aIndex)] || colA[i] || {};
+            const right = colB[Number(pair.bIndex)] || colB[i] || {};
+            return <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center", color: c.text, fontSize: 13, fontWeight: 750 }}><span style={{ padding: 9, borderRadius: 10, background: c.cardBg2 }}>{answerLabel(left) || `Pair ${i + 1} A`}</span><span style={{ color: c.textMuted }}>⇄</span><span style={{ padding: 9, borderRadius: 10, background: c.cardBg2 }}>{answerLabel(right) || `Pair ${i + 1} B`}</span></div>;
+          })}
+        </div>
+        {needsExpand && <button type="button" style={{ ...ui.ghostBtn, marginTop: 10, padding: "7px 10px", fontSize: 12 }} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : `Expand ${pairs.length} pairs`}</button>}
+      </div>
+    );
+  }
+
+  if (tt === "GUESS_WORD_4PICS") {
+    const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
+    while (images.length < 4) images.push("");
+    return (
+      <div style={previewWrap}>
+        <div style={{ width: 156, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+          {images.map((src, i) => <div key={i} style={{ height: 72, borderRadius: 10, overflow: "hidden", background: c.cardBg2, border: `1px solid ${c.border}` }}><MiniImage src={src} c={c} label={`Pic ${i + 1}`} /></div>)}
+        </div>
+        <div style={answerBox}>Correct answer: {trimText(cor.text || cfg.target) || "Not set"}</div>
+      </div>
+    );
+  }
+
+  if (tt === "THINK_SPELL") {
+    const answers = (Array.isArray(cor.answers) && cor.answers.length ? cor.answers : Array.isArray(cfg.answers) ? cfg.answers : []).map(trimText).filter(Boolean);
+    const gridSize = Math.min(12, Math.max(5, Number(cfg.gridSize || 8) || 8));
+    const needsExpand = gridSize >= 8 || answers.length > 5;
+    const visibleAnswers = needsExpand && !expanded ? answers.slice(0, 5) : answers;
+    const cells = Array.from({ length: Math.min(gridSize * gridSize, expanded ? 144 : 64) });
+    return (
+      <div style={previewWrap}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ width: expanded ? 220 : 156, display: "grid", gridTemplateColumns: `repeat(${gridSize}, 1fr)`, gap: 2, padding: 8, borderRadius: 12, border: `1px solid ${c.border}`, background: c.cardBg2, overflow: "auto", maxHeight: expanded ? 240 : 178 }}>
+            {cells.map((_, i) => <span key={i} style={{ aspectRatio: "1", borderRadius: 4, background: `${c.accent}18`, display: "block" }} />)}
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ color: c.text, fontWeight: 900, marginBottom: 8 }}>{gridSize}×{gridSize} letter grid</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{visibleAnswers.map((word, i) => <span key={`${word}-${i}`} style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{word}</span>)}</div>
+            <div style={answerBox}>Typed answers: {answers.length ? answers.join(", ") : "Not set"}</div>
+          </div>
+        </div>
+        {needsExpand && <button type="button" style={{ ...ui.ghostBtn, marginTop: 10, padding: "7px 10px", fontSize: 12 }} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Expand large grid"}</button>}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /**
@@ -1024,7 +1155,7 @@ function BankModal({ templateType, onSelect, onClose, ui, c }) {
  * type more than the first answer word.  Now rawText is the local source of
  * truth while the user is typing; only the parsed array is sent upstream.
  */
-function ThinkSpellEditor({ cor, cfg, onChange, ui, c }) {
+function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null }) {
   const initText = (
     Array.isArray(cor.answers) && cor.answers.length
       ? cor.answers
@@ -1040,7 +1171,8 @@ function ThinkSpellEditor({ cor, cfg, onChange, ui, c }) {
       .split(",")
       .map((w) => trimText(w))
       .filter(Boolean);
-    onChange({ correct: { ...cor, answers: parsed }, config: { ...cfg, answers: parsed } });
+    const limited = maxWords ? parsed.slice(0, maxWords) : parsed;
+    onChange({ correct: { ...cor, answers: limited }, config: { ...cfg, answers: limited } });
   }
 
   return (
@@ -1058,6 +1190,7 @@ function ThinkSpellEditor({ cor, cfg, onChange, ui, c }) {
       />
       <div style={{ color: c.textMuted, fontSize: 11, marginTop: 4 }}>
         Students earn points for each word they find in the letter grid before time runs out.
+        {maxWords ? ` Guest quizzes can use up to ${maxWords} words.` : ""}
       </div>
 
       <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Grid size</label>
@@ -1185,14 +1318,14 @@ function MediaInput({ label, value, placeholder, onChange, ui, c }) {
   );
 }
 
-function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
+function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode = false }) {
   const [showMatchingSuggest, setShowMatchingSuggest] = useState(false);
   const tt = normalizeTemplateType(templateType);
   const cfg = q.config || {};
   const cor = q.correct || {};
 
   if (tt === "MCQ") {
-    const mcqMode = cfg.mcqMode === "MODIFIED" ? "MODIFIED" : "NORMAL";
+    const mcqMode = guestMode ? "NORMAL" : (cfg.mcqMode === "MODIFIED" ? "MODIFIED" : "NORMAL");
     const baseOptions = normalizeChoiceOptions(cfg.options, category);
     const opts = mcqMode === "MODIFIED"
       ? [...baseOptions, ...defaultMcqImageOptions()].slice(0, 4).map((opt, index) => ({ ...opt, id: opt.id || `image-option-${index + 1}`, text: "" }))
@@ -1255,8 +1388,10 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
             Multiple Choice <span style={ui.innerMeta}>({mcqMode === "MODIFIED" ? "4 image choices" : `${opts.length}, min ${MIN}/max ${MAX}`})</span>
           </h4>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "NORMAL" ? c.accent : c.border }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
-            <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border }} onClick={() => setMcqMode("MODIFIED")}>Modified</button>
+            {!guestMode && <>
+              <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "NORMAL" ? c.accent : c.border }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
+              <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border }} onClick={() => setMcqMode("MODIFIED")}>Modified</button>
+            </>}
             <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "ONE" ? c.accent : c.border }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
             <button
               type="button"
@@ -1274,7 +1409,7 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
             >
               2 answers
             </button>
-            {mcqMode === "NORMAL" && (
+            {mcqMode === "NORMAL" && !guestMode && (
               <>
                 <button
                   style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
@@ -1365,11 +1500,11 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
                 <div style={{ display: "grid", gap: 8, flex: 1, width: mcqMode === "MODIFIED" ? "100%" : undefined }}>
                   {mcqMode === "NORMAL" && (
                     <input
-                      maxLength={255}
+                      maxLength={guestMode ? 120 : 255}
                       value={opt.text}
                       placeholder={`Option ${letter} text`}
                       onChange={(e) => {
-                        const next = opts.map((row, idx) => (idx === i ? { ...row, text: e.target.value } : row));
+                        const next = opts.map((row, idx) => (idx === i ? { ...row, text: e.target.value.slice(0, guestMode ? 120 : 255) } : row));
                         emitOptions(next);
                       }}
                       style={{ ...ui.input, margin: 0 }}
@@ -1576,7 +1711,8 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
     function updateA(i, patch) { emit(colA.map((row, idx) => (idx === i ? { ...row, ...patch } : row)), pairB, activeDummy); }
     function updateB(i, patch) { emit(colA, pairB.map((row, idx) => (idx === i ? { ...row, ...patch } : row)), activeDummy); }
     function updateDummy(i, patch) { emit(colA, pairB, activeDummy.map((row, idx) => (idx === i ? { ...row, ...patch } : row))); }
-    function addRow() { emit([...colA, { text: "", image: "" }], [...pairB, { text: "", image: "" }], activeDummy); }
+    const maxPairs = guestMode ? 5 : 99;
+    function addRow() { if (colA.length >= maxPairs) return; emit([...colA, { text: "", image: "" }], [...pairB, { text: "", image: "" }], activeDummy); }
     function removeRow(index) { if (colA.length <= 1) return; emit(colA.filter((_, i) => i !== index), pairB.filter((_, i) => i !== index), activeDummy); }
     function addDummy() { if (activeDummy.length >= 2) return; emit(colA, pairB, [...activeDummy, { text: "", image: "" }]); }
     function removeDummy(index) { if (activeDummy.length <= 1) return; emit(colA, pairB, activeDummy.filter((_, i) => i !== index)); }
@@ -1588,9 +1724,9 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
           <div>
             <h4 style={ui.innerTitle}>Matching Pairs</h4>
-            <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Each pair is correct by row. Add 1–2 dummy answers below for Column B distractors.</div>
+            <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Each pair is correct by row. Add 1–2 dummy answers below for Column B distractors.{guestMode ? " Guest limit: 5 pairs max." : ""}</div>
           </div>
-          <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} onClick={addRow}>＋ Add Pair</button>
+          <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? 0.55 : 1, cursor: colA.length >= maxPairs ? "not-allowed" : "pointer" }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
         </div>
 
         <div style={{ display: "grid", gap: 12 }}>
@@ -1653,11 +1789,43 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c }) {
         onChange={onChange}
         ui={ui}
         c={c}
+        maxWords={guestMode ? 5 : null}
       />
     );
   }
 
   return null;
+}
+
+function QuestionSupportFields({ q, onChange, ui, c }) {
+  const cfg = q.config || {};
+  const difficulty = difficultyLabel(cfg.difficulty);
+  return (
+    <div style={{ ...ui.innerCard, marginTop: 16, borderStyle: "dashed" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <div>
+          <h4 style={{ ...ui.innerTitle, marginBottom: 4 }}>Answer explanation</h4>
+          <div style={{ color: c.textMuted, fontSize: 12 }}>Shown to students after they submit their answer.</div>
+        </div>
+        <label style={{ display: "grid", gap: 6, minWidth: 150 }}>
+          <span style={ui.smallLabel}>Difficulty</span>
+          <select value={difficulty} onChange={(e) => onChange({ config: { ...cfg, difficulty: e.target.value } })} style={ui.input}>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+      </div>
+      <textarea
+        rows={3}
+        maxLength={1000}
+        value={cfg.explanation || ""}
+        placeholder="explanation goes here"
+        onChange={(e) => onChange({ config: { ...cfg, explanation: e.target.value.slice(0, 1000), difficulty } })}
+        style={ui.textarea}
+      />
+    </div>
+  );
 }
 
 function getUi(c, dark, templateType) {

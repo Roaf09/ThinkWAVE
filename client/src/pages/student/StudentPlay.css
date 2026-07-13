@@ -2283,3 +2283,62 @@ body:not(.dark) .sp-inline-theme-toggle {
     font-size: 15px;
   }
 }
+
+/* Revision 16: per-question difficulty + post-answer explanation reveal */
+@keyframes spDifficultyFade {
+  0% { opacity: 0; transform: translate(-50%, -14px) scale(0.94); }
+  14% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  72% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
+}
+.sp-difficulty-pop {
+  position: fixed;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  pointer-events: none;
+  padding: 9px 18px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 13px;
+  font-weight: 950;
+  color: #fff;
+  background: rgba(43, 108, 255, 0.92);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.22);
+  animation: spDifficultyFade 3.2s ease forwards;
+}
+.sp-difficulty-pop.easy { background: rgba(34, 197, 94, 0.94); }
+.sp-difficulty-pop.medium { background: rgba(245, 158, 11, 0.94); }
+.sp-difficulty-pop.hard { background: rgba(239, 68, 68, 0.94); }
+
+@keyframes spExplanationSlide {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sp-explanation-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  text-align: left;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
+  animation: spExplanationSlide 0.35s ease both;
+}
+.sp-explanation-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 950;
+  color: #2b6cff;
+  margin-bottom: 6px;
+}
+.sp-explanation-panel p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 700;
+}
