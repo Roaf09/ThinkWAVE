@@ -27,7 +27,7 @@ export const env = {
 DB_PORT: Number(process.env.DB_PORT || 3306),
 DB_USER: process.env.DB_USER || "root",
 DB_PASS: process.env.DB_PASS || "",
-DB_NAME: process.env.DB_NAME || "thinkwave",
+DB_NAME: process.env.DB_NAME || "defaultdb",
 DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
 DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
 
