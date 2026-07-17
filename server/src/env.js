@@ -21,16 +21,16 @@ if (!JWT_SECRET || JWT_SECRET === "dev_secret_change_me") {
 export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: Number(process.env.PORT || 4000),
-  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || "https://thinkwave-1.onrender.com",
   JWT_SECRET: process.env.JWT_SECRET || "dev_secret_change_me",
 
   DB_HOST: process.env.DB_HOST || "127.0.0.1",
 DB_PORT: Number(process.env.DB_PORT || 3306),
-DB_USER: process.env.DB_USER || "root",
-DB_PASS: process.env.DB_PASS || "",
-DB_NAME: process.env.DB_NAME || "thinkwave",
-DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
-DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
+DB_USER: process.env.DB_USER || "avnadmin",
+DB_PASS: process.env.DB_PASS || "AVNS_O-159EKs9_11uTqYJ3j",
+DB_NAME: process.env.DB_NAME || "defaultdb",
+DB_SSL: String(process.env.DB_SSL || "true").toLowerCase() === "true",
+DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "/etc/secrets/ca.pem",
 
   SMTP_SERVICE: process.env.SMTP_SERVICE || "",
   SMTP_HOST: process.env.SMTP_HOST || "",
