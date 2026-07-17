@@ -4,6 +4,7 @@
  */
 
 import React, { useMemo, useState } from "react";
+import PublicHeader from "../../components/PublicHeader";
 import { Link, useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken } from "../../lib/auth";
@@ -75,7 +76,7 @@ export default function StudentAuth({ onLoginSuccess }) {
       if (rememberMe) {
         try { localStorage.setItem("tw_remember_email", form.email); } catch {}
       }
-      onLoginSuccess?.(data.token, data.role);
+      onLoginSuccess?.(data.token, data.role, data);
       nav("/student");
     } catch (err) {
       const text = err?.response?.data?.message || "Student access failed.";
@@ -87,19 +88,7 @@ export default function StudentAuth({ onLoginSuccess }) {
   return (
     <div style={s.page(c)}>
       <div style={s.glow} />
-
-      <header style={s.header(c)}>
-        <Link to="/" style={s.logo}>
-          <span style={s.logoThink(c)}>Think</span>
-          <span style={s.logoWave}>WAVE</span>
-        </Link>
-        <div style={s.headerRight}>
-          <button onClick={toggleTheme} style={s.themeBtn(c)}>{dark ? "☀️ Light" : "🌙 Dark"}</button>
-          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMsg(""); setNotFound(false); }} style={s.headerBtn(c)}>
-            {mode === "login" ? "Register" : "Login"}
-          </button>
-        </div>
-      </header>
+      <PublicHeader compact />
 
       <main style={s.main}>
         <div style={mode === "login" ? s.card(c) : s.registerCard(c)}>
@@ -125,7 +114,7 @@ export default function StudentAuth({ onLoginSuccess }) {
                 </div>
 
                 <div style={s.rememberRow}>
-                  <label style={s.rememberLabel(c)}><input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ marginRight: 6, accentColor: "#2b6cff" }} />Remember me</label>
+                  <label style={s.rememberLabel(c)}><input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ margin: 0, width: 15, height: 15, flex: "0 0 auto", accentColor: "#2b6cff" }} />Remember me</label>
                   <button type="button" style={s.forgotBtn} onClick={() => nav("/forgot-password")}>Forgot password?</button>
                 </div>
 
@@ -195,7 +184,7 @@ const s = {
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   rememberRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  rememberLabel: (c) => ({ fontSize: 13, color: c.textMuted }),
+  rememberLabel: (c) => ({ display: "inline-flex", alignItems: "center", gap: 7, lineHeight: 1, fontSize: 13, color: c.textMuted, whiteSpace: "nowrap" }),
   forgotBtn: { background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   errorBox: (tone) => ({ background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: 12, padding: "12px 14px", boxShadow: "0 10px 24px rgba(15,23,42,0.06)" }),
   errorHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },

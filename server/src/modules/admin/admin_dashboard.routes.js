@@ -16,7 +16,7 @@ import {
   getStats, listTeachers,
   setTeacherActive, deleteTeacher,
   getInvitation, createInvitation, revokeInvitation,
-  joinViaInvitation,
+  joinViaInvitation, getInstitutionDetails, getActivity,
 } from "./admin_dashboard.controller.js";
 
 export const adminDashboardRouter = Router();
@@ -34,6 +34,8 @@ adminDashboardRouter.post("/setup-institution",   ...ADMIN,
 // stats/teachers
 adminDashboardRouter.get("/stats",                ...ADMIN, getStats);
 adminDashboardRouter.get("/teachers",             ...ADMIN, listTeachers);
+adminDashboardRouter.get("/institution",          ...ADMIN, getInstitutionDetails);
+adminDashboardRouter.get("/activity",             ...ADMIN, getActivity);
 adminDashboardRouter.post("/teachers/:id/active", ...ADMIN, setTeacherActive);
 adminDashboardRouter.delete("/teachers/:id",      ...ADMIN, deleteTeacher);
 

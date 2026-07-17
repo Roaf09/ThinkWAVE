@@ -17,8 +17,8 @@ const ALL_TEMPLATES = [
   { value: "TRUE_FALSE", label: "True / False", icon: "truefalse" },
   { value: "TYPE_ANSWER", label: "Identification", icon: "identification" },
   { value: "MATCHING", label: "Matching", icon: "matching" },
-  { value: "GUESS_WORD_4PICS", label: "4 Pics 1 Word", icon: "image" },
-  { value: "THINK_SPELL", label: "Think-and-Spell", icon: "spell" },
+  { value: "GUESS_WORD_4PICS", label: "Guess Word", icon: "image" },
+  { value: "THINK_SPELL", label: "Think and Spell", icon: "spell" },
 ];
 
 function buildFolderPathMap(rows) {

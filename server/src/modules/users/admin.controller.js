@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { pool } from "../../db.js";
 import { sendOtpForUser } from "../auth/otp.service.js";
 

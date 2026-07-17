@@ -9,8 +9,10 @@ import { QRCodeCanvas } from "qrcode.react";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/ActionDialog";
-import { normalizeTemplateType } from "../../../lib/templateTypes";
-import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import QuizPreviewModal from "../../../components/QuizPreviewModal";
+import { isInstitutionPlan } from "../../../lib/planLimits";
+import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
 
 const card = (c, extra = {}) => ({ background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 18, padding: 16, boxShadow: c.pageBg === "#eef2ff" ? "0 16px 34px rgba(43,108,255,0.08)" : "0 16px 34px rgba(0,0,0,0.14)", ...extra });
 const btn = (c, primary = false) => ({ padding: "9px 13px", borderRadius: 12, border: `1px solid ${primary ? c.accent : c.border}`, background: primary ? c.accent : c.cardBg2, color: primary ? "#fff" : c.text, fontWeight: 800, fontSize: 13, cursor: "pointer" });
@@ -49,6 +51,9 @@ export default function LiveSessionsTab({ setActiveTab }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("recent");
+  const [institutionPlan, setInstitutionPlan] = useState(false);
+  const [openQuizId, setOpenQuizId] = useState(null);
+  const [assignmentSaved, setAssignmentSaved] = useState(false);
   const c = useColors();
   const { dark } = useTheme();
 
@@ -66,10 +71,11 @@ export default function LiveSessionsTab({ setActiveTab }) {
 
   async function load() {
     try {
-      const [quizRes, folderRes, activeRes] = await Promise.all([api.get("/quizzes"), api.get("/classes"), api.get("/sessions/active")]);
+      const [quizRes, folderRes, activeRes, meRes] = await Promise.all([api.get("/quizzes"), api.get("/classes"), api.get("/sessions/active"), api.get("/auth/me")]);
       setQuizzes(quizRes.data || []);
       setFolders(folderRes.data || []);
       setActiveSessions(activeRes.data || []);
+      setInstitutionPlan(isInstitutionPlan(meRes.data));
     } catch (e) {
       showFlash("Failed to load live sessions.", "error");
     } finally {
@@ -86,19 +92,23 @@ export default function LiveSessionsTab({ setActiveTab }) {
       if (statusFilter === "ACTIVE" && !active) return false;
       if (statusFilter === "READY" && active) return false;
       if (statusFilter === "PUBLISHED" && quiz.status !== "PUBLISHED") return false;
+      const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
+      if (templateFilter && normalizeLiveTemplate(quiz.template_type) !== templateFilter) return false;
       if (!q) return true;
       return [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
-    rows.sort((a, b) => sortBy === "title" ? String(a.title || "").localeCompare(String(b.title || "")) : sortBy === "template" ? String(a.template_type || "").localeCompare(String(b.template_type || "")) : Number(b.id) - Number(a.id));
+    rows.sort((a, b) => sortBy === "title" ? String(a.title || "").localeCompare(String(b.title || "")) : Number(b.id) - Number(a.id));
     return rows;
   }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId]);
 
   async function hostLive(quiz, joinMode, maxParticipants) {
     try {
-      const cap = Number(maxParticipants || 0) > 0 ? Number(maxParticipants) : null;
-      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode, maxParticipants: cap });
+      const selectedMode = institutionPlan ? joinMode : "SOLO";
+      const requestedCap = Number(maxParticipants || 0) > 0 ? Number(maxParticipants) : null;
+      const cap = institutionPlan ? requestedCap : Math.min(requestedCap || 45, 45);
+      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode: selectedMode, maxParticipants: cap });
       await load();
-      showFlash(data?.existing ? "That live session is already open." : `Session created in ${joinMode === "GROUP" ? "group" : "solo"} mode.`);
+      showFlash(data?.existing ? "That live session is already open." : `Session created in ${selectedMode === "GROUP" ? "group" : "solo"} mode.`);
     } catch (e) { showFlash(e?.response?.data?.message || "Failed to create session.", "error"); }
   }
 
@@ -108,7 +118,8 @@ export default function LiveSessionsTab({ setActiveTab }) {
       await api.post(`/quizzes/${quiz.id}/assign`, payload);
       setAssignQuiz(null);
       await load();
-      showFlash("Assignment created. Students will see it on their home tab.");
+      setAssignmentSaved(true);
+      setTimeout(() => setAssignmentSaved(false), 2000);
     } catch (e) { showFlash(e?.response?.data?.message || "Failed to create assignment.", "error"); }
   }
 
@@ -121,10 +132,11 @@ export default function LiveSessionsTab({ setActiveTab }) {
   return <>
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section><h2 style={{ marginBottom: 4, color: c.text }}>Live Sessions</h2></section>
-      <section style={card(c)}><div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) repeat(2, minmax(150px, 0.7fr))", gap: 12 }}><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search quizzes" style={inputStyle(c)} /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputStyle(c)}><option value="ALL">All quizzes</option><option value="READY">Not active yet</option><option value="ACTIVE">Active sessions</option><option value="PUBLISHED">Published only</option></select><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="template">Template</option></select></div></section>
+      <section style={card(c)}><div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) repeat(2, minmax(150px, 0.7fr))", gap: 12 }}><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search quizzes" style={inputStyle(c)} /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputStyle(c)}><option value="ALL">All quizzes</option><option value="READY">Not active yet</option><option value="ACTIVE">Active sessions</option><option value="PUBLISHED">Published only</option></select><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option>{Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}</select></div></section>
       {flash && <div style={{ ...card(c, { padding: "12px 16px", boxShadow: "none", background: flash.kind === "error" ? c.redBg : c.greenBg, borderColor: flash.kind === "error" ? c.redBorder : c.greenBorder }), color: flash.kind === "error" ? c.redFg : c.greenFg, fontWeight: 800, fontSize: 13 }}>{flash.text}</div>}
-      {filteredQuizzes.length === 0 ? <div style={card(c)}>No quizzes match your filters. <button onClick={() => setActiveTab?.("create")} style={{ border: "none", background: "none", color: c.accent, fontWeight: 800 }}>Create one</button>.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} folderLabel={folderPathMap.get(Number(quiz.class_id)) || "No folder assigned"} activeSession={activeByQuizId.get(Number(quiz.id)) || null} onHost={hostLive} onAssign={setAssignQuiz} onDelete={(q) => setConfirmState({ type: "delete", quiz: q })} onCopyToBank={(q) => setConfirmState({ type: "bank", quiz: q })} onDuplicate={(q) => setConfirmState({ type: "duplicate", quiz: q })} onPreview={setPreviewQuiz} c={c} />)}</div>}
-      {previewQuiz && <PreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
+      {filteredQuizzes.length === 0 ? <div style={card(c)}>No quizzes match your filters. <button onClick={() => setActiveTab?.("create")} style={{ border: "none", background: "none", color: c.accent, fontWeight: 800 }}>Create one</button>.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} folderLabel={folderPathMap.get(Number(quiz.class_id)) || "No folder assigned"} activeSession={activeByQuizId.get(Number(quiz.id)) || null} onHost={hostLive} onAssign={setAssignQuiz} onDelete={(q) => setConfirmState({ type: "delete", quiz: q })} onCopyToBank={(q) => setConfirmState({ type: "bank", quiz: q })} onDuplicate={(q) => setConfirmState({ type: "duplicate", quiz: q })} onPreview={setPreviewQuiz} c={c} institutionPlan={institutionPlan} expanded={Number(openQuizId)===Number(quiz.id)} onToggle={()=>setOpenQuizId(curr=>Number(curr)===Number(quiz.id)?null:quiz.id)} />)}</div>}
+      {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
+      {assignmentSaved && <ProfileSavedOverlay />}
     </div>
 
     {assignQuiz && <AssignModal quiz={assignQuiz} c={c} onClose={() => setAssignQuiz(null)} onSubmit={createAssignment} />}
@@ -132,8 +144,13 @@ export default function LiveSessionsTab({ setActiveTab }) {
   </>;
 }
 
-function QuizCard({ quiz, folderLabel, activeSession, onHost, onAssign, onDelete, onCopyToBank, onDuplicate, onPreview, c }) {
-  const [expanded, setExpanded] = useState(false);
+function normalizeLiveTemplate(value) {
+  if (value === "FOUR_PICS_ONE_WORD") return "GUESS_WORD_4PICS";
+  if (value === "THINK_AND_SPELL") return "THINK_SPELL";
+  return value;
+}
+
+function QuizCard({ quiz, folderLabel, activeSession, onHost, onAssign, onDelete, onCopyToBank, onDuplicate, onPreview, c, institutionPlan, expanded, onToggle }) {
   const [joinMode, setJoinMode] = useState(activeSession?.join_mode || "SOLO");
   const [maxParticipants, setMaxParticipants] = useState(activeSession?.max_participants || "");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -143,12 +160,12 @@ function QuizCard({ quiz, folderLabel, activeSession, onHost, onAssign, onDelete
   const inSession = !!activeSession;
   useEffect(() => { if (activeSession?.join_mode) setJoinMode(activeSession.join_mode); if (activeSession?.max_participants) setMaxParticipants(activeSession.max_participants); }, [activeSession?.join_mode, activeSession?.max_participants]);
   return <div style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false) }}>
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{templateLabel(quiz.template_type)} · {quiz.category}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} /><Badge c={c} label={folderLabel} tone="blue" /></div></div><button style={btn(c, true)} onClick={() => setExpanded((v) => !v)}>{expanded ? "Close" : "Open"}</button></div>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{templateLabel(quiz.template_type)} · {quiz.category}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} /><Badge c={c} label={folderLabel} tone="blue" /></div></div><button style={btn(c, true)} onClick={onToggle}>{expanded ? "Close" : "Open"}</button></div>
     <div className={`collapsible-content ${expanded ? "open" : ""}`} style={{ marginTop: expanded ? 16 : 0 }}><div className="collapsible-inner"><div style={{ display: "grid", gap: 14 }}>
       <div style={card(c, { padding: 14, boxShadow: "none", background: c.cardBg2 })}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}><div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} /><Badge c={c} label={folderLabel} tone="blue" /></div></div><div style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 9001 : 1 }}><button onClick={() => onHost(quiz, joinMode, maxParticipants)} disabled={!isPublished || inSession} style={{ ...btn(c, true), opacity: !isPublished || inSession ? .6 : 1 }}>{inSession ? "Already active" : "Host Live"}</button><button onClick={() => onAssign(quiz)} disabled={!isPublished || !quiz.class_id} style={{ ...btn(c), opacity: !isPublished || !quiz.class_id ? .6 : 1 }}>Assign</button><button onClick={() => setMoreOpen((v) => !v)} style={btn(c)}>...</button>{moreOpen && <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 9500, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}><button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button><button onClick={() => { setMoreOpen(false); navigate(`/teacher/quizzes/${quiz.id}/builder`); }} style={menuBtn(c)}>Edit</button><button onClick={() => { setMoreOpen(false); onCopyToBank(quiz); }} style={{ ...menuBtn(c), color: c.yellowFg }}>Add to Quiz Bank</button><button onClick={() => { setMoreOpen(false); onDuplicate(quiz); }} style={menuBtn(c)}>Duplicate</button><button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button></div>}</div></div>
       </div>
-      {!inSession && <div style={card(c, { padding: 14, boxShadow: "none", background: c.pageBg })}><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub, marginBottom: 10 }}>Host setup</div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Mode</div><div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => setJoinMode("SOLO")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "SOLO" ? c.accent : c.border, color: joinMode === "SOLO" ? c.accent : c.text }}>Solo</button><button type="button" onClick={() => setJoinMode("GROUP")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "GROUP" ? c.accent : c.border, color: joinMode === "GROUP" ? c.accent : c.text }}>Group</button></div></div><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Maximum students</div><input type="number" min={1} max={500} value={maxParticipants} onChange={(e) => setMaxParticipants(e.target.value.replace(/[^\d]/g, "").slice(0, 3))} placeholder="No cap" style={inputStyle(c)} /></div><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Selected folder</div><div style={{ ...inputStyle(c), background: c.cardBg2 }}>{folderLabel}</div></div></div></div>}
+      {!inSession && <div style={card(c, { padding: 14, boxShadow: "none", background: c.pageBg })}><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub, marginBottom: 10 }}>Host setup</div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Mode</div><div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => setJoinMode("SOLO")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "SOLO" ? c.accent : c.border, color: joinMode === "SOLO" ? c.accent : c.text }}>Solo</button>{institutionPlan && <button type="button" onClick={() => setJoinMode("GROUP")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "GROUP" ? c.accent : c.border, color: joinMode === "GROUP" ? c.accent : c.text }}>Group</button>}</div>{!institutionPlan && <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan supports solo sessions only.</div>}</div><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Maximum students</div><input type="number" min={1} max={institutionPlan ? 500 : 45} value={maxParticipants} onChange={(e) => { const raw=e.target.value.replace(/[^\d]/g, "").slice(0, 3); setMaxParticipants(raw && !institutionPlan ? String(Math.min(Number(raw),45)) : raw); }} placeholder={institutionPlan ? "No cap" : "Up to 45"} style={inputStyle(c)} /></div><div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Selected folder</div><div style={{ ...inputStyle(c), background: c.cardBg2 }}>{folderLabel}</div></div></div></div>}
       {activeSession && <div style={card(c, { padding: 0, overflow: "hidden", borderColor: tone.border })}><div style={{ padding: "16px 18px", background: tone.softBg, borderBottom: `1px solid ${tone.border}` }}><div style={{ color: tone.accent, fontWeight: 900, fontSize: 18 }}>Session Ready</div></div><div style={{ padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18, flexWrap: "wrap" }}><div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub }}>Join code</div><div style={{ fontWeight: 900, fontSize: 28, letterSpacing: "0.22em", color: c.accent }}>{activeSession.join_code}</div><Link to={`/teacher/sessions/${activeSession.id}/live`} style={{ color: c.accent, fontWeight: 800, textDecoration: "underline" }}>Open Host Panel →</Link></div><div style={{ background: "white", padding: 10, borderRadius: 14 }}><QRCodeCanvas value={`${window.location.origin}/play?code=${activeSession.join_code}`} size={96} /></div></div></div>}
     </div></div></div>
   </div>;
@@ -330,35 +347,3 @@ function formatSchedule(value) {
 function menuBtn(c) { return { width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 700, cursor: "pointer" }; }
 function inputStyle(c) { return { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }; }
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "grid", placeItems: "center", padding: 20, zIndex: 9000, isolation: "isolate" };
-
-function PreviewModal({ quiz, onClose }) {
-  const [questions, setQuestions] = useState([]);
-  const [qIndex, setQIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const c = useColors();
-  const { dark } = useTheme();
-  useEffect(() => { api.get(`/quizzes/${quiz.id}`).then(({ data }) => setQuestions(data.questions || [])).catch(console.error).finally(() => setLoading(false)); }, [quiz.id]);
-  const currentQ = questions[qIndex] || null;
-  const cfg = currentQ ? safeJson(currentQ.config_json) || {} : {};
-  return <div onClick={onClose} style={previewOverlay(dark)}>
-    <div onClick={(e) => e.stopPropagation()} style={{ width: "min(95vw, 760px)", maxHeight: "90vh", background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.30)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", background: c.cardBg2, borderBottom: `1px solid ${c.border}` }}><span style={{ fontWeight: 800, fontSize: 15, color: c.text }}>👁 Preview — {quiz.title}</span><button onClick={onClose} style={btn(c)}>✕ Close</button></div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>{loading && <div style={{ textAlign: "center", padding: 40, color: c.textMuted }}>Loading questions…</div>}{!loading && questions.length === 0 && <div style={{ textAlign: "center", padding: 40, color: c.textMuted }}>No questions yet.</div>}{!loading && currentQ && <div><div style={{ background: c.cardBg2, borderRadius: 12, padding: "10px 16px", marginBottom: 12, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><span style={{ color: c.text, fontWeight: 700 }}>{quiz.title}</span><span style={{ color: c.textMuted, fontSize: 13 }}>Q {qIndex + 1} of {questions.length}</span></div><div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "18px 20px", fontSize: 16, fontWeight: 800, lineHeight: 1.6, color: c.text, marginBottom: 14, textAlign: "center" }}>{currentQ.prompt}</div><PreviewBody templateType={normalizeTemplateType(quiz.template_type)} cfg={cfg} c={c} /></div>}</div>{!loading && questions.length > 0 && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 24px", borderTop: `1px solid ${c.border}` }}><button style={{ ...btn(c), visibility: qIndex === 0 ? "hidden" : "visible" }} onClick={() => setQIndex((i) => i - 1)}>‹ Previous</button><span style={{ fontSize: 14, color: c.textMuted }}>{qIndex + 1} / {questions.length}</span><button style={{ ...btn(c), visibility: qIndex === questions.length - 1 ? "hidden" : "visible" }} onClick={() => setQIndex((i) => i + 1)}>Next ›</button></div>}
-    </div>
-  </div>;
-}
-
-function PreviewBody({ templateType, cfg, c }) {
-  const opts = Array.isArray(cfg.options) ? cfg.options : [];
-  const labels = "ABCDEFGHIJ".split("");
-  const tt = normalizeTemplateType(templateType);
-  if (tt === "MCQ" || tt === "TRUE_FALSE") return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{opts.map((o, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.text }}><span style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: c.cardBg, color: c.accent, fontWeight: 900, fontSize: 14, flexShrink: 0, border: `1px solid ${c.border}` }}>{labels[i]}</span><span style={{ fontWeight: 600 }}>{typeof o === "object" ? o.text || "Image choice" : o}</span></div>)}</div>;
-  if (tt === "GUESS_WORD_4PICS") { const images = Array.isArray(cfg.images) ? cfg.images : []; return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxWidth: 280 }}>{[0, 1, 2, 3].map((i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 10, overflow: "hidden", background: c.cardBg2, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ color: c.textMuted, fontWeight: 900 }}>?</span>}</div>)}</div>; }
-  return <div style={{ padding: "12px 14px", background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 12, fontSize: 13, color: c.textMuted }}>Preview available in builder.</div>;
-}
-
-function previewOverlay(dark) {
-  return { position: "fixed", inset: 0, zIndex: 9200, display: "grid", placeItems: "center", padding: 20, background: dark ? "rgba(0,0,0,.68)" : "rgba(15,23,42,.46)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", isolation: "isolate" };
-}
-
-function safeJson(v) { if (!v) return null; if (typeof v === "object") return v; try { return JSON.parse(v); } catch { return null; } }

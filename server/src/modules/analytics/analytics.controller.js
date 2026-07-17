@@ -7,6 +7,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
+import { getTeacherPlan } from "../plans/plan.js";
 
 function safeJson(v) {
   if (!v) return null;
@@ -27,6 +28,16 @@ function cleanTemplateLabel(value) {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+
+async function requireInstitutionAnalytics(req, res) {
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code !== "INSTITUTION") {
+    res.status(403).json({ message: "Extensive analytics and downloads are available on the Institution plan." });
+    return false;
+  }
+  return true;
 }
 
 async function getSessionOwned(sessionId, teacherId) {
@@ -150,6 +161,7 @@ export async function sessionQuestionStats(req, res) {
 }
 
 export async function exportSessionXlsx(req, res) {
+  if (!(await requireInstitutionAnalytics(req, res))) return;
   const sessionId = Number(req.params.sessionId);
   const data = await buildFullAnalyticsData(sessionId, req.user.sub);
   if (!data) return res.status(404).json({ message: "Session not found" });
@@ -217,6 +229,7 @@ export async function exportSessionXlsx(req, res) {
 }
 
 export async function exportSessionPdf(req, res) {
+  if (!(await requireInstitutionAnalytics(req, res))) return;
   const sessionId = Number(req.params.sessionId);
   const data = await buildFullAnalyticsData(sessionId, req.user.sub);
   if (!data) return res.status(404).json({ message: "Session not found" });

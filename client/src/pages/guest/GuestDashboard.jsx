@@ -20,6 +20,7 @@ import { useTheme } from "../../context/ThemeContext";
 import GuestCreateTab    from "./GuestCreateTab";
 import GuestLiveTab      from "./GuestLiveTab";
 import GuestHistoryTab   from "./GuestHistoryTab";
+import ThemeIconButton from "../../components/ThemeIconButton";
 
 const NAV = [
   { id:"create",  label:"Create",          icon:"＋" },
@@ -113,15 +114,7 @@ export default function GuestDashboard() {
 
         {/* Theme toggle */}
         <div style={{ padding:"0 12px", marginBottom:8 }}>
-          <button onClick={toggleTheme} style={{
-            display:"flex", alignItems:"center", gap:10, width:"100%",
-            padding:"10px 14px", borderRadius:10, border:`1px solid ${borderC}`,
-            background:"transparent", color:navColor, fontSize:13, fontWeight:600, cursor:"pointer",
-            transition:"color 0.2s, border-color 0.2s",
-          }}>
-            <span>{dark ? "☀️" : "🌙"}</span>
-            <span>{dark ? "Light Mode" : "Dark Mode"}</span>
-          </button>
+          <ThemeIconButton dark={dark} onClick={toggleTheme} style={{ width:"100%", color:navColor, borderColor:borderC, background:"transparent" }} />
         </div>
 
         {/* Exit Guest Mode */}

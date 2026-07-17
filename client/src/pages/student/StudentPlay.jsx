@@ -11,8 +11,11 @@ import { makeSocket } from "../../lib/socket";
 import "./StudentPlay.css";
 import soundManager from "../../utils/soundmanager";
 import { useTheme } from "../../context/ThemeContext";
-import { API_BASE } from "../../lib/api";
 import { normalizeTemplateType } from "../../lib/templateTypes";
+import { getRole } from "../../lib/auth";
+import ThemeIconButton from "../../components/ThemeIconButton";
+import { TwIcon } from "../../components/TwUI";
+import { AudioPlayButton } from "../../components/AudioControls";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
   buildThinkSpellSignature,
@@ -64,61 +67,14 @@ function LoadingDots({ color = "currentColor" }) {
 }
 
 function ThemeTogglePill({ dark, onClick, style, className = "" }) {
-  return (
-    <button
-      className={`sp-inline-theme-toggle ${className}`.trim()}
-      onClick={onClick}
-      type="button"
-      style={{
-        padding: "7px 14px",
-        borderRadius: 20,
-        fontSize: 13,
-        fontWeight: 700,
-        color: dark ? "#bfd0ff" : "#5a6a9a",
-        border: dark ? "1px solid rgba(191,208,255,0.18)" : "1px solid rgba(43,108,255,0.16)",
-        background: dark ? "rgba(255,255,255,0.04)" : "transparent",
-        cursor: "pointer",
-        transition: "background 0.25s, color 0.25s, border-color 0.25s, transform 0.18s",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        whiteSpace: "nowrap",
-        ...(style || {}),
-      }}
-    >
-      <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
-      <span>{dark ? "Light" : "Dark"}</span>
-    </button>
-  );
+  return <ThemeIconButton dark={dark} onClick={onClick} className={`sp-inline-theme-toggle ${className}`.trim()} style={style} size={18} />;
 }
 
 function SoundTogglePill({ muted, onClick, style, className = "" }) {
   return (
-    <button
-      className={`sp-inline-sound-toggle ${className}`.trim()}
-      onClick={onClick}
-      type="button"
-      style={{
-        padding: "7px 14px",
-        borderRadius: 20,
-        fontSize: 13,
-        fontWeight: 800,
-        color: muted ? "#ffd4d4" : "#d8ffe8",
-        border: muted ? "1px solid rgba(255,120,120,0.28)" : "1px solid rgba(120,255,180,0.24)",
-        background: muted ? "rgba(127, 29, 29, 0.26)" : "rgba(18, 96, 63, 0.22)",
-        cursor: "pointer",
-        transition: "background 0.25s, color 0.25s, border-color 0.25s, transform 0.18s",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        whiteSpace: "nowrap",
-        ...(style || {}),
-      }}
-      title={muted ? "Unmute sounds" : "Mute sounds"}
-      aria-label={muted ? "Unmute sounds" : "Mute sounds"}
-    >
-      <span style={{ fontSize: 14 }}>{muted ? "🔇" : "🔊"}</span>
-      <span>{muted ? "Muted" : "Sound"}</span>
+    <button className={`sp-inline-sound-toggle ${className}`.trim()} onClick={onClick} type="button" style={style}
+      title={muted ? "Unmute sounds" : "Mute sounds"} aria-label={muted ? "Unmute sounds" : "Mute sounds"}>
+      <span key={muted ? "muted" : "sound"} className="tw-theme-icon-swap"><TwIcon name={muted ? "volumeOff" : "volume"} size={19} /></span>
     </button>
   );
 }
@@ -127,8 +83,9 @@ function WaitRosterCard({ item, dark, subtitle }) {
   const tone = rosterTone(item.id || `${item.first_name}-${item.last_name}`, dark);
   return (
     <div className="sp-wait-roster-card" style={{ background: tone.bg, borderColor: tone.border }}>
-      <div style={{ color: tone.text, fontWeight: 900 }}>{item.first_name} {item.last_name}</div>
-      <div style={{ color: dark ? "#bfd0ff" : "#52648f", fontSize: 12 }}>{subtitle}</div>
+      <div className="sp-roster-profile">{item.profile_image ? <img src={item.profile_image} alt="" /> : <TwIcon name="user" size={18} />}</div>
+      <div><div style={{ color: tone.text, fontWeight: 900 }}>{item.first_name} {item.last_name}</div>
+      <div style={{ color: dark ? "#bfd0ff" : "#52648f", fontSize: 12 }}>{subtitle}</div></div>
     </div>
   );
 }
@@ -142,13 +99,25 @@ function TitleWithTheme({ title, dark, onToggle, color, dotsColor, style, titleS
   );
 }
 
-function questionExplanation(q) {
-  return String(q?.config_json?.explanation || "").trim();
+function ExperienceControls({ dark, muted, onMute, onTheme }) {
+  return <div className="sp-experience-controls"><SoundTogglePill muted={muted} onClick={onMute}/><ThemeTogglePill dark={dark} onClick={onTheme}/></div>;
 }
 
-function questionDifficulty(q) {
-  const value = String(q?.config_json?.difficulty || "").trim().toLowerCase();
-  return ["easy", "medium", "hard"].includes(value) ? value : "";
+function AntiCheatModal({ antiCheat, countdown, onConfirm }) {
+  if (!antiCheat) return null;
+  const warning=antiCheat.type === "warning";
+  return <div className="sp-anticheat-backdrop"><div className="sp-anticheat-card">
+    <div className={`sp-anticheat-icon ${warning ? "warning" : "danger"}`}><TwIcon name={warning ? "warning" : "logout"} size={38}/></div>
+    <h3>{warning ? "Activity warning" : "Session access removed"}</h3>
+    <p>{antiCheat.message}</p>
+    {warning ? <button type="button" disabled={countdown>0} onClick={onConfirm}>{countdown>0 ? `Confirm in ${countdown}s` : "Confirm"}</button> : <div className="sp-anticheat-countdown">Redirecting in {Math.max(0,countdown)}s…</div>}
+  </div></div>;
+}
+
+function VoiceAnswerStrip({ config }) {
+  const recordings=Array.isArray(config?.voiceAnswers)?config.voiceAnswers:[];
+  if(!recordings.some(Boolean)) return null;
+  return <div className="sp-voice-answer-strip">{recordings.map((audio,index)=>audio?<div key={index}><span>{String.fromCharCode(65+index)}</span><AudioPlayButton src={audio} title={`Play answer ${index+1}`}/></div>:null)}</div>;
 }
 
 // StudentPlay covers the entire student journey after joining: waiting room, current question, group flow, and leaderboard.
@@ -185,6 +154,10 @@ export default function StudentPlay() {
   const [waitingForFinalFx, setWaitingForFinalFx] = useState(false);
   const [feedbackPulse, setFeedbackPulse] = useState("");
   const [feedbackFxKey, setFeedbackFxKey] = useState(0);
+  const [antiCheat, setAntiCheat] = useState(null);
+  const [antiCountdown, setAntiCountdown] = useState(0);
+  const [experienceBlur, setExperienceBlur] = useState(false);
+  const [frozenTimer, setFrozenTimer] = useState(null);
 
   const socketRef = useRef(null);
   const currentQRef = useRef(null);
@@ -192,6 +165,8 @@ export default function StudentPlay() {
   const completeTimer = useRef(null);
   const feedbackHideTimer = useRef(null);
   const feedbackPulseTimer = useRef(null);
+  const antiRemovalTimer = useRef(null);
+  const lastTabSignal = useRef(0);
   const participantId = Number(localStorage.getItem("qz_participantId") || "0");
   const reconnectKey = localStorage.getItem("qz_reconnectKey") || "";
 
@@ -240,17 +215,27 @@ export default function StudentPlay() {
   }, [currentSoundMode, isMuted]);
 
   useEffect(() => {
-    function onVis() {
-      if (document.hidden && participantId) {
-        fetch(`${API_BASE}/sessions/${sessionId}/tab-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ participantId }),
-        }).catch(() => {});
-      }
+    function signalTabOut() {
+      if (stateRef.current?.status !== "LIVE" || !participantId) return;
+      const now = Date.now();
+      if (now - lastTabSignal.current < 1500) return;
+      lastTabSignal.current = now;
+      setExperienceBlur(true);
+      socketRef.current?.emit("student:tabOut", { sessionId:Number(sessionId), participantId });
     }
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    function onVisibility(){ if(document.hidden) signalTabOut(); else setExperienceBlur(false); }
+    function onBlur(){ if(document.visibilityState !== "hidden") signalTabOut(); }
+    function onFocus(){ setExperienceBlur(false); }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pagehide", signalTabOut);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pagehide", signalTabOut);
+    };
   }, [sessionId, participantId]);
 
   // Real-time connection. Student screens stay updated from socket events instead of repeated polling.
@@ -260,6 +245,21 @@ export default function StudentPlay() {
     s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey }));
     s.on("student:connected", () => { void soundManager.startBGM("lobby"); });
     s.on("student:error", (e) => setMsg(e?.message || "Could not join the session."));
+    s.on("antiCheat:warning", (payload) => { setAntiCheat({ type:"warning", message:payload?.message || "You have left the experience, this is a warning." }); setAntiCountdown(Number(payload?.confirmDelaySec || 5)); });
+    s.on("antiCheat:pendingRemoval", (payload) => {
+      clearTimeout(antiRemovalTimer.current);
+      const delay=Number(payload?.redirectDelaySec || 10);
+      setAntiCheat({ type:"removal", message:payload?.message || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher." });
+      setAntiCountdown(delay);
+      antiRemovalTimer.current=setTimeout(()=>navigate(getRole()==="STUDENT"?"/student":"/"),delay*1000);
+    });
+    s.on("antiCheat:allowed", () => { clearTimeout(antiRemovalTimer.current); setAntiCheat(null); setAntiCountdown(0); });
+    s.on("antiCheat:kicked", (payload) => {
+      clearTimeout(antiRemovalTimer.current);
+      setAntiCheat({ type:"kicked", message:payload?.message || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher." });
+      setAntiCountdown(3);
+      antiRemovalTimer.current=setTimeout(()=>navigate(getRole()==="STUDENT"?"/student":"/"),3000);
+    });
     s.on("session:state", (payload) => {
       setState((prev) => {
         const prevIdx = prev?.current_question_index;
@@ -274,6 +274,7 @@ export default function StudentPlay() {
           setSubmitLabel("Submit");
           setProposalStatus("");
           setGroupProposal(null);
+          setFrozenTimer(null);
         }
         return payload.state;
       });
@@ -329,6 +330,7 @@ export default function StudentPlay() {
 
       clearTimeout(feedbackHideTimer.current);
       clearTimeout(feedbackPulseTimer.current);
+      clearTimeout(antiRemovalTimer.current);
 
       if (isThinkSpell) {
         if (a.thinkSpell) {
@@ -350,7 +352,7 @@ export default function StudentPlay() {
         }
 
         if (a.isCorrect !== null && a.isCorrect !== undefined) {
-          setFeedbackQ({ isCorrect: a.isCorrect, points: a.points, explanation: questionExplanation(currentQRef.current) });
+          setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
           setShowFeedback(true);
           setFeedbackFxKey((v) => v + 1);
           setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
@@ -376,7 +378,7 @@ export default function StudentPlay() {
 
       if (a?.locked && currentQRef.current?.id) setSubmittedQId(currentQRef.current.id);
 
-      setFeedbackQ({ isCorrect: a.isCorrect, points: a.points, explanation: questionExplanation(currentQRef.current) });
+      setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
       setShowFeedback(true);
       setFeedbackFxKey((v) => v + 1);
       setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
@@ -410,6 +412,12 @@ export default function StudentPlay() {
       s.disconnect();
     };
   }, [sessionId, reconnectKey, participantId]);
+
+  useEffect(() => {
+    if (!antiCheat || antiCountdown <= 0) return;
+    const t=setTimeout(()=>setAntiCountdown(v=>Math.max(0,v-1)),1000);
+    return ()=>clearTimeout(t);
+  },[antiCheat,antiCountdown]);
 
   useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 200); return () => clearInterval(t); }, []);
 
@@ -454,6 +462,7 @@ export default function StudentPlay() {
 
   const timer = useMemo(() => {
     const total = Number(currentQ?.config_json?.timeLimitSec || state?.time_limit_sec || 0);
+    if (frozenTimer && submittedQId === currentQ?.id) return frozenTimer;
     if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
     if (state?.question_deadline_at) {
       const serverNowMs = nowMs - clockOffsetMs;
@@ -466,7 +475,7 @@ export default function StudentPlay() {
     const elapsed = Math.max(0, Math.floor((nowMs - started) / 1000));
     const remaining = Math.max(0, total - elapsed);
     return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
-  }, [state, nowMs, currentQ, clockOffsetMs]);
+  }, [state, nowMs, currentQ, clockOffsetMs, frozenTimer, submittedQId]);
 
   const isGroupMode = state?.join_mode === "GROUP";
   const isLastQuestion = !!state && Number(state.current_question_index || 0) >= Math.max(0, questions.length - 1);
@@ -519,6 +528,7 @@ export default function StudentPlay() {
     else if (tt === "THINK_SPELL") answer = { words: Array.isArray(spell.foundEntries) ? spell.foundEntries : [] };
     else if (tt === "GUESS_WORD_4PICS") answer = { text: spell.built };
     else answer = { text: answerText };
+    setFrozenTimer({ ...timer });
     socketRef.current?.emit("answer:submit", { sessionId: Number(sessionId), participantId, questionId: currentQ.id, answer });
     if (isGroupMode) setSubmitLabel("Waiting for group vote…");
   }
@@ -548,12 +558,15 @@ export default function StudentPlay() {
     : isGroupMode
       ? "Groups update in real time as the teacher prepares the session."
       : "The teacher will start the session soon.";
+  const experienceControls=<ExperienceControls dark={dark} muted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}/>;
+  const antiCheatOverlay=<AntiCheatModal antiCheat={antiCheat} countdown={antiCountdown} onConfirm={()=>{setAntiCheat(null);setAntiCountdown(0)}}/>;
 
   if (state?.status === "ENDED" && !waitingForFinalFx && !showFeedback) {
     const myScore = scores.find((s) => s.participant_id === participantId);
     const myRank = scores.findIndex((s) => s.participant_id === participantId) + 1;
     return (
       <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
+        {experienceControls}{antiCheatOverlay}
         <div className="sp-page-enter" style={{ maxWidth: 640, margin: "0 auto", padding: "32px 16px 48px" }}>
           <div style={{ textAlign: "center", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
@@ -590,9 +603,10 @@ export default function StudentPlay() {
   if (!state || state.status === "LOBBY" || state.status === "PAUSED") {
     return (
       <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
+        {experienceControls}{antiCheatOverlay}
         <div className="sp-wait-card sp-page-enter" style={{ width: "min(100%, 820px)", background: cardBg, borderColor: cardBor }}>
           <div className="sp-wait-icon-wrap" style={{ background: dark ? "rgba(255,255,255,0.05)" : "#eef3ff", borderColor: cardBor }}>
-            <div className="sp-wait-icon">{state?.status === "PAUSED" ? "⏸" : "⏳"}</div>
+            <div className="sp-wait-icon"><TwIcon name={state?.status === "PAUSED" ? "pause" : "clock"} size={38}/></div>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
             <h3 className="sp-wait-title" style={{ color: textC, margin: 0 }}>{waitingTitle}<LoadingDots color={mutedC} /></h3>
@@ -617,7 +631,7 @@ export default function StudentPlay() {
               {groups.length === 0 ? (
                 <div style={{ padding: 18, borderRadius: 18, background: dark ? "rgba(255,255,255,0.05)" : "#f4f7ff", border: `1px solid ${cardBor}`, color: textC, fontWeight: 700, textAlign: "center" }}>
                   <div className="sp-wait-icon-wrap" style={{ margin: "0 auto 12px", width: 78, height: 78, background: dark ? "rgba(255,255,255,0.05)" : "#eef3ff", borderColor: cardBor }}>
-                    <div className="sp-wait-icon">⏳</div>
+                    <div className="sp-wait-icon"><TwIcon name="clock" size={34}/></div>
                   </div>
                   Waiting for teacher to add groups<LoadingDots color={mutedC} />
                 </div>
@@ -657,11 +671,12 @@ export default function StudentPlay() {
   if (state?.status === "LIVE" && countdown > 0) {
     return (
       <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
+        {experienceControls}{antiCheatOverlay}
         <div className="countdown-overlay" style={{ background: dark ? undefined : "radial-gradient(circle at center, rgba(255,255,255,0.86), rgba(219,230,255,0.95))" }}>
           <div className="countdown-card">
-            <h3 className="countdown-title" style={{ color: dark ? "#fff" : "#17305f" }}>Get Ready</h3>
+            <h3 className="countdown-title" style={{ color: dark ? "#fff" : "#17305f" }}>{Number(state?.current_question_index||0)===0 ? "Get Ready" : Number(state?.current_question_index||0)>=questions.length-1 ? "This will be the last question!" : "Next question coming in..."}</h3>
             <div key={countdown} className="countdown-number">{countdown}</div>
-            <p className="countdown-sub" style={{ color: dark ? "rgba(255,255,255,0.75)" : "#5a6a9a" }}>Session is about to start</p>
+            <p className="countdown-sub" style={{ color: dark ? "rgba(255,255,255,0.75)" : "#5a6a9a" }}>{Number(state?.current_question_index||0)===0 ? "Session is about to start" : "Prepare for the next challenge"}</p>
           </div>
         </div>
       </div>
@@ -671,16 +686,17 @@ export default function StudentPlay() {
   if (postAnswerPhase && state?.status === "LIVE") {
     return (
       <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", display: "grid", placeItems: "center", padding: 20, transition: "background 0.45s" }}>
+        {experienceControls}{antiCheatOverlay}
         <div className={`sp-wait-card ${postAnswerPhase === "complete" ? "sp-phase-complete" : "sp-phase-wait"}`} style={{ maxWidth: 520, background: cardBg, borderColor: cardBor, textAlign: "center" }}>
           {postAnswerPhase === "complete" ? (
             <>
-              <div style={{ fontSize: 58, marginBottom: 12 }}>✅</div>
+              <div style={{ marginBottom: 12, color:"#16a34a" }}><TwIcon name="check" size={58}/></div>
               <h3 className="sp-wait-title" style={{ color: textC, marginBottom: 0 }}>Complete!</h3>
             </>
           ) : (
             <>
               <div className="sp-wait-icon-wrap" style={{ margin: "0 auto 16px", background: dark ? "rgba(255,255,255,0.05)" : "#eef3ff", borderColor: cardBor }}>
-                <div className="sp-wait-icon">⏳</div>
+                <div className="sp-wait-icon"><TwIcon name="clock" size={34}/></div>
               </div>
               <h3 className="sp-wait-title" style={{ color: textC }}>Please wait<LoadingDots color={mutedC} /></h3>
               <p className="sp-wait-subtitle" style={{ color: mutedC }}>Your teacher will end the session once everyone is ready.</p>
@@ -693,10 +709,10 @@ export default function StudentPlay() {
 
   if (!currentQ) return null;
   const timerRed = (timer.remainingSec ?? 999) <= 5;
-  const difficulty = questionDifficulty(currentQ);
 
   return (
     <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
+        {experienceControls}{antiCheatOverlay}
       {showFeedback && feedbackQ && (
         <div className={`sp-feedback-overlay ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
           <div className="sp-feedback-burst" aria-hidden="true">
@@ -705,19 +721,13 @@ export default function StudentPlay() {
             ))}
           </div>
           <div key={feedbackFxKey} className={`sp-feedback-card ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
-            <div className="sp-feedback-icon">{feedbackQ.isCorrect ? "✅" : "❌"}</div>
+            <div className="sp-feedback-icon"><TwIcon name={feedbackQ.isCorrect ? "check" : "close"} size={44}/></div>
             <div className="sp-feedback-title">
               {feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}
             </div>
             <div className="sp-feedback-subtitle">
               {feedbackQ.isCorrect ? "Nice one — keep the streak going!" : "No worries — the next question is yours."}
             </div>
-            {feedbackQ.explanation && (
-              <div className="sp-explanation-panel">
-                <div className="sp-explanation-kicker">Explanation</div>
-                <p>{feedbackQ.explanation}</p>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -726,7 +736,7 @@ export default function StudentPlay() {
         <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: dark ? "rgba(0,0,0,0.56)" : "rgba(30,45,85,0.24)", backdropFilter: "blur(6px)" }}>
           <div style={{ width: "min(92vw, 520px)", borderRadius: 24, background: dark ? "#0e1733" : "#ffffff", border: `1px solid ${cardBor}`, boxShadow: dark ? "0 30px 80px rgba(0,0,0,0.5)" : "0 24px 60px rgba(43,108,255,0.18)", overflow: "hidden" }}>
             <div style={{ padding: "24px 24px 14px", background: dark ? "linear-gradient(180deg, rgba(43,108,255,0.16), transparent)" : "linear-gradient(180deg, rgba(43,108,255,0.14), transparent)" }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, display: "grid", placeItems: "center", background: "rgba(43,108,255,0.12)", color: "#2b6cff", border: "1px solid rgba(43,108,255,0.2)", marginBottom: 14, fontSize: 24 }}>🤝</div>
+              <div style={{ width: 56, height: 56, borderRadius: 16, display: "grid", placeItems: "center", background: "rgba(43,108,255,0.12)", color: "#2b6cff", border: "1px solid rgba(43,108,255,0.2)", marginBottom: 14, fontSize: 24 }}><TwIcon name="users" size={28}/></div>
               <h3 style={{ margin: 0, color: textC, fontSize: 22, fontWeight: 900 }}>Confirm group answer?</h3>
               <p style={{ margin: "10px 0 0", color: mutedC, lineHeight: 1.65, fontSize: 14 }}><b style={{ color: textC }}>{groupProposal.proposerName || "A teammate"}</b> wants to submit this answer: <b style={{ color: textC }}>{renderAnswerPreview(groupProposal.answer)}</b></p>
             </div>
@@ -744,19 +754,14 @@ export default function StudentPlay() {
       <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"} ${feedbackPulse ? `feedback-hit-${feedbackPulse}` : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
         <div className="qn-header">
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="qn-subject">{state.quiz_title || "ThinkWAVE"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <SoundTogglePill muted={isMuted} onClick={handleToggleMute} style={{ padding: "6px 11px", fontSize: 12 }} />
-              <ThemeTogglePill dark={dark} onClick={toggleTheme} style={{ padding: "6px 11px", fontSize: 12, color: dark ? "#dbe7ff" : "#17305f", border: dark ? "1px solid rgba(219,231,255,0.25)" : "1px solid rgba(43,108,255,0.18)", background: dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)", boxShadow: dark ? "0 12px 22px rgba(0,0,0,0.26)" : "0 12px 22px rgba(43,108,255,0.14)" }} />
-            </div>
+            <div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{state.quiz_title || "Quiz"}</div>
           </div>
           <div className="qn-meta">
             <div className="qn-qcount">{state?.template_type === "MATCHING" ? "Batch" : "Q"} {(state.current_question_index || 0) + 1}/{questions.length}</div>
-            <div className="qn-timer" style={{ background: timerRed ? "#ef4444" : undefined }}>⏱ {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
+            <div className={`qn-timer ${state.quiz_category === "K12" ? "is-k12" : ""}`} style={{ background: timerRed ? "#ef4444" : undefined }}><TwIcon name="clock" size={17}/> {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
           </div>
         </div>
         <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
-        {difficulty && <div key={`${currentQ.id}-${difficulty}`} className={`sp-difficulty-pop ${difficulty}`}>{difficulty}</div>}
 
         <div className="qn-body" style={{ flex: 1 }}>
         {isGroupMode && myGroup && (
@@ -769,9 +774,11 @@ export default function StudentPlay() {
           </div>
         )}
         <div className="qn-prompt-box">
-          {currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
+          {currentQ?.config_json?.showPromptImage !== false && currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
           <span className="qn-prompt-text">{currentQ.prompt}</span>
+          {currentQ?.config_json?.voicePrompt ? <AudioPlayButton src={currentQ.config_json.voicePrompt} title="Play recorded question"/> : null}
         </div>
+        <VoiceAnswerStrip config={currentQ?.config_json}/>
         <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} answerText={answerText} setAnswerText={setAnswerText} matchingMap={matchingMap} setMatchingMap={setMatchingMap} spell={spell} setSpell={setSpell} />
         {thinkSpellTimeUp && (
           <div className="bword-summary">
@@ -1003,7 +1010,8 @@ function MatchingTemplate({ disabled, q, cfg, matchingMap, setMatchingMap }) {
             {orderB.map((bi, rowIndex) => {
               const b = colB[bi] || {};
               const isUsed = usedB.has(bi);
-              const canPick = selectedA !== null && !isUsed;
+              if (isUsed) return null;
+              const canPick = selectedA !== null;
               return (
                 <li key={`a-${bi}`}>
                   <button

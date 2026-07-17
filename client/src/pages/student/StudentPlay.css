@@ -2284,61 +2284,17 @@ body:not(.dark) .sp-inline-theme-toggle {
   }
 }
 
-/* Revision 16: per-question difficulty + post-answer explanation reveal */
-@keyframes spDifficultyFade {
-  0% { opacity: 0; transform: translate(-50%, -14px) scale(0.94); }
-  14% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  72% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
-}
-.sp-difficulty-pop {
-  position: fixed;
-  top: 82px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 120;
-  pointer-events: none;
-  padding: 9px 18px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 13px;
-  font-weight: 950;
-  color: #fff;
-  background: rgba(43, 108, 255, 0.92);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.22);
-  animation: spDifficultyFade 3.2s ease forwards;
-}
-.sp-difficulty-pop.easy { background: rgba(34, 197, 94, 0.94); }
-.sp-difficulty-pop.medium { background: rgba(245, 158, 11, 0.94); }
-.sp-difficulty-pop.hard { background: rgba(239, 68, 68, 0.94); }
-
-@keyframes spExplanationSlide {
-  from { opacity: 0; transform: translateY(22px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.sp-explanation-panel {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #0f172a;
-  text-align: left;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
-  animation: spExplanationSlide 0.35s ease both;
-}
-.sp-explanation-kicker {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 11px;
-  font-weight: 950;
-  color: #2b6cff;
-  margin-bottom: 6px;
-}
-.sp-explanation-panel p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.55;
-  font-weight: 700;
-}
+/* Revision 22: icon-only controls, anti-cheating warning, and clearer game surfaces. */
+.sp-experience-controls{position:fixed;left:18px;bottom:18px;z-index:95;display:flex;gap:9px;align-items:center}
+.sp-experience-controls .sp-inline-sound-toggle,.sp-experience-controls .sp-inline-theme-toggle{width:44px;height:44px;border-radius:50%;padding:0;display:grid;place-items:center;border:1px solid rgba(255,255,255,.3);background:rgba(9,18,45,.72);color:#fff;box-shadow:0 12px 28px rgba(0,0,0,.22);backdrop-filter:blur(12px)}
+.sp-anticheat-backdrop{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:20px;background:rgba(4,10,28,.42);backdrop-filter:blur(12px)}
+.sp-anticheat-card{width:min(92vw,470px);border-radius:24px;padding:28px;text-align:center;background:#fff;color:#14213d;border:1px solid #cbd5e1;box-shadow:0 30px 90px rgba(0,0,0,.28)}
+.dark .sp-anticheat-card{background:#0e1733;color:#e7e9ee;border-color:#2a3d6b}
+.sp-anticheat-icon{width:72px;height:72px;border-radius:22px;display:grid;place-items:center;margin:0 auto 16px}.sp-anticheat-icon.warning{background:#fef3c7;color:#b45309}.sp-anticheat-icon.danger{background:#fee2e2;color:#dc2626}
+.sp-anticheat-card h3{font-size:24px;margin:0 0 10px}.sp-anticheat-card p{line-height:1.65;margin:0 0 20px;color:#5a6a9a}.dark .sp-anticheat-card p{color:#aebce0}.sp-anticheat-card button{border:0;border-radius:14px;padding:12px 24px;background:#2b6cff;color:#fff;font-weight:900;cursor:pointer}.sp-anticheat-card button:disabled{opacity:.58;cursor:not-allowed}.sp-anticheat-countdown{font-weight:850;color:#dc2626}
+.sp-wait-roster-card{display:flex;align-items:center;gap:10px}.sp-roster-profile{width:38px;height:38px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:rgba(255,255,255,.5);flex:0 0 auto}.sp-roster-profile img{width:100%;height:100%;object-fit:cover}
+.qn-brand{font-weight:950;font-size:17px;white-space:nowrap}.qn-brand span:last-child{color:#2b6cff}.qn-timer{display:inline-flex;align-items:center;gap:6px}.qn-timer.is-k12{border:3px solid rgba(255,255,255,.75);font-family:"Courier New",monospace;font-weight:950;letter-spacing:.06em;box-shadow:0 4px 0 rgba(0,0,0,.2)}
+.sp-voice-answer-strip{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0 16px}.sp-voice-answer-strip>div{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:rgba(43,108,255,.1);color:#17305f;font-weight:900}.theme-dark .sp-voice-answer-strip>div{color:#dbe7ff;background:rgba(255,255,255,.08)}
+.quiz-shell-new.theme-light .qn-prompt-text,.quiz-shell-new.theme-light .choice-text,.quiz-shell-new.theme-light .match-v2-text,.quiz-shell-new.theme-light .type-input{color:#14213d!important}.quiz-shell-new.theme-light .qn-body{color:#14213d}
+.quiz-shell-new.feedback-hit-correct,.quiz-shell-new.feedback-hit-wrong{animation:none!important;transform:none!important}
+@media(max-width:640px){.sp-experience-controls{left:12px;bottom:12px}.sp-experience-controls .sp-inline-sound-toggle,.sp-experience-controls .sp-inline-theme-toggle{width:40px;height:40px}}

@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import PublicHeader from "../components/PublicHeader";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
@@ -38,10 +39,14 @@ export default function ForgotPassword() {
     e.preventDefault();
     setErr(""); setMsg("");
     try {
-      await api.post("/auth/password/request-reset", { email });
-      // Revision 1: password reset requires OTP verification before applying the new password.
-      setMsg("An OTP has been sent. Verify it first before your password is changed.");
-      setStep("otp");
+      const { data } = await api.post("/auth/password/request-reset", { email });
+      const note = data.emailSent
+        ? "An OTP has been sent. Verify it first before your password is changed."
+        : data.devOtp
+          ? `Email delivery failed. For local testing, use OTP: ${data.devOtp}`
+          : (data.deliveryWarning || "The OTP email could not be sent. Check the server SMTP settings.");
+      setMsg(note);
+      if (data.emailSent || data.devOtp) setStep("otp");
     } catch (error) {
       setErr(error?.response?.data?.message || "Could not send OTP.");
     }
@@ -64,12 +69,7 @@ export default function ForgotPassword() {
   return (
     <div style={s.page(c)}>
       <div style={s.glow} />
-      <header style={s.header(c)}>
-        <Link to="/" style={s.logo}>
-          <span style={s.logoThink(c)}>Think</span><span style={s.logoWave}>WAVE</span>
-        </Link>
-        <button onClick={toggleTheme} style={s.themeBtn(c)}>{dark ? "☀️ Light" : "🌙 Dark"}</button>
-      </header>
+      <PublicHeader compact />
       <main style={s.main}>
         <div style={s.card(c)}>
           <h1 style={s.title(c)}>Reset Password</h1>

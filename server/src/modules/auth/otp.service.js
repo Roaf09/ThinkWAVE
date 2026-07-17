@@ -4,9 +4,10 @@
  * Tip: Read sendOtpForUser first, then verifyOtpCode. That shows the full OTP lifecycle.
  */
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { pool } from "../../db.js";
 import { sendMail } from "../../utils/mailer.js";
+import { env } from "../../env.js";
 
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -70,10 +71,8 @@ export async function sendOtpForUser(userId, email) {
 
   const mail = buildOtpEmail({ code, email });
   const delivery = await sendMail({ to: email, ...mail });
-  if (!delivery?.sent) {
-    // Local/dev fallback: keep registration usable and make the missing SMTP setup visible.
-    // This is intentionally not returned to production clients.
-    console.warn(`[DEV OTP FALLBACK] OTP for ${email}: ${code}`);
+  if (env.NODE_ENV !== "production") {
+    console.info(`[ThinkWAVE local OTP] ${email}: ${code}`);
   }
   return { code, delivery: delivery || { sent: false, reason: "UNKNOWN" } };
 }

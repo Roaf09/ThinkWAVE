@@ -10,7 +10,11 @@ import { api } from "../../lib/api";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
 import { normalizeTemplateType } from "../../lib/templateTypes";
+import ThemeIconButton from "../../components/ThemeIconButton";
 import { templateLabel, templateTone } from "../../lib/templatePalette";
+import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../lib/thinkSpell";
+import { getTemplateLimit, isInstitutionPlan } from "../../lib/planLimits";
+import { VoiceRecorderButton } from "../../components/AudioControls";
 
 function normalizeSemanticText(value) {
   // Revision 3: lightweight duplicate detector catches reordered/similar answer wording offline.
@@ -90,21 +94,26 @@ async function compressImageFile(file) {
 function defaultConfig(t, c) {
   switch (normalizeTemplateType(t)) {
     case "MCQ":
-      return { options: defaultMcqOptions(c), promptImage: "", mcqMode: "NORMAL" };
+      return { options: defaultMcqOptions(c), promptImage: "", showPromptImage: false, mcqMode: "NORMAL", voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
     case "TRUE_FALSE":
-      return { options: ["True", "False"], promptImage: "" };
+      return { options: ["True", "False"], promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
     case "MATCHING":
       return {
         colA: [{ text: "", image: "" }],
         colB: [{ text: "", image: "" }],
         dummyB: [{ text: "", image: "" }], // Revision 1: matching requires at least one dummy answer.
+        promptImage: "",
+        showPromptImage: false,
+        voiceRecord: false,
+        voicePrompt: "",
+        voiceAnswers: [],
       };
     case "GUESS_WORD_4PICS":
-      return { images: ["", "", "", ""], dummyLetters: 6, target: "" };
+      return { images: ["", "", "", ""], dummyLetters: 6, target: "", promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
     case "THINK_SPELL":
-      return { gridSize: 8, answers: [], minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 1 };
+      return { gridSize: 5, answers: [], gridSeed: 1, gridFilled: false, promptImage: "", showPromptImage: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
     case "TYPE_ANSWER":
-      return { promptImage: "" };
+      return { promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
     default:
       return {};
   }
@@ -222,25 +231,6 @@ function choiceMatchesValue(option, value) {
 
 function choiceDisplay(option, fallback = "Choice") {
   return trimText(option?.text) || (trimText(option?.image) ? "Image choice" : fallback);
-}
-
-function supportsExplanationFields(templateType) {
-  return ["MCQ", "TRUE_FALSE", "TYPE_ANSWER"].includes(normalizeTemplateType(templateType));
-}
-
-function hasAnswerKey(q, templateType) {
-  const tt = normalizeTemplateType(templateType);
-  const cor = q?.correct || {};
-  if (tt === "MCQ") return !!((Array.isArray(cor.choices) && cor.choices.length) || trimText(cor.choice));
-  if (tt === "TRUE_FALSE") return !!trimText(cor.choice);
-  if (tt === "TYPE_ANSWER") return !!trimText(cor.text);
-  return false;
-}
-
-function difficultyLabel(value) {
-  const v = String(value || "medium").toLowerCase();
-  if (["easy", "medium", "hard"].includes(v)) return v;
-  return "medium";
 }
 
 function normalizeMatchingPayload(config, correct) {
@@ -361,7 +351,7 @@ function validateQuestion(q, templateType) {
 }
 
 // QuizBuilder is the main authoring page. Each template shares the same save/publish flow but renders different fields.
-export default function QuizBuilder({ guestMode = false } = {}) {
+export default function QuizBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
@@ -384,6 +374,9 @@ export default function QuizBuilder({ guestMode = false } = {}) {
   const [navDir, setNavDir] = useState("next");
   const [navTick, setNavTick] = useState(0);
   const [publishFlow, setPublishFlow] = useState(false);
+  const [institutionPlan, setInstitutionPlan] = useState(false);
+  const isBasic = !institutionPlan;
+  const planLimit = getTemplateLimit(quiz?.template_type);
 
   useEffect(() => {
     if (!["saved", "published", "bankSaved"].includes(modal)) return;
@@ -392,7 +385,9 @@ export default function QuizBuilder({ guestMode = false } = {}) {
   }, [modal]);
 
   const load = useCallback(async () => {
-    const { data } = await api.get(`/quizzes/${id}`);
+    const [{ data }, { data: me }] = await Promise.all([api.get(`/quizzes/${id}`), api.get("/auth/me")]);
+    const institution = isInstitutionPlan(me);
+    setInstitutionPlan(institution);
     setQuiz({ ...data.quiz, template_type: normalizeTemplateType(data.quiz.template_type) });
     setTitleDraft(data.quiz.title || "");
     setSettings({
@@ -403,19 +398,36 @@ export default function QuizBuilder({ guestMode = false } = {}) {
     const loaded = (data.questions || []).map((q) => {
       const cfg = safeJson(q.config_json) || {};
       let correct = safeJson(q.correct_json) || {};
-      let nextCfg = cfg;
+      let nextCfg = { ...cfg, showPromptImage: cfg.showPromptImage ?? !!cfg.promptImage };
       if (data.quiz?.template_type === "MATCHING") {
         const normalized = normalizeMatchingPayload(cfg, correct);
-        nextCfg = normalized.config;
+        nextCfg = { ...normalized.config, showPromptImage: normalized.config.showPromptImage ?? !!normalized.config.promptImage };
         correct = normalized.correct;
       }
+      if (!institution) {
+        nextCfg = { ...nextCfg, showPromptImage: false, promptImage: "" };
+        if (normalizeTemplateType(data.quiz?.template_type) === "MCQ") {
+          nextCfg.mcqMode = "NORMAL";
+          nextCfg.options = (Array.isArray(nextCfg.options) ? nextCfg.options : []).slice(0, 4).map((option) => typeof option === "object" ? { ...option, image: "" } : option);
+        }
+        if (normalizeTemplateType(data.quiz?.template_type) === "MATCHING") {
+          nextCfg.colA = (nextCfg.colA || []).slice(0, 5).map((row) => ({ ...row, image: "" }));
+          nextCfg.colB = (nextCfg.colB || []).slice(0, 6).map((row) => ({ ...row, image: "" }));
+          nextCfg.dummyB = (nextCfg.dummyB || []).slice(0, 1).map((row) => ({ ...row, image: "" }));
+        }
+        if (normalizeTemplateType(data.quiz?.template_type) === "THINK_SPELL") {
+          nextCfg.answers = (nextCfg.answers || []).slice(0, 4);
+          correct = { ...correct, answers: (correct.answers || nextCfg.answers || []).slice(0, 4) };
+        }
+      }
+      const basicLimit = getTemplateLimit(data.quiz?.template_type);
       return {
         id: q.id,
         order: q.question_order,
         prompt: q.prompt,
         config: nextCfg,
         correct,
-        timeLimitSec: nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30,
+        timeLimitSec: institution ? (nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30) : Math.min(Number(nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30), basicLimit.maxTimeSec),
         points: nextCfg.points ?? data.quiz.points_per_question ?? 1,
       };
     });
@@ -481,6 +493,10 @@ export default function QuizBuilder({ guestMode = false } = {}) {
   }
 
   function addQuestion() {
+    if (isBasic && questions.length >= planLimit.maxItems) {
+      setMsg(`Basic plan allows only ${planLimit.maxItems} ${["MATCHING","THINK_SPELL"].includes(quiz?.template_type) ? "batches" : "questions"} for this template.`);
+      return;
+    }
     markUnsaved((qs) => [...qs, buildBlankQuestion(quiz, qs.length)]);
     setNavDir("next");
     setQIndex(questions.length);
@@ -548,11 +564,8 @@ export default function QuizBuilder({ guestMode = false } = {}) {
     return questions.map((q, idx) => {
       const extra = quiz?.template_type === "MATCHING"
         ? {
-            shuffleColA: !!settings.randomizeQuestions,
+            shuffleColA: !!settings.shuffleAnswers,
           }
-        : {};
-      const supportExtra = supportsExplanationFields(quiz?.template_type) && hasAnswerKey(q, quiz?.template_type)
-        ? { difficulty: difficultyLabel(q.config?.difficulty) }
         : {};
       return {
         ...q,
@@ -560,7 +573,6 @@ export default function QuizBuilder({ guestMode = false } = {}) {
         config: {
           ...q.config,
           ...extra,
-          ...supportExtra,
           timeLimitSec: q.timeLimitSec,
           // Revision 3: every template now stores points per individual question, capped at 3.
           points: clampQuestionPoints(q.points, 3),
@@ -630,7 +642,7 @@ export default function QuizBuilder({ guestMode = false } = {}) {
     try {
       await api.delete(`/quizzes/${id}`);
       setModal("deleted");
-      setTimeout(() => navigate(builderHomePath), 1800);
+      setTimeout(() => navigate("/teacher"), 1800);
     } catch {
       setMsg("Delete failed.");
     }
@@ -695,8 +707,7 @@ export default function QuizBuilder({ guestMode = false } = {}) {
   const isFirst = qIndex === 0;
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
   const publishDisabled = !isSaved || quiz.status === "PUBLISHED";
-  const promptMaxLength = guestMode ? 120 : 255;
-  const builderHomePath = guestMode ? "/guest" : "/teacher";
+  const isBatchTemplate = ["MATCHING", "THINK_SPELL"].includes(quiz.template_type);
 
   return (
     <>
@@ -709,6 +720,8 @@ export default function QuizBuilder({ guestMode = false } = {}) {
           from { opacity: 0; transform: translateX(-32px) scale(0.985); }
           to { opacity: 1; transform: translateX(0) scale(1); }
         }
+        @keyframes twGridFill { from { opacity: .45; transform: scale(.985); } to { opacity: 1; transform: scale(1); } }
+        @keyframes twTilePop { from { opacity: 0; transform: scale(.72) rotate(-4deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
       `}</style>
 
       {bankOpen && <div style={ui.blurOverlay} />}
@@ -716,8 +729,8 @@ export default function QuizBuilder({ guestMode = false } = {}) {
       <div style={ui.page}>
         <div style={ui.topBar}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button style={ui.ghostBtn} onClick={() => navigate(builderHomePath)}>← Back</button>
-            <button onClick={toggleTheme} style={ui.ghostBtn}>{dark ? "☀️ Light" : "🌙 Dark"}</button>
+            <button style={ui.ghostBtn} onClick={() => navigate("/teacher")}>← Back</button>
+            <ThemeIconButton dark={dark} onClick={toggleTheme} style={ui.ghostBtn} />
             <div style={{ minWidth: 260, flex: 1 }}>
               {titleEditing ? (
                 <div style={ui.titleEditorWrap}>
@@ -746,7 +759,7 @@ export default function QuizBuilder({ guestMode = false } = {}) {
                     <button style={ui.inlineEditBtn} onClick={() => setTitleEditing(true)}>✎ Edit title</button>
                   </div>
                   <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
-                    {guestMode ? "Guest Builder · " : ""}{displayTemplateName(quiz.template_type)} · {quiz.category} · {quiz.status}
+                    {displayTemplateName(quiz.template_type)} · {quiz.category} · {quiz.status}
                   </div>
                 </>
               )}
@@ -754,12 +767,10 @@ export default function QuizBuilder({ guestMode = false } = {}) {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button style={ui.dangerGhostBtn} onClick={() => setModal("confirmDelete")}>Delete Quiz</button>
-            <button style={{ ...ui.secondaryBtn, ...(settingsOpen ? ui.secondaryBtnActive : {}) }} onClick={() => setSettingsOpen((v) => !v)}>
-              Settings {settingsOpen ? "▲" : "▼"}
-            </button>
-            {!guestMode && <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>}
-            <button style={ui.secondaryBtn} onClick={addQuestion}>＋ Add Question</button>
+            <button title="Delete quiz" aria-label="Delete quiz" style={{ ...ui.dangerGhostBtn, width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setModal("confirmDelete")}>🗑</button>
+            <button title="Quiz settings" aria-label="Quiz settings" style={{ ...ui.secondaryBtn, ...(settingsOpen ? ui.secondaryBtnActive : {}), width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setSettingsOpen((v) => !v)}>⚙</button>
+            <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>
+            <button style={ui.secondaryBtn} onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</button>
             <button style={isSaved ? ui.savedBtn : ui.secondaryBtn} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</button>
             <button style={publishDisabled ? ui.disabledPrimaryBtn : ui.primaryBtn} onClick={publish} disabled={publishDisabled}>
               {quiz.status === "PUBLISHED" ? "Published" : "Publish"}
@@ -767,28 +778,37 @@ export default function QuizBuilder({ guestMode = false } = {}) {
           </div>
         </div>
 
-        {msg && <div style={ui.msgBar}>{msg}</div>}
-
         <div className={`collapsible-content ${settingsOpen ? "open" : ""}`} style={{ marginTop: settingsOpen ? 0 : 0 }}>
           <div className="collapsible-inner">
             <div style={ui.settingsPanel}>
               <div style={ui.settingsPanelInner}>
               <button style={ui.toggleCard(settings.randomizeQuestions)} onClick={() => saveSettings({ randomizeQuestions: !settings.randomizeQuestions })}>
                 <div>
-                  <div style={ui.toggleTitle}>{quiz.template_type === "MATCHING" ? "Shuffle column A cards" : "Randomize question order"}</div>
-                    <div style={ui.toggleHint}>{quiz.template_type === "MATCHING" ? "Shuffle the prompt-side cards for each student view." : "Mix the question sequence each time the live session starts."}</div>
+                  <div style={ui.toggleTitle}>{isBatchTemplate ? "Randomize batch" : "Randomize question order"}</div>
+                  <div style={ui.toggleHint}>{isBatchTemplate ? "Mix the batch sequence when the session starts." : "Mix the question sequence each time the session starts."}</div>
                 </div>
                 <span style={ui.switchTrack(settings.randomizeQuestions)}><span style={ui.switchThumb(settings.randomizeQuestions)} /></span>
               </button>
-              {quiz.template_type !== "TRUE_FALSE" && quiz.template_type !== "MATCHING" && quiz.template_type !== "GUESS_WORD_4PICS" && (
+              {quiz.template_type === "MATCHING" && (
                 <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
-                  <div>
-                    <div style={ui.toggleTitle}>Shuffle answer choices</div>
-                    <div style={ui.toggleHint}>Randomize the order of options for each student view.</div>
-                  </div>
+                  <div><div style={ui.toggleTitle}>Shuffle Column A</div><div style={ui.toggleHint}>Change the order of the prompt-side matching cards.</div></div>
                   <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
+              {quiz.template_type === "MCQ" && (
+                <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
+                  <div><div style={ui.toggleTitle}>Shuffle answer choices</div><div style={ui.toggleHint}>Randomize option order while keeping the answer key intact.</div></div>
+                  <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
+                </button>
+              )}
+              {!isBasic && <button style={ui.toggleCard(!!currentQ?.config?.showPromptImage)} onClick={() => updateQ({ config: { ...(currentQ?.config || {}), showPromptImage: !currentQ?.config?.showPromptImage, promptImage: currentQ?.config?.promptImage || "" } })}>
+                <div><div style={ui.toggleTitle}>Question image</div><div style={ui.toggleHint}>Show an optional image field directly after the prompt.</div></div>
+                <span style={ui.switchTrack(!!currentQ?.config?.showPromptImage)}><span style={ui.switchThumb(!!currentQ?.config?.showPromptImage)} /></span>
+              </button>}
+              <button style={ui.toggleCard(!!currentQ?.config?.voiceRecord)} onClick={() => updateQ({ config: { ...(currentQ?.config || {}), voiceRecord: !currentQ?.config?.voiceRecord, voicePrompt: currentQ?.config?.voicePrompt || "", voiceAnswers: Array.isArray(currentQ?.config?.voiceAnswers) ? currentQ.config.voiceAnswers : [] } })}>
+                <div><div style={ui.toggleTitle}>Voice record</div><div style={ui.toggleHint}>Record the prompt and each answer for learners who benefit from audio support.</div></div>
+                <span style={ui.switchTrack(!!currentQ?.config?.voiceRecord)}><span style={ui.switchThumb(!!currentQ?.config?.voiceRecord)} /></span>
+              </button>
               </div>
             </div>
           </div>
@@ -796,7 +816,7 @@ export default function QuizBuilder({ guestMode = false } = {}) {
 
         <div style={ui.pagerBar}>
           <button style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible" }} onClick={goPrev}>‹ Previous</button>
-          <div style={{ textAlign: "center", color: c.text, fontSize: 15, fontWeight: 800 }}>{`${quiz?.template_type === "MATCHING" ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</div>
+          <div style={{ textAlign: "center", color: c.text, fontSize: 15, fontWeight: 800 }}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</div>
           <button style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible" }} onClick={goNext}>Next ›</button>
         </div>
 
@@ -805,14 +825,12 @@ export default function QuizBuilder({ guestMode = false } = {}) {
             <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
               <div style={ui.questionCard}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 900, fontSize: 17, color: c.accent }}>{quiz?.template_type === "MATCHING" ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
+                  <span style={{ fontWeight: 900, fontSize: 17, color: c.accent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && (
-                      <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
-                        Save to Bank
-                      </button>
-                    )}
-                    <button style={{ ...ui.dangerGhostBtn, padding: "7px 12px", fontSize: 12 }} onClick={deleteCurrentQuestion}>Delete</button>
+                    <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
+                      Save to Bank
+                    </button>
+                    <button title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} style={{ ...ui.dangerGhostBtn, width: 36, height: 36, padding: 0, display: "grid", placeItems: "center", fontSize: 16 }} onClick={deleteCurrentQuestion}>🗑</button>
                   </div>
                 </div>
 
@@ -820,8 +838,9 @@ export default function QuizBuilder({ guestMode = false } = {}) {
                   <div style={ui.metaCard}>
                     <div style={ui.metaLabel}>⏱ Time limit</div>
                     <div style={ui.metaRow}>
-                      <input type="number" min={5} max={600} value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={ui.metaInput} />
-                      <span style={ui.metaSuffix}>seconds</span>
+                      <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={{ ...ui.metaInput, width: 125 }}>
+                        {Array.from({ length: Math.floor((isBasic ? planLimit.maxTimeSec : 600) / 30) }, (_, i) => (i + 1) * 30).map((seconds) => <option key={seconds} value={seconds}>{seconds}s</option>)}
+                      </select>
                     </div>
                   </div>
                   <div style={ui.metaCard}>
@@ -838,17 +857,17 @@ export default function QuizBuilder({ guestMode = false } = {}) {
                         })}
                         style={ui.metaInput}
                       />
-                      <span style={ui.metaSuffix}>per question</span>
+                      <span style={ui.metaSuffix}>{quiz.template_type === "THINK_SPELL" ? "per word" : "per question"}</span>
                     </div>
                   </div>
                 </div>
 
                 <label style={ui.fieldLabel}>
                   Prompt
-                  <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/{promptMaxLength}</span>
+                  <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/255</span>
                 </label>
-                <textarea rows={4} maxLength={promptMaxLength} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value.slice(0, promptMaxLength) })} style={ui.textarea} />
-                <div style={{ marginTop: 10, marginBottom: 16 }}>
+                <textarea rows={4} maxLength={255} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value })} style={ui.textarea} />
+                {!isBasic && currentQ.config?.showPromptImage && <div style={{ marginTop: 10, marginBottom: 16 }}>
                   <MediaInput
                     label="Question image (optional)"
                     value={currentQ.config?.promptImage || ""}
@@ -857,12 +876,11 @@ export default function QuizBuilder({ guestMode = false } = {}) {
                     ui={ui}
                     c={c}
                   />
-                </div>
+                </div>}
 
-                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} guestMode={guestMode} />
-                {supportsExplanationFields(quiz.template_type) && hasAnswerKey(currentQ, quiz.template_type) && (
-                  <QuestionSupportFields q={currentQ} onChange={updateQ} ui={ui} c={c} />
-                )}
+                {currentQ.config?.voiceRecord && <VoiceRecordingPanel question={currentQ} templateType={quiz.template_type} onChange={updateQ} ui={ui} c={c} />}
+
+                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} isBasic={isBasic} />
               </div>
             </div>
           )}
@@ -1024,124 +1042,23 @@ function BankModal({ templateType, onSelect, onClose, ui, c }) {
 
   return (
     <div style={ui.modalWrap} onClick={onClose}>
-      <div style={{ ...ui.modalCard, maxWidth: 680, maxHeight: "78vh", overflowY: "auto", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...ui.modalCard, maxWidth: 560, maxHeight: "75vh", overflowY: "auto", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0, color: c.text }}>Add from Question Bank</h3>
         <p style={{ fontSize: 13, color: c.textMuted, marginTop: -8, marginBottom: 16 }}>Template: <b>{templateType}</b></p>
         {loading && <p style={{ color: c.textMuted }}>Loading…</p>}
         {!loading && questions.length === 0 && <p style={{ color: c.textMuted }}>No saved questions for this template.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {questions.map((q) => <BankQuestionCard key={q.id} q={q} onSelect={onSelect} ui={ui} c={c} />)}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {questions.map((q) => (
+            <div key={q.id} style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, cursor: "pointer", padding: 14 }} onClick={() => onSelect(q)}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}><span style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{q.template_type}</span></div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: c.text }}>{q.prompt}</div>
+            </div>
+          ))}
         </div>
         <div style={{ marginTop: 16 }}><button style={ui.secondaryBtn} onClick={onClose}>Cancel</button></div>
       </div>
     </div>
   );
-}
-
-function BankQuestionCard({ q, onSelect, ui, c }) {
-  const [expanded, setExpanded] = useState(false);
-  const cfg = safeJson(q.config_json) || q.config_json || {};
-  const cor = safeJson(q.correct_json) || q.correct_json || {};
-  return (
-    <div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 16, padding: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}><span style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{q.template_type}</span></div>
-          <div style={{ fontWeight: 800, fontSize: 14, color: c.text, lineHeight: 1.45 }}>{q.prompt}</div>
-        </div>
-        <button type="button" style={{ ...ui.primaryBtn, padding: "8px 13px", fontSize: 12 }} onClick={() => onSelect(q)}>Use Question</button>
-      </div>
-      <BankQuestionPreview templateType={q.template_type} cfg={cfg} cor={cor} expanded={expanded} setExpanded={setExpanded} ui={ui} c={c} />
-    </div>
-  );
-}
-
-function MiniImage({ src, c, label = "Image" }) {
-  return src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : <div style={{ display: "grid", placeItems: "center", height: "100%", color: c.textMuted, fontSize: 11, fontWeight: 800 }}>{label}</div>;
-}
-
-function BankQuestionPreview({ templateType, cfg, cor, expanded, setExpanded, ui, c }) {
-  const tt = normalizeTemplateType(templateType);
-  const previewWrap = { marginTop: 12, border: `1px solid ${c.border}`, borderRadius: 14, background: c.cardBg, padding: 12 };
-  const answerBox = { marginTop: 10, padding: "9px 11px", borderRadius: 12, background: `${c.accent}12`, border: `1px solid ${c.accent}40`, color: c.text, fontSize: 13, fontWeight: 800 };
-
-  if (tt === "MCQ") {
-    const opts = normalizeChoiceOptions(cfg.options, "");
-    const raw = Array.isArray(cor.choices) && cor.choices.length ? cor.choices : [cor.choice].filter(Boolean);
-    const corrects = raw.filter(Boolean);
-    return (
-      <div style={previewWrap}>
-        <div style={{ display: "grid", gap: 8 }}>
-          {opts.map((opt, i) => {
-            const correct = corrects.some((choice) => choiceMatchesValue(opt, choice));
-            return <div key={opt.id || i} style={{ display: "grid", gridTemplateColumns: "32px 1fr auto", gap: 8, alignItems: "center", border: `1px solid ${correct ? c.accent : c.border}`, borderRadius: 12, padding: "8px 10px", background: correct ? `${c.accent}10` : c.cardBg2 }}><span style={{ ...ui.badge, justifyContent: "center", background: c.pageBg, color: c.text }}>{String.fromCharCode(65 + i)}</span><span style={{ color: c.text, fontWeight: correct ? 900 : 650 }}>{choiceDisplay(opt, `Choice ${i + 1}`)}</span>{correct && <span style={{ ...ui.badge, background: c.greenBg, color: c.greenFg }}>Correct</span>}</div>;
-          })}
-        </div>
-        <div style={answerBox}>Correct answer{corrects.length > 1 ? "s" : ""}: {corrects.map((choice) => choiceDisplay(opts.find((opt) => choiceMatchesValue(opt, choice)), choice)).join(" + ")}</div>
-      </div>
-    );
-  }
-
-  if (tt === "TRUE_FALSE") return <div style={previewWrap}><div style={answerBox}>Correct answer: {trimText(cor.choice) || "Not set"}</div></div>;
-  if (tt === "TYPE_ANSWER") return <div style={previewWrap}><div style={answerBox}>Correct answer: {trimText(cor.text) || "Not set"}</div></div>;
-
-  if (tt === "MATCHING") {
-    const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
-    const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
-    const pairs = Array.isArray(cor.pairs) && cor.pairs.length ? cor.pairs : colA.map((_, i) => ({ aIndex: i, bIndex: i }));
-    const needsExpand = colA.length >= 3;
-    const visible = needsExpand && !expanded ? pairs.slice(0, 2) : pairs;
-    return (
-      <div style={previewWrap}>
-        <div style={{ display: "grid", gap: 8 }}>
-          {visible.map((pair, i) => {
-            const left = colA[Number(pair.aIndex)] || colA[i] || {};
-            const right = colB[Number(pair.bIndex)] || colB[i] || {};
-            return <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center", color: c.text, fontSize: 13, fontWeight: 750 }}><span style={{ padding: 9, borderRadius: 10, background: c.cardBg2 }}>{answerLabel(left) || `Pair ${i + 1} A`}</span><span style={{ color: c.textMuted }}>⇄</span><span style={{ padding: 9, borderRadius: 10, background: c.cardBg2 }}>{answerLabel(right) || `Pair ${i + 1} B`}</span></div>;
-          })}
-        </div>
-        {needsExpand && <button type="button" style={{ ...ui.ghostBtn, marginTop: 10, padding: "7px 10px", fontSize: 12 }} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : `Expand ${pairs.length} pairs`}</button>}
-      </div>
-    );
-  }
-
-  if (tt === "GUESS_WORD_4PICS") {
-    const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
-    while (images.length < 4) images.push("");
-    return (
-      <div style={previewWrap}>
-        <div style={{ width: 156, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-          {images.map((src, i) => <div key={i} style={{ height: 72, borderRadius: 10, overflow: "hidden", background: c.cardBg2, border: `1px solid ${c.border}` }}><MiniImage src={src} c={c} label={`Pic ${i + 1}`} /></div>)}
-        </div>
-        <div style={answerBox}>Correct answer: {trimText(cor.text || cfg.target) || "Not set"}</div>
-      </div>
-    );
-  }
-
-  if (tt === "THINK_SPELL") {
-    const answers = (Array.isArray(cor.answers) && cor.answers.length ? cor.answers : Array.isArray(cfg.answers) ? cfg.answers : []).map(trimText).filter(Boolean);
-    const gridSize = Math.min(12, Math.max(5, Number(cfg.gridSize || 8) || 8));
-    const needsExpand = gridSize >= 8 || answers.length > 5;
-    const visibleAnswers = needsExpand && !expanded ? answers.slice(0, 5) : answers;
-    const cells = Array.from({ length: Math.min(gridSize * gridSize, expanded ? 144 : 64) });
-    return (
-      <div style={previewWrap}>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ width: expanded ? 220 : 156, display: "grid", gridTemplateColumns: `repeat(${gridSize}, 1fr)`, gap: 2, padding: 8, borderRadius: 12, border: `1px solid ${c.border}`, background: c.cardBg2, overflow: "auto", maxHeight: expanded ? 240 : 178 }}>
-            {cells.map((_, i) => <span key={i} style={{ aspectRatio: "1", borderRadius: 4, background: `${c.accent}18`, display: "block" }} />)}
-          </div>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <div style={{ color: c.text, fontWeight: 900, marginBottom: 8 }}>{gridSize}×{gridSize} letter grid</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{visibleAnswers.map((word, i) => <span key={`${word}-${i}`} style={{ ...ui.badge, background: c.pageBg, color: c.text }}>{word}</span>)}</div>
-            <div style={answerBox}>Typed answers: {answers.length ? answers.join(", ") : "Not set"}</div>
-          </div>
-        </div>
-        {needsExpand && <button type="button" style={{ ...ui.ghostBtn, marginTop: 10, padding: "7px 10px", fontSize: 12 }} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Expand large grid"}</button>}
-      </div>
-    );
-  }
-
-  return null;
 }
 
 /**
@@ -1156,114 +1073,79 @@ function BankQuestionPreview({ templateType, cfg, cor, expanded, setExpanded, ui
  * truth while the user is typing; only the parsed array is sent upstream.
  */
 function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null }) {
-  const initText = (
-    Array.isArray(cor.answers) && cor.answers.length
-      ? cor.answers
-      : [cor.horizontal, cor.vertical, cor.diagonal, cor.text].filter(Boolean)
-  ).join(", ");
-
-  const [rawText, setRawText] = useState(initText);
+  const initialAnswers = Array.isArray(cor.answers) && cor.answers.length
+    ? cor.answers
+    : Array.isArray(cfg.answers) ? cfg.answers : [cor.text].filter(Boolean);
+  const [rawText, setRawText] = useState(initialAnswers.join(", "));
+  const allAnswers = rawText.split(/[,;\n]+/).map((word) => trimText(word)).filter(Boolean);
+  const answers = maxWords ? allAnswers.slice(0, maxWords) : allAnswers;
+  const normalized = answers.map((word) => word.toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
+  const longest = normalized.length ? Math.max(...normalized.map((word) => word.length)) : 5;
+  const shortest = normalized.length ? Math.min(...normalized.map((word) => word.length)) : 5;
+  const minGrid = Math.min(12, Math.max(5, longest, shortest));
+  const maxGrid = Math.min(12, Math.max(minGrid, longest + 3));
+  const gridSize = Math.min(maxGrid, Math.max(minGrid, Number(cfg.gridSize || minGrid)));
+  const gridSeed = Number(cfg.gridSeed || 1);
+  const canFill = normalized.length > 0 && gridSize >= longest;
+  const preview = useMemo(() => {
+    if (!cfg.gridFilled || !canFill) return { grid: new Array(gridSize * gridSize).fill(""), gridSize };
+    const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: normalized })}-${gridSeed}`;
+    return buildThinkSpellGrid({ gridSize, words: normalized, seed: buildThinkSpellSeed(signature) });
+  }, [cfg.gridFilled, canFill, gridSize, gridSeed, normalized.join("|")]);
 
   function handleAnswersChange(e) {
     const next = e.target.value;
     setRawText(next);
-    const parsed = next
-      .split(",")
-      .map((w) => trimText(w))
-      .filter(Boolean);
-    const limited = maxWords ? parsed.slice(0, maxWords) : parsed;
-    onChange({ correct: { ...cor, answers: limited }, config: { ...cfg, answers: limited } });
+    let parsed = next.split(/[,;\n]+/).map((word) => trimText(word)).filter(Boolean);
+    if (maxWords) parsed = parsed.slice(0, maxWords);
+    const clean = parsed.map((word) => word.toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
+    const nextLongest = clean.length ? Math.max(...clean.map((word) => word.length)) : 5;
+    const nextMin = Math.min(12, Math.max(5, nextLongest));
+    const nextMax = Math.min(12, Math.max(nextMin, nextLongest + 3));
+    const nextSize = Math.min(nextMax, Math.max(nextMin, Number(cfg.gridSize || nextMin)));
+    onChange({
+      correct: { ...cor, answers: parsed, text: parsed[0] || "" },
+      config: { ...cfg, answers: parsed, gridSize: nextSize, gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 },
+    });
+  }
+
+  function setGridSize(value) {
+    const next = Math.min(maxGrid, Math.max(minGrid, Number(value) || minGrid));
+    onChange({ config: { ...cfg, answers, gridSize: next, gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+  }
+
+  function fillGrid() {
+    if (!canFill) return;
+    onChange({ config: { ...cfg, answers, gridSize, gridFilled: true, gridSeed: gridSeed || 1, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+  }
+
+  function shuffleGrid() {
+    if (!canFill || !cfg.gridFilled) return;
+    onChange({ config: { ...cfg, answers, gridSize, gridFilled: true, gridSeed: gridSeed + 1, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
   }
 
   return (
-    <div style={ui.innerCard}>
-      <h4 style={ui.innerTitle}>Think &amp; Spell</h4>
-
-      <label style={ui.smallLabel}>Valid words (comma or space separated)</label>
-      <textarea
-        rows={3}
-        maxLength={1000}
-        value={rawText}
-        placeholder="cat, dog, bird, fish, crab"
-        onChange={handleAnswersChange}
-        style={ui.textarea}
-      />
-      <div style={{ color: c.textMuted, fontSize: 11, marginTop: 4 }}>
-        Students earn points for each word they find in the letter grid before time runs out.
-        {maxWords ? ` Guest quizzes can use up to ${maxWords} words.` : ""}
+    <div style={{ ...ui.innerCard, display: "grid", gridTemplateColumns: "minmax(260px,.85fr) minmax(300px,1.15fr)", gap: 18, alignItems: "start" }}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div>
+          <label style={ui.smallLabel}>Valid or correct words</label>
+          <textarea rows={5} maxLength={1000} value={rawText} placeholder="cat, dog, bird, fish" onChange={handleAnswersChange} style={{ ...ui.textarea, marginTop: 7 }} />
+          {maxWords && <div style={{ color: allAnswers.length > maxWords ? c.redFg : c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan uses the first {maxWords} valid words in this batch.</div>}
+        </div>
+        <div>
+          <label style={ui.smallLabel}>Grid size</label>
+          <select value={gridSize} onChange={(e) => setGridSize(e.target.value)} style={{ ...ui.select, display: "block", width: "100%", marginTop: 7 }} disabled={!normalized.length}>
+            {Array.from({ length: Math.max(1, maxGrid - minGrid + 1) }, (_, i) => minGrid + i).map((size) => <option key={size} value={size}>{size} × {size}</option>)}
+          </select>
+          <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Available size is based on the longest valid word, up to three additional rows and columns.</div>
+        </div>
+        <button type="button" onClick={fillGrid} disabled={!canFill} style={{ ...ui.primaryBtn, opacity: canFill ? 1 : .5, cursor: canFill ? "pointer" : "not-allowed" }}>Fill It Up!</button>
+        <button type="button" onClick={shuffleGrid} disabled={!canFill || !cfg.gridFilled} style={{ ...ui.secondaryBtn, opacity: canFill && cfg.gridFilled ? 1 : .5, cursor: canFill && cfg.gridFilled ? "pointer" : "not-allowed" }}>Shuffle</button>
       </div>
-
-      <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Grid size</label>
-      <input
-        type="number"
-        min={5}
-        max={12}
-        value={Number(cfg.gridSize ?? 8)}
-        onChange={(e) =>
-          onChange({
-            config: {
-              ...cfg,
-              gridSize: Math.min(12, Math.max(5, Number(e.target.value) || 8)),
-              answers: Array.isArray(cor.answers) ? cor.answers : [],
-            },
-          })
-        }
-        style={{ ...ui.smallInput, width: 110 }}
-      />
-
-      <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Minimum word length</label>
-      <input
-        type="number"
-        min={2}
-        max={8}
-        value={Number(cfg.minWordLength ?? 3)}
-        onChange={(e) =>
-          onChange({
-            config: {
-              ...cfg,
-              minWordLength: Math.min(8, Math.max(2, Number(e.target.value) || 3)),
-            },
-          })
-        }
-        style={{ ...ui.smallInput, width: 110 }}
-      />
-
-      <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Points per word</label>
-      <input
-        type="number"
-        min={1}
-        max={20}
-        value={Number(cfg.pointsPerWord ?? 1)}
-        onChange={(e) =>
-          onChange({
-            config: {
-              ...cfg,
-              pointsPerWord: Math.min(20, Math.max(1, Number(e.target.value) || 1)),
-            },
-          })
-        }
-        style={{ ...ui.smallInput, width: 110 }}
-      />
-
-      <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Bonus per extra letter</label>
-      <input
-        type="number"
-        min={0}
-        max={10}
-        value={Number(cfg.lengthBonusPerLetter ?? 1)}
-        onChange={(e) =>
-          onChange({
-            config: {
-              ...cfg,
-              lengthBonusPerLetter: Math.min(10, Math.max(0, Number(e.target.value) || 0)),
-            },
-          })
-        }
-        style={{ ...ui.smallInput, width: 110 }}
-      />
-      <div style={{ color: c.textMuted, fontSize: 12, marginTop: 8 }}>
-        Bookworm-style play: students chain adjacent letters, tiles refill after each word, longer words and combos earn more points.
-        Words can be found in any order; same letters as your word count (grid path order may differ).
+      <div style={{ minHeight: 330, display: "grid", placeItems: "center", padding: 14, borderRadius: 18, border: `1.5px solid ${ui.templateBorder || c.border}`, background: c.cardBg }}>
+        <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}`} style={{ width: "min(100%, 430px)", display: "grid", gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))`, gap: preview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
+          {preview.grid.map((letter, index) => <div key={index} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: preview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontWeight: 900, fontSize: preview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease", animation: letter ? `twTilePop 240ms ease ${Math.min(index * 8, 180)}ms both` : "none" }}>{letter}</div>)}
+        </div>
       </div>
     </div>
   );
@@ -1318,20 +1200,79 @@ function MediaInput({ label, value, placeholder, onChange, ui, c }) {
   );
 }
 
-function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode = false }) {
+
+function voiceAnswerRows(question, templateType) {
+  const tt = normalizeTemplateType(templateType);
+  const cfg = question?.config || {};
+  const correct = question?.correct || {};
+  const clean = (value, fallback) => trimText(value) || fallback;
+  if (tt === "MCQ") {
+    return normalizeChoiceOptions(cfg.options || [], "").map((option, index) => ({
+      key: `choice-${option.id || index}`,
+      label: clean(option.text, `Choice ${String.fromCharCode(65 + index)}`),
+    }));
+  }
+  if (tt === "TRUE_FALSE") return ["True", "False"].map((label, index) => ({ key: `tf-${index}`, label }));
+  if (tt === "TYPE_ANSWER") return [{ key: "identification-answer", label: clean(correct.text, "Correct answer") }];
+  if (tt === "MATCHING") {
+    const rows = [];
+    (cfg.colA || []).forEach((row, index) => rows.push({ key: `a-${index}`, label: `Column A ${index + 1}: ${clean(row?.text, "image item")}` }));
+    (cfg.colB || []).forEach((row, index) => rows.push({ key: `b-${index}`, label: `Column B ${index + 1}: ${clean(row?.text, "image item")}` }));
+    (cfg.dummyB || []).forEach((row, index) => rows.push({ key: `dummy-${index}`, label: `Dummy ${index + 1}: ${clean(row?.text, "image item")}` }));
+    return rows;
+  }
+  if (tt === "GUESS_WORD_4PICS") return [{ key: "guess-word", label: clean(cfg.target || correct.text, "Correct word") }];
+  if (tt === "THINK_SPELL") {
+    const words = Array.isArray(cfg.answers) && cfg.answers.length ? cfg.answers : (Array.isArray(correct.answers) ? correct.answers : []);
+    return words.map((word, index) => ({ key: `word-${index}`, label: clean(word, `Word ${index + 1}`) }));
+  }
+  return [];
+}
+
+function VoiceRecordingPanel({ question, templateType, onChange, ui, c }) {
+  const cfg = question?.config || {};
+  const recordings = Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [];
+  const rows = voiceAnswerRows(question, templateType);
+  const holdToRecord = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
+  const setRecording = (index, value) => {
+    const next = [...recordings];
+    next[index] = value;
+    onChange({ config: { ...cfg, voiceAnswers: next } });
+  };
+  return (
+    <div className="tw-voice-recording-panel" style={{ ...ui.innerCard, marginTop: 14, marginBottom: 16, padding: 16 }}>
+      <div style={{ fontWeight: 900, color: c.text, marginBottom: 4 }}>Voice support</div>
+      <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 12 }}>
+        {holdToRecord ? "Press and hold the speaker to record. Release to stop." : "Click the speaker to record. Click it again to stop."}
+      </div>
+      <div className="tw-voice-record-row">
+        <div><strong>Prompt</strong><span>{trimText(question?.prompt) || "Question prompt"}</span></div>
+        <VoiceRecorderButton holdToRecord={holdToRecord} value={cfg.voicePrompt || ""} onChange={(value) => onChange({ config: { ...cfg, voicePrompt: value } })} />
+      </div>
+      {rows.map((row, index) => (
+        <div className="tw-voice-record-row" key={row.key}>
+          <div><strong>{`Answer ${index + 1}`}</strong><span>{row.label}</span></div>
+          <VoiceRecorderButton holdToRecord={holdToRecord} value={recordings[index] || ""} onChange={(value) => setRecording(index, value)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = false }) {
   const [showMatchingSuggest, setShowMatchingSuggest] = useState(false);
   const tt = normalizeTemplateType(templateType);
   const cfg = q.config || {};
   const cor = q.correct || {};
 
   if (tt === "MCQ") {
-    const mcqMode = guestMode ? "NORMAL" : (cfg.mcqMode === "MODIFIED" ? "MODIFIED" : "NORMAL");
+    const mcqMode = isBasic ? "NORMAL" : (cfg.mcqMode === "MODIFIED" ? "MODIFIED" : "NORMAL");
     const baseOptions = normalizeChoiceOptions(cfg.options, category);
     const opts = mcqMode === "MODIFIED"
       ? [...baseOptions, ...defaultMcqImageOptions()].slice(0, 4).map((opt, index) => ({ ...opt, id: opt.id || `image-option-${index + 1}`, text: "" }))
       : baseOptions;
     const MIN = mcqMode === "MODIFIED" ? 4 : 2;
-    const MAX = mcqMode === "MODIFIED" ? 4 : 5;
+    const MAX = mcqMode === "MODIFIED" ? 4 : (isBasic ? 4 : 5);
     // Revision 5: Modified MCQ requires only one image answer, so two-answer mode is disabled.
     const answerMode = mcqMode === "MODIFIED" ? "ONE" : (cfg.answerMode === "TWO" ? "TWO" : "ONE");
     const rawCorrect = Array.isArray(cor.choices) && cor.choices.length ? cor.choices : [cor.choice].filter(Boolean);
@@ -1341,6 +1282,7 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
     }
 
     function setMcqMode(nextMode) {
+      if (isBasic && nextMode === "MODIFIED") return;
       // Revision 4: MCQ has Normal mode and Modified image-choice mode.
       const nextOptions = nextMode === "MODIFIED"
         ? [...opts, ...defaultMcqImageOptions()].slice(0, 4).map((opt) => ({ id: opt.id || newChoiceId(), text: "", image: opt.image || "" }))
@@ -1387,52 +1329,55 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
           <h4 style={ui.innerTitle}>
             Multiple Choice <span style={ui.innerMeta}>({mcqMode === "MODIFIED" ? "4 image choices" : `${opts.length}, min ${MIN}/max ${MAX}`})</span>
           </h4>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {!guestMode && <>
+          <div style={{ display: "grid", gap: 8, justifyItems: "end", minWidth: "min(100%, 390px)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, max-content)", gap: 8, maxWidth: "100%", overflowX: "auto", paddingBottom: 2 }}>
               <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "NORMAL" ? c.accent : c.border }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
-              <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border }} onClick={() => setMcqMode("MODIFIED")}>Modified</button>
-            </>}
-            <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "ONE" ? c.accent : c.border }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
-            <button
-              type="button"
-              disabled={mcqMode === "MODIFIED"}
-              style={{
-                ...ui.secondaryBtn,
-                padding: "4px 10px",
-                fontSize: 12,
-                borderColor: answerMode === "TWO" ? c.accent : c.border,
-                opacity: mcqMode === "MODIFIED" ? 0.38 : 1,
-                cursor: mcqMode === "MODIFIED" ? "not-allowed" : "pointer",
-                transition: "opacity 0.2s ease, border-color 0.2s ease",
-              }}
-              onClick={() => setAnswerMode("TWO")}
-            >
-              2 answers
-            </button>
-            {mcqMode === "NORMAL" && !guestMode && (
-              <>
-                <button
-                  style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
-                  disabled={opts.length <= MIN}
-                  onClick={() => {
-                    const next = opts.slice(0, -1);
-                    const kept = correctChoices.filter((choice) => next.some((row) => choiceMatchesValue(row, choice)));
-                    emitOptions(next, { ...cor, choice: kept[0] || "", choices: kept });
-                  }}
-                >
-                  − Delete Choice
-                </button>
-                <button
-                  style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
-                  onClick={() => {
-                    if (opts.length >= MAX) setShowMatchingSuggest(true);
-                    else emitOptions([...opts, { id: newChoiceId(), text: "", image: "" }]);
-                  }}
-                >
-                  ＋ Add Choice
-                </button>
-              </>
-            )}
+              <button type="button" disabled={isBasic} title={isBasic ? "Institution plan feature" : ""} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border, opacity:isBasic?.4:1, cursor:isBasic?"not-allowed":"pointer" }} onClick={() => setMcqMode("MODIFIED")}>Modified</button>
+              <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "ONE" ? c.accent : c.border }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
+              <button
+                type="button"
+                disabled={mcqMode === "MODIFIED"}
+                style={{
+                  ...ui.secondaryBtn,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  borderColor: answerMode === "TWO" ? c.accent : c.border,
+                  opacity: mcqMode === "MODIFIED" ? 0.38 : 1,
+                  cursor: mcqMode === "MODIFIED" ? "not-allowed" : "pointer",
+                  transition: "opacity 0.2s ease, border-color 0.2s ease",
+                }}
+                onClick={() => setAnswerMode("TWO")}
+              >
+                2 answers
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, minHeight: 31, visibility: mcqMode === "NORMAL" ? "visible" : "hidden" }} aria-hidden={mcqMode !== "NORMAL"}>
+              <button
+                type="button"
+                tabIndex={mcqMode === "NORMAL" ? 0 : -1}
+                style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
+                disabled={mcqMode !== "NORMAL" || opts.length <= MIN}
+                onClick={() => {
+                  const next = opts.slice(0, -1);
+                  const kept = correctChoices.filter((choice) => next.some((row) => choiceMatchesValue(row, choice)));
+                  emitOptions(next, { ...cor, choice: kept[0] || "", choices: kept });
+                }}
+              >
+                − Delete Choice
+              </button>
+              {!isBasic && <button
+                type="button"
+                tabIndex={mcqMode === "NORMAL" ? 0 : -1}
+                style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
+                disabled={mcqMode !== "NORMAL"}
+                onClick={() => {
+                  if (opts.length >= MAX) setShowMatchingSuggest(true);
+                  else emitOptions([...opts, { id: newChoiceId(), text: "", image: "" }]);
+                }}
+              >
+                ＋ Add Choice
+              </button>}
+            </div>
           </div>
         </div>
 
@@ -1500,28 +1445,25 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
                 <div style={{ display: "grid", gap: 8, flex: 1, width: mcqMode === "MODIFIED" ? "100%" : undefined }}>
                   {mcqMode === "NORMAL" && (
                     <input
-                      maxLength={guestMode ? 120 : 255}
+                      maxLength={255}
                       value={opt.text}
                       placeholder={`Option ${letter} text`}
                       onChange={(e) => {
-                        const next = opts.map((row, idx) => (idx === i ? { ...row, text: e.target.value.slice(0, guestMode ? 120 : 255) } : row));
+                        const next = opts.map((row, idx) => (idx === i ? { ...row, text: e.target.value } : row));
                         emitOptions(next);
                       }}
                       style={{ ...ui.input, margin: 0 }}
                     />
                   )}
-                  <MediaInput
+                  {!isBasic && <MediaInput
                     value={opt.image}
                     placeholder={`Option ${letter} image URL`}
                     onChange={(value) => {
-                      // Revision 4: Modified MCQ image choices are uploaded/selected directly as answers.
                       const next = opts.map((row, idx) => (idx === i ? { ...row, image: value, text: mcqMode === "MODIFIED" ? "" : row.text } : row));
                       const kept = correctChoices.filter((choice) => next.some((row) => choiceMatchesValue(row, choice) && (mcqMode !== "MODIFIED" || trimText(row.image))));
                       emitOptions(next, { ...cor, choice: kept[0] || "", choices: kept });
-                    }}
-                    ui={ui}
-                    c={c}
-                  />
+                    }} ui={ui} c={c}
+                  />}
                 </div>
               </div>
             );
@@ -1599,7 +1541,6 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
             );
           })}
         </div>
-        <div style={{ color: c.textMuted, fontSize: 12, marginTop: 10 }}>Choose the correct answer. The outlined button becomes the answer key.</div>
       </div>
     );
   }
@@ -1655,9 +1596,8 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
 
     return (
       <div style={ui.innerCard}>
-        <h4 style={ui.innerTitle}>Guess Word / 4 Pics</h4>
+        <h4 style={ui.innerTitle}>Guess Word</h4>
         <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 10 }}>
-          Drag images to reorder. Students will spell the correct word using the letter bank.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(160px, 1fr))", gap: 12 }}>
           {images.slice(0, 4).map((src, index) => (
@@ -1682,11 +1622,15 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
             </div>
           ))}
         </div>
-        <label style={{ ...ui.smallLabel, marginTop: 12, display: "block" }}>Correct word</label>
-        <input maxLength={255} value={cor.text ?? ""} onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Number(cfg.dummyLetters || 6) } })} style={ui.input} />
-        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-          <label style={ui.smallLabel}>Extra random letters</label>
-          <input type="number" min={0} max={12} value={Number(cfg.dummyLetters || 6)} onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(12, Math.max(0, Number(e.target.value) || 0)) } })} style={{ ...ui.smallInput, width: 84 }} />
+        <div style={{ marginTop: 16, padding: 15, borderRadius: 16, border: `1px solid ${ui.templateBorder || c.border}`, background: ui.templateSoftBg || c.cardBg2, display: "grid", gridTemplateColumns: "minmax(220px, 1fr) minmax(150px, .45fr)", gap: 14, alignItems: "end" }}>
+          <div>
+            <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Correct word</label>
+            <input maxLength={255} value={cor.text ?? ""} placeholder="Enter the answer" onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Number(cfg.dummyLetters || 6) } })} style={{ ...ui.input, fontWeight: 850, letterSpacing: ".04em" }} />
+          </div>
+          <div>
+            <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Extra word-forming letters</label>
+            <input type="number" min={0} max={12} value={Number(cfg.dummyLetters || 6)} onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(12, Math.max(0, Number(e.target.value) || 0)) } })} style={{ ...ui.input, fontWeight: 850 }} />
+          </div>
         </div>
       </div>
     );
@@ -1697,11 +1641,13 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
     const allB = Array.isArray(cfg.colB) && cfg.colB.length ? cfg.colB.map((item) => ({ text: item?.text || "", image: item?.image || "" })) : [{ text: "", image: "" }, { text: "", image: "" }];
     const dummyB = Array.isArray(cfg.dummyB) && cfg.dummyB.length ? cfg.dummyB.map((item) => ({ text: item?.text || "", image: item?.image || "" })) : allB.slice(colA.length, colA.length + 2);
     const pairB = Array.from({ length: colA.length }, (_, i) => ({ text: allB[i]?.text || "", image: allB[i]?.image || "" }));
-    const activeDummy = dummyB.length ? dummyB.slice(0, 2) : [{ text: "", image: "" }];
+    const maxPairs = isBasic ? 5 : 999;
+    const maxDummies = isBasic ? 1 : 2;
+    const activeDummy = dummyB.length ? dummyB.slice(0, maxDummies) : [{ text: "", image: "" }];
 
     function emit(aRows, bRows, dRows) {
       // Revision 1: matching saves paired answers first, then dummy choices.
-      const cleanedDummy = dRows.slice(0, 2);
+      const cleanedDummy = dRows.slice(0, maxDummies);
       onChange({
         config: { ...cfg, colA: aRows, colB: [...bRows, ...cleanedDummy], dummyB: cleanedDummy },
         correct: { ...cor, pairs: aRows.map((_, i) => ({ aIndex: i, bIndex: i })) },
@@ -1711,10 +1657,9 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
     function updateA(i, patch) { emit(colA.map((row, idx) => (idx === i ? { ...row, ...patch } : row)), pairB, activeDummy); }
     function updateB(i, patch) { emit(colA, pairB.map((row, idx) => (idx === i ? { ...row, ...patch } : row)), activeDummy); }
     function updateDummy(i, patch) { emit(colA, pairB, activeDummy.map((row, idx) => (idx === i ? { ...row, ...patch } : row))); }
-    const maxPairs = guestMode ? 5 : 99;
     function addRow() { if (colA.length >= maxPairs) return; emit([...colA, { text: "", image: "" }], [...pairB, { text: "", image: "" }], activeDummy); }
     function removeRow(index) { if (colA.length <= 1) return; emit(colA.filter((_, i) => i !== index), pairB.filter((_, i) => i !== index), activeDummy); }
-    function addDummy() { if (activeDummy.length >= 2) return; emit(colA, pairB, [...activeDummy, { text: "", image: "" }]); }
+    function addDummy() { if (activeDummy.length >= maxDummies) return; emit(colA, pairB, [...activeDummy, { text: "", image: "" }]); }
     function removeDummy(index) { if (activeDummy.length <= 1) return; emit(colA, pairB, activeDummy.filter((_, i) => i !== index)); }
     function movePair(from, to) { if (from === to) return; emit(reorderList(colA, from, to), reorderList(pairB, from, to), activeDummy); }
     function moveDummy(from, to) { if (from === to) return; emit(colA, pairB, reorderList(activeDummy, from, to)); }
@@ -1724,9 +1669,9 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
           <div>
             <h4 style={ui.innerTitle}>Matching Pairs</h4>
-            <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Each pair is correct by row. Add 1–2 dummy answers below for Column B distractors.{guestMode ? " Guest limit: 5 pairs max." : ""}</div>
+            <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Each pair is correct by row. Add 1–{maxDummies} dummy answer{maxDummies === 1 ? "" : "s"} below for Column B distractors.</div>
           </div>
-          <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? 0.55 : 1, cursor: colA.length >= maxPairs ? "not-allowed" : "pointer" }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
+          <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity:colA.length>=maxPairs?.5:1 }} disabled={colA.length>=maxPairs} onClick={addRow}>＋ Add Pair</button>
         </div>
 
         <div style={{ display: "grid", gap: 12 }}>
@@ -1740,13 +1685,13 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
                 <div style={{ display: "grid", gap: 8 }}>
                   <label style={ui.smallLabel}>Column A</label>
                   <input maxLength={255} value={colA[index]?.text || ""} placeholder="Concept / term / caption" onChange={(e) => updateA(index, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                  <MediaInput value={colA[index]?.image || ""} placeholder="Column A image URL" onChange={(value) => updateA(index, { image: value })} ui={ui} c={c} />
+                  {!isBasic && <MediaInput value={colA[index]?.image || ""} placeholder="Column A image URL" onChange={(value) => updateA(index, { image: value })} ui={ui} c={c} />}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: c.textMuted, fontWeight: 900, fontSize: 24 }}>⇄</div>
                 <div style={{ display: "grid", gap: 8 }}>
                   <label style={ui.smallLabel}>Column B Correct Match</label>
                   <input maxLength={255} value={pairB[index]?.text || ""} placeholder="Definition / answer / caption" onChange={(e) => updateB(index, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                  <MediaInput value={pairB[index]?.image || ""} placeholder="Column B image URL" onChange={(value) => updateB(index, { image: value })} ui={ui} c={c} />
+                  {!isBasic && <MediaInput value={pairB[index]?.image || ""} placeholder="Column B image URL" onChange={(value) => updateB(index, { image: value })} ui={ui} c={c} />}
                 </div>
               </div>
             </div>
@@ -1757,9 +1702,9 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
             <div>
               <h4 style={{ ...ui.innerTitle, margin: 0 }}>Dummy Answers</h4>
-              <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Minimum 1, maximum 2. These appear in Column B but do not match Column A.</div>
+              <div style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>Minimum 1, maximum {maxDummies}.</div>
             </div>
-            <button type="button" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={activeDummy.length >= 2} onClick={addDummy}>＋ Add Dummy</button>
+            <button type="button" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={activeDummy.length >= maxDummies} onClick={addDummy}>＋ Add Dummy</button>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             {activeDummy.map((row, index) => (
@@ -1767,7 +1712,7 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
                 <div style={{ display: "grid", gap: 8 }}>
                   <label style={ui.smallLabel}>Dummy {index + 1}</label>
                   <input maxLength={255} value={row.text || ""} placeholder="Wrong choice" onChange={(e) => updateDummy(index, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                  <MediaInput value={row.image || ""} placeholder="Dummy image URL" onChange={(value) => updateDummy(index, { image: value })} ui={ui} c={c} />
+                  {!isBasic && <MediaInput value={row.image || ""} placeholder="Dummy image URL" onChange={(value) => updateDummy(index, { image: value })} ui={ui} c={c} />}
                 </div>
                 <button type="button" style={{ ...ui.dangerGhostBtn, padding: "6px 12px", fontSize: 12 }} disabled={activeDummy.length <= 1} onClick={() => removeDummy(index)}>Delete</button>
               </div>
@@ -1789,43 +1734,12 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, guestMode 
         onChange={onChange}
         ui={ui}
         c={c}
-        maxWords={guestMode ? 5 : null}
+        maxWords={isBasic ? 4 : null}
       />
     );
   }
 
   return null;
-}
-
-function QuestionSupportFields({ q, onChange, ui, c }) {
-  const cfg = q.config || {};
-  const difficulty = difficultyLabel(cfg.difficulty);
-  return (
-    <div style={{ ...ui.innerCard, marginTop: 16, borderStyle: "dashed" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-        <div>
-          <h4 style={{ ...ui.innerTitle, marginBottom: 4 }}>Answer explanation</h4>
-          <div style={{ color: c.textMuted, fontSize: 12 }}>Shown to students after they submit their answer.</div>
-        </div>
-        <label style={{ display: "grid", gap: 6, minWidth: 150 }}>
-          <span style={ui.smallLabel}>Difficulty</span>
-          <select value={difficulty} onChange={(e) => onChange({ config: { ...cfg, difficulty: e.target.value } })} style={ui.input}>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label>
-      </div>
-      <textarea
-        rows={3}
-        maxLength={1000}
-        value={cfg.explanation || ""}
-        placeholder="explanation goes here"
-        onChange={(e) => onChange({ config: { ...cfg, explanation: e.target.value.slice(0, 1000), difficulty } })}
-        style={ui.textarea}
-      />
-    </div>
-  );
 }
 
 function getUi(c, dark, templateType) {
@@ -1906,7 +1820,7 @@ function getUi(c, dark, templateType) {
       cursor: "pointer",
       boxShadow: active ? palette.shadow : "none",
     }),
-    toggleTitle: { fontWeight: 800, fontSize: 14, color: c.text },
+    toggleTitle: { fontWeight: 850, fontSize: 14, color: palette.accent },
     toggleHint: { fontSize: 12, color: c.textMuted, marginTop: 4, lineHeight: 1.5 },
     switchTrack: (active) => ({
       width: 50,
@@ -1946,7 +1860,7 @@ function getUi(c, dark, templateType) {
       boxSizing: "border-box",
     },
     questionCard: {
-      background: c.cardBg,
+      background: palette.cardBg,
       border: `1.5px solid ${palette.border}`,
       borderRadius: 22,
       padding: "28px 32px",
@@ -1961,11 +1875,11 @@ function getUi(c, dark, templateType) {
     metaCard: {
       padding: "14px 16px",
       borderRadius: 16,
-      background: c.cardBg2,
-      border: `1px solid ${c.border}`,
+      background: palette.softBg,
+      border: `1px solid ${palette.border}`,
       boxShadow: dark ? "inset 0 1px 0 rgba(255,255,255,0.03)" : "inset 0 1px 0 rgba(255,255,255,0.55)",
     },
-    metaLabel: { fontSize: 12, fontWeight: 800, color: c.textMuted, marginBottom: 10, letterSpacing: "0.03em", textTransform: "uppercase" },
+    metaLabel: { fontSize: 12, fontWeight: 850, color: palette.accent, marginBottom: 10, letterSpacing: "0.03em", textTransform: "uppercase" },
     metaRow: { display: "flex", alignItems: "center", gap: 10 },
     metaInput: {
       width: 96,
@@ -1982,7 +1896,7 @@ function getUi(c, dark, templateType) {
     fieldLabel: {
       fontSize: 13,
       fontWeight: 800,
-      color: c.text,
+      color: palette.accent,
       display: "block",
       marginBottom: 8,
       letterSpacing: "0.02em",
@@ -1998,6 +1912,7 @@ function getUi(c, dark, templateType) {
       boxSizing: "border-box",
       resize: "vertical",
       minHeight: 90,
+      fontFamily: "inherit",
     },
     textareaSmall: {
       padding: "9px 12px",
@@ -2035,7 +1950,7 @@ function getUi(c, dark, templateType) {
       color: c.text,
       fontSize: 14,
     },
-    smallLabel: { fontSize: 12, color: c.textMuted, fontWeight: 700 },
+    smallLabel: { fontSize: 12, color: palette.accent, fontWeight: 800 },
     blurOverlay: {
       position: "fixed",
       inset: 0,
@@ -2063,12 +1978,12 @@ function getUi(c, dark, templateType) {
     },
     innerCard: {
       marginTop: 16,
-      background: c.cardBg2,
-      border: `1px solid ${c.border}`,
+      background: `linear-gradient(145deg, ${palette.softBg}, ${c.cardBg2})`,
+      border: `1px solid ${palette.border}`,
       borderRadius: 16,
       padding: 16,
     },
-    innerTitle: { margin: "0 0 10px", color: c.text },
+    innerTitle: { margin: "0 0 10px", color: palette.accent, fontWeight: 900 },
     innerMeta: { fontSize: 12, opacity: 0.7 },
     badge: {
       display: "inline-flex",
@@ -2173,6 +2088,9 @@ function getUi(c, dark, templateType) {
       fontWeight: 800,
       cursor: "pointer",
     },
+    templateBorder: palette.border,
+    templateAccent: palette.accent,
+    templateSoftBg: palette.softBg,
     dangerPrimaryBtn: {
       padding: "10px 16px",
       borderRadius: 12,

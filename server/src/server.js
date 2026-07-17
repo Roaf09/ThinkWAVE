@@ -9,6 +9,7 @@ import { Server as IOServer } from "socket.io";
 import { env } from "./env.js";
 import { makeApp } from "./app.js";
 import { registerSessionSockets } from "./modules/sessions/sessions.socket.js";
+import { ensureRevision19Schema } from "./revision19.schema.js";
 
 // Create the Express app first so REST routes and middleware exist before sockets attach.
 const app = makeApp();
@@ -22,6 +23,10 @@ const io = new IOServer(httpServer, {
 
 registerSessionSockets(io);
 
-httpServer.listen(env.PORT, () => {
-  console.log(`API listening on http://localhost:${env.PORT}`);
-});
+ensureRevision19Schema()
+  .catch((error) => console.warn("Revision 19 schema check skipped:", error?.message || error))
+  .finally(() => {
+    httpServer.listen(env.PORT, () => {
+      console.log(`API listening on http://localhost:${env.PORT}`);
+    });
+  });

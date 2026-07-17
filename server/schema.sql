@@ -23,6 +23,7 @@ CREATE TABLE users (
   approval_status        ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'APPROVED',
   last_active_at         TIMESTAMP NULL,
   contact_number         VARCHAR(30) NULL,
+  profile_image          LONGTEXT NULL,
   institution_name       VARCHAR(200) NULL,
   institution_setup_done TINYINT(1) NOT NULL DEFAULT 0,
   created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -40,6 +41,8 @@ CREATE TABLE student_profiles (
   first_name     VARCHAR(100) NOT NULL,
   middle_initial VARCHAR(10) NULL,
   student_id     VARCHAR(80) NOT NULL,
+  birth_date     DATE NULL,
+  profile_image  LONGTEXT NULL,
   created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_student_profiles_user FOREIGN KEY (user_id) REFERENCES users(id),
@@ -176,14 +179,20 @@ CREATE TABLE session_participants (
   first_name     VARCHAR(100) NOT NULL,
   last_name      VARCHAR(100) NOT NULL,
   reconnect_key  VARCHAR(64) NOT NULL UNIQUE,
+  student_user_id BIGINT NULL,
   connected      TINYINT(1) NOT NULL DEFAULT 1,
   join_type      ENUM('SOLO','GROUP') NOT NULL DEFAULT 'SOLO',
   group_name     VARCHAR(120) NULL,
   joined_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   left_at        TIMESTAMP NULL,
+  kicked_at      TIMESTAMP NULL,
+  kick_reason    VARCHAR(255) NULL,
   CONSTRAINT fk_session_participants_session
     FOREIGN KEY (session_id) REFERENCES sessions(id),
+  CONSTRAINT fk_session_participants_student
+    FOREIGN KEY (student_user_id) REFERENCES users(id),
   INDEX idx_session_participants_session (session_id),
+  INDEX idx_session_participants_student (student_user_id, session_id),
   INDEX idx_session_participants_group_name (session_id, group_name)
 );
 
@@ -417,3 +426,41 @@ CREATE TABLE tab_events (
   INDEX idx_tab_events_session_participant (session_id, participant_id),
   INDEX idx_tab_events_event_at (event_at)
 );
+
+-- -----------------------------------------------------------
+-- 18. institution_applications
+-- -----------------------------------------------------------
+CREATE TABLE institution_applications (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  first_name VARCHAR(100) NOT NULL,
+  last_name VARCHAR(100) NOT NULL,
+  work_email VARCHAR(190) NOT NULL,
+  country VARCHAR(100) NOT NULL,
+  role_description VARCHAR(150) NOT NULL,
+  phone_number VARCHAR(40) NOT NULL,
+  status ENUM('PENDING','APPROVED','DISAPPROVED') NOT NULL DEFAULT 'PENDING',
+  reviewed_by BIGINT NULL,
+  reviewed_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_institution_applications_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id),
+  INDEX idx_institution_applications_status_created (status, created_at)
+);
+
+-- -----------------------------------------------------------
+-- 19. system_notifications
+-- -----------------------------------------------------------
+CREATE TABLE system_notifications (
+  id               BIGINT PRIMARY KEY AUTO_INCREMENT,
+  type             VARCHAR(60) NOT NULL,
+  user_id          BIGINT NULL,
+  name             VARCHAR(180) NULL,
+  email            VARCHAR(190) NULL,
+  role             VARCHAR(30) NULL,
+  institution_name VARCHAR(200) NULL,
+  payload_json     JSON NULL,
+  status           VARCHAR(30) NOT NULL DEFAULT 'NEW',
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_system_notification_type (type, created_at),
+  INDEX idx_system_notification_user (user_id)
+);
+

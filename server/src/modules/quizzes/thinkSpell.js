@@ -225,7 +225,7 @@ export function isAdjacentSelection(prevIdx, nextIdx, gridSize) {
 }
 
 export function isStraightLinePath(path, gridSize) {
-  // Revision 2: Think & Spell selections must stay horizontal, vertical, or diagonal.
+  // Revision 2: Think and Spell selections must stay horizontal, vertical, or diagonal.
   const n = Number(gridSize) || 0;
   if (!Array.isArray(path) || !n) return false;
   if (path.length <= 1) return true;
@@ -282,18 +282,11 @@ export function removeTilesAndRefill(grid, gridSize, usedIndices, refillSeed) {
   return next;
 }
 
-export function computeThinkSpellPoints(wordLength, config = {}, basePoints = 1, streak = 1) {
+export function computeThinkSpellPoints(wordLength, config = {}, basePoints = 1) {
   const minLen = Math.min(8, Math.max(2, Number(config?.minWordLength ?? 3) || 3));
   const len = Number(wordLength) || 0;
   if (len < minLen) return 0;
-
-  const perWord = Math.max(1, Number(config?.pointsPerWord ?? basePoints ?? 1) || 1);
-  const lengthBonus = Math.max(0, len - minLen) * Math.max(0, Number(config?.lengthBonusPerLetter ?? 1) || 1);
-  const base = perWord + lengthBonus;
-
-  const s = Math.max(1, Number(streak) || 1);
-  const comboBonus = s >= 2 ? Math.min(2, (s - 1) * 0.15) : 0;
-  return Math.max(1, Math.round(base * (1 + comboBonus)));
+  return Math.max(1, Number(basePoints) || 1);
 }
 
 export function loadThinkSpellGridState({ config, correct, questionId, priorPayload }) {
@@ -311,7 +304,7 @@ export function loadThinkSpellGridState({ config, correct, questionId, priorPayl
     };
   }
 
-  const signature = buildThinkSpellSignature({ questionId, gridSize, words: wordBank });
+  const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: wordBank })}-${Number(config?.gridSeed || 0)}`;
   const seed = buildThinkSpellSeed(signature);
   const built = buildThinkSpellGrid({ gridSize, words: wordBank, seed });
   return {

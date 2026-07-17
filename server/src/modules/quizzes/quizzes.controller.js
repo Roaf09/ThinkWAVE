@@ -6,6 +6,7 @@
 
 import { pool } from "../../db.js";
 import { normalizeTemplateType } from "./templates.js";
+import { BASIC_LIMITS, getTeacherPlan, validateBasicQuestionPayload } from "../plans/plan.js";
 
 function toMysqlDateTime(value) {
   // Revision 6: datetime-local inputs arrive as YYYY-MM-DDTHH:mm.
@@ -22,6 +23,12 @@ export async function listQuizzes(req, res) {
 
 export async function createQuiz(req, res) {
   const b = req.body;
+  const plan = await getTeacherPlan(req.user.sub);
+  const template = normalizeTemplateType(b.templateType);
+  const templateLimit = BASIC_LIMITS[template];
+  if (plan.code === "BASIC" && templateLimit && Number(b.timeLimitSec) > templateLimit.maxTimeSec) {
+    return res.status(403).json({ message: `Basic plan time limit is ${Math.round(templateLimit.maxTimeSec / 60)} minute${templateLimit.maxTimeSec > 60 ? "s" : ""} maximum for this template.` });
+  }
   const [r] = await pool.query(
     `INSERT INTO quizzes(teacher_id,class_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,delivery_mode,available_from,available_until)
      VALUES(:tid,:cid,:title,:cat,:tt,:tls,:ppq,:rq,:sa,:mode,:fromDt,:untilDt)`,
@@ -30,7 +37,7 @@ export async function createQuiz(req, res) {
       cid: b.classId ?? null,
       title: b.title,
       cat: b.category,
-      tt: normalizeTemplateType(b.templateType),
+      tt: template,
       tls: b.timeLimitSec,
       ppq: b.pointsPerQuestion,
       rq: b.randomizeQuestions ? 1 : 0,
@@ -68,12 +75,17 @@ export async function upsertQuestions(req, res) {
 
   // ownership
   const [q] = await pool.query(
-    `SELECT id FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
+    `SELECT id, template_type FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
     { id: quizId, tid: req.user.sub }
   );
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
   const items = req.body.questions;
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code === "BASIC") {
+    const issue = validateBasicQuestionPayload(q[0].template_type, items);
+    if (issue) return res.status(403).json({ message: issue });
+  }
 
   // simple strategy: soft-delete existing then insert fresh
   await pool.query(`UPDATE quiz_questions SET deleted_at=NOW() WHERE quiz_id=:qid AND deleted_at IS NULL`, { qid: quizId });
@@ -308,6 +320,13 @@ export async function updateQuizMeta(req, res) {
 
 export async function updateQuizSettings(req, res) {
   const { timeLimitSec, pointsPerQuestion, randomizeQuestions, shuffleAnswers } = req.body;
+  const [[quiz]] = await pool.query(`SELECT template_type FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: req.params.id, tid: req.user.sub });
+  if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+  const plan = await getTeacherPlan(req.user.sub);
+  const templateLimit = BASIC_LIMITS[normalizeTemplateType(quiz.template_type)];
+  if (plan.code === "BASIC" && templateLimit && Number(timeLimitSec) > templateLimit.maxTimeSec) {
+    return res.status(403).json({ message: `Basic plan time limit is ${Math.round(templateLimit.maxTimeSec / 60)} minute${templateLimit.maxTimeSec > 60 ? "s" : ""} maximum for this template.` });
+  }
   await pool.query(
     `UPDATE quizzes
      SET time_limit_sec       = :tls,

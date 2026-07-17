@@ -89,6 +89,11 @@ export async function setupInstitution(req, res) {
       }
     );
   } catch (_) {}
+  try {
+    await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('INSTITUTION_SETUP',:uid,:name,:email,'ADMIN',:inst,:payload)`, {
+      uid: req.user.sub, name: `${adminRow.first_name} ${adminRow.last_name}`, email: adminRow.email, inst: institutionName.trim(), payload: JSON.stringify({ institutionName: institutionName.trim() })
+    });
+  } catch (_) {}
 
   res.json({ ok: true });
 }
@@ -104,121 +109,71 @@ export async function getSetupStatus(req, res) {
 export async function getStats(req, res) {
   const admin = await getAdminInstitution(req.user.sub);
   const inst = admin?.institution_name || null;
-
-  const [[teacherCounts]] = await pool.query(
+  const [[counts]] = await pool.query(
     `SELECT
-       COUNT(*) AS total_teachers,
-       SUM(is_active = 1) AS active_teachers,
-       SUM(last_active_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND is_active = 1) AS currently_online
-     FROM users
-     WHERE role = 'TEACHER'
-       AND institution_name = :inst
-       AND deleted_at IS NULL`,
-    { inst }
+       (SELECT COUNT(*) FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL AND is_active=1) AS active_teachers,
+       (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst2 AND s.status IN ('LOBBY','LIVE','PAUSED')) AS active_live_sessions,
+       (SELECT COUNT(*) FROM quizzes q JOIN users u ON u.id=q.teacher_id WHERE u.institution_name=:inst3 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL AND (q.available_until IS NULL OR q.available_until>=NOW())) AS active_assigned_sessions,
+       (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users u ON u.id=c.teacher_id WHERE u.institution_name=:inst4 AND ce.removed_at IS NULL) AS active_students`,
+    { inst, inst2:inst, inst3:inst, inst4:inst }
   );
-
-  const [[memberCounts]] = await pool.query(
-    `SELECT COUNT(*) AS institution_members
-     FROM users
-     WHERE institution_name = :inst
-       AND role IN ('ADMIN', 'TEACHER')
-       AND deleted_at IS NULL`,
-    { inst }
+  const [weeklySessions] = await pool.query(
+    `SELECT week_key, MIN(week_start) AS week_start,
+            SUM(live_total) AS live_total,
+            SUM(assigned_total) AS assigned_total
+       FROM (
+         SELECT YEARWEEK(s.created_at,1) AS week_key,
+                DATE_SUB(DATE(s.created_at),INTERVAL WEEKDAY(s.created_at) DAY) AS week_start,
+                COUNT(*) AS live_total, 0 AS assigned_total
+           FROM sessions s
+           JOIN users u ON u.id=s.teacher_id
+          WHERE u.institution_name=:inst
+            AND s.created_at>=DATE_SUB(CURDATE(),INTERVAL 11 WEEK)
+          GROUP BY YEARWEEK(s.created_at,1), DATE_SUB(DATE(s.created_at),INTERVAL WEEKDAY(s.created_at) DAY)
+         UNION ALL
+         SELECT YEARWEEK(q.created_at,1) AS week_key,
+                DATE_SUB(DATE(q.created_at),INTERVAL WEEKDAY(q.created_at) DAY) AS week_start,
+                0 AS live_total, COUNT(*) AS assigned_total
+           FROM quizzes q
+           JOIN users u ON u.id=q.teacher_id
+          WHERE u.institution_name=:inst2
+            AND q.delivery_mode='ASYNCHRONOUS'
+            AND q.deleted_at IS NULL
+            AND q.created_at>=DATE_SUB(CURDATE(),INTERVAL 11 WEEK)
+          GROUP BY YEARWEEK(q.created_at,1), DATE_SUB(DATE(q.created_at),INTERVAL WEEKDAY(q.created_at) DAY)
+       ) weekly
+      GROUP BY week_key
+      ORDER BY week_start`, { inst, inst2: inst }
   );
-
-  const [[sessionCounts]] = await pool.query(
+  const [[distribution]] = await pool.query(
     `SELECT
-       COUNT(*) AS live_sessions,
-       SUM(COALESCE(s.ended_at, s.created_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS recent_sessions,
-       SUM(s.end_reason = 'TEACHER_DISCONNECTED'
-           AND COALESCE(s.ended_at, s.created_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)) AS disconnected_sessions
-     FROM sessions s
-     JOIN users u ON u.id = s.teacher_id
-     WHERE u.institution_name = :inst`,
-    { inst }
+       (SELECT COUNT(*) FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL) AS teachers,
+       (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users u ON u.id=c.teacher_id WHERE u.institution_name=:inst2 AND ce.removed_at IS NULL) AS students`, { inst, inst2:inst }
   );
-
-  const [[tabFlags]] = await pool.query(
-    `SELECT COUNT(*) AS flagged_sessions
-     FROM (
-       SELECT te.session_id
-       FROM tab_events te
-       JOIN sessions s ON s.id = te.session_id
-       JOIN users u ON u.id = s.teacher_id
-       WHERE u.institution_name = :inst
-         AND te.event_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-       GROUP BY te.session_id
-       HAVING COUNT(*) >= 8
-     ) flagged`,
-    { inst }
+  const [templates] = await pool.query(
+    `SELECT q.template_type AS label,COUNT(*) AS value FROM sessions s JOIN quizzes q ON q.id=s.quiz_id JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst GROUP BY q.template_type ORDER BY value DESC LIMIT 6`, { inst }
   );
-
-  const activity = await buildInstitutionActivity(inst, 6);
-
-  const alerts = [];
-  const flaggedIssues = Number(sessionCounts.disconnected_sessions || 0) + Number(tabFlags.flagged_sessions || 0);
-
-  if (!inst) {
-    alerts.push({ level: "warning", title: "Institution profile incomplete", detail: "Complete your institution profile to fully use the admin dashboard." });
-  }
-  if (flaggedIssues > 0) {
-    alerts.push({ level: "critical", title: `${flaggedIssues} flagged issue${flaggedIssues === 1 ? "" : "s"} detected`, detail: "Review disconnect-heavy sessions or unusual tab-switching behaviour." });
-  }
-  if (Number(sessionCounts.recent_sessions || 0) === 0) {
-    alerts.push({ level: "info", title: "No recent sessions this week", detail: "Recent activity will appear here after teachers finish hosted sessions." });
-  }
-  if (Number(teacherCounts.currently_online || 0) > 0) {
-    alerts.push({ level: "success", title: `${teacherCounts.currently_online} teacher${Number(teacherCounts.currently_online) === 1 ? "" : "s"} active now`, detail: "Teachers were active within the last 30 minutes." });
-  }
-
-  res.json({
-    institutionName: inst,
-    totalTeachers: Number(teacherCounts.total_teachers || 0),
-    activeTeachers: Number(teacherCounts.active_teachers || 0),
-    currentlyOnline: Number(teacherCounts.currently_online || 0),
-    liveSessionCount: Number(sessionCounts.live_sessions || 0),
-    recentSessionCount: Number(sessionCounts.recent_sessions || 0),
-    institutionMembers: Number(memberCounts.institution_members || 0),
-    flaggedIssues,
-    alerts,
-    recentActivityCount: activity.length,
-  });
+  res.json({institutionName:inst,activeTeachers:Number(counts.active_teachers||0),activeLiveSessions:Number(counts.active_live_sessions||0),activeAssignedSessions:Number(counts.active_assigned_sessions||0),activeStudents:Number(counts.active_students||0),weeklySessions:weeklySessions.map(x=>({weekStart:x.week_start,live:Number(x.live_total||0),assigned:Number(x.assigned_total||0)})),accountDistribution:[{label:'Teachers',value:Number(distribution.teachers||0)},{label:'Students',value:Number(distribution.students||0)}],templateUsage:templates.map(x=>({label:x.label,value:Number(x.value||0)}) )});
 }
 
 export async function listTeachers(req, res) {
   const admin = await getAdminInstitution(req.user.sub);
   const inst = admin?.institution_name || null;
-
-  const [rows] = await pool.query(
-    `SELECT
-       u.id,
-       u.email,
-       u.first_name,
-       u.last_name,
-       u.is_active,
-       u.contact_number,
-       u.created_at,
-       u.last_active_at,
-       u.approval_status,
-       (
-         SELECT COUNT(*)
-         FROM sessions s
-         WHERE s.teacher_id = u.id
-       ) AS hosted_sessions_count,
-       (
-         SELECT MAX(COALESCE(s.ended_at, s.created_at))
-         FROM sessions s
-         WHERE s.teacher_id = u.id
-       ) AS last_session_at
-     FROM users u
-     WHERE u.role = 'TEACHER'
-       AND u.institution_name = :inst
-       AND u.deleted_at IS NULL
-     ORDER BY u.last_name ASC, u.first_name ASC`,
-    { inst }
-  );
+  let rows=[];
+  try {
+    [rows]=await pool.query(`SELECT u.id,u.email,u.first_name,u.last_name,u.is_active,u.contact_number,u.created_at,u.last_active_at,u.approval_status,
+      (SELECT COUNT(*) FROM sessions s WHERE s.teacher_id=u.id) hosted_sessions_count,
+      (SELECT COUNT(*) FROM quizzes q WHERE q.teacher_id=u.id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) assigned_sessions_count,
+      (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s WHERE s.teacher_id=u.id) last_session_at,
+      (SELECT COUNT(*) FROM classes c WHERE c.teacher_id=u.id AND c.deleted_at IS NULL AND c.parent_id IS NOT NULL) classes_handled_count
+      FROM users u WHERE u.role='TEACHER' AND u.institution_name=:inst AND u.deleted_at IS NULL ORDER BY u.last_name,u.first_name`,{inst});
+  } catch (error) {
+    console.warn('Admin teacher detail fallback:', error?.message || error);
+    [rows]=await pool.query(`SELECT id,email,first_name,last_name,is_active,contact_number,created_at,last_active_at,approval_status,0 hosted_sessions_count,0 assigned_sessions_count,NULL last_session_at,0 classes_handled_count FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL ORDER BY last_name,first_name`,{inst});
+  }
   res.json(rows);
 }
+
 
 export async function setTeacherActive(req, res) {
   const [[teacher]] = await pool.query(
@@ -238,66 +193,24 @@ export async function setTeacherActive(req, res) {
 }
 
 export async function deleteTeacher(req, res) {
-  await pool.query(
-    `UPDATE users
-     SET deleted_at = NOW()
-     WHERE id = :id
-       AND role = 'TEACHER'`,
-    { id: req.params.id }
-  );
+  const [[teacher]] = await pool.query(`SELECT id,first_name,last_name,email,role,institution_name FROM users WHERE id=:id AND role='TEACHER'`, { id:req.params.id });
+  await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id AND role='TEACHER'`, { id:req.params.id });
+  if (teacher) { try { await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`, { uid:teacher.id,name:`${teacher.first_name} ${teacher.last_name}`.trim(),email:teacher.email,role:teacher.role,inst:teacher.institution_name,payload:JSON.stringify({deletedBy:'ADMIN'}) }); } catch (_) {} }
   res.json({ ok: true });
 }
 
 export async function getInstitutionDetails(req, res) {
-  const admin = await getAdminInstitution(req.user.sub);
-  const inst = admin?.institution_name || null;
-  const teachers = inst
-    ? (await pool.query(
-        `SELECT
-           id,
-           email,
-           first_name,
-           last_name,
-           is_active,
-           created_at,
-           last_active_at
-         FROM users
-         WHERE role = 'TEACHER'
-           AND institution_name = :inst
-           AND deleted_at IS NULL
-         ORDER BY last_name ASC, first_name ASC`,
-        { inst }
-      ))[0]
-    : [];
-
-  const [[sessionSummary]] = await pool.query(
-    `SELECT
-       COUNT(*) AS total_sessions,
-       SUM(COALESCE(s.ended_at, s.created_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS sessions_this_week,
-       MAX(COALESCE(s.ended_at, s.created_at)) AS last_activity
-     FROM sessions s
-     JOIN users u ON u.id = s.teacher_id
-     WHERE u.institution_name = :inst`,
-    { inst }
-  );
-
-  const activity = await buildInstitutionActivity(inst, 8);
-
-  res.json({
-    institution: {
-      name: inst,
-      adminName: admin ? `${admin.first_name} ${admin.last_name}` : null,
-      adminEmail: admin?.email || null,
-      createdAt: admin?.created_at || null,
-      status: admin?.is_active ? "Active" : "Inactive",
-      totalTeachers: teachers.length,
-      totalSessions: Number(sessionSummary.total_sessions || 0),
-      sessionsThisWeek: Number(sessionSummary.sessions_this_week || 0),
-      lastActivity: sessionSummary.last_activity || null,
-    },
-    teachers,
-    recentActivity: activity,
-  });
+  const admin=await getAdminInstitution(req.user.sub); const inst=admin?.institution_name||null;
+  const teachers=inst?(await pool.query(`SELECT id,email,first_name,last_name,is_active,created_at,last_active_at FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL ORDER BY last_name,first_name`,{inst}))[0]:[];
+  const [[summary]]=await pool.query(`SELECT
+    (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst) total_hosted_sessions,
+    (SELECT COUNT(*) FROM quizzes q JOIN users u ON u.id=q.teacher_id WHERE u.institution_name=:inst2 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) total_assigned_sessions,
+    (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst3 AND COALESCE(s.ended_at,s.created_at)>=DATE_SUB(NOW(),INTERVAL 7 DAY)) hosted_this_week,
+    (SELECT COUNT(*) FROM quizzes q JOIN users u ON u.id=q.teacher_id WHERE u.institution_name=:inst4 AND q.delivery_mode='ASYNCHRONOUS' AND q.created_at>=DATE_SUB(NOW(),INTERVAL 7 DAY) AND q.deleted_at IS NULL) assigned_this_week,
+    (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users u ON u.id=c.teacher_id WHERE u.institution_name=:inst5 AND ce.removed_at IS NULL) total_students,
+    (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst6) last_activity`,{inst,inst2:inst,inst3:inst,inst4:inst,inst5:inst,inst6:inst});
+  const activity=await buildInstitutionActivity(inst,8);
+  res.json({institution:{name:inst,adminName:admin?`${admin.first_name} ${admin.last_name}`:null,adminEmail:admin?.email||null,createdAt:admin?.created_at||null,totalTeachers:teachers.length,totalStudents:Number(summary.total_students||0),totalHostedSessions:Number(summary.total_hosted_sessions||0),totalAssignedSessions:Number(summary.total_assigned_sessions||0),hostedSessionsThisWeek:Number(summary.hosted_this_week||0),assignedSessionsThisWeek:Number(summary.assigned_this_week||0),lastActivity:summary.last_activity||null},teachers,recentActivity:activity});
 }
 
 export async function getActivity(req, res) {
@@ -308,15 +221,21 @@ export async function getActivity(req, res) {
 }
 
 export async function getInvitation(req, res) {
-  const [rows] = await pool.query(
-    `SELECT id, invite_code, institution_name, is_active, created_at
-     FROM teacher_invitations
-     WHERE admin_id = :aid AND is_active = 1
-     ORDER BY created_at DESC LIMIT 1`,
-    { aid: req.user.sub }
-  );
-  res.json(rows[0] || null);
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, invite_code, institution_name, is_active, created_at
+       FROM teacher_invitations
+       WHERE admin_id = :aid AND is_active = 1
+       ORDER BY created_at DESC LIMIT 1`,
+      { aid: req.user.sub }
+    );
+    res.json(rows[0] || null);
+  } catch (error) {
+    console.warn('Invitation lookup unavailable:', error?.message || error);
+    res.json(null);
+  }
 }
+
 
 export async function createInvitation(req, res) {
   const admin = await getAdminInstitution(req.user.sub);

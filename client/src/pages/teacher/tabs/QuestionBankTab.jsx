@@ -9,7 +9,9 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/ActionDialog";
-import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { TwIcon } from "../../../components/TwUI";
+import QuizPreviewModal from "../../../components/QuizPreviewModal";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -130,8 +132,10 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 
   const filteredQuizBankItems = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
     const rows = quizBankItems.filter((quiz) => {
       if (folderFilter !== "ALL" && Number(quiz.class_id || 0) !== Number(folderFilter)) return false;
+      if (templateFilter && normalizeBankTemplate(quiz.template_type) !== templateFilter) return false;
       if (!q) return true;
       return [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
@@ -141,7 +145,11 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 
   const filteredQuestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = [...questions].filter((question) => !q || [question.prompt, question.template_type, question.category].some((value) => String(value || "").toLowerCase().includes(q)));
+    const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
+    const rows = [...questions].filter((question) => {
+      if (templateFilter && normalizeBankTemplate(question.template_type) !== templateFilter) return false;
+      return !q || [question.prompt, question.template_type, question.category].some((value) => String(value || "").toLowerCase().includes(q));
+    });
     rows.sort((a, b) => sortBy === "title" ? String(a.prompt || "").localeCompare(String(b.prompt || "")) : new Date(b.saved_at || 0).getTime() - new Date(a.saved_at || 0).getTime());
     return rows;
   }, [questions, query, sortBy]);
@@ -153,7 +161,6 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
       <div className="container" style={{ display: 'grid', gap: 18 }}>
         <section>
           <h2 style={{ marginBottom: 4, color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
-          {view === 'question' && <p style={{ color: c.textMuted, marginTop: 0, fontSize: 14 }}>Saved questions stay here for future use in the Quiz Builder.</p>}
         </section>
 
         <section style={card(c, { padding: 10 })}>
@@ -175,6 +182,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}>
               <option value='recent'>Newest first</option>
               <option value='title'>Title A–Z</option>
+              {Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}
             </select>
           </div>
         </section>
@@ -195,7 +203,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
           </div>
         )}
 
-        {previewQuiz && <PreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
+        {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
       </div>
 
       {modal?.type === 'deleteQuiz' && <ActionDialog tone='red' icon='🗑' title='Delete quiz from Quiz Bank?' message={<><b style={{ color: c.text }}>{modal.quiz.title}</b> will be permanently removed.</>} onClose={() => setModal(null)} actions={<><button onClick={() => setModal(null)} style={secondaryBtn(c, dark)}>Cancel</button><button onClick={() => deleteQuiz(modal.quiz)} style={primaryBtn({ bg: c.redBg, fg: c.redFg, border: c.redBorder })}>Delete</button></>} />}
@@ -219,7 +227,7 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
             <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
             <div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>{templateLabel(quiz.template_type)} · {quiz.category}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
             <Badge label={templateLabel(quiz.template_type)} c={c} tone='blue' />
             <Badge label='In Quiz Bank' c={c} tone='blue' />
             <Badge label={currentFolderLabel} c={c} />
@@ -253,24 +261,110 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
 }
 
 function QuestionCard({ question: q, onRemove, c }) {
-  const tone = templateTone(q.template_type, c, false);
+  const tt = normalizeBankTemplate(q.template_type);
+  const tone = templateTone(tt, c, false);
+  const cfg = q.config_json || {};
+  const correct = q.correct_json || {};
+  const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING";
+  const [expanded, setExpanded] = useState(false);
+  const answers = getBankAnswers(tt, cfg, correct);
+  const answerAreaStyle = tt === "MATCHING"
+    ? { display: "grid", justifyItems: "center", gap: 8, width: "100%" }
+    : { display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", width: "100%" };
+
   return (
-    <div style={{ ...card(c, { width: 'min(100%, 780px)' }), ...templateCardChrome(q.template_type, c, false), display: 'grid', gap: 12, justifyItems: 'center', textAlign: 'center' }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Badge label={templateLabel(q.template_type)} c={c} tone='blue' />
-        <Badge label={q.category} c={c} />
-      </div>
-      <div style={{ fontWeight: 700, lineHeight: 1.6, color: c.text, maxWidth: 620 }}>{q.prompt}</div>
-      {Array.isArray(q.config_json?.options) && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {q.config_json.options.map((opt, i) => <Badge key={i} label={`${opt}${opt === q.correct_json?.choice ? ' ✓' : ''}`} c={c} tone={opt === q.correct_json?.choice ? 'green' : 'neutral'} />)}
+    <div style={{ ...card(c, { width: "min(100%, 780px)", padding: 0, overflow: "hidden" }), ...templateCardChrome(tt, c, false), textAlign: "center" }}>
+      <div style={{ padding: 16, display: "grid", gap: 12, justifyItems: "center" }}>
+        <div style={{ minWidth: 0, width: "100%" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginBottom: 9 }}>
+            <Badge label={templateLabel(tt)} c={c} tone="blue" />
+            <Badge label={q.category} c={c} />
+          </div>
+          <div style={{ fontWeight: 800, lineHeight: 1.5, color: c.text, overflowWrap: "anywhere", textAlign: "center" }}>{q.prompt}</div>
         </div>
-      )}
-      {q.correct_json?.text && <div style={{ fontSize: 13, color: c.textMuted }}>Answer: <strong style={{ color: c.text }}>{q.correct_json.text}</strong></div>}
-      <div style={{ fontSize: 12, color: c.textSub }}>Saved {new Date(q.saved_at).toLocaleDateString('en-PH')}</div>
-      <button onClick={onRemove} style={{ ...btn(c), borderColor: c.redBorder, background: c.redBg, color: c.redFg }}>Remove</button>
+
+        <div style={answerAreaStyle}>
+          {answers.length ? answers.map((answer, i) => <CorrectAnswer key={`${answer}-${i}`} value={answer} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
+        </div>
+
+        {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((v) => !v)} style={{ width: 46, height: 40, display: "grid", placeItems: "center", borderRadius: 13, border: `1.5px solid ${tone.border}`, color: tone.accent, background: tone.softBg, cursor: "pointer" }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
+
+        {collapsible && expanded && (
+          <div style={{ width: "100%", padding: 14, borderRadius: 16, border: `1px solid ${tone.border}`, background: tone.softBg }}>
+            {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", width: "100%" }}>
+          <span /><div style={{ fontSize: 12, color: c.textSub, textAlign: "center" }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
+          <button onClick={onRemove} style={{ ...btn(c), borderColor: c.redBorder, background: c.redBg, color: c.redFg }}>Remove</button>
+        </div>
+      </div>
     </div>
   );
+}
+
+function normalizeBankTemplate(value) {
+  if (value === 'FOUR_PICS_ONE_WORD') return 'GUESS_WORD_4PICS';
+  if (value === 'THINK_AND_SPELL') return 'THINK_SPELL';
+  return value;
+}
+
+function optionLabel(option, index = 0) {
+  if (option && typeof option === 'object') return String(option.text ?? option.label ?? option.value ?? '').trim() || (option.image ? `Image choice ${index + 1}` : `Option ${index + 1}`);
+  return String(option ?? '').trim() || `Option ${index + 1}`;
+}
+
+function getBankAnswers(tt, cfg, correct) {
+  if (tt === 'MCQ') {
+    const options = Array.isArray(cfg.options) ? cfg.options : [];
+    const values = Array.isArray(correct.choices) && correct.choices.length ? correct.choices : [correct.choice].filter(Boolean);
+    return values.map((value) => {
+      const found = options.find((option, index) => {
+        if (option && typeof option === 'object') return String(option.id ?? option.value ?? '') === String(value) || optionLabel(option, index).toLowerCase() === String(value).toLowerCase();
+        return String(option).toLowerCase() === String(value).toLowerCase();
+      });
+      return found !== undefined ? optionLabel(found, options.indexOf(found)) : String(value);
+    }).filter(Boolean);
+  }
+  if (tt === 'TRUE_FALSE') return [correct.choice].filter(Boolean);
+  if (tt === 'TYPE_ANSWER' || tt === 'DRAW_IT' || tt === 'GRIP_GUESS' || tt === 'GUESS_WORD_4PICS') return [correct.text || cfg.target, ...(Array.isArray(correct.answers) ? correct.answers : [])].filter(Boolean);
+  if (tt === 'THINK_SPELL') return [...(Array.isArray(correct.answers) ? correct.answers : Array.isArray(cfg.answers) ? cfg.answers : []), ...(!correct.answers?.length && correct.text ? [correct.text] : [])].filter(Boolean);
+  if (tt === 'MATCHING') {
+    const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+    const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
+    return colA.map((a, i) => `${optionLabel(a, i)} ↔ ${optionLabel(colB[i], i)}`);
+  }
+  return [correct.text, correct.choice].filter(Boolean);
+}
+
+function CorrectAnswer({ value }) {
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 12, border: '2px solid #22c55e', background: 'rgba(34,197,94,.10)', color: '#15803d', fontWeight: 900, fontSize: 13 }}><span style={{ width: 18, height: 18, borderRadius: 999, background: '#22c55e', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11 }}>✓</span>{value}</span>;
+}
+
+function GuessWordBankPreview({ cfg, c, tone }) {
+  const images = Array.isArray(cfg.images) ? cfg.images : [];
+  return <div style={{ width: 'min(100%, 260px)', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', border: `1px solid ${tone.border}`, background: c.cardBg, display: 'grid', placeItems: 'center' }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>;
+}
+
+function MatchingBankPreview({ cfg, c, tone }) {
+  const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+  const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14, alignItems: "start", textAlign: "center" }}>
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ color: "#f97316", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Choices</div>
+      {colA.map((item, i) => <div key={`a-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(249,115,22,.11)", border: "1.5px solid rgba(249,115,22,.62)" }}><MiniBankItem item={item} fallback={`Item ${i + 1}`} c={c} /></div>)}
+    </div>
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ color: "#16a34a", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Answers</div>
+      {colB.map((item, i) => <div key={`b-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(34,197,94,.11)", border: "1.5px solid rgba(34,197,94,.62)" }}><MiniBankItem item={item} fallback={i < colA.length ? `Match ${i + 1}` : `Dummy ${i - colA.length + 1}`} c={c} />{i >= colA.length && <div style={{ marginTop: 5, color: c.textMuted, fontSize: 10, fontWeight: 850 }}>Dummy answer</div>}</div>)}
+    </div>
+  </div>;
+}
+
+function MiniBankItem({ item, fallback, c }) {
+  const obj = item && typeof item === 'object' ? item : { text: String(item || '') };
+  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, minWidth: 0, textAlign: 'center' }}>{obj.image ? <img src={obj.image} alt='' style={{ width: 42, height: 42, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : null}<span style={{ color: c.text, fontWeight: 800, overflowWrap: 'anywhere' }}>{obj.text || obj.label || fallback}</span></div>;
 }
 
 function menuBtn(c) {

@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from "react";
+import PublicHeader from "../components/PublicHeader";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
@@ -45,7 +46,7 @@ export default function Login({ onLoginSuccess }) {
       if (rememberMe) {
         try { localStorage.setItem("tw_remember_email", email); } catch {}
       }
-      if (onLoginSuccess) onLoginSuccess(data.token, data.role);
+      if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
       if (data.role === "ADMIN") nav("/admin");
       else nav("/teacher");
     } catch (err) {
@@ -60,19 +61,7 @@ export default function Login({ onLoginSuccess }) {
   return (
     <div style={s.page(c)}>
       <div style={s.glow} />
-
-      <header style={s.header(c)}>
-        <Link to="/" style={s.logo}>
-          <span style={s.logoThink(c)}>Think</span>
-          <span style={s.logoWave}>WAVE</span>
-        </Link>
-        <div style={s.headerRight}>
-          <button onClick={toggleTheme} style={s.themeBtn(c)}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><TwIcon name={dark ? "sun" : "moon"} size={16} /> {dark ? "Light" : "Dark"}</span>
-          </button>
-          <Link to={isAdminLogin ? "/register?role=admin" : "/register"} style={s.headerBtn(c)}>Register</Link>
-        </div>
-      </header>
+      <PublicHeader compact />
 
       <main style={s.main}>
         <section style={s.visualPanel(c)} aria-hidden="true">
@@ -140,7 +129,7 @@ export default function Login({ onLoginSuccess }) {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  style={{ marginRight: 6, accentColor: "#2b6cff" }}
+                  style={{ margin: 0, width: 15, height: 15, flex: "0 0 auto", accentColor: "#2b6cff" }}
                 />
                 Remember me
               </label>
@@ -219,7 +208,7 @@ const s = {
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   rememberRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  rememberLabel: (c) => ({ fontSize: 13, color: c.textMuted }),
+  rememberLabel: (c) => ({ display: "inline-flex", alignItems: "center", gap: 7, lineHeight: 1, fontSize: 13, color: c.textMuted, whiteSpace: "nowrap" }),
   forgotBtn: { background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   errorBox: (tone) => ({ background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: 12, padding: "12px 14px", boxShadow: "0 10px 24px rgba(15,23,42,0.06)" }),
   warnBox: {},

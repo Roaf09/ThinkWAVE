@@ -183,8 +183,13 @@ export default function SessionHistoryTab({ setActiveTab }) {
                     </div>
 
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {!isAssignedSession(session) && <button style={btn(c, true)} onClick={() => navigate(`/teacher/analytics/${session.id}`)}>Open Analytics</button>}
-                      <button style={btn(c)} onClick={() => setActiveTab?.("bank")}>Reuse</button>
+                      <button
+                        style={btn(c, true)}
+                        onClick={() => navigate(isAssignedSession(session)
+                          ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}`
+                          : `/teacher/analytics/${session.id}`)}
+                      >Open Analytics</button>
+                      {!isAssignedSession(session) && <button style={btn(c)} onClick={() => setActiveTab?.("bank")}>Reuse</button>}
                       <button style={btn(c)} disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</button>
                       <button style={btn(c)} disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</button>
                     </div>

@@ -7,6 +7,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
+import ThemeIconButton from "../../components/ThemeIconButton";
+import { TwIcon } from "../../components/TwUI";
+import { AudioPlayButton } from "../../components/AudioControls";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
@@ -28,28 +31,17 @@ function LoadingDots({ color = "currentColor" }) {
 }
 
 function ThemeTogglePill({ dark, onClick, style }) {
-  return (
-    <button className="sp-inline-theme-toggle" onClick={onClick} type="button" style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 700, color: dark ? "#bfd0ff" : "#5a6a9a", border: dark ? "1px solid rgba(191,208,255,0.18)" : "1px solid rgba(43,108,255,0.16)", background: dark ? "rgba(255,255,255,0.04)" : "transparent", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", ...(style || {}) }}>
-      <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span><span>{dark ? "Light" : "Dark"}</span>
-    </button>
-  );
+  return <ThemeIconButton dark={dark} onClick={onClick} className="sp-inline-theme-toggle" style={style} size={18}/>;
 }
 
 function SoundTogglePill({ muted, onClick, style }) {
-  return (
-    <button className="sp-inline-sound-toggle" onClick={onClick} type="button" style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 800, color: muted ? "#ffd4d4" : "#d8ffe8", border: muted ? "1px solid rgba(255,120,120,0.28)" : "1px solid rgba(120,255,180,0.24)", background: muted ? "rgba(127, 29, 29, 0.26)" : "rgba(18, 96, 63, 0.22)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", ...(style || {}) }} title={muted ? "Unmute sounds" : "Mute sounds"} aria-label={muted ? "Unmute sounds" : "Mute sounds"}>
-      <span style={{ fontSize: 14 }}>{muted ? "🔇" : "🔊"}</span><span>{muted ? "Muted" : "Sound"}</span>
-    </button>
-  );
+  return <button className="sp-inline-sound-toggle" onClick={onClick} type="button" style={style} title={muted ? "Unmute sounds" : "Mute sounds"} aria-label={muted ? "Unmute sounds" : "Mute sounds"}><span key={muted?"off":"on"} className="tw-theme-icon-swap"><TwIcon name={muted?"volumeOff":"volume"} size={19}/></span></button>;
 }
 
-function questionDifficulty(q) {
-  const value = String(q?.config_json?.difficulty || "").trim().toLowerCase();
-  return ["easy", "medium", "hard"].includes(value) ? value : "";
-}
-
-function currentQuestionExplanation(q) {
-  return String(q?.config_json?.explanation || "").trim();
+function VoiceAnswerStrip({ config }) {
+  const recordings=Array.isArray(config?.voiceAnswers)?config.voiceAnswers:[];
+  if(!recordings.some(Boolean)) return null;
+  return <div className="sp-voice-answer-strip">{recordings.map((audio,index)=>audio?<div key={index}><span>{String.fromCharCode(65+index)}</span><AudioPlayButton src={audio} title={`Play answer ${index+1}`}/></div>:null)}</div>;
 }
 
 export default function StudentAsyncPlay() {
@@ -60,14 +52,12 @@ export default function StudentAsyncPlay() {
   const [questions, setQuestions] = useState([]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
+  const [locked, setLocked] = useState({});
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
-  const [submittedByQuestion, setSubmittedByQuestion] = useState({});
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [feedbackQ, setFeedbackQ] = useState(null);
-  const [feedbackFxKey, setFeedbackFxKey] = useState(0);
-  const feedbackHideTimer = useRef(null);
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
+  const [remainingSec,setRemainingSec]=useState(0);
+  const [confirmNext,setConfirmNext]=useState(false);
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
   const cardBg = dark ? "#0e1733" : "#ffffff";
@@ -77,183 +67,104 @@ export default function StudentAsyncPlay() {
 
   useEffect(() => {
     let alive = true;
-    api.get(`/student/quizzes/${quizId}`)
-      .then(({ data }) => {
-        if (!alive) return;
-        setQuiz(data.quiz);
-        setQuestions(data.questions || []);
-      })
-      .catch((err) => setMsg(err?.response?.data?.message || "Quiz unavailable."));
+    api.get(`/student/quizzes/${quizId}`).then(({ data }) => {
+      if (!alive) return;
+      setQuiz(data.quiz); setQuestions(data.questions || []);
+    }).catch((err) => setMsg(err?.response?.data?.message || "Quiz unavailable."));
     return () => { alive = false; };
   }, [quizId]);
 
-  // Revision 11: assignment gameplay now uses the same playing background music + mute control as live sessions.
   useEffect(() => {
-    function unlockAudio() {
-      void soundManager.unlock().then(() => { void soundManager.startBGM("playing"); });
-    }
+    function unlockAudio() { void soundManager.unlock().then(() => soundManager.startBGM("playing")); }
     void soundManager.startBGM("playing");
-    window.addEventListener("pointerdown", unlockAudio, { passive: true });
-    window.addEventListener("keydown", unlockAudio);
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-      clearTimeout(feedbackHideTimer.current);
-      soundManager.stopBGM();
-    };
+    window.addEventListener("pointerdown", unlockAudio, { passive: true }); window.addEventListener("keydown", unlockAudio);
+    return () => { window.removeEventListener("pointerdown", unlockAudio); window.removeEventListener("keydown", unlockAudio); soundManager.stopBGM(); };
   }, []);
-
   useEffect(() => { void soundManager.startBGM("playing"); }, [isMuted]);
 
   const q = questions[idx];
   const tt = normalizeTemplateType(quiz?.template_type);
   const currentAnswer = answers[q?.id] || {};
+  const timeLimit=Math.max(1,Number(q?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
   const progress = questions.length ? ((idx + 1) / questions.length) * 100 : 0;
   const isLast = idx >= questions.length - 1;
   const done = !!result;
-  const currentSubmitted = q?.id ? submittedByQuestion[q.id] : null;
-  const difficulty = questionDifficulty(q);
+  const currentLocked=!!locked[q?.id];
+  const currentAnswered=hasAnswer(tt,currentAnswer,q);
+  const everyAnswered=questions.length>0 && questions.every(item=>hasAnswer(tt,answers[item.id],item) || locked[item.id]);
 
-  function handleToggleMute() {
-    const nextMuted = soundManager.toggleMute();
-    setIsMuted(nextMuted);
-    if (!nextMuted) void soundManager.startBGM("playing");
+  useEffect(()=>{
+    if(!q?.id || done) return;
+    if(currentLocked){setRemainingSec(0);return;}
+    setRemainingSec(timeLimit);
+  },[q?.id,timeLimit,currentLocked,done]);
+  useEffect(()=>{
+    if(!q?.id || done || currentLocked || remainingSec<=0) return;
+    const timer=setTimeout(()=>setRemainingSec(v=>Math.max(0,v-1)),1000);
+    return()=>clearTimeout(timer);
+  },[q?.id,done,currentLocked,remainingSec]);
+  useEffect(()=>{
+    if(!q?.id || done || currentLocked || remainingSec!==0) return;
+    setAnswers(prev=>({...prev,[q.id]:prev[q.id]&&hasAnswer(tt,prev[q.id],q)?prev[q.id]:{timedOut:true}}));
+    setLocked(prev=>({...prev,[q.id]:true}));
+    setMsg("Time is up. This question has been counted as incorrect.");
+  },[remainingSec,q?.id,currentLocked,done,tt]);
+
+  function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next) void soundManager.startBGM("playing");}
+  function setAnswer(answer){if(!q?.id||done||currentLocked)return;setMsg("");setAnswers(prev=>({...prev,[q.id]:answer}));}
+  function goNext(){
+    if(currentLocked){setIdx(i=>Math.min(questions.length-1,i+1));return;}
+    if(!currentAnswered){setMsg("Answer this question before moving to the next one.");return;}
+    setConfirmNext(true);
+  }
+  function confirmMoveNext(){setLocked(prev=>({...prev,[q.id]:true}));setConfirmNext(false);setIdx(i=>Math.min(questions.length-1,i+1));setMsg("");}
+  async function submit(){
+    if(!currentLocked){if(!currentAnswered){setMsg("Answer this question before submitting.");return;} setLocked(prev=>({...prev,[q.id]:true}));}
+    const completed={...answers,[q.id]:answers[q.id]};
+    const allReady=questions.every(item=>hasAnswer(tt,completed[item.id],item) || locked[item.id] || item.id===q.id);
+    if(!allReady){setMsg("Complete every question before submitting.");return;}
+    try{
+      const payload=questions.map(item=>({questionId:Number(item.id),answer:completed[item.id]??{timedOut:true}}));
+      const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{answers:payload});setResult(data);soundManager.play("correct").catch(()=>{});
+    }catch(err){setMsg(err?.response?.data?.message||"Submit failed.");soundManager.play("wrong").catch(()=>{});}
   }
 
-  function setAnswer(answer) {
-    if (!q?.id || done || currentSubmitted) return;
-    setAnswers((prev) => ({ ...prev, [q.id]: answer }));
-  }
+  if(msg && !quiz) return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
+  if(!quiz||!q) return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
 
-  async function submitCurrentQuestion() {
-    if (!q?.id || done || currentSubmitted) return;
-    setMsg("");
-    try {
-      const { data } = await api.post(`/student/quizzes/${quizId}/check-question`, { questionId: Number(q.id), answer: currentAnswer });
-      const feedback = {
-        isCorrect: !!data.isCorrect,
-        points: Number(data.points || 0),
-        explanation: String(data.explanation || currentQuestionExplanation(q)),
-      };
-      setSubmittedByQuestion((prev) => ({ ...prev, [q.id]: feedback }));
-      setFeedbackQ(feedback);
-      setShowFeedback(true);
-      setFeedbackFxKey((v) => v + 1);
-      clearTimeout(feedbackHideTimer.current);
-      feedbackHideTimer.current = setTimeout(() => setShowFeedback(false), 2200);
-      soundManager.play(feedback.isCorrect ? "correct" : "wrong").catch(() => {});
-    } catch (err) {
-      setMsg(err?.response?.data?.message || "Could not submit this question.");
-      soundManager.play("wrong").catch(() => {});
-    }
-  }
-
-  async function submit() {
-    try {
-      const payload = Object.entries(answers).map(([questionId, answer]) => ({ questionId: Number(questionId), answer }));
-      const { data } = await api.post(`/student/quizzes/${quizId}/submit`, { answers: payload });
-      setResult(data);
-      soundManager.play("correct").catch(() => {});
-    } catch (err) {
-      setMsg(err?.response?.data?.message || "Submit failed.");
-      soundManager.play("wrong").catch(() => {});
-    }
-  }
-
-  if (msg && !quiz) {
-    return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{ maxWidth: 520, background: cardBg, borderColor: cardBor, textAlign: "center" }}><h3 className="sp-wait-title" style={{ color: textC }}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{ color: mutedC }}>{msg}</p><button className="submit-btn" type="button" onClick={() => nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
-  }
-
-  if (!quiz || !q) {
-    return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{ maxWidth: 520, background: cardBg, borderColor: cardBor, textAlign: "center" }}><h3 className="sp-wait-title" style={{ color: textC }}>Loading assignment<LoadingDots color={mutedC} /></h3></div></AsyncShell>;
-  }
-
-  return (
-    <div style={{ minHeight: "100vh", background: pageBg, color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-      {showFeedback && feedbackQ && (
-        <div className={`sp-feedback-overlay ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
-          <div key={feedbackFxKey} className={`sp-feedback-card ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
-            <div className="sp-feedback-icon">{feedbackQ.isCorrect ? "✅" : "❌"}</div>
-            <div className="sp-feedback-title">{feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}</div>
-            <div className="sp-feedback-subtitle">{feedbackQ.isCorrect ? "Nice one — keep going!" : "Review the explanation before moving on."}</div>
-            {feedbackQ.explanation && (
-              <div className="sp-explanation-panel">
-                <div className="sp-explanation-kicker">Explanation</div>
-                <p>{feedbackQ.explanation}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
-        <div className="qn-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="qn-subject">{quiz.title || "ThinkWAVE Assignment"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <SoundTogglePill muted={isMuted} onClick={handleToggleMute} style={{ padding: "6px 11px", fontSize: 12 }} />
-              <ThemeTogglePill dark={dark} onClick={toggleTheme} style={{ padding: "6px 11px", fontSize: 12, color: dark ? "#dbe7ff" : "#17305f", border: dark ? "1px solid rgba(219,231,255,0.25)" : "1px solid rgba(43,108,255,0.18)", background: dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)", boxShadow: dark ? "0 12px 22px rgba(0,0,0,0.26)" : "0 12px 22px rgba(43,108,255,0.14)" }} />
-            </div>
-          </div>
-          <div className="qn-meta">
-            <div className="qn-qcount">Q {idx + 1}/{questions.length}</div>
-            <div className="qn-timer">Assignment</div>
-          </div>
-        </div>
-        <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round(progress)}%` }} /></div>
-        {difficulty && <div key={`${q.id}-${difficulty}`} className={`sp-difficulty-pop ${difficulty}`}>{difficulty}</div>}
-
-        <div className="qn-body" style={{ flex: 1 }}>
-          {done ? (
-            <div className="sp-wait-card sp-page-enter" style={{ maxWidth: 560, margin: "0 auto", background: cardBg, borderColor: cardBor, textAlign: "center" }}>
-              <div className="sp-wait-icon-wrap" style={{ margin: "0 auto 16px", background: dark ? "rgba(255,255,255,0.05)" : "#eef3ff", borderColor: cardBor }}><div className="sp-wait-icon">✅</div></div>
-              <h3 className="sp-wait-title" style={{ color: textC, marginBottom: 8 }}>Submitted!</h3>
-              <p className="sp-wait-subtitle" style={{ color: mutedC }}>You scored <b style={{ color: "#2b6cff" }}>{result.score}/{result.maxScore}</b>.</p>
-              <button className="submit-btn" type="button" onClick={() => nav('/student')}>Back to Dashboard</button>
-            </div>
-          ) : (
-            <>
-              <div className="qn-prompt-box">
-                {q?.config_json?.promptImage ? <img src={q.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
-                <span className="qn-prompt-text">{q.prompt}</span>
-              </div>
-              <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done || !!currentSubmitted} />
-              {currentSubmitted && (
-                <div style={{ maxWidth: 720, margin: "18px auto 0", padding: "14px 16px", borderRadius: 18, background: currentSubmitted.isCorrect ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.12)", border: `1px solid ${currentSubmitted.isCorrect ? "rgba(34,197,94,0.34)" : "rgba(239,68,68,0.28)"}`, color: textC, fontWeight: 800 }}>
-                  {currentSubmitted.isCorrect ? `Correct · +${currentSubmitted.points} pts` : "Incorrect"}
-                  {currentSubmitted.explanation ? <div style={{ marginTop: 8, color: mutedC, fontWeight: 700, lineHeight: 1.55 }}>{currentSubmitted.explanation}</div> : null}
-                </div>
-              )}
-              {msg && <div style={{ textAlign: "center", color: "#ef4444", fontWeight: 700, marginTop: 12 }}>{msg}</div>}
-              <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginTop: 22 }}>
-                <button type="button" className="spell-ctrl back" onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0}>Previous</button>
-                {!currentSubmitted ? (
-                  <button type="button" className="submit-btn" onClick={submitCurrentQuestion}>Submit</button>
-                ) : isLast ? (
-                  <button type="button" className="submit-btn" onClick={submit}>Finish</button>
-                ) : (
-                  <button type="button" className="submit-btn" onClick={() => setIdx((i) => Math.min(questions.length - 1, i + 1))}>Next</button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+  return <div style={{minHeight:"100vh",background:pageBg,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
+    <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
+    {confirmNext&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className="sp-anticheat-icon warning"><TwIcon name="arrowRight" size={38}/></div><h3>Move to the next question?</h3><p>Your current answer will be locked and cannot be changed when you return.</p><div style={{display:"flex",gap:10,justifyContent:"center"}}><button type="button" onClick={()=>setConfirmNext(false)} style={{background:"#64748b"}}>Cancel</button><button type="button" onClick={confirmMoveNext}>Next</button></div></div></div>}
+    <div className={`quiz-shell-new ${dark?"theme-dark":"theme-light"}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column"}}>
+      <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(remainingSec)}</div></div></div>
+      <div className="qn-progress"><div className="qn-progress-bar" style={{width:`${Math.round(currentLocked?0:(remainingSec/timeLimit)*100)}%`}}/></div>
+      <div className="qn-body" style={{flex:1}}>{done?<div className="sp-wait-card sp-page-enter" style={{maxWidth:560,margin:"0 auto",background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={56}/></div><h3 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>You scored <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b>.</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div>:<>
+        <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span>{q?.config_json?.voicePrompt?<AudioPlayButton src={q.config_json.voicePrompt} title="Play recorded question"/>:null}</div>
+        <VoiceAnswerStrip config={q?.config_json}/><TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked}/>
+        {currentLocked&&<div style={{textAlign:"center",color:mutedC,fontWeight:800,marginTop:12}}>This answer is locked.</div>}{msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
+        <div style={{display:"flex",justifyContent:"center",gap:12,flexWrap:"wrap",marginTop:22}}>{idx>0&&<button type="button" className="spell-ctrl back" onClick={()=>setIdx(i=>Math.max(0,i-1))}>Previous</button>}{!isLast&&<button type="button" className="submit-btn" onClick={goNext} disabled={!currentAnswered&&!currentLocked}>Next</button>}{isLast&&everyAnswered&&<button type="button" className="submit-btn" onClick={submit}>Submit</button>}</div>
+      </>}</div>
     </div>
-  );
+  </div>;
 }
+
+function hasAnswer(templateType,answer,q){
+  if(!answer||answer.timedOut) return !!answer?.timedOut;
+  const tt=normalizeTemplateType(templateType);
+  if(tt==="MCQ") return !!answer.choice || (Array.isArray(answer.choices)&&answer.choices.length>0);
+  if(tt==="TRUE_FALSE") return answer.choice!==undefined&&answer.choice!==null&&answer.choice!=="";
+  if(tt==="MATCHING") return Array.isArray(answer.pairs)&&answer.pairs.length>=Number(q?.config_json?.colA?.length||1);
+  if(tt==="THINK_SPELL") return Array.isArray(answer.words||answer.foundEntries)&&(answer.words||answer.foundEntries).length>0;
+  return String(answer.text||"").trim().length>0;
+}
+function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
 
 function AsyncShell({ dark, pageBg, cardBg, cardBor, textC, mutedC, title, isMuted, onMute, onTheme, children }) {
   return (
     <div style={{ minHeight: "100vh", background: pageBg, color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={onMute}/><ThemeTogglePill dark={dark} onClick={onTheme}/></div>
       <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
-        <div className="qn-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="qn-subject">{title}</div>
-            <SoundTogglePill muted={isMuted} onClick={onMute} style={{ padding: "6px 11px", fontSize: 12 }} />
-            <ThemeTogglePill dark={dark} onClick={onTheme} style={{ padding: "6px 11px", fontSize: 12 }} />
-          </div>
-          <div className="qn-meta"><div className="qn-timer">Assignment</div></div>
-        </div>
+        <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{title}</div></div><div className="qn-meta"><div className="qn-timer"><TwIcon name="clock" size={17}/> Assignment</div></div></div>
         <div className="qn-body" style={{ flex: 1, display: "grid", placeItems: "center" }}>{children}</div>
       </div>
     </div>
@@ -312,29 +223,79 @@ function TypeAnswerTemplate({ value, onChange, disabled }) {
   return <div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your identification answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={text} onChange={(e) => onChange({ text: e.target.value.slice(0, MAX) })} placeholder="Start typing..." disabled={disabled} autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && text && <button type="button" className="type-clear-btn" onClick={() => onChange({ text: "" })}>✕</button>}</div>{text.length > 0 && <div className="type-charboxes">{text.split("").map((ch, i) => <div key={i} className="type-charbox">{ch === " " ? "\u00A0" : ch}</div>)}</div>}<div className="type-count">{text.length} / {MAX}</div></div></div>;
 }
 
-// Revision 11: assignment matching uses the same matching card classes as live gameplay.
+// Revision 18: assignment matching mirrors live gameplay, including shuffled Column A and hidden paired answers.
+function matchingOrder(length, shouldShuffle, seedText) {
+  const order = Array.from({ length }, (_, index) => index);
+  if (!shouldShuffle || length < 2) return order;
+  let seed = 2166136261;
+  for (const ch of String(seedText || "matching")) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  if (order.every((value, index) => value === index)) order.push(order.shift());
+  return order;
+}
+
 function MatchingTemplate({ cfg, value, onChange, disabled }) {
   const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
   const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
   const pairs = Array.isArray(value.pairs) ? value.pairs : [];
-  const matchingMap = Object.fromEntries(pairs.map((p) => [Number(p.aIndex), Number(p.bIndex)]));
+  const matchingMap = Object.fromEntries(pairs.map((pair) => [Number(pair.aIndex), Number(pair.bIndex)]));
   const [selectedA, setSelectedA] = useState(null);
   const usedB = new Set(Object.values(matchingMap).map(Number));
   const total = colA.length;
   const matchedCount = Object.keys(matchingMap).length;
-  function updateMap(next) { onChange({ pairs: Object.entries(next).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })) }); }
+  const seed = `${colA.map((row) => row?.text || "").join("|")}-${colB.length}`;
+  const orderA = useMemo(() => matchingOrder(colA.length, !!cfg.shuffleColA, `${seed}-A`), [colA.length, cfg.shuffleColA, seed]);
+  const orderB = useMemo(() => matchingOrder(colB.length, true, `${seed}-B`), [colB.length, seed]);
+
+  function updateMap(next) {
+    onChange({ pairs: Object.entries(next).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })) });
+  }
   function assignPair(aIndex, bIndex) {
     const next = { ...matchingMap };
-    Object.keys(next).forEach((key) => { if (Number(key) === Number(aIndex) || Number(next[key]) === Number(bIndex)) delete next[key]; });
+    Object.keys(next).forEach((key) => {
+      if (Number(key) === Number(aIndex) || Number(next[key]) === Number(bIndex)) delete next[key];
+    });
     next[Number(aIndex)] = Number(bIndex);
     updateMap(next);
     setSelectedA(null);
   }
+
   return (
     <div className="match-v2">
-      <div className="match-v2-intro"><div className="match-v2-steps"><span className="match-v2-step"><span className="match-v2-step-num">1</span> Pick a question</span><span className="match-v2-step-arrow">→</span><span className="match-v2-step"><span className="match-v2-step-num">2</span> Pick its answer</span></div><div className="match-v2-progress"><div className="match-v2-progress-top"><span className="match-v2-progress-label">{matchedCount} of {total} matched</span></div><div className="match-v2-progress-track"><div className="match-v2-progress-fill" style={{ width: `${total ? Math.round((matchedCount / total) * 100) : 0}%` }} /></div></div></div>
+      <div className="match-v2-intro">
+        <div className="match-v2-steps"><span className="match-v2-step"><span className="match-v2-step-num">1</span> Pick a question</span><span className="match-v2-step-arrow">→</span><span className="match-v2-step"><span className="match-v2-step-num">2</span> Pick its answer</span></div>
+        <div className="match-v2-progress"><div className="match-v2-progress-top"><span className="match-v2-progress-label">{matchedCount} of {total} matched</span></div><div className="match-v2-progress-track"><div className="match-v2-progress-fill" style={{ width: `${total ? Math.round((matchedCount / total) * 100) : 0}%` }} /></div></div>
+      </div>
       <p className="match-v2-hint">{selectedA !== null ? "Now tap the matching answer on the right." : "Tap a question on the left, then tap its answer."}</p>
-      <div className="match-v2-columns"><section className="match-v2-col"><h3 className="match-v2-col-title">Questions</h3><ul className="match-v2-list">{colA.map((a, ai) => <li key={ai}><button type="button" className={`match-v2-card match-v2-card-q ${selectedA === ai ? "is-selected" : ""} ${matchingMap[ai] !== undefined ? "is-matched" : ""}`} onClick={() => !disabled && setSelectedA(selectedA === ai ? null : ai)} disabled={disabled}><span className="match-v2-card-main">{a.image ? <img src={a.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(a.text) || `Question ${ai + 1}`}</span>{matchingMap[ai] !== undefined ? <span className="match-v2-paired"><span className="match-v2-paired-label">Your answer:</span><strong>{trimText(colB[Number(matchingMap[ai])]?.text) || `Answer ${Number(matchingMap[ai]) + 1}`}</strong></span> : null}</span></button></li>)}</ul></section><section className="match-v2-col"><h3 className="match-v2-col-title">Answers</h3><ul className="match-v2-list">{colB.map((b, bi) => <li key={bi}><button type="button" className={`match-v2-card match-v2-card-ans ${usedB.has(bi) ? "is-used" : ""} ${selectedA !== null && !usedB.has(bi) ? "is-targetable" : ""}`} onClick={() => !disabled && selectedA !== null && !usedB.has(bi) && assignPair(selectedA, bi)} disabled={disabled || usedB.has(bi)}><span className="match-v2-card-main">{b.image ? <img src={b.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(b.text) || `Answer ${bi + 1}`}</span></span>{usedB.has(bi) ? <span className="match-v2-used-tag">Matched</span> : null}</button></li>)}</ul></section></div>
+      <div className="match-v2-columns">
+        <section className="match-v2-col">
+          <h3 className="match-v2-col-title">Questions</h3>
+          <ul className="match-v2-list">
+            {orderA.map((ai) => {
+              const item = colA[ai] || {};
+              const matchedB = matchingMap[ai] !== undefined ? Number(matchingMap[ai]) : null;
+              return <li key={ai}><button type="button" className={`match-v2-card match-v2-card-q ${selectedA === ai ? "is-selected" : ""} ${matchedB !== null ? "is-matched" : ""}`} onClick={() => !disabled && setSelectedA(selectedA === ai ? null : ai)} disabled={disabled}><span className="match-v2-card-main">{item.image ? <img src={item.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(item.text) || `Question ${ai + 1}`}</span>{matchedB !== null ? <span className="match-v2-paired"><span className="match-v2-paired-label">Your answer:</span><strong>{trimText(colB[matchedB]?.text) || `Answer ${matchedB + 1}`}</strong></span> : null}</span></button></li>;
+            })}
+          </ul>
+        </section>
+        <section className="match-v2-col">
+          <h3 className="match-v2-col-title">Answers</h3>
+          <ul className="match-v2-list">
+            {orderB.map((bi) => {
+              if (usedB.has(bi)) return null;
+              const item = colB[bi] || {};
+              return <li key={bi}><button type="button" className={`match-v2-card match-v2-card-ans ${selectedA !== null ? "is-targetable" : ""}`} onClick={() => !disabled && selectedA !== null && assignPair(selectedA, bi)} disabled={disabled}><span className="match-v2-card-main">{item.image ? <img src={item.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(item.text) || `Answer ${bi + 1}`}</span></span></button></li>;
+            })}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }
@@ -400,5 +361,5 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   function handleGridPointerMove(e) { if (!draggingRef.current || disabled) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-bword-index]"); if (target) addIndex(Number(target.dataset.bwordIndex)); }
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
   const previewStatus = !built ? "Hold and drag across adjacent letters." : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div><div className="bword-hud-stat"><span className="bword-hud-label">Submit</span><span className="bword-hud-value">Once</span></div></div><div className="bword-instructions">Hold and drag across adjacent letters to find words. Find all answers first, then submit once.</div>{wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{linePoints.length > 1 && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none"><polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div><div className="bword-controls"><button type="button" className="spell-ctrl clr" onClick={() => patch({ selected: [], built: "" })} disabled={disabled || !selected.length}>Clear current line</button></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found before submission</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
+  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div><div className="bword-instructions">Hold and drag across adjacent letters to find words. Find all answers before submitting.</div>{wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{linePoints.length > 1 && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none"><polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div><div className="bword-controls"><button type="button" className="spell-ctrl clr" onClick={() => patch({ selected: [], built: "" })} disabled={disabled || !selected.length}>Clear current line</button></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found before submission</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
 }

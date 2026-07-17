@@ -19,6 +19,7 @@ if (!JWT_SECRET || JWT_SECRET === "dev_secret_change_me") {
 }
 
 export const env = {
+  NODE_ENV: process.env.NODE_ENV || "development",
   PORT: Number(process.env.PORT || 4000),
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || "http://localhost:5173",
   JWT_SECRET: process.env.JWT_SECRET || "dev_secret_change_me",
@@ -27,7 +28,7 @@ export const env = {
 DB_PORT: Number(process.env.DB_PORT || 3306),
 DB_USER: process.env.DB_USER || "root",
 DB_PASS: process.env.DB_PASS || "",
-DB_NAME: process.env.DB_NAME || "defaultdb",
+DB_NAME: process.env.DB_NAME || "thinkwave",
 DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
 DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
 
@@ -37,6 +38,7 @@ DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
   SMTP_USER: process.env.SMTP_USER || "",
   SMTP_PASS: process.env.SMTP_PASS || "",
   SMTP_FROM: process.env.SMTP_FROM || "ThinkWAVE <no-reply@thinkwave.local>",
+  OTP_DEV_FALLBACK: String(process.env.OTP_DEV_FALLBACK || "false").toLowerCase() === "true",
 
   TEACHER_GRACE_SEC: Number(process.env.TEACHER_GRACE_SEC || 30),
 };

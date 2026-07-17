@@ -22,6 +22,7 @@ import React, { useEffect, useState } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 
 import Landing             from "./pages/Landing.jsx";
+import Plan                from "./pages/Plan.jsx";
 import Register            from "./pages/Register.jsx";
 import SuperadminRegister  from "./pages/SuperadminRegister.jsx";
 import SuperadminLogin     from "./pages/SuperadminLogin.jsx";
@@ -37,6 +38,7 @@ import Analytics           from "./pages/teacher/Analytics.jsx";
 import AdminDashboard      from "./pages/admin/AdminDashboard.jsx";
 import SuperadminDashboard from "./pages/superadmin/SuperadminDashboard.jsx";
 import GuestDashboard      from "./pages/guest/GuestDashboard.jsx";
+import GuestBuilder        from "./pages/guest/GuestBuilder.jsx";
 import StudentJoin         from "./pages/student/StudentJoin.jsx";
 import StudentPlay         from "./pages/student/StudentPlay.jsx";
 import StudentAuth         from "./pages/student/StudentAuth.jsx";
@@ -55,7 +57,7 @@ function Guard({ role, children }) {
   return children;
 }
 
-function WelcomeToast({ name, onDone }) {
+function WelcomeToast({ name, firstLogin = false, onDone }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
     const f = setTimeout(() => setVisible(false), 1600);
@@ -64,7 +66,7 @@ function WelcomeToast({ name, onDone }) {
   }, [onDone]);
   return (
     <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#0f2a1a", border:"1px solid #22c55e", color:"#86efac", padding:"12px 28px", borderRadius:12, fontSize:15, fontWeight:700, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", pointerEvents:"none", transition:"opacity 0.5s ease", opacity:visible?1:0, whiteSpace:"nowrap" }}>
-      <span style={{ display:"inline-flex", alignItems:"center", gap:8 }}><TwIcon name="spark" size={17} /> Welcome back, {name}!</span>
+      <span style={{ display:"inline-flex", alignItems:"center", gap:8 }}><TwIcon name="spark" size={17} /> {firstLogin ? "Welcome" : "Welcome back"}, {name}!</span>
     </div>
   );
 }
@@ -73,6 +75,7 @@ function Shell({ children, toast, setToast }) {
   const loc = useLocation();
   const hideHeader =
     loc.pathname === "/" ||
+    loc.pathname === "/plan" ||
     loc.pathname === "/login" ||
     loc.pathname === "/forgot-password" ||
     loc.pathname === "/register" ||
@@ -89,7 +92,7 @@ function Shell({ children, toast, setToast }) {
     loc.pathname.startsWith("/play");
   return (
     <div>
-      {toast && <WelcomeToast name={toast} onDone={() => setToast(null)} />}
+      {toast && <WelcomeToast name={toast.name} firstLogin={toast.firstLogin} onDone={() => setToast(null)} />}
       {!hideHeader && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 32px", background:"#080e1f", borderBottom:"1px solid #1a2540", position:"sticky", top:0, zIndex:50 }}>
           <Link to="/" style={{ display:"flex", alignItems:"baseline", textDecoration:"none" }}>
@@ -108,10 +111,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   useEffect(() => { setAuthToken(getToken()); }, []);
 
-  async function handleLoginSuccess(token, role) {
+  async function handleLoginSuccess(token, role, loginMeta = {}) {
     setAuthToken(token);
     if (["TEACHER","SUPERADMIN","ADMIN","STUDENT"].includes(role)) {
-      try { const { data } = await api.get("/auth/me"); if (data?.first_name) setToast(data.first_name); }
+      try { const { data } = await api.get("/auth/me"); if (data?.first_name) setToast({ name: data.first_name, firstLogin: role === "ADMIN" && !!loginMeta.firstLogin }); }
       catch {}
     }
   }
@@ -120,6 +123,7 @@ export default function App() {
     <Shell toast={toast} setToast={setToast}>
       <Routes>
         <Route path="/"                    element={<Landing />} />
+        <Route path="/plan"                 element={<Plan />} />
         <Route path="/register"            element={<Register />} />
         <Route path="/superadmin-register" element={<SuperadminRegister />} />
         <Route path="/superadmin-login"    element={<SuperadminLogin onLoginSuccess={handleLoginSuccess} />} />
@@ -131,7 +135,7 @@ export default function App() {
 
         {/* Guest — no auth, session-based */}
         <Route path="/guest"                            element={<GuestDashboard />} />
-        <Route path="/guest/quizzes/:id/builder"        element={<QuizBuilder guestMode />} />
+        <Route path="/guest/quizzes/:id/builder"        element={<GuestBuilder />} />
         <Route path="/guest/sessions/:id/live"          element={<HostLive />} />
 
         {/* Superadmin */}
@@ -145,6 +149,7 @@ export default function App() {
         <Route path="/teacher/quizzes/:id/builder"  element={<Guard role="TEACHER"><QuizBuilder /></Guard>} />
         <Route path="/teacher/sessions/:id/live"    element={<Guard role="TEACHER"><HostLive /></Guard>} />
         <Route path="/teacher/analytics/:sessionId" element={<Guard role="TEACHER"><Analytics /></Guard>} />
+        <Route path="/teacher/async-analytics/:classId/:quizId" element={<Guard role="TEACHER"><Analytics /></Guard>} />
 
         {/* Student */}
         <Route path="/student-login"    element={<StudentAuth onLoginSuccess={handleLoginSuccess} />} />

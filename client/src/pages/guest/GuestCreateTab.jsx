@@ -18,7 +18,7 @@ const ALL_TEMPLATES = [
   { value:"GUESS_WORD_4PICS", label:"4Pics 1Word",      icon:"🖼️" },
   { value:"DRAW_IT",          label:"Draw-it",          icon:"🎨" },
   { value:"GRIP_GUESS",       label:"Grip-and-Guess",   icon:"🤝" },
-  { value:"THINK_SPELL",      label:"Think-and-Spell",  icon:"🔡" },
+  { value:"THINK_SPELL",      label:"Think and Spell",  icon:"🔡" },
 ];
 
 async function getGuestApi() {
@@ -28,8 +28,6 @@ async function getGuestApi() {
     token = data.token;
     sessionStorage.setItem("guest_token", token);
   }
-  localStorage.setItem("qz_token", token);
-  localStorage.setItem("qz_role", "TEACHER");
   return axios.create({
     baseURL: API_BASE,
     headers: { Authorization: `Bearer ${token}` },

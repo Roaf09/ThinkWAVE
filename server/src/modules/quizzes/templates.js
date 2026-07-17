@@ -149,7 +149,7 @@ export function scoreThinkSpellBatch({
     if (!validatePathSpellsWord({ grid: gridState.grid, gridSize: gridState.gridSize, path, word: text })) continue;
     acceptedKeys.add(canonical);
     accepted.push(canonical);
-    // Revision 2: Think & Spell score is question points multiplied by words found.
+    // Revision 2: Think and Spell score is question points multiplied by words found.
     pointsAwarded += Math.max(1, Number(basePoints) || 1);
   }
 

@@ -113,6 +113,7 @@ export default function HomeTab({ setActiveTab }) {
   }, []);
 
   const recentSessions = sessions.slice(0, 5);
+  const recentSessionSnapshots = recentSessions.slice(0, 3);
   const draftQuizzes = quizzes.filter((q) => q.status !== "BANKED" && q.status !== "PUBLISHED");
   const readyToHost = quizzes.filter((q) => q.status === "PUBLISHED" || q.status === "IN_SESSION");
   const banked = quizzes.filter((q) => q.status === "BANKED");
@@ -180,12 +181,13 @@ export default function HomeTab({ setActiveTab }) {
               {submissionStats.length === 0 ? (
                 <EmptyState c={c} icon="chart" title="No assigned submissions yet" message="Submission updates from assigned quizzes will appear here." compact />
               ) : (
-                <div style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 238 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
-                  {submissionStats.map((row) => (
-                    <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "11px 12px", borderRadius: 14, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, fontSize: 13, lineHeight: 1.5, fontWeight: 800 }}>
+                <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 238 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
+                  {submissionStats.map((row) => {
+                    const rowTone = templateTone(row.template_type, c, false);
+                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "11px 12px", borderRadius: 14, border: `1px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
                       {Number(row.submitted_count || 0)} {Number(row.submitted_count || 0) === 1 ? "student" : "students"} from {row.class_name} have submitted their answers on {row.quiz_title}
-                    </div>
-                  ))}
+                    </div>;
+                  })}
                 </div>
               )}
             </div>
@@ -241,7 +243,7 @@ export default function HomeTab({ setActiveTab }) {
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} setActiveTab={setActiveTab} />)}
+                {recentSessionSnapshots.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} setActiveTab={setActiveTab} />)}
               </div>
             )}
           </div>
@@ -299,7 +301,7 @@ function SessionCard({ session, analytics, c, navigate, setActiveTab }) {
 
 function MiniInfo({ c, label, value }) {
   return (
-    <div style={{ padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}` }}>
+    <div className="tw-mini-info-card" style={{ padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}` }}>
       <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: c.textSub, fontWeight: 900 }}>{label}</div>
       <div style={{ color: c.text, fontWeight: 950, fontSize: 22, marginTop: 5 }}>{value}</div>
     </div>

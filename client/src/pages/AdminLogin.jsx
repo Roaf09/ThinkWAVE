@@ -42,7 +42,7 @@ export default function AdminLogin({ onLoginSuccess }) {
       setToken(data.token);
       setRole(data.role);
       setAuthToken(data.token);
-      if (onLoginSuccess) onLoginSuccess(data.token, data.role);
+      if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
       nav("/admin");
     } catch (err) {
       setError(err?.response?.data?.message || "Login failed.");

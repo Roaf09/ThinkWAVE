@@ -1,245 +1,58 @@
-/* FILE GUIDE:
- * server/src/modules/superadmin/superadmin.controller.js
- * Purpose: Superadmin dashboard data for overview, institution management, notifications, and system health.
- * Tip: Start with exported functions/components first, then read helper functions underneath.
- */
-
 import { pool } from "../../db.js";
+import { getSystemMetrics } from "../../metrics.js";
 
-function numberify(value) {
-  return Number(value || 0);
+const n=v=>Number(v||0);
+const safeJson=v=>{if(!v)return null;if(typeof v==="object")return v;try{return JSON.parse(v)}catch{return null}};
+
+export async function getStats(_req,res){
+  const [[counts]]=await pool.query(`SELECT COUNT(DISTINCT CASE WHEN role='ADMIN' AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' AND deleted_at IS NULL THEN institution_name END) total_institutions,SUM(role='ADMIN' AND deleted_at IS NULL) total_admins,SUM(role='TEACHER' AND deleted_at IS NULL) total_teachers,SUM(role='STUDENT' AND deleted_at IS NULL) total_students FROM users`);
+  const [timeline]=await pool.query(`SELECT DATE_FORMAT(created_at,'%Y-%m') month,COUNT(*) total FROM users WHERE created_at>=DATE_SUB(CURDATE(),INTERVAL 11 MONTH) GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY month`);
+  const [sessionTrend]=await pool.query(`SELECT DATE_FORMAT(COALESCE(ended_at,created_at),'%Y-%m') month,COUNT(*) total FROM sessions WHERE COALESCE(ended_at,created_at)>=DATE_SUB(CURDATE(),INTERVAL 11 MONTH) GROUP BY DATE_FORMAT(COALESCE(ended_at,created_at),'%Y-%m') ORDER BY month`);
+  const [[sessions]]=await pool.query(`SELECT SUM(status='LIVE') active_live,SUM(status='PAUSED') paused_live,SUM(status='ENDED' AND COALESCE(ended_at,created_at)>=DATE_SUB(NOW(),INTERVAL 7 DAY)) completed_week FROM sessions`);
+  res.json({totalInstitutions:n(counts.total_institutions),totalAdmins:n(counts.total_admins),totalTeachers:n(counts.total_teachers),totalStudents:n(counts.total_students),activeLive:n(sessions.active_live),pausedLive:n(sessions.paused_live),completedThisWeek:n(sessions.completed_week),accountTimeline:timeline.map(x=>({month:x.month,total:n(x.total)})),sessionTimeline:sessionTrend.map(x=>({month:x.month,total:n(x.total)})),accountDistribution:[{label:'Admins',value:n(counts.total_admins)},{label:'Teachers',value:n(counts.total_teachers)},{label:'Students',value:n(counts.total_students)}]});
 }
 
-// Overview cards and high-level counts.
-export async function getStats(req, res) {
-  const [[counts]] = await pool.query(
-    `SELECT
-       COUNT(DISTINCT CASE WHEN role = 'ADMIN' AND institution_name IS NOT NULL THEN institution_name END) AS total_institutions,
-       SUM(role = 'ADMIN' AND deleted_at IS NULL) AS total_admins,
-       SUM(role = 'TEACHER' AND deleted_at IS NULL) AS total_teachers
-     FROM users`
-  );
-
-  const [[sessions]] = await pool.query(
-    `SELECT
-       SUM(COALESCE(ended_at, created_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS sessions_this_week,
-       SUM(end_reason = 'TEACHER_DISCONNECTED'
-           AND COALESCE(ended_at, created_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)) AS disconnected_sessions
-     FROM sessions`
-  );
-
-  const [[tabFlags]] = await pool.query(
-    `SELECT COUNT(*) AS flagged_sessions
-     FROM (
-       SELECT te.session_id
-       FROM tab_events te
-       WHERE te.event_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-       GROUP BY te.session_id
-       HAVING COUNT(*) >= 8
-     ) flagged`
-  );
-
-  res.json({
-    totalInstitutions: numberify(counts.total_institutions),
-    totalAdmins: numberify(counts.total_admins),
-    totalTeachers: numberify(counts.total_teachers),
-    sessionsThisWeek: numberify(sessions.sessions_this_week),
-    flaggedIncidents: numberify(sessions.disconnected_sessions) + numberify(tabFlags.flagged_sessions),
-  });
-}
-
-// Institution listing. One admin is surfaced per institution.
-export async function listAccounts(req, res) {
-  const [admins] = await pool.query(
-    `SELECT
-       id, email, first_name, last_name, is_active, contact_number,
-       institution_name, created_at, last_active_at
-     FROM users
-     WHERE role = 'ADMIN'
-       AND deleted_at IS NULL
-       AND institution_name IS NOT NULL
-     ORDER BY institution_name ASC, created_at ASC`
-  );
-
-  const [teachers] = await pool.query(
-    `SELECT
-       id, email, first_name, last_name, is_active, contact_number,
-       institution_name, created_at, last_active_at
-     FROM users
-     WHERE role = 'TEACHER'
-       AND deleted_at IS NULL
-       AND institution_name IS NOT NULL
-     ORDER BY institution_name ASC, last_name ASC, first_name ASC`
-  );
-
-  const [sessionStats] = await pool.query(
-    `SELECT
-       u.institution_name,
-       SUM(COALESCE(s.ended_at, s.created_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS recent_sessions,
-       MAX(COALESCE(s.ended_at, s.created_at)) AS last_activity
-     FROM sessions s
-     JOIN users u ON u.id = s.teacher_id
-     WHERE u.institution_name IS NOT NULL
-     GROUP BY u.institution_name`
-  );
-
-  const sessionMap = Object.fromEntries(
-    sessionStats.map(row => [row.institution_name, row])
-  );
-
-  const institutionMap = {};
-
-  for (const admin of admins) {
-    const inst = admin.institution_name;
-    if (!institutionMap[inst]) {
-      const stat = sessionMap[inst] || {};
-      institutionMap[inst] = {
-        name: inst,
-        admin,
-        teachers: [],
-        teacherCount: 0,
-        recentSessions: numberify(stat.recent_sessions),
-        lastActivity: stat.last_activity || admin.last_active_at || admin.created_at,
-      };
-    }
+export async function listAccounts(_req,res){
+  const [admins]=await pool.query(`SELECT id,email,first_name,last_name,is_active,contact_number,institution_name,created_at,last_active_at FROM users WHERE role='ADMIN' AND deleted_at IS NULL AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' ORDER BY institution_name,created_at`);
+  const [teachers]=await pool.query(`SELECT id,email,first_name,last_name,is_active,contact_number,institution_name,created_at,last_active_at FROM users WHERE role='TEACHER' AND deleted_at IS NULL AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' ORDER BY institution_name,last_name,first_name`);
+  let stats=[];
+  try{
+    [stats]=await pool.query(`SELECT inst.institution_name,COUNT(DISTINCT ce.student_user_id) student_count,COUNT(DISTINCT s.id) sessions_count,MAX(COALESCE(s.ended_at,s.created_at)) last_activity FROM (SELECT DISTINCT institution_name FROM users WHERE institution_name IS NOT NULL AND TRIM(institution_name)<>'' AND deleted_at IS NULL) inst LEFT JOIN users t ON t.institution_name=inst.institution_name AND t.role='TEACHER' AND t.deleted_at IS NULL LEFT JOIN classes c ON c.teacher_id=t.id AND c.deleted_at IS NULL LEFT JOIN class_enrollments ce ON ce.class_id=c.id AND ce.removed_at IS NULL LEFT JOIN sessions s ON s.teacher_id=t.id GROUP BY inst.institution_name`);
+  }catch(error){
+    console.warn('Superadmin institution statistics fallback:',error?.message||error);
   }
-
-  for (const teacher of teachers) {
-    const inst = teacher.institution_name;
-    if (!institutionMap[inst]) {
-      const stat = sessionMap[inst] || {};
-      institutionMap[inst] = {
-        name: inst,
-        admin: null,
-        teachers: [],
-        teacherCount: 0,
-        recentSessions: numberify(stat.recent_sessions),
-        lastActivity: stat.last_activity || teacher.last_active_at || teacher.created_at,
-      };
-    }
-    institutionMap[inst].teachers.push(teacher);
-    institutionMap[inst].teacherCount += 1;
-    institutionMap[inst].lastActivity = institutionMap[inst].lastActivity || teacher.last_active_at || teacher.created_at;
-  }
-
-  const institutions = Object.values(institutionMap).sort((a, b) => a.name.localeCompare(b.name));
-  res.json(institutions);
+  const map={}; const sm=Object.fromEntries(stats.map(x=>[x.institution_name,x]));
+  for(const a of admins){const name=String(a.institution_name||'').trim();if(!name)continue;const x=sm[name]||{};map[name]={name,admin:a,teachers:[],teacherCount:0,studentCount:n(x.student_count),sessionCount:n(x.sessions_count),lastActivity:x.last_activity||a.last_active_at||a.created_at};}
+  for(const t of teachers){const name=String(t.institution_name||'').trim();if(!name)continue;const x=sm[name]||{};map[name] ||= {name,admin:null,teachers:[],teacherCount:0,studentCount:n(x.student_count),sessionCount:n(x.sessions_count),lastActivity:x.last_activity||t.last_active_at||t.created_at};map[name].teachers.push(t);map[name].teacherCount+=1;}
+  res.json(Object.values(map).sort((a,b)=>String(a.name).localeCompare(String(b.name))));
 }
 
-// Existing moderation endpoints are kept for compatibility even if the latest UI no longer surfaces them.
-export async function listPending(req, res) {
-  const [rows] = await pool.query(
-    `SELECT id, role, email, first_name, last_name,
-            contact_number, institution_name, created_at
-     FROM users
-     WHERE approval_status = 'PENDING' AND deleted_at IS NULL
-     ORDER BY created_at ASC`
-  );
-  res.json(rows);
+
+export async function listPending(_req,res){const [rows]=await pool.query(`SELECT id,role,email,first_name,last_name,contact_number,institution_name,created_at FROM users WHERE approval_status='PENDING' AND deleted_at IS NULL ORDER BY created_at`);res.json(rows)}
+export async function approveAccount(req,res){await pool.query(`UPDATE users SET approval_status='APPROVED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});res.json({ok:true})}
+export async function rejectAccount(req,res){await pool.query(`UPDATE users SET approval_status='REJECTED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});res.json({ok:true})}
+export async function setActive(req,res){await pool.query(`UPDATE users SET is_active=:a WHERE id=:id AND deleted_at IS NULL`,{a:req.body?.active?1:0,id:req.params.id});res.json({ok:true})}
+export async function deleteAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id`,{id:req.params.id});await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id`,{id:req.params.id});if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name} ${user.last_name}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({deletedBy:'SUPERADMIN'})})}catch{}}res.json({ok:true})}
+
+export async function getNotifications(req,res){
+  const search=String(req.query.search||"").trim(); const type=String(req.query.type||"ALL").trim();
+  const params={search:`%${search}%`,type};
+  const [rows]=await pool.query(`SELECT id,type,user_id,name,email,role,institution_name,payload_json,status,created_at FROM system_notifications WHERE (:type='ALL' OR type=:type2) AND (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT 250`,{type,type2:type,search:params.search,search2:params.search,search3:params.search,search4:params.search});
+  let legacy=[]; if(type==='ALL'||['USER_REGISTERED','INSTITUTION_SETUP'].includes(type)){try{const [old]=await pool.query(`SELECT id,IF(type='REGISTERED','USER_REGISTERED',type) type,user_id,name,email,role,institution_name,NULL payload_json,'READ' status,created_at FROM activity_log WHERE (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT 100`,{search:params.search,search2:params.search,search3:params.search,search4:params.search});legacy=old}catch{}}
+  res.json([...rows.map(x=>({...x,payload:safeJson(x.payload_json)})),...legacy.map(x=>({...x,payload:null,legacy:true}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,250));
 }
 
-export async function approveAccount(req, res) {
-  await pool.query(
-    `UPDATE users SET approval_status = 'APPROVED' WHERE id = :id AND deleted_at IS NULL`,
-    { id: req.params.id }
-  );
-  res.json({ ok: true });
+export async function reviewApplication(req,res){
+  const id=Number(req.params.id); const decision=String(req.body?.decision||'').toUpperCase(); if(!['APPROVED','DISAPPROVED'].includes(decision))return res.status(400).json({message:'Invalid decision.'});
+  const [[app]]=await pool.query(`SELECT * FROM institution_applications WHERE id=:id`,{id}); if(!app)return res.status(404).json({message:'Application not found.'});
+  await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:uid,reviewed_at=NOW() WHERE id=:id`,{status:decision,uid:req.user.sub,id});
+  await pool.query(`UPDATE system_notifications SET status=:status WHERE type='PLAN_APPLICATION' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.applicationId'))=:idText`,{status:decision,idText:String(id)});
+  res.json({ok:true,status:decision});
 }
 
-export async function rejectAccount(req, res) {
-  await pool.query(
-    `UPDATE users SET approval_status = 'REJECTED' WHERE id = :id AND deleted_at IS NULL`,
-    { id: req.params.id }
-  );
-  res.json({ ok: true });
-}
-
-export async function setActive(req, res) {
-  const active = req.body?.active ? 1 : 0;
-  await pool.query(
-    `UPDATE users SET is_active = :a WHERE id = :id AND deleted_at IS NULL`,
-    { a: active, id: req.params.id }
-  );
-  res.json({ ok: true });
-}
-
-export async function deleteAccount(req, res) {
-  await pool.query(`UPDATE users SET deleted_at = NOW() WHERE id = :id`, { id: req.params.id });
-  res.json({ ok: true });
-}
-
-export async function getNotifications(req, res) {
-  try {
-    const [rows] = await pool.query(
-      `SELECT id, type, user_id, name, email, role, institution_name, created_at
-       FROM activity_log
-       ORDER BY created_at DESC
-       LIMIT 100`
-    );
-    res.json(rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Failed to load notifications." });
-  }
-}
-
-export async function getHealth(req, res) {
-  const [disconnects] = await pool.query(
-    `SELECT
-       s.id,
-       COALESCE(q.title, 'Quiz Session') AS quiz_title,
-       u.institution_name,
-       CONCAT(u.first_name, ' ', u.last_name) AS teacher_name,
-       COALESCE(s.ended_at, s.created_at) AS event_at
-     FROM sessions s
-     JOIN users u ON u.id = s.teacher_id
-     LEFT JOIN quizzes q ON q.id = s.quiz_id
-     WHERE s.end_reason = 'TEACHER_DISCONNECTED'
-     ORDER BY COALESCE(s.ended_at, s.created_at) DESC
-     LIMIT 10`
-  );
-
-  const [tabSwitch] = await pool.query(
-    `SELECT
-       te.session_id,
-       COALESCE(q.title, 'Quiz Session') AS quiz_title,
-       u.institution_name,
-       CONCAT(p.first_name, ' ', p.last_name) AS participant_name,
-       COUNT(*) AS switch_count,
-       MAX(te.event_at) AS event_at
-     FROM tab_events te
-     JOIN session_participants p ON p.id = te.participant_id
-     JOIN sessions s ON s.id = te.session_id
-     JOIN users u ON u.id = s.teacher_id
-     LEFT JOIN quizzes q ON q.id = s.quiz_id
-     GROUP BY te.session_id, te.participant_id
-     HAVING COUNT(*) >= 3
-     ORDER BY switch_count DESC, event_at DESC
-     LIMIT 10`
-  );
-
-  const [inactiveAccounts] = await pool.query(
-    `SELECT
-       id,
-       CONCAT(first_name, ' ', last_name) AS name,
-       email,
-       role,
-       institution_name,
-       updated_at AS event_at
-     FROM users
-     WHERE is_active = 0 AND deleted_at IS NULL
-     ORDER BY updated_at DESC
-     LIMIT 10`
-  );
-
-  res.json({
-    summary: {
-      disconnectCount: disconnects.length,
-      tabSwitchCount: tabSwitch.length,
-      inactiveAccountCount: inactiveAccounts.length,
-    },
-    disconnects,
-    tabSwitch,
-    inactiveAccounts,
-  });
+export async function getHealth(_req,res){
+  const system=getSystemMetrics();
+  let db={connected:true,users:0,sessions:0,classes:0};
+  try{const [[row]]=await pool.query(`SELECT (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) users,(SELECT COUNT(*) FROM sessions) sessions,(SELECT COUNT(*) FROM classes WHERE deleted_at IS NULL) classes`);db={connected:true,users:n(row.users),sessions:n(row.sessions),classes:n(row.classes)}}catch{db.connected=false}
+  res.json({...system,database:db});
 }

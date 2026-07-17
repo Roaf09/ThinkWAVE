@@ -12,470 +12,74 @@ import { QRCodeCanvas } from "qrcode.react";
 import { useTheme } from "../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
 import { normalizeTemplateType } from "../../lib/templateTypes";
+import ThemeIconButton from "../../components/ThemeIconButton";
+import { TwIcon } from "../../components/TwUI";
+import { isInstitutionPlan } from "../../lib/planLimits";
 
 // HostLive is the teacher's live-control screen. It manages session status, question flow, roster/groups, and analytics.
 export default function HostLive() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
+  const [state,setState]=useState(null); const [questions,setQuestions]=useState([]); const [roster,setRoster]=useState([]); const [groups,setGroups]=useState([]); const [scores,setScores]=useState([]);
+  const [msg,setMsg]=useState(""); const [starting,setStarting]=useState(false); const [countdown,setCountdown]=useState(0); const [nowMs,setNowMs]=useState(Date.now()); const [answeredCount,setAnsweredCount]=useState(0); const [clockOffsetMs,setClockOffsetMs]=useState(0);
+  const [confirmAction,setConfirmAction]=useState(null); const [deleteGroupTarget,setDeleteGroupTarget]=useState(null); const [reviewTarget,setReviewTarget]=useState(null); const [kickTarget,setKickTarget]=useState(null); const [allAnsweredPrompt,setAllAnsweredPrompt]=useState(false); const [finishedPrompt,setFinishedPrompt]=useState(false); const [autoNextCount,setAutoNextCount]=useState(5); const [institutionPlan,setInstitutionPlan]=useState(false);
+  const socketRef=useRef(null);
+  const C=dark?{pageBg:"radial-gradient(circle at top left,rgba(43,108,255,.18),transparent 32%),linear-gradient(180deg,#07111f,#0e1733)",cardBg:"rgba(12,23,45,.94)",cardBg2:"rgba(9,19,37,.92)",border:"#203154",text:"#e7e9ee",muted:"#8a9bc4",sub:"#6b7db3",accent:"#2b6cff",headerBg:"#0d1428"}:{pageBg:"radial-gradient(circle at top left,rgba(43,108,255,.15),transparent 34%),linear-gradient(180deg,#f8fbff,#e6eeff)",cardBg:"rgba(255,255,255,.92)",cardBg2:"rgba(241,246,255,.96)",border:"#c8d5f4",text:"#0f172a",muted:"#4b5f92",sub:"#5a6a9a",accent:"#2b6cff",headerBg:"#f5f8ff"};
 
-  const [state, setState] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [roster, setRoster] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [scores, setScores] = useState([]);
-  const [msg, setMsg] = useState("");
-  const [starting, setStarting] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [nowMs, setNowMs] = useState(Date.now());
-  const [answeredCount, setAnsweredCount] = useState(0);
-  const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analytics, setAnalytics] = useState(null);
-  const [tabMonitoring, setTabMonitoring] = useState([]);
-  const [deleteGroupTarget, setDeleteGroupTarget] = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null);
-  const [allAnsweredPrompt, setAllAnsweredPrompt] = useState(false);
-  const [clockOffsetMs, setClockOffsetMs] = useState(0);
-  const socketRef = useRef(null);
+  useEffect(()=>{Promise.all([api.get(`/sessions/${id}/state`),api.get("/auth/me")]).then(([sessionRes,meRes])=>{const data=sessionRes.data;setState(data.session);setQuestions(data.questions||[]);setRoster(data.participants||[]);setGroups(data.groups||[]);setScores(data.scores||[]);setInstitutionPlan(isInstitutionPlan(meRes.data))}).catch(()=>setMsg("Could not load session."));},[id]);
+  useEffect(()=>{const t=setInterval(()=>setNowMs(Date.now()),200);return()=>clearInterval(t)},[]);
+  useEffect(()=>{
+    const s=makeSocket(); socketRef.current=s;
+    s.on("connect",()=>s.emit("teacher:join",{sessionId:Number(id)}));
+    s.on("teacher:error",p=>setMsg(p?.message||"Action could not be completed."));
+    s.on("session:state",p=>{setState(p.state);setQuestions(p.questions||[]);if(p.state?.server_now)setClockOffsetMs(Date.now()-new Date(p.state.server_now).getTime());setAnsweredCount(0);setAllAnsweredPrompt(false);setFinishedPrompt(false);setAutoNextCount(5)});
+    s.on("roster:update",r=>setRoster(r||[])); s.on("groups:update",g=>setGroups(g||[])); s.on("scores:update",sc=>setScores(sc||[])); s.on("answer:received",()=>setAnsweredCount(v=>v+1));
+    s.on("tab:updated",({participantId,count})=>setRoster(rows=>rows.map(row=>Number(row.id)===Number(participantId)?{...row,tab_out_count:count}:row)));
+    s.on("antiCheat:review",payload=>setReviewTarget(payload));
+    const hb=setInterval(()=>s.emit("teacher:heartbeat",{sessionId:Number(id)}),5000);
+    return()=>{clearInterval(hb);s.disconnect()};
+  },[id]);
 
-  const C = dark ? {
-    pageBg: "radial-gradient(circle at top left, rgba(43,108,255,0.18), transparent 32%), radial-gradient(circle at bottom right, rgba(34,197,94,0.10), transparent 26%), linear-gradient(180deg, #07111f 0%, #0b1530 46%, #0e1733 100%)", cardBg: "rgba(12, 23, 45, 0.92)", cardBg2: "rgba(9, 19, 37, 0.9)", border: "#203154",
-    text: "#e7e9ee", muted: "#8a9bc4", sub: "#6b7db3", accent: "#2b6cff", headerBg: "#0d1428",
-  } : {
-    pageBg: "radial-gradient(circle at top left, rgba(43,108,255,0.15), transparent 34%), radial-gradient(circle at bottom right, rgba(56,189,248,0.12), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #edf4ff 48%, #e6eeff 100%)", cardBg: "rgba(255,255,255,0.88)", cardBg2: "rgba(241,246,255,0.92)", border: "#c8d5f4",
-    text: "#0f172a", muted: "#4b5f92", sub: "#5a6a9a", accent: "#2b6cff", headerBg: "#f5f8ff",
-  };
+  const currentQ=useMemo(()=>state?questions[state.current_question_index||0]||null:null,[state,questions]);
+  const isEnded=state?.status==="ENDED"; const isLive=state?.status==="LIVE"; const joinMode=state?.join_mode||"SOLO"; const connectedStudents=roster.filter(p=>p.connected&&!p.kicked_at).length;
+  const unassignedStudents=roster.filter(p=>!p.group_id&&!p.kicked_at); const groupsLocked=state?.status!=="LOBBY"; const canStartGroup=joinMode!=="GROUP"||(groups.length>0&&unassignedStudents.length===0); const isLastQuestion=!!state&&Number(state.current_question_index||0)>=Math.max(0,questions.length-1);
+  const expectedAnswerCount=joinMode==="GROUP"?groups.filter(g=>(g.members||[]).some(m=>Number(m.connected)===1)).length:connectedStudents;
+  useEffect(()=>{if(!isLive||expectedAnswerCount<=0||answeredCount<expectedAnswerCount)return;if(isLastQuestion)setFinishedPrompt(true);else{setAutoNextCount(5);setAllAnsweredPrompt(true)}},[answeredCount,expectedAnswerCount,isLive,isLastQuestion]);
+  useEffect(()=>{if(!allAnsweredPrompt)return;if(autoNextCount<=0){setAllAnsweredPrompt(false);next();return}const t=setTimeout(()=>setAutoNextCount(v=>v-1),1000);return()=>clearTimeout(t)},[allAnsweredPrompt,autoNextCount]);
 
-  async function loadInitial() {
-    const { data } = await api.get(`/sessions/${id}/state`);
-    setState(data.session);
-    setQuestions(data.questions || []);
-    setRoster(data.participants || []);
-    setGroups(data.groups || []);
-    setScores(data.scores || []);
-  }
+  const timer=useMemo(()=>{const total=Number(currentQ?.config_json?.timeLimitSec||state?.time_limit_sec||0);if(!currentQ||!isLive)return{remainingSec:0,progress:0,total};const deadline=state?.question_deadline_at?new Date(state.question_deadline_at).getTime():state?.question_started_at?new Date(state.question_started_at).getTime()+total*1000:0;const remaining=Math.max(0,Math.ceil((deadline-(nowMs-clockOffsetMs))/1000));return{remainingSec:remaining,progress:total?remaining/total:0,total}},[currentQ,state,isLive,nowMs,clockOffsetMs]);
 
-  async function loadAnalytics() {
-    setAnalyticsLoading(true);
-    try {
-      const [full, tabs] = await Promise.all([
-        api.get(`/sessions/${id}/full-analytics`),
-        api.get(`/sessions/${id}/tab-monitoring`),
-      ]);
-      setAnalytics(full.data);
-      setTabMonitoring(tabs.data || []);
-    } catch {
-      setMsg("Could not load analytics.");
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  }
+  async function startWithCountdown(){if(starting)return;if(joinMode==="GROUP"&&!canStartGroup){setMsg("Create groups and assign all joined students before starting.");return}setStarting(true);for(let i=3;i>=1;i--){setCountdown(i);await new Promise(r=>setTimeout(r,1000))}setCountdown(0);socketRef.current?.emit("teacher:setStatus",{sessionId:Number(id),status:"LIVE"});setStarting(false)}
+  function next(){if(!isLive||isLastQuestion)return;socketRef.current?.emit("teacher:nextQuestion",{sessionId:Number(id)})}
+  async function runConfirmedAction(){const kind=confirmAction;setConfirmAction(null);if(kind==="toggle"){if(state.status==="LIVE")socketRef.current?.emit("teacher:setStatus",{sessionId:Number(id),status:"PAUSED"});else await startWithCountdown()}if(kind==="end")socketRef.current?.emit("teacher:setStatus",{sessionId:Number(id),status:"ENDED"})}
+  function allowStudent(){if(!reviewTarget)return;socketRef.current?.emit("teacher:allowStudent",{sessionId:Number(id),participantId:reviewTarget.participantId});setReviewTarget(null)}
+  function kickStudent(target){socketRef.current?.emit("teacher:kickStudent",{sessionId:Number(id),participantId:target.participantId||target.id});setReviewTarget(null);setKickTarget(null)}
+  async function download(format){if(!isEnded)return;try{const resp=await api.get(`/analytics/sessions/${id}/export/${format}`,{responseType:"blob"});const url=URL.createObjectURL(resp.data);const a=document.createElement("a");a.href=url;a.download=`session-${id}-records.${format}`;a.click();URL.revokeObjectURL(url)}catch{setMsg("Export failed.")}}
+  if(!state)return <div style={{minHeight:"100vh",background:C.pageBg,display:"grid",placeItems:"center",color:C.muted}}>Loading session…</div>;
+  const toggleLabel=starting?`Starting in ${countdown}…`:state.status==="LIVE"?"Pause":state.status==="PAUSED"?"Resume":"Start";
 
-  useEffect(() => { loadInitial().catch(() => setMsg("Could not load session.")); }, [id]);
-  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 200); return () => clearInterval(t); }, []);
-  useEffect(() => {
-    if (analyticsOpen && state?.status === "ENDED" && !analytics && !analyticsLoading) loadAnalytics();
-  }, [analyticsOpen, state?.status]);
+  return <div className="tw-host-live" style={{minHeight:"100vh",background:C.pageBg,fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text}}>
+    <header className="tw-host-header" style={{background:C.headerBg,borderColor:C.border}}><div><div className="tw-host-brand"><span>Think</span><span>WAVE</span><small>Host Panel</small></div><div className="tw-host-status"><StatusPill label={state.status} kind={isLive?"green":isEnded?"neutral":"yellow"}/><StatusPill label={joinMode==="GROUP"?"Group Mode":"Solo Mode"} kind="blue"/>{state.max_participants?<StatusPill label={`Capacity ${state.max_participants}`} kind="blue"/>:null}{msg?<span>{msg}</span>:null}</div></div><div className="tw-host-actions"><ThemeIconButton dark={dark} onClick={toggleTheme} style={btnStyle(C,"ghost")}/>{isEnded?<button onClick={()=>navigate("/teacher",{state:{tab:"home"}})} style={btnStyle(C,"secondary")}><TwIcon name="home" size={17}/> Dashboard</button>:<><button onClick={()=>setConfirmAction("toggle")} disabled={starting} style={btnStyle(C,"primary")}><TwIcon name={state.status==="LIVE"?"pause":"play"} size={17}/>{toggleLabel}</button><button onClick={()=>setConfirmAction("end")} style={btnStyle(C,"danger")}><TwIcon name="stop" size={17}/> End</button></>}</div></header>
 
-  // Host socket subscription keeps the panel synchronized with the backend source of truth.
-  useEffect(() => {
-    const s = makeSocket();
-    socketRef.current = s;
-    s.on("connect", () => s.emit("teacher:join", { sessionId: Number(id), token: "" }));
-    s.on("teacher:joined", () => setMsg("Connected."));
-    s.on("teacher:error", (p) => setMsg(p?.message || "Action could not be completed."));
-    s.on("session:state", (p) => {
-      setState(p.state);
-      setQuestions(p.questions || []);
-      if (p.state?.server_now) setClockOffsetMs(Date.now() - new Date(p.state.server_now).getTime());
-      setAnsweredCount(0);
-      setAllAnsweredPrompt(false);
-      if (p.state?.status === "ENDED") setAnalytics(null);
-    });
-    s.on("roster:update", (r) => setRoster(r || []));
-    s.on("groups:update", (g) => setGroups(g || []));
-    s.on("scores:update", (sc) => setScores(sc || []));
-    s.on("answer:received", () => setAnsweredCount((v) => v + 1));
-    const hb = setInterval(() => s.emit("teacher:heartbeat", { sessionId: Number(id) }), 5000);
-    return () => { clearInterval(hb); s.disconnect(); };
-  }, [id]);
+    <main className="tw-host-main">
+      {!isEnded&&<section style={{...card(C),padding:0,overflow:"hidden"}}><div className="tw-host-question-head"><div className="qn-subject">{state.quiz_title||"ThinkWAVE"}</div><div><StatusPill label={`${answeredCount}/${expectedAnswerCount} answered`} kind="blue"/><StatusPill label={fmtTime(timer.remainingSec)} kind={timer.remainingSec<=5&&isLive?"red":"neutral"}/></div></div><div className="tw-host-progress" style={{background:C.border}}><div style={{width:`${Math.round(timer.progress*100)}%`,background:timer.remainingSec<=5?"#ef4444":C.accent}}/></div><div className="tw-host-question-body"><div className="tw-host-question-row"><span>{state.template_type==="MATCHING"?"Batch":"Question"} {(state.current_question_index||0)+1} / {questions.length}</span><button className={`tw-host-next ${isLastQuestion?"is-hidden":""}`} onClick={()=>next()} disabled={!isLive||isLastQuestion} style={btnStyle(C,"primary")}><TwIcon name="arrowRight" size={17}/> Next</button><div><StatusPill label={`${currentQ?.config_json?.timeLimitSec||state.time_limit_sec||30}s`} kind="blue"/><StatusPill label={`${currentQ?.config_json?.points||1} pts`} kind="yellow"/></div></div>{currentQ?<><div className="tw-host-prompt" style={{background:C.cardBg2,borderColor:C.border}}>{currentQ?.config_json?.showPromptImage!==false&&currentQ?.config_json?.promptImage?<img src={currentQ.config_json.promptImage} alt=""/>:null}<div>{currentQ.prompt}</div></div><QuestionPreview q={currentQ} templateType={normalizeTemplateType(state.template_type)} C={C}/></>:<div style={{padding:30,textAlign:"center",color:C.muted}}>You have reached the end.</div>}</div></section>}
 
-  const currentQ = useMemo(() => state ? questions[state.current_question_index || 0] || null : null, [state, questions]);
-  const stepLabel = state?.template_type === "MATCHING" ? "Batch" : "Question";
-  const isEnded = state?.status === "ENDED";
-  const isLive = state?.status === "LIVE";
-  const groupsLocked = state?.status !== "LOBBY";
-  const joinMode = state?.join_mode || "SOLO";
-  const connectedStudents = roster.filter((p) => p.connected).length;
-  const unassignedStudents = roster.filter((p) => !p.group_id);
-  const canStartGroup = joinMode !== "GROUP" || (groups.length > 0 && unassignedStudents.length === 0);
-  const isLastQuestion = !!state && Number(state.current_question_index || 0) >= Math.max(0, questions.length - 1);
-  const expectedAnswerCount = joinMode === 'GROUP'
-    ? groups.filter((g) => (g.members || []).some((m) => Number(m.connected) === 1)).length
-    : connectedStudents;
+      <section style={card(C)}><div className="tw-host-section-title"><h3><TwIcon name="trophy" size={21}/>{isEnded?"Scores":"Live Scores"}</h3><div><button onClick={()=>navigate(`/teacher/analytics/${id}`)} style={btnStyle(C,"ghost")}><TwIcon name="analytics" size={16}/> Open Analytics</button>{institutionPlan?<><button onClick={()=>download("pdf")} disabled={!isEnded} style={{...btnStyle(C,"ghost"),opacity:isEnded?1:.45}}><TwIcon name="download" size={16}/> PDF</button><button onClick={()=>download("xlsx")} disabled={!isEnded} style={{...btnStyle(C,"ghost"),opacity:isEnded?1:.45}}><TwIcon name="download" size={16}/> XLSX</button></>:null}</div></div><div className="tw-host-score-list">{scores.length?scores.map((score,index)=><div key={score.participant_id} style={{background:index===0?"rgba(251,191,36,.08)":C.cardBg2,borderColor:C.border}}><span className="tw-host-rank">#{index+1}</span><strong>{joinMode==="GROUP"?(score.group_name||`${score.first_name} ${score.last_name}`):`${score.first_name} ${score.last_name}`}</strong><b>{score.total_points} pts</b></div>):<p style={{color:C.muted,textAlign:"center"}}>No answers yet.</p>}</div></section>
 
-  useEffect(() => {
-    if (isLive && !isLastQuestion && expectedAnswerCount > 0 && answeredCount >= expectedAnswerCount) setAllAnsweredPrompt(true);
-  }, [answeredCount, expectedAnswerCount, isLive, isLastQuestion]);
+      {!isEnded&&<div className="tw-host-lower-grid"><section style={card(C)}><div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> Students</h3>{joinMode==="GROUP"?<button disabled={groupsLocked} onClick={()=>socketRef.current?.emit("teacher:addGroup",{sessionId:Number(id)})} style={{...btnStyle(C,"ghost"),opacity:groupsLocked?.5:1}}><TwIcon name="plus" size={16}/> Add Group</button>:null}</div><div className="tw-host-student-list">{roster.filter(p=>!p.kicked_at).map(p=><div key={p.id} style={{background:C.cardBg2,borderColor:C.border}}><div><strong>{p.first_name} {p.last_name}</strong><small>{p.connected?"Online":"Offline"} · Tab outs: {Number(p.tab_out_count||0)}</small></div>{Number(p.tab_out_count||0)>=2?<button onClick={()=>setKickTarget(p)} style={btnStyle(C,"danger")}><TwIcon name="logout" size={15}/> Kick</button>:null}</div>)}{!roster.length?<p style={{color:C.muted,textAlign:"center"}}>No students yet.</p>:null}</div>{joinMode==="GROUP"?<div className="tw-host-group-list"><div style={{...card(C),background:C.cardBg2,boxShadow:"none"}}><b>Waiting for assignment</b><div>{unassignedStudents.map(p=><StudentChip key={p.id} name={`${p.first_name} ${p.last_name}`.trim()} connected={p.connected} C={C}/>)}</div></div>{groups.map(group=><div key={group.id} style={{...card(C),background:C.cardBg2,boxShadow:"none"}}><div className="tw-host-section-title"><div><b>{group.display_name}</b><small>{group.members?.length||0} members</small></div><button disabled={groupsLocked} onClick={()=>setDeleteGroupTarget(group)} style={{...btnStyle(C,"ghost"),opacity:groupsLocked?.45:1}}><TwIcon name="trash" size={15}/></button></div><div>{group.members?.map(member=><StudentChip key={member.id} name={`${member.first_name} ${member.last_name}`.trim()} connected={member.connected} C={C}/>)}</div></div>)}</div>:null}</section>
+      <section style={card(C)}><h3 style={{margin:"0 0 10px",display:"flex",gap:8,alignItems:"center"}}><TwIcon name="link" size={21}/> Guest Join</h3><p style={{color:C.muted}}>Share the QR code or join code with guests.</p><div className="tw-host-qr"><div><QRCodeCanvas value={`${window.location.origin}/play?code=${state.join_code||""}`} size={160}/></div></div><div className="tw-host-code" style={{background:C.cardBg2,borderColor:C.border}}><small>Join Code</small><strong>{state.join_code||"—"}</strong></div></section></div>}
+    </main>
 
-  const timer = useMemo(() => {
-    const total = Number(currentQ?.config_json?.timeLimitSec || currentQ?.timeLimitSec || state?.time_limit_sec || 0);
-    if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
-    if (state?.question_deadline_at) {
-      const serverNowMs = nowMs - clockOffsetMs;
-      const remainingMs = Math.max(0, new Date(state.question_deadline_at).getTime() - serverNowMs);
-      const remaining = Math.ceil(remainingMs / 1000);
-      return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
-    }
-    if (!state?.question_started_at) return { remainingSec: 0, progress: 0, total };
-    const started = new Date(state.question_started_at).getTime();
-    const elapsed = Math.max(0, Math.floor((nowMs - started) / 1000));
-    const remaining = Math.max(0, total - elapsed);
-    return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
-  }, [state, nowMs, currentQ, clockOffsetMs]);
-
-  // Host-side countdown gives the class a short buffer before the live question timer begins.
-  async function startWithCountdown() {
-    if (starting) return;
-    if (joinMode === "GROUP" && !canStartGroup) {
-      setMsg("Create groups and assign all joined students before starting.");
-      return;
-    }
-    setStarting(true);
-    for (let i = 3; i >= 1; i--) {
-      setCountdown(i);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    setCountdown(0);
-    socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "LIVE" });
-    setStarting(false);
-  }
-
-  function next() {
-    if (!isLive || isLastQuestion) return;
-    socketRef.current?.emit("teacher:nextQuestion", { sessionId: Number(id) });
-  }
-
-  function requestDeleteGroup(group) {
-    setDeleteGroupTarget(group);
-  }
-
-  function confirmDeleteGroup() {
-    if (!deleteGroupTarget) return;
-    socketRef.current?.emit("teacher:deleteGroup", { sessionId: Number(id), groupId: deleteGroupTarget.id });
-    setDeleteGroupTarget(null);
-  }
-
-  function queueConfirm(kind) {
-    setConfirmAction(kind);
-  }
-
-  async function runConfirmedAction() {
-    const kind = confirmAction;
-    setConfirmAction(null);
-    if (kind === 'start') await startWithCountdown();
-    if (kind === 'pause') socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "PAUSED" });
-    if (kind === 'next') next();
-    if (kind === 'end') socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "ENDED" });
-  }
-
-  async function download(format) {
-    if (!isEnded) return;
-    try {
-      const resp = await api.get(`/analytics/sessions/${id}/export/${format}`, { responseType: "blob" });
-      const mime = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-      const url = URL.createObjectURL(new Blob([resp.data], { type: mime }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `session-${id}-records.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setMsg("Export failed.");
-    }
-  }
-
-  if (!state) return <div style={{ minHeight: "100vh", background: C.pageBg, display: "grid", placeItems: "center", color: C.muted }}>Loading session…</div>;
-
-  return (
-    <div style={{ minHeight: "100vh", background: C.pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.35s" }}>
-      <div style={{ background: C.headerBg, borderBottom: `1px solid ${C.border}`, padding: "16px 26px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", position: "sticky", top: 0, zIndex: 10 }}>
-        <div>
-          <div style={{ color: C.text, fontWeight: 900, fontSize: 18 }}><span>Think</span><span style={{ color: C.accent }}>WAVE</span><span style={{ marginLeft: 10, fontSize: 13, color: C.muted, fontWeight: 700 }}>Host Panel</span></div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: C.muted }}>Session #{state.id}</span>
-            <StatusPill label={state.status} kind={state.status === "LIVE" ? "green" : state.status === "ENDED" ? "neutral" : "yellow"} />
-            <StatusPill label={joinMode === "GROUP" ? "👥 Group Mode" : "👤 Solo Mode"} kind="blue" />
-            <StatusPill
-              label={`👨‍🎓 ${connectedStudents}${roster.length > connectedStudents ? `/${roster.length}` : ""} joined`}
-              kind={connectedStudents > 0 ? "green" : "neutral"}
-            />
-            {state.max_participants ? <StatusPill label={`Cap ${state.max_participants}`} kind="blue" /> : null}
-            {msg && <span style={{ fontSize: 11, color: C.sub }}>· {msg}</span>}
-            {state.teacher_disconnected_deadline ? <span style={{ fontSize: 11, color: '#f59e0b' }}>· reconnect before {new Date(state.teacher_disconnected_deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={toggleTheme} style={btnStyle(C, "ghost")}>{dark ? "☀️ Light" : "🌙 Dark"}</button>
-          {isEnded ? (
-            <button onClick={() => navigate("/teacher")} style={btnStyle(C, "secondary")}>← Dashboard</button>
-          ) : (
-            <>
-              <button onClick={() => queueConfirm('start')} disabled={starting} style={{ ...btnStyle(C, "primary"), opacity: starting ? 0.8 : 1 }}>{starting ? `Starting in ${countdown}…` : state.status === "LIVE" ? "🔄 Restart" : "▶ Start / Resume"}</button>
-              <button onClick={() => queueConfirm('pause')} style={btnStyle(C, "secondary")}>⏸ Pause</button>
-              <button onClick={() => queueConfirm('end')} style={btnStyle(C, "danger")}>⏹ End</button>
-              <button onClick={() => queueConfirm('next')} disabled={!isLive || isLastQuestion} style={{ ...btnStyle(C, "primary"), opacity: (!isLive || isLastQuestion) ? 0.45 : 1, cursor: (!isLive || isLastQuestion) ? "not-allowed" : "pointer" }}>{isLastQuestion ? "End Reached" : "Next →"}</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: isEnded ? 1380 : 1160, margin: "0 auto", padding: "24px 20px 48px", display: "grid", gridTemplateColumns: isEnded ? "1fr" : "1.25fr 0.95fr", gap: 20, alignItems: isEnded ? "start" : "stretch" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ maxHeight: isEnded ? 0 : 620, opacity: isEnded ? 0 : 1, overflow: "hidden", transform: isEnded ? "translateY(-18px)" : "translateY(0)", transition: "max-height 420ms cubic-bezier(0.22,1,0.36,1), opacity 320ms ease, transform 320ms ease" }}>
-            <div style={{ ...card(C), padding: 0, overflow: "hidden" }}>
-              <div style={{ background: dark ? "#0d1428" : "#1e2d55", padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
-                <div className="qn-subject" style={{ color: "#fff", fontSize: 17 }}>{state.quiz_title || "ThinkWAVE"}</div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <StatusPill label={`✍ ${answeredCount}/${joinMode === "GROUP" ? Math.max(groups.length, 0) : connectedStudents}`} kind="blue" />
-                  <StatusPill label={`⏱ ${fmtTime(timer.remainingSec ?? 0)}`} kind={(timer.remainingSec ?? 999) <= 5 && isLive ? "red" : "neutral"} />
-                </div>
-              </div>
-              <div style={{ height: 6, background: C.border }}><div style={{ height: "100%", width: `${Math.round((timer.progress || 0) * 100)}%`, background: (timer.remainingSec ?? 999) <= 5 ? "#ef4444" : C.accent, transition: "width 0.2s linear, background 0.3s" }} /></div>
-              <div style={{ padding: "22px 22px 20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-                  <span style={{ color: C.muted, fontSize: 13, fontWeight: 800 }}>{stepLabel} {(state.current_question_index || 0) + 1} / {questions.length}</span>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <StatusPill label={`⏱ ${currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 30}s`} kind="blue" />
-                    <StatusPill label={`⭐ ${currentQ?.config_json?.points || 1} pts`} kind="yellow" />
-                  </div>
-                </div>
-                {currentQ ? (
-                  <>
-                    <div style={{ background: dark ? "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))" : "linear-gradient(135deg, rgba(255,255,255,0.96), rgba(237,243,255,0.95))", borderRadius: 22, padding: "34px 22px", border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : C.border}`, marginBottom: 18 }}>
-                      <div style={{ display: "grid", gap: 12, justifyItems: "center", textAlign: "center" }}>
-                        {currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 16, objectFit: "contain" }} /> : null}
-                        <div style={{ fontSize: 20, fontWeight: 900, color: C.text, lineHeight: 1.6 }}>{currentQ.prompt}</div>
-                      </div>
-                    </div>
-                    <QuestionPreview q={currentQ} templateType={normalizeTemplateType(state.template_type)} C={C} />
-                  </>
-                ) : (
-                  <div style={{ padding: 28, color: C.muted, textAlign: "center", fontWeight: 800 }}>You have reached the end.</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ ...card(C), transition: "transform 320ms ease, max-width 320ms ease", transform: isEnded ? "translateY(-8px)" : "translateY(0)", maxWidth: isEnded ? 1240 : "100%", margin: isEnded ? "0 auto" : "0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0, color: C.text, fontWeight: 900 }}>🏆 Live Scores</h3>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => isEnded && setAnalyticsOpen((v) => !v)} disabled={!isEnded} style={{ ...btnStyle(C, "ghost"), opacity: isEnded ? 1 : 0.5, cursor: isEnded ? "pointer" : "not-allowed" }}>{analyticsOpen ? "Hide Analytics" : "Open Analytics"}</button>
-                <button onClick={() => download("pdf")} disabled={!isEnded} style={{ ...btnStyle(C, "ghost"), opacity: isEnded ? 1 : 0.5, cursor: isEnded ? "pointer" : "not-allowed" }}>⬇ PDF</button>
-                <button onClick={() => download("xlsx")} disabled={!isEnded} style={{ ...btnStyle(C, "ghost"), opacity: isEnded ? 1 : 0.5, cursor: isEnded ? "pointer" : "not-allowed" }}>⬇ Excel</button>
-              </div>
-            </div>
-            {analyticsOpen && isEnded ? (
-              <div style={{ display: "grid", gap: 16, marginTop: 8 }}>
-                {/* Revision 1: ended-session analytics starts with quiz title, then template, folder, and date. */}
-                <div style={{ padding: "12px 14px", borderRadius: 16, background: C.cardBg2, border: `1px solid ${C.border}` }}>
-                  <h3 style={{ margin: "0 0 4px", color: C.text, fontWeight: 900 }}>{analytics?.session?.quiz_title || state.quiz_title || "Untitled Quiz"}</h3>
-                  <div style={{ color: C.muted, fontSize: 13, fontWeight: 700 }}>
-                    Session Analytics · {analytics?.session?.template_label || analytics?.session?.template_type || state.template_type || "Template"} · {analytics?.session?.folder_name || "Unassigned"} · {analytics?.session?.display_date || "No date"}
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,0.72fr) minmax(420px,1.28fr)", gap: 18, alignItems: "start" }}>
-                  <div>
-                  {scores.length === 0 ? <p style={{ color: C.muted, textAlign: "center", fontSize: 14 }}>No answers yet.</p> : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {scores.map((s, i) => (
-                        <div key={s.participant_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 12, background: i === 0 ? "rgba(251,191,36,0.07)" : "transparent", border: `1px solid ${i === 0 ? "rgba(251,191,36,0.2)" : C.border}` }}>
-                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                            <span style={{ width: 24 }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
-                            <span style={{ color: C.text, fontWeight: 700 }}>{joinMode === "GROUP" ? (s.group_name || `${s.first_name} ${s.last_name}`) : `${s.first_name} ${s.last_name}`}</span>
-                          </div>
-                          <span style={{ color: C.accent, fontWeight: 900 }}>{s.total_points} pts</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div style={{ alignSelf: "center" }}>
-                  {analyticsLoading ? <div style={{ color: C.muted, fontWeight: 700 }}>Loading analytics…</div> : analytics && (
-                    <AnalyticsPanel C={C} analytics={analytics} tabMonitoring={tabMonitoring} joinMode={joinMode} />
-                  )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                {scores.length === 0 ? <p style={{ color: C.muted, textAlign: "center", fontSize: 14 }}>No answers yet.</p> : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {scores.map((s, i) => (
-                      <div key={s.participant_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 12, background: i === 0 ? "rgba(251,191,36,0.07)" : "transparent", border: `1px solid ${i === 0 ? "rgba(251,191,36,0.2)" : C.border}` }}>
-                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          <span style={{ width: 24 }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
-                          <span style={{ color: C.text, fontWeight: 700 }}>{joinMode === "GROUP" ? (s.group_name || `${s.first_name} ${s.last_name}`) : `${s.first_name} ${s.last_name}`}</span>
-                        </div>
-                        <span style={{ color: C.accent, fontWeight: 900 }}>{s.total_points} pts</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ maxHeight: isEnded ? 0 : 1400, opacity: isEnded ? 0 : 1, overflow: "hidden", transform: isEnded ? "translateY(-18px)" : "translateY(0)", transition: "max-height 420ms cubic-bezier(0.22,1,0.36,1), opacity 320ms ease, transform 320ms ease" }}>
-          <div style={card(C)}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <h3 style={{ margin: 0, color: C.text, fontWeight: 900 }}>👥 Students</h3>
-                <StatusPill
-                  label={`${connectedStudents} online${roster.length > connectedStudents ? ` · ${roster.length - connectedStudents} offline` : ""}`}
-                  kind={connectedStudents > 0 ? "green" : "neutral"}
-                />
-                {roster.length > 0 && (
-                  <span style={{ fontSize: 12, color: C.muted, fontWeight: 700 }}>
-                    {roster.length} total
-                  </span>
-                )}
-              </div>
-              {joinMode === "GROUP" && !isEnded && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", opacity: groupsLocked ? 0.45 : 1, transition: "opacity 240ms ease" }}>
-                  <button onClick={() => !groupsLocked && socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} disabled={groupsLocked} style={{ ...btnStyle(C, "ghost"), cursor: groupsLocked ? "not-allowed" : "pointer" }}>＋ Add Group</button>
-                </div>
-              )}
-            </div>
-            {joinMode === "GROUP" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ ...card(C), padding: 14, boxShadow: "none", background: C.cardBg2 }}>
-                  <div style={{ fontSize: 12, color: C.sub, fontWeight: 800, textTransform: "uppercase", marginBottom: 8 }}>Waiting for assignment</div>
-                  {unassignedStudents.length === 0 ? <p style={{ margin: 0, color: C.muted, fontSize: 13 }}>Everyone who joined is already in a group.</p> : (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {unassignedStudents.map((p) => <StudentChip key={p.id} name={`${p.first_name} ${p.last_name}`.trim()} connected={p.connected} C={C} />)}
-                    </div>
-                  )}
-                </div>
-                {groups.length === 0 && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>No groups yet. Add a group so students can join one in real time.</p>}
-                {groups.map((group) => (
-                  <div key={group.id} style={{ ...card(C), padding: 14, boxShadow: "none", background: C.cardBg2 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                      <div>
-                        <div style={{ color: C.text, fontWeight: 900 }}>{group.display_name}</div>
-                        <div style={{ color: C.muted, fontSize: 12 }}>{group.default_name}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <StatusPill label={`${group.members?.length || 0} members`} kind="blue" />
-                        {!isEnded && <button onClick={() => requestDeleteGroup(group)} disabled={groupsLocked} style={{ ...btnStyle(C, "ghost"), padding: "8px 12px", opacity: groupsLocked ? 0.4 : 1, cursor: groupsLocked ? "not-allowed" : "pointer" }}>Delete</button>}
-                      </div>
-                    </div>
-                    {group.members?.length ? (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {group.members.map((member) => <StudentChip key={member.id} name={`${member.first_name} ${member.last_name}`.trim()} connected={member.connected} C={C} />)}
-                      </div>
-                    ) : <p style={{ margin: 0, color: C.muted, fontSize: 13 }}>Waiting for students to join this group.</p>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
-                {roster.map((p) => (
-                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, background: C.cardBg2, border: `1px solid ${C.border}` }}>
-                    <span style={{ color: C.text, fontSize: 14, fontWeight: 700 }}>{p.first_name} {p.last_name}</span>
-                    <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: p.connected ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.1)", color: p.connected ? "#22c55e" : "#64748b" }}>{p.connected ? "● Online" : "○ Offline"}</span>
-                  </div>
-                ))}
-                {roster.length === 0 && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>No students yet.</p>}
-              </div>
-            )}
-          </div>
-          </div>
-
-          <div style={{ maxHeight: isEnded ? 0 : 900, opacity: isEnded ? 0 : 1, overflow: "hidden", transform: isEnded ? "translateY(-18px)" : "translateY(0)", transition: "max-height 420ms cubic-bezier(0.22,1,0.36,1), opacity 320ms ease, transform 320ms ease" }}>
-          <div style={card(C)}>
-            <h3 style={{ margin: "0 0 12px", color: C.text, fontWeight: 900 }}>🔗 Student Join</h3>
-            <p style={{ color: C.muted, fontSize: 13, margin: "0 0 16px" }}>
-              Share the QR code or join code with students. {joinMode === "GROUP" ? "They will wait for teacher-created groups, then choose one in real time." : "They will join the solo waiting roster immediately."}
-            </p>
-            <div style={{ background: "white", padding: 12, borderRadius: 16, display: "inline-block", marginBottom: 14 }}>
-              <QRCodeCanvas value={`${window.location.origin}/play?code=${state.join_code || ""}`} size={140} />
-            </div>
-            <div style={{ padding: "12px 20px", borderRadius: 14, background: C.cardBg2, border: `1px solid ${C.border}`, textAlign: "center" }}>
-              <div style={{ color: C.sub, fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Join Code</div>
-              <div style={{ color: C.text, fontSize: 28, fontWeight: 900, letterSpacing: "0.25em" }}>{state.join_code || "—"}</div>
-            </div>
-          </div>
-          </div>
-        </div>
-      </div>
-
-      <ActionDialog
-        open={!!confirmAction}
-        tone={confirmAction === 'end' ? 'red' : 'blue'}
-        icon={confirmAction === 'start' ? '▶' : confirmAction === 'pause' ? '⏸' : confirmAction === 'next' ? '⏭' : '⏹'}
-        title={confirmAction === 'start' ? (state.status === 'LIVE' ? 'Restart session?' : 'Start or resume session?') : confirmAction === 'pause' ? 'Pause session?' : confirmAction === 'next' ? (isLastQuestion ? 'End reached' : 'Go to next question?') : 'End session?'}
-        message={confirmAction === 'start'
-          ? (joinMode === 'GROUP' && !canStartGroup ? 'Create groups and assign all joined students before starting.' : 'This will begin the live countdown and move the session into the current question.')
-          : confirmAction === 'pause'
-            ? 'Students will stop progressing until you resume the session.'
-            : confirmAction === 'next'
-              ? 'This will close the current question and move everyone to the next one.'
-              : 'This will finish the live session, save the analytics, and show the final results.'}
-        onClose={() => setConfirmAction(null)}
-        actions={(<>
-          <button onClick={() => setConfirmAction(null)} style={secondaryBtn(C, dark)}>Cancel</button>
-          <button
-            onClick={runConfirmedAction}
-            disabled={confirmAction === 'start' && joinMode === 'GROUP' && !canStartGroup}
-            style={{
-              ...(confirmAction === 'end'
-                ? primaryBtn({ bg: '#fee2e2', fg: '#dc2626', border: '#fca5a5' })
-                : primaryBtn({ bg: dark ? '#1d4ed8' : '#dbeafe', fg: dark ? '#eff6ff' : '#1d4ed8', border: dark ? '#3b82f6' : '#93c5fd' })),
-              opacity: (confirmAction === 'start' && joinMode === 'GROUP' && !canStartGroup) ? 0.55 : 1,
-              cursor: (confirmAction === 'start' && joinMode === 'GROUP' && !canStartGroup) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {confirmAction === 'start' ? 'Start' : confirmAction === 'pause' ? 'Pause' : confirmAction === 'next' ? 'Next question' : 'End session'}
-          </button>
-        </>)}
-      />
-
-      <ActionDialog
-        open={allAnsweredPrompt}
-        tone="blue"
-        icon="✅"
-        title="Everyone has answered"
-        message={isLastQuestion ? 'All connected participants have answered the last question. You can wait or end the session when ready.' : 'All connected participants have answered the current question. You can keep waiting or move to the next question now.'}
-        onClose={() => setAllAnsweredPrompt(false)}
-        actions={(<>
-          <button onClick={() => setAllAnsweredPrompt(false)} style={secondaryBtn(C, dark)}>Wait</button>
-          {!isLastQuestion && <button onClick={() => { setAllAnsweredPrompt(false); next(); }} style={primaryBtn({ bg: dark ? '#1d4ed8' : '#dbeafe', fg: dark ? '#eff6ff' : '#1d4ed8', border: dark ? '#3b82f6' : '#93c5fd' })}>Go to next</button>}
-          {isLastQuestion && <button onClick={() => { setAllAnsweredPrompt(false); queueConfirm('end'); }} style={primaryBtn({ bg: '#fee2e2', fg: '#dc2626', border: '#fca5a5' })}>End session</button>}
-        </>)}
-      />
-
-      <ActionDialog
-        open={!!deleteGroupTarget}
-        tone="red"
-        icon="🗑"
-        title={deleteGroupTarget ? `Delete ${deleteGroupTarget.display_name || deleteGroupTarget.default_name}?` : "Delete group?"}
-        message={deleteGroupTarget?.members?.length ? "There are still students inside this group. They will be moved back to the waiting list." : "This group will be removed from the lobby."}
-        onClose={() => setDeleteGroupTarget(null)}
-        actions={(<>
-          <button onClick={() => setDeleteGroupTarget(null)} style={secondaryBtn(C, dark)}>Cancel</button>
-          <button onClick={confirmDeleteGroup} style={primaryBtn({ bg: '#fee2e2', fg: '#dc2626', border: '#fca5a5' })}>Delete group</button>
-        </>)}
-      />
-    </div>
-  );
+    <ActionDialog open={!!confirmAction} tone={confirmAction==="end"?"red":"blue"} icon={<TwIcon name={confirmAction==="end"?"stop":state.status==="LIVE"?"pause":"play"} size={28}/>} title={confirmAction==="end"?"End session?":state.status==="LIVE"?"Pause session?":state.status==="PAUSED"?"Resume session?":"Start session?"} message={confirmAction==="end"?"This will finish the live session and save its results.":state.status==="LIVE"?"Students will stop progressing until you resume.":"The live question countdown will begin."} onClose={()=>setConfirmAction(null)}><button onClick={()=>setConfirmAction(null)} style={secondaryBtn(C,dark)}>Cancel</button><button onClick={runConfirmedAction} style={primaryBtn(confirmAction==="end"?{bg:"#fee2e2",fg:"#dc2626",border:"#fca5a5"}:{bg:"#dbeafe",fg:"#1d4ed8",border:"#93c5fd"})}>Confirm</button></ActionDialog>
+    <ActionDialog open={allAnsweredPrompt} tone="green" icon={<TwIcon name="check" size={28}/>} title="Everyone has answered" message={null} closeOnBackdrop={false} onClose={()=>{}}><button onClick={()=>{setAllAnsweredPrompt(false);next()}} style={primaryBtn({bg:"#dcfce7",fg:"#15803d",border:"#86efac"})}>Go to next ({autoNextCount})</button></ActionDialog>
+    <ActionDialog open={finishedPrompt} tone="green" icon={<TwIcon name="check" size={28}/>} title="Everyone has finished answering" message={null} onClose={()=>setFinishedPrompt(false)}><button onClick={()=>setFinishedPrompt(false)} style={secondaryBtn(C,dark)}>Wait</button><button onClick={()=>{setFinishedPrompt(false);setConfirmAction("end")}} style={primaryBtn({bg:"#dcfce7",fg:"#15803d",border:"#86efac"})}>End Session</button></ActionDialog>
+    <ActionDialog open={!!reviewTarget} tone="yellow" icon={<TwIcon name="warning" size={28}/>} title="Suspicious activity" message="Suspicious activities: a student have left the live session twice" closeOnBackdrop={false} onClose={()=>{}}><button onClick={allowStudent} style={secondaryBtn(C,dark)}>Wait</button><button onClick={()=>kickStudent(reviewTarget)} style={primaryBtn({bg:"#fee2e2",fg:"#dc2626",border:"#fca5a5"})}>Kick</button></ActionDialog>
+    <ActionDialog open={!!kickTarget} tone="red" icon={<TwIcon name="logout" size={28}/>} title="Kick this student?" message={kickTarget?`${kickTarget.first_name} ${kickTarget.last_name} will be removed from the live session.`:""} onClose={()=>setKickTarget(null)}><button onClick={()=>setKickTarget(null)} style={secondaryBtn(C,dark)}>No</button><button onClick={()=>kickStudent(kickTarget)} style={primaryBtn({bg:"#fee2e2",fg:"#dc2626",border:"#fca5a5"})}>Yes</button></ActionDialog>
+    <ActionDialog open={!!deleteGroupTarget} tone="red" icon={<TwIcon name="trash" size={28}/>} title="Delete group?" message={deleteGroupTarget?`Delete ${deleteGroupTarget.display_name}? Its students will return to the waiting list.`:""} onClose={()=>setDeleteGroupTarget(null)}><button onClick={()=>setDeleteGroupTarget(null)} style={secondaryBtn(C,dark)}>Cancel</button><button onClick={()=>{socketRef.current?.emit("teacher:deleteGroup",{sessionId:Number(id),groupId:deleteGroupTarget.id});setDeleteGroupTarget(null)}} style={primaryBtn({bg:"#fee2e2",fg:"#dc2626",border:"#fca5a5"})}>Delete</button></ActionDialog>
+  </div>;
 }
 
-// Shared analytics widget used inside the host panel after a session ends.
 function AnalyticsPanel({ C, analytics, tabMonitoring, joinMode }) {
   const summary = analytics.summary || {};
   const students = analytics.students || [];

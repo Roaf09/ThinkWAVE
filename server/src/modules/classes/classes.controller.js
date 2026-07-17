@@ -8,6 +8,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
 import { makeJoinCode } from "../../utils/codes.js";
+import { getTeacherPlan } from "../plans/plan.js";
 
 async function getTeacherFolders(teacherId) {
   const [rows] = await pool.query(
@@ -237,6 +238,8 @@ async function getAsyncExportData(classId, quizId, teacherId) {
 
 // Revision 6: downloadable async results in XLSX.
 export async function exportClassAsyncXlsx(req, res) {
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
   const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
   if (!data) return res.status(404).json({ message: "Async quiz not found." });
   const workbook = new ExcelJS.Workbook();
@@ -262,6 +265,8 @@ export async function exportClassAsyncXlsx(req, res) {
 
 // Revision 6: downloadable async results in PDF.
 export async function exportClassAsyncPdf(req, res) {
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
   const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
   if (!data) return res.status(404).json({ message: "Async quiz not found." });
   res.setHeader("Content-Type", "application/pdf");
@@ -275,4 +280,92 @@ export async function exportClassAsyncPdf(req, res) {
     doc.fillColor("#000").fontSize(9).text(`${idx + 1}. ${r.last_name}, ${r.first_name} ${r.middle_initial || ""} | ${r.student_id} | ${r.score ?? "—"}/${r.max_score ?? "—"} | ${r.submitted_at ? "Submitted" : "Not submitted"}`);
   });
   doc.end();
+}
+
+// Revision 18: full analytics for assigned/asynchronous sessions using the same UI payload as live analytics.
+export async function getClassAsyncAnalytics(req, res) {
+  const classId = Number(req.params.id);
+  const quizId = Number(req.params.quizId);
+  const [[quiz]] = await pool.query(
+    `SELECT q.id, q.title AS quiz_title, q.template_type, q.category, q.available_from, q.available_until,
+            c.name AS class_name
+     FROM quizzes q
+     JOIN classes c ON c.id=q.class_id
+     WHERE q.id=:qid AND q.class_id=:cid AND q.teacher_id=:tid
+       AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL`,
+    { qid: quizId, cid: classId, tid: req.user.sub }
+  );
+  if (!quiz) return res.status(404).json({ message: "Assigned session not found." });
+
+  const [questions] = await pool.query(
+    `SELECT id AS question_id, question_order, prompt
+     FROM quiz_questions
+     WHERE quiz_id=:qid AND deleted_at IS NULL
+     ORDER BY question_order ASC`,
+    { qid: quizId }
+  );
+  const [submissions] = await pool.query(
+    `SELECT a.id, a.student_user_id, a.answers_json, a.score AS total_points, a.max_score, a.submitted_at,
+            e.first_name, e.last_name, e.student_id
+     FROM async_quiz_submissions a
+     LEFT JOIN class_enrollments e
+       ON e.class_id=a.class_id AND e.student_user_id=a.student_user_id AND e.teacher_id=a.teacher_id
+     WHERE a.quiz_id=:qid AND a.class_id=:cid AND a.teacher_id=:tid
+     ORDER BY e.last_name ASC, e.first_name ASC, a.id ASC`,
+    { qid: quizId, cid: classId, tid: req.user.sub }
+  );
+
+  const stats = new Map(questions.map((q) => [Number(q.question_id), { total: 0, correct: 0, incorrect: 0 }]));
+  for (const submission of submissions) {
+    const checked = safeJsonValue(submission.answers_json);
+    for (const answer of Array.isArray(checked) ? checked : []) {
+      const row = stats.get(Number(answer?.questionId));
+      if (!row) continue;
+      row.total += 1;
+      if (answer?.isCorrect) row.correct += 1;
+      else row.incorrect += 1;
+    }
+  }
+
+  const scores = submissions.map((row) => Number(row.total_points || 0));
+  const avg = scores.length ? Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(2)) : 0;
+  const min = scores.length ? Math.min(...scores) : 0;
+  const max = scores.length ? Math.max(...scores) : 0;
+
+  res.json({
+    session: {
+      ...quiz,
+      join_mode: "ASSIGNED",
+      folder_name: quiz.class_name || "Unassigned",
+      display_date: quiz.available_until || quiz.available_from || null,
+      question_count: questions.length,
+    },
+    summary: { avg_score: avg, min_score: min, max_score: max, participant_count: submissions.length },
+    students: submissions.map((row) => ({
+      participant_id: row.student_user_id,
+      first_name: row.first_name || "Student",
+      last_name: row.last_name || row.student_id || "",
+      total_points: Number(row.total_points || 0),
+      max_score: Number(row.max_score || 0),
+      joined_at: row.submitted_at,
+    })),
+    questions: questions.map((q) => {
+      const row = stats.get(Number(q.question_id)) || { total: 0, correct: 0, incorrect: 0 };
+      return {
+        ...q,
+        total_answers: row.total,
+        correct_answers: row.correct,
+        incorrect_answers: row.incorrect,
+        pct_correct: row.total ? Number(((row.correct / row.total) * 100).toFixed(2)) : 0,
+        pct_incorrect: row.total ? Number(((row.incorrect / row.total) * 100).toFixed(2)) : 0,
+      };
+    }),
+    tabMonitoring: [],
+  });
+}
+
+function safeJsonValue(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try { return JSON.parse(value); } catch { return null; }
 }

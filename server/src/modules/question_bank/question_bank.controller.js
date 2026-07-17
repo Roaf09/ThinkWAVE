@@ -5,6 +5,8 @@
  */
 
 import { pool } from "../../db.js";
+import { getTeacherPlan, BASIC_LIMITS } from "../plans/plan.js";
+import { normalizeTemplateType } from "../quizzes/templates.js";
 
 // ireturn mga saved questions sa teacher, dipa soft delete
 export async function listBankQuestions(req, res) {
@@ -16,11 +18,23 @@ export async function listBankQuestions(req, res) {
     { tid: req.user.sub }
   );
   // parse json fields para object tanggapin ni client hindi string
-  const parsed = rows.map((r) => ({
+  let parsed = rows.map((r) => ({
     ...r,
+    template_type: normalizeTemplateType(r.template_type),
     config_json:  safeJson(r.config_json),
     correct_json: safeJson(r.correct_json),
   }));
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code === "BASIC") {
+    const counts = new Map();
+    parsed = parsed.filter((row) => {
+      const key = normalizeTemplateType(row.template_type);
+      const current = counts.get(key) || 0;
+      if (current >= BASIC_LIMITS.questionBankPerTemplate) return false;
+      counts.set(key, current + 1);
+      return true;
+    });
+  }
   res.json(parsed);
 }
 
@@ -28,12 +42,23 @@ export async function listBankQuestions(req, res) {
 // save question sa bank
 export async function saveToBank(req, res) {
   const { templateType, category, prompt, config, correct } = req.body;
+  const normalizedTemplate = normalizeTemplateType(templateType);
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code === "BASIC") {
+    const [[count]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM question_bank WHERE teacher_id=:tid AND template_type=:tt AND deleted_at IS NULL`,
+      { tid: req.user.sub, tt: normalizedTemplate }
+    );
+    if (Number(count?.total || 0) >= BASIC_LIMITS.questionBankPerTemplate) {
+      return res.status(403).json({ message: `Basic plan can save up to ${BASIC_LIMITS.questionBankPerTemplate} questions per template.` });
+    }
+  }
   const [r] = await pool.query(
     `INSERT INTO question_bank(teacher_id, template_type, category, prompt, config_json, correct_json)
      VALUES(:tid, :tt, :cat, :prompt, :cfg, :corr)`,
     {
       tid:    req.user.sub,
-      tt:     templateType,
+      tt:     normalizedTemplate,
       cat:    category,
       prompt,
       cfg:    config  ? JSON.stringify(config)  : null,

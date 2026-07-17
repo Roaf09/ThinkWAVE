@@ -5,11 +5,12 @@
  */
 
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt    from "jsonwebtoken";
 import { pool } from "../../db.js";
 import { env  } from "../../env.js";
 import { sendOtpForUser, verifyOtpCode } from "./otp.service.js";
+import { getTeacherPlan } from "../plans/plan.js";
 
 
 function otpClientPayload(otpResult) {
@@ -19,7 +20,6 @@ function otpClientPayload(otpResult) {
     payload.deliveryWarning = otpResult?.delivery?.reason === "SMTP_NOT_CONFIGURED"
       ? "Email delivery is not configured on the server. Configure Gmail/SMTP in server/.env to receive OTP emails."
       : "The OTP email could not be sent. Check the server email settings and logs.";
-    if (process.env.NODE_ENV !== "production" && otpResult?.code) payload.devOtp = otpResult.code;
   }
   return payload;
 }
@@ -70,6 +70,12 @@ export async function register(req, res) {
           email: cleanEmail, role }
       );
     } catch (_) {}
+    try {
+      await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,payload_json) VALUES('USER_REGISTERED',:uid,:name,:email,:role,:payload)`, {
+        uid: result.insertId, name: `${firstName.trim()} ${lastName.trim()}`.trim(), email: cleanEmail, role,
+        payload: JSON.stringify({ role, email: cleanEmail })
+      });
+    } catch (_) {}
 
     const otpResult = await sendOtpForUser(result.insertId, cleanEmail);
     const otpPayload = otpClientPayload(otpResult);
@@ -111,7 +117,7 @@ export async function login(req, res) {
   const { email, password, loginPortal } = req.body;
   const cleanEmail = normalizeEmail(email);
   const [rows] = await pool.query(
-    `SELECT id, role, password_hash, is_verified, is_active, approval_status
+    `SELECT id, role, password_hash, is_verified, is_active, approval_status, last_active_at
      FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
     { email: cleanEmail }
   );
@@ -138,9 +144,10 @@ export async function login(req, res) {
     return res.status(403).json({ message: "Only student accounts can use the student login page." });
   }
 
+  const firstLogin = !u.last_active_at;
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
   const token = jwt.sign({ sub: u.id, role: u.role }, env.JWT_SECRET, { expiresIn: "8h" });
-  res.json({ token, role: u.role });
+  res.json({ token, role: u.role, firstLogin });
 }
 
 export async function requestPasswordReset(req, res) {
@@ -154,9 +161,7 @@ export async function requestPasswordReset(req, res) {
   if (rows.length) {
     const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
     return res.json({
-      message: otpResult?.delivery?.sent
-        ? "If the email exists, an OTP has been sent."
-        : "The account exists, but the OTP email could not be sent because email delivery needs server setup.",
+      message: "If the email exists, an OTP request has been processed.",
       ...otpClientPayload(otpResult),
     });
   }
@@ -175,15 +180,43 @@ export async function confirmPasswordReset(req, res) {
   if (!ok) return res.status(400).json({ message: "Invalid or expired OTP" });
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await pool.query(`UPDATE users SET password_hash=:ph WHERE id=:id`, { ph: passwordHash, id: rows[0].id });
+  try {
+    const [[changedUser]] = await pool.query(`SELECT first_name,last_name,email,role,institution_name FROM users WHERE id=:id`, { id: rows[0].id });
+    await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`, {
+      uid: rows[0].id, name: `${changedUser?.first_name || ''} ${changedUser?.last_name || ''}`.trim(), email: changedUser?.email || cleanEmail,
+      role: changedUser?.role || null, inst: changedUser?.institution_name || null, payload: JSON.stringify({ changedAt: new Date().toISOString() })
+    });
+  } catch (_) {}
   res.json({ message: "Password changed successfully." });
 }
 
 export async function me(req, res) {
   const [rows] = await pool.query(
     `SELECT id, role, email, first_name, last_name, is_verified, is_active,
-            approval_status, institution_name, contact_number
+            approval_status, institution_name, contact_number, profile_image
      FROM users WHERE id=:id`,
     { id: req.user.sub }
   );
-  res.json(rows[0] || null);
+  const user = rows[0] || null;
+  if (user?.role === "TEACHER") {
+    const plan = await getTeacherPlan(req.user.sub);
+    return res.json({ ...user, plan_code: plan.code, plan_limits: plan.limits });
+  }
+  res.json(user);
+}
+
+
+export async function updateMe(req, res) {
+  const fields = [];
+  const params = { id: req.user.sub };
+  const mapping = { firstName: "first_name", lastName: "last_name", contactNumber: "contact_number", profileImage: "profile_image" };
+  for (const [key, column] of Object.entries(mapping)) {
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, key)) continue;
+    const param = `v_${key}`;
+    fields.push(`${column}=:${param}`);
+    params[param] = req.body[key] === null ? null : String(req.body[key] ?? "").trim();
+  }
+  if (!fields.length) return res.status(400).json({ message: "No profile changes supplied." });
+  await pool.query(`UPDATE users SET ${fields.join(", ")} WHERE id=:id AND deleted_at IS NULL`, params);
+  return me(req, res);
 }

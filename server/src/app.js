@@ -20,6 +20,8 @@ import { questionBankRouter }   from "./modules/question_bank/question_bank.rout
 import { superadminRouter }     from "./modules/superadmin/superadmin.routes.js";
 import { adminDashboardRouter } from "./modules/admin/admin_dashboard.routes.js";
 import { studentRouter }        from "./modules/student/student.routes.js";
+import { publicRouter }         from "./modules/public/public.routes.js";
+import { metricsMiddleware }     from "./metrics.js";
 
 export function makeApp() {
   const app = express();
@@ -27,12 +29,14 @@ export function makeApp() {
   // Global middleware: security headers, CORS, JSON body parsing, and request logging.
   app.use(helmet());
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
-  app.use(express.json({ limit: "5mb" }));
+  app.use(express.json({ limit: "28mb" }));
   app.use(morgan("dev"));
+  app.use(metricsMiddleware);
   // Health route is useful for quick checks during deployment or local debugging.
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
   // Route registration order is kept simple by module. Each router owns one feature area.
+  app.use("/api/public",          publicRouter);
   app.use("/api/auth",            authRouter);
   app.use("/api/classes",         classesRouter);
   app.use("/api/quizzes",         quizzesRouter);

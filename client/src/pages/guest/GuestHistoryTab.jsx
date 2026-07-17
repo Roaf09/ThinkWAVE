@@ -16,8 +16,6 @@ async function getGuestApi() {
     token = data.token;
     sessionStorage.setItem("guest_token", token);
   }
-  localStorage.setItem("qz_token", token);
-  localStorage.setItem("qz_role", "TEACHER");
   return axios.create({ baseURL: API_BASE, headers: { Authorization: `Bearer ${token}` } });
 }
 

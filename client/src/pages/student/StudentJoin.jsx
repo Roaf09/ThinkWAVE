@@ -4,10 +4,11 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
+import ThemeIconButton from "../../components/ThemeIconButton";
 
 // StudentJoin handles the code-entry flow before the live player screen opens.
 export default function StudentJoin() {
@@ -16,35 +17,12 @@ export default function StudentJoin() {
   const { dark, toggleTheme } = useTheme();
 
   const prefilled = sp.get("code") || "";
-  const entryMode = sp.get("entry") || "student";
-  const guestAutoJoin = entryMode === "guest" && !!prefilled;
-  const autoJoinStarted = useRef(false);
-  const [step, setStep] = useState(guestAutoJoin ? "joining" : (prefilled ? "name" : "code"));
+  const [step, setStep] = useState(prefilled ? "name" : "code");
   const [code, setCode] = useState(prefilled);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!guestAutoJoin || autoJoinStarted.current) return;
-    autoJoinStarted.current = true;
-    setLoading(true);
-    api.post("/sessions/join", {
-      code: prefilled.trim().toUpperCase(),
-      firstName: "Guest",
-      lastName: `Player ${Math.floor(1000 + Math.random() * 9000)}`,
-    }).then(({ data }) => {
-      localStorage.setItem("qz_reconnectKey", data.reconnectKey);
-      localStorage.setItem("qz_participantId", String(data.participantId));
-      localStorage.setItem("qz_sessionId", String(data.sessionId));
-      localStorage.setItem("qz_joinMode", data.joinMode || "SOLO");
-      nav(`/play/${data.sessionId}`);
-    }).catch((err) => {
-      setMsg(err?.response?.data?.message || "Could not join. Check your code and try again.");
-      setStep("code");
-    }).finally(() => setLoading(false));
-  }, [guestAutoJoin, prefilled, nav]);
 
   function handleCode(e) {
     e.preventDefault();
@@ -94,22 +72,13 @@ export default function StudentJoin() {
         <Link to="/" style={{ ...s.topLink, color: mutedC, borderColor: cardBor }}>
           ← Back to landing
         </Link>
-        <button onClick={toggleTheme} style={{ ...s.topLink, color: mutedC, borderColor: cardBor, background: "transparent" }}>
-          {dark ? "☀️ Light" : "🌙 Dark"}
-        </button>
+        <ThemeIconButton dark={dark} onClick={toggleTheme} style={{ ...s.topLink, color:mutedC, borderColor:cardBor, background:"transparent" }} />
       </div>
 
       <div style={s.logo}>
         <span style={{ ...s.logoThink, color: textC }}>Think</span>
         <span style={s.logoWave}>WAVE</span>
       </div>
-
-      {step === "joining" && (
-        <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>
-          <p style={{ ...s.cardLabel, color: textC }}>Joining session…</p>
-          <p style={{ fontSize: 13, color: mutedC, margin: 0, textAlign: "center" }}>Taking you to the waiting lobby.</p>
-        </div>
-      )}
 
       {step === "code" && (
         <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>

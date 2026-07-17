@@ -30,6 +30,7 @@ export const sessionsRouter = Router();
 const CreateSchema = z.object({
   quizId: z.coerce.number().int().positive(),
   joinMode: z.enum(["SOLO", "GROUP"]).default("SOLO"),
+  maxParticipants: z.coerce.number().int().positive().max(1000).optional().nullable(),
 });
 
 const JoinSchema = z.object({

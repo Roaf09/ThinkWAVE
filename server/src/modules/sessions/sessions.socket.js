@@ -11,6 +11,7 @@ import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComp
 
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
+  const pendingKickTimers = new Map();
 
   io.on("connection", (socket) => {
     socket.on("teacher:join", async ({ sessionId }) => {
@@ -136,6 +137,11 @@ export function registerSessionSockets(io) {
         { sid: sessionId, rk: reconnectKey }
       );
       if (!p) return socket.emit("student:error", { message: "Invalid reconnect key" });
+      if (p.kicked_at) {
+        return socket.emit("antiCheat:kicked", {
+          message: p.kick_reason || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher."
+        });
+      }
 
       socket.data.role = "STUDENT";
       socket.data.sessionId = sessionId;
@@ -222,6 +228,63 @@ export function registerSessionSockets(io) {
 
       await resolveGroupProposalIfReady(io, proposal.id, sessionId);
       await broadcastGroups(io, sessionId);
+    });
+
+    socket.on("student:tabOut", async ({ sessionId, participantId }) => {
+      try {
+        if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || Number(socket.data.participantId) !== Number(participantId)) return;
+        const [[participant]] = await pool.query(
+          `SELECT p.id, p.first_name, p.last_name, p.kicked_at, s.status
+           FROM session_participants p JOIN sessions s ON s.id=p.session_id
+           WHERE p.id=:pid AND p.session_id=:sid`,
+          { pid: participantId, sid: sessionId }
+        );
+        if (!participant || participant.kicked_at || participant.status === "ENDED") return;
+        await pool.query(`INSERT INTO tab_events(session_id, participant_id) VALUES(:sid,:pid)`, { sid:sessionId, pid:participantId });
+        const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM tab_events WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId, pid:participantId });
+        const count = Number(row?.total || 0);
+        io.to(roomTeacher(sessionId)).emit("tab:updated", { participantId:Number(participantId), count });
+        if (count === 1) {
+          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"You have left the experience, this is a warning." });
+        } else {
+          const key = `${sessionId}:${participantId}`;
+          const oldTimer = pendingKickTimers.get(key);
+          if (oldTimer) clearTimeout(oldTimer);
+          io.to(roomParticipant(participantId)).emit("antiCheat:pendingRemoval", {
+            count,
+            message:"You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher.",
+            redirectDelaySec:10,
+          });
+          io.to(roomTeacher(sessionId)).emit("antiCheat:review", {
+            participantId:Number(participantId), count,
+            firstName:participant.first_name, lastName:participant.last_name,
+            message:"Suspicious activities: a student have left the live session twice",
+          });
+          const timer = setTimeout(() => kickParticipant(io, sessionId, participantId, "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher."), 10000);
+          pendingKickTimers.set(key, timer);
+        }
+        await broadcastRoster(io, sessionId);
+      } catch (error) {
+        socket.emit("student:error", { message:"Unable to record the activity warning." });
+      }
+    });
+
+    socket.on("teacher:allowStudent", async ({ sessionId, participantId }) => {
+      if (socket.data.role !== "TEACHER" || Number(socket.data.sessionId) !== Number(sessionId)) return;
+      const key = `${sessionId}:${participantId}`;
+      const timer = pendingKickTimers.get(key);
+      if (timer) clearTimeout(timer);
+      pendingKickTimers.delete(key);
+      io.to(roomParticipant(participantId)).emit("antiCheat:allowed", { ok:true });
+    });
+
+    socket.on("teacher:kickStudent", async ({ sessionId, participantId }) => {
+      if (socket.data.role !== "TEACHER" || Number(socket.data.sessionId) !== Number(sessionId)) return;
+      const key = `${sessionId}:${participantId}`;
+      const timer = pendingKickTimers.get(key);
+      if (timer) clearTimeout(timer);
+      pendingKickTimers.delete(key);
+      await kickParticipant(io, sessionId, participantId, "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher.");
     });
 
     // All answer submission funnels through one event so template scoring stays centralized on the server.
@@ -356,7 +419,7 @@ async function isQuestionTimeUp(session) {
 async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
   const tt = normalizeTemplateType(session.template_type);
   if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
-    // Revision 1: keep legacy single-word Think & Spell support, but use batch scoring for new one-submit gameplay.
+    // Revision 1: keep legacy single-word Think and Spell support, but use batch scoring for new one-submit gameplay.
     await handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
     return;
   }
@@ -781,14 +844,32 @@ async function recalcParticipantScore(sessionId, participantId) {
   );
 }
 
+async function kickParticipant(io, sessionId, participantId, reason) {
+  await pool.query(
+    `UPDATE session_participants SET kicked_at=NOW(), kick_reason=:reason, connected=0, left_at=NOW()
+     WHERE id=:pid AND session_id=:sid`,
+    { reason, pid:participantId, sid:sessionId }
+  );
+  io.to(roomParticipant(participantId)).emit("antiCheat:kicked", { message:reason });
+  io.in(roomParticipant(participantId)).socketsLeave(roomSession(sessionId));
+  await broadcastRoster(io, sessionId);
+  await broadcastGroups(io, sessionId);
+}
+
 async function broadcastRoster(io, sessionId) {
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
-            gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name
+            p.kicked_at, p.kick_reason, u.profile_image,
+            gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
+            COUNT(te.id) AS tab_out_count
      FROM session_participants p
+     LEFT JOIN users u ON u.id = p.student_user_id
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
-     WHERE p.session_id=:sid ORDER BY p.last_name ASC, p.first_name ASC, id ASC`,
+     LEFT JOIN tab_events te ON te.session_id=p.session_id AND te.participant_id=p.id
+     WHERE p.session_id=:sid
+     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, u.profile_image
+     ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
     { sid: sessionId }
   );
   io.to(roomTeacher(sessionId)).emit("roster:update", participants);
@@ -806,7 +887,8 @@ async function broadcastGroups(io, sessionId) {
                     'id', p.id,
                     'first_name', p.first_name,
                     'last_name', p.last_name,
-                    'connected', p.connected
+                    'connected', p.connected,
+                    'profile_image', u.profile_image
                   ) END
                   ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC
                   SEPARATOR ','
@@ -818,6 +900,7 @@ async function broadcastGroups(io, sessionId) {
      FROM session_groups g
      LEFT JOIN session_group_members m ON m.group_id = g.id
      LEFT JOIN session_participants p ON p.id = m.participant_id
+     LEFT JOIN users u ON u.id = p.student_user_id
      WHERE g.session_id=:sid
      GROUP BY g.id
      ORDER BY g.group_order ASC`,

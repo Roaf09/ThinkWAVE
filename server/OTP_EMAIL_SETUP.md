@@ -1,19 +1,32 @@
 # ThinkWAVE OTP Email Setup
 
-Use a dedicated official Gmail account for OTP emails.
+## Security first
+The previous Revision 16.2 archive contained a Gmail App Password in plaintext. Revoke that password in the Google account and create a new App Password before running this merged version. Never commit or share `server/.env`.
 
-## Recommended setup
-1. Create or use your official Gmail account for ThinkWAVE.
-2. Turn on 2-Step Verification for that Gmail account.
-3. Generate a Gmail App Password.
-4. Put the Gmail address and app password into `server/.env`.
+## Configure Gmail OTP
+1. Enable 2-Step Verification on the dedicated ThinkWAVE Gmail account.
+2. Create a new Gmail App Password.
+3. Copy `server/.env.example` to `server/.env`.
+4. Replace the placeholder SMTP user, sender, and App Password.
+5. Keep `OTP_DEV_FALLBACK=false` outside local debugging.
 
-## Environment values
-- `SMTP_SERVICE=gmail`
-- `SMTP_USER=your-official-thinkwave@gmail.com`
-- `SMTP_PASS=your_16_character_gmail_app_password`
-- `SMTP_FROM="ThinkWAVE Team <your-official-thinkwave@gmail.com>"`
+The mailer automatically removes spaces from a pasted Gmail App Password.
 
-## Important note
-Do not use your normal Gmail login password in `SMTP_PASS`.
-Use a Gmail App Password instead.
+## Clean installation
+Do not copy or share `node_modules`. Install dependencies on the target computer:
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+In another terminal:
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Bundled native modules such as `bcrypt` can fail across operating systems. This merged version uses `bcryptjs`, which is portable and remains compatible with existing bcrypt password hashes.

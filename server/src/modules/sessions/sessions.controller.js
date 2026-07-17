@@ -9,6 +9,7 @@ import { makeJoinCode, makeReconnectKey } from "../../utils/codes.js";
 import { resolveThinkSpellWordBank } from "../quizzes/thinkSpell.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
 import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
+import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -56,7 +57,9 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
   if (shuffleAnswers) {
     questions = questions.map((q) => {
       const cfg = { ...(q.config_json || {}) };
-      if (Array.isArray(cfg.options)) cfg.options = shuffle(cfg.options);
+      const template = normalizeTemplateType(quizMeta?.template_type);
+      if (template === "MCQ" && Array.isArray(cfg.options)) cfg.options = shuffle(cfg.options);
+      if (template === "MATCHING") cfg.shuffleColA = true;
       return { ...q, config_json: cfg };
     });
   }
@@ -66,6 +69,10 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
   const { quizId, joinMode = "SOLO", maxParticipants = null } = req.body;
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code === "BASIC" && joinMode === "GROUP") {
+    return res.status(403).json({ message: "Group mode is available on the Institution plan." });
+  }
 
   const [[quiz]] = await pool.query(
     `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode
@@ -94,7 +101,10 @@ export async function createSession(req, res) {
 
   const snapshot = await buildQuestionsSnapshot(quizId, quiz.randomize_questions, quiz.shuffle_answers);
 
-  const maxCap = Number(maxParticipants || 0) > 0 ? Number(maxParticipants) : null;
+  const requestedCap = Number(maxParticipants || 0) > 0 ? Number(maxParticipants) : null;
+  const maxCap = plan.code === "BASIC"
+    ? Math.min(requestedCap || BASIC_LIMITS.live.maxStudents, BASIC_LIMITS.live.maxStudents)
+    : requestedCap;
 
   const [r] = await pool.query(
     `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json)
@@ -357,11 +367,16 @@ export async function getTeacherSessionHistory(req, res) {
 }
 
 export async function getSessionFullAnalytics(req, res) {
-  // Revision 1: return the same analytics package used by PDF/XLSX exports.
+  // Revision 20: Basic and Institution teachers can both review per-question difficulty.
   const sessionId = Number(req.params.id);
   const data = await buildFullAnalyticsData(sessionId, req.user.sub);
   if (!data) return res.status(404).json({ message: "Session not found" });
-  res.json({ session: data.session, summary: data.summary, questions: data.questions, students: data.students });
+  res.json({
+    session: data.session,
+    summary: data.summary,
+    questions: data.questions,
+    students: data.students,
+  });
 }
 
 export async function joinSession(req, res) {
@@ -431,6 +446,10 @@ export async function logTabEvent(req, res) {
 }
 
 export async function getTabMonitoring(req, res) {
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code !== "INSTITUTION") {
+    return res.status(403).json({ message: "Tab monitoring is available on the Institution plan." });
+  }
   const sessionId = Number(req.params.id);
   try {
     const [rows] = await pool.query(

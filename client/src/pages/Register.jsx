@@ -5,6 +5,7 @@
  */
 
 import React, { useMemo, useState } from "react";
+import PublicHeader from "../components/PublicHeader";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
@@ -83,19 +84,7 @@ export default function Register() {
   return (
     <div style={s.page(c)}>
       <div style={s.glow} />
-
-      <header style={s.header(c)}>
-        <Link to="/" style={s.logo}>
-          <span style={s.logoThink(c)}>Think</span>
-          <span style={s.logoWave}>WAVE</span>
-        </Link>
-        <div style={s.headerRight}>
-          <button onClick={toggleTheme} style={s.themeBtn(c)}>
-            {dark ? "☀️ Light" : "🌙 Dark"}
-          </button>
-          <Link to={isAdminReg ? "/login?role=admin" : "/login"} style={s.headerBtn(c)}>Login</Link>
-        </div>
-      </header>
+      <PublicHeader compact />
 
       <main style={s.main}>
         <div style={s.card(c)}>

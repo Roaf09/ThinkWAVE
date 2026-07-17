@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from "react";
+import PublicHeader from "../components/PublicHeader";
 import { useNavigate, Link } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
@@ -27,7 +28,7 @@ export default function SuperadminLogin({ onLoginSuccess }) {
       setToken(data.token);
       setRole(data.role);
       setAuthToken(data.token);
-      if (onLoginSuccess) onLoginSuccess(data.token, data.role);
+      if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
       nav("/superadmin");
     } catch (err) {
       setMsg(err?.response?.data?.message || "Login failed. Check your credentials.");
@@ -37,19 +38,7 @@ export default function SuperadminLogin({ onLoginSuccess }) {
   return (
     <div style={s.page(c)}>
       <div style={s.glow} />
-
-      <header style={s.header(c)}>
-        <Link to="/" style={s.logo}>
-          <span style={s.logoThink(c)}>Think</span>
-          <span style={s.logoWave}>WAVE</span>
-        </Link>
-        <div style={s.headerRight}>
-          <button onClick={toggleTheme} style={s.themeBtn(c)}>
-            {dark ? "☀️ Light" : "🌙 Dark"}
-          </button>
-          <span style={s.portalBadge}>Super Admin</span>
-        </div>
-      </header>
+      <PublicHeader compact />
 
       <main style={s.main}>
         <div style={s.card(c)}>

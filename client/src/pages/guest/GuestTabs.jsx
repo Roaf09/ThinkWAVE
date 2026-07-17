@@ -17,7 +17,7 @@ const ALL_TEMPLATES = [
   { value:"GUESS_WORD_4PICS", label:"4Pics 1Word",     icon:"🖼️" },
   { value:"DRAW_IT",          label:"Draw-it",         icon:"🎨" },
   { value:"GRIP_GUESS",       label:"Grip-and-Guess",  icon:"🤝" },
-  { value:"THINK_SPELL",      label:"Think-and-Spell", icon:"🔡" },
+  { value:"THINK_SPELL",      label:"Think and Spell", icon:"🔡" },
 ];
 
 // Get or create a guest API client with a temporary token

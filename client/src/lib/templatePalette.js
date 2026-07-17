@@ -5,8 +5,8 @@ export const TEMPLATE_PALETTES = {
   TRUE_FALSE: { label: "True / False", icon: "truefalse", accent: "#14b8a6" },
   TYPE_ANSWER: { label: "Identification", icon: "identification", accent: "#a855f7" },
   MATCHING: { label: "Matching", icon: "matching", accent: "#f97316" },
-  GUESS_WORD_4PICS: { label: "4 Pics 1 Word", icon: "image", accent: "#22c55e" },
-  THINK_SPELL: { label: "Think-and-Spell", icon: "spell", accent: "#0ea5e9" },
+  GUESS_WORD_4PICS: { label: "Guess Word", icon: "image", accent: "#22c55e" },
+  THINK_SPELL: { label: "Think and Spell", icon: "spell", accent: "#0ea5e9" },
 };
 
 export function templatePalette(templateType) {
@@ -29,14 +29,14 @@ export function templateTone(templateType, c, active = false) {
   const accent = templateAccent(templateType);
   return {
     accent,
-    bg: active ? `${accent}24` : `${accent}14`,
-    softBg: `${accent}12`,
+    bg: active ? `${accent}30` : `${accent}20`,
+    softBg: `${accent}1c`,
     border: active ? `${accent}cc` : `${accent}72`,
     shadow: `0 18px 34px ${accent}24`,
     text: accent,
     iconBg: `${accent}22`,
     iconBorder: `${accent}88`,
-    cardBg: active ? `linear-gradient(135deg, ${accent}20 0%, ${c.cardBg} 46%, ${c.cardBg2} 100%)` : `linear-gradient(135deg, ${accent}12 0%, ${c.cardBg} 58%, ${c.cardBg2} 100%)`,
+    cardBg: active ? `linear-gradient(135deg, ${accent}32 0%, ${c.cardBg} 48%, ${accent}12 100%)` : `linear-gradient(135deg, ${accent}22 0%, ${c.cardBg} 56%, ${accent}0d 100%)`,
   };
 }
 

@@ -1,0 +1,13 @@
+import { pool } from "../../db.js";
+
+export async function getPublicStats(_req,res){try{const [[row]]=await pool.query(`SELECT (SELECT COUNT(*) FROM sessions WHERE status='ENDED')+(SELECT COUNT(*) FROM async_quiz_submissions) AS sessions_completed,(SELECT COUNT(DISTINCT institution_name) FROM users WHERE role='ADMIN' AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' AND deleted_at IS NULL) AS institutions_count,(SELECT COUNT(*) FROM classes WHERE deleted_at IS NULL) AS classes_created`);return res.json({sessionsCompleted:Number(row?.sessions_completed||0),institutionsEmpowered:Number(row?.institutions_count||0),classesCreated:Number(row?.classes_created||0)});}catch(error){console.warn("Public statistics unavailable:",error?.code||error?.message||error);return res.json({sessionsCompleted:0,institutionsEmpowered:0,classesCreated:0});}}
+
+export async function createInstitutionApplication(req,res){
+  const {firstName,lastName,workEmail,country,role,phone}=req.body||{};
+  if(!firstName?.trim()||!lastName?.trim()||!workEmail?.trim()||!country?.trim()||!role?.trim()||!phone?.trim()) return res.status(400).json({message:"All application fields are required."});
+  try{const [result]=await pool.query(`INSERT INTO institution_applications(first_name,last_name,work_email,country,role_description,phone_number) VALUES(:fn,:ln,:email,:country,:role,:phone)`,{fn:firstName.trim(),ln:lastName.trim(),email:workEmail.trim().toLowerCase(),country:country.trim(),role:role.trim(),phone:phone.trim()});
+  await pool.query(`INSERT INTO system_notifications(type,name,email,role,payload_json) VALUES('PLAN_APPLICATION',:name,:email,:role,:payload)`,{name:`${firstName.trim()} ${lastName.trim()}`,email:workEmail.trim().toLowerCase(),role:role.trim(),payload:JSON.stringify({applicationId:result.insertId,firstName:firstName.trim(),lastName:lastName.trim(),workEmail:workEmail.trim().toLowerCase(),country:country.trim(),role:role.trim(),phone:phone.trim()})});
+  res.status(201).json({ok:true,id:result.insertId});}catch(error){console.error(error);res.status(500).json({message:"Unable to submit the institution request."});}
+}
+
+export async function submitFeedback(req,res){const {name,email,message}=req.body||{};if(!message?.trim())return res.status(400).json({message:"Feedback message is required."});try{await pool.query(`INSERT INTO system_notifications(type,name,email,payload_json) VALUES('FEEDBACK',:name,:email,:payload)`,{name:String(name||"Anonymous").trim(),email:String(email||"").trim()||null,payload:JSON.stringify({message:String(message).trim()})});res.status(201).json({ok:true});}catch{res.status(500).json({message:"Unable to submit feedback."});}}

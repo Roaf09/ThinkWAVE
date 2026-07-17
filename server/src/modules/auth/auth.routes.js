@@ -10,7 +10,7 @@ import jwt        from "jsonwebtoken";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, verifyOtp, login, me, requestPasswordReset, confirmPasswordReset } from "./auth.controller.js";
+import { register, verifyOtp, login, me, updateMe, requestPasswordReset, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 
 export const authRouter = Router();
@@ -30,6 +30,13 @@ const RegisterSchema = z.object({
 const VerifySchema = z.object({ email: z.string().email(), code: z.string().min(4).max(10) });
 const PasswordResetRequestSchema = z.object({ email: z.string().email() });
 const PasswordResetConfirmSchema = z.object({ email: z.string().email(), code: z.string().min(4).max(10), newPassword: strongPassword });
+const ProfileSchema = z.object({
+  firstName: z.string().max(80).optional(),
+  lastName: z.string().max(80).optional(),
+  contactNumber: z.string().max(40).nullable().optional(),
+  profileImage: z.string().max(4000000).nullable().optional(),
+}).refine((value) => Object.keys(value).length > 0, { message: "No profile changes supplied." });
+
 const LoginSchema  = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -64,3 +71,4 @@ authRouter.post("/password/request-reset", validateBody(PasswordResetRequestSche
 authRouter.post("/password/confirm-reset", validateBody(PasswordResetConfirmSchema), confirmPasswordReset);
 authRouter.post("/login",      validateBody(LoginSchema),   login);
 authRouter.get( "/me",         requireAuth,                 me);
+authRouter.patch("/me",         requireAuth, validateBody(ProfileSchema), updateMe);

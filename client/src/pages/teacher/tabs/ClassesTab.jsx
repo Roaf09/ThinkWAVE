@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { TwIcon } from "../../../components/TwUI";
 
 function card(c, extra = {}) {
   return {
@@ -87,19 +88,20 @@ export default function ClassesTab({ setActiveTab }) {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (!selectedFolderId) { setStudents([]); setAsyncResults([]); setClassCode(""); return; }
-    // Revision 7: selected class folders refresh the roster and async results in real time.
+    const selected = (folders || []).find((folder) => Number(folder.id) === Number(selectedFolderId));
+    if (!selectedFolderId || !selected?.parent_id) { setStudents([]); setAsyncResults([]); setClassCode(""); return; }
     api.get(`/classes/${selectedFolderId}/students`).then(({ data }) => setStudents(data || [])).catch(() => setStudents([]));
     api.get(`/classes/${selectedFolderId}/async-results`).then(({ data }) => setAsyncResults(data || [])).catch(() => setAsyncResults([]));
     const t = setInterval(() => {
       api.get(`/classes/${selectedFolderId}/async-results`).then(({ data }) => setAsyncResults(data || [])).catch(() => {});
     }, 5000);
     return () => clearInterval(t);
-  }, [selectedFolderId]);
+  }, [selectedFolderId, folders]);
 
   const tree = useMemo(() => buildTree(folders), [folders]);
   const current = useMemo(() => selectedFolderId ? findNode(tree, selectedFolderId) : null, [tree, selectedFolderId]);
   const children = selectedFolderId ? (current?.children || []) : tree;
+  const isSectionFolder = Boolean(selectedFolderId && current?.parent_id);
   const breadcrumbs = useMemo(() => buildPath(folders, selectedFolderId), [folders, selectedFolderId]);
   const currentQuizzes = useMemo(() => (quizzes || []).filter((q) => Number(q.class_id) === Number(selectedFolderId) && q.status !== "BANKED"), [quizzes, selectedFolderId]);
   const currentReports = useMemo(() => (sessions || []).filter((s) => Number(s.class_id) === Number(selectedFolderId)), [sessions, selectedFolderId]);
@@ -200,7 +202,7 @@ export default function ClassesTab({ setActiveTab }) {
           <div style={{ color: c.text, fontWeight: 900, fontSize: 17 }}>My Folders</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={openAddFolder} style={btn(c, true)}>Add Folder</button>
-            {selectedFolderId && <button onClick={getShareCode} style={btn(c, true)}>Share Code</button>}
+            {isSectionFolder && <button onClick={getShareCode} style={btn(c, true)}>Share Code</button>}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
@@ -209,7 +211,7 @@ export default function ClassesTab({ setActiveTab }) {
           {breadcrumbs.map((b) => <button key={b.id} onClick={() => setSelectedFolderId(b.id)} style={crumbBtn(c, Number(selectedFolderId) === Number(b.id))}>{b.name}</button>)}
         </div>
 
-        {classCode && selectedFolderId && (
+        {classCode && isSectionFolder && (
           <div style={{ marginBottom: 16, padding: 14, borderRadius: 14, border: `1px dashed ${c.accent}`, background: `${c.accent}12`, color: c.accent, fontWeight: 900, letterSpacing: 2 }}>
             Class Code: {classCode}
           </div>
@@ -244,22 +246,22 @@ export default function ClassesTab({ setActiveTab }) {
         )}
       </section>
 
-      {selectedFolderId && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+      {isSectionFolder && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
         <div style={card(c)}>
           <h3 style={{ marginTop: 0 }}>Students</h3>
           {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : students.map((st) => <div key={st.id} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={() => setRemoveConfirm(st)} style={{ ...btn(c), color: c.redFg, background: c.redBg, borderColor: c.redBorder }}>Remove</button></div>)}
         </div>
         <div style={card(c)}>
           <h3 style={{ marginTop: 0 }}>Assignments</h3>
-          {asyncResults.length === 0 ? <div style={{ color: c.textMuted }}>No assigned quizzes for this class yet.</div> : asyncResults.map((r) => <AssignmentResultRow key={r.quiz_id} r={r} c={c} onPdf={() => downloadAsync(r.quiz_id, "pdf")} onXlsx={() => downloadAsync(r.quiz_id, "xlsx")} />)}
+          {asyncResults.length === 0 ? <div style={{ color: c.textMuted }}>No assigned quizzes for this class yet.</div> : asyncResults.map((r) => <AssignmentResultRow key={r.quiz_id} r={r} c={c} onAnalytics={() => window.location.assign(`/teacher/async-analytics/${selectedFolderId}/${r.quiz_id}`)} onPdf={() => downloadAsync(r.quiz_id, "pdf")} onXlsx={() => downloadAsync(r.quiz_id, "xlsx")} />)}
         </div>
       </section>}
 
 
-      {selectedFolderId && currentReports.length > 0 && <section style={card(c)}>
+      {isSectionFolder && currentReports.length > 0 && <section style={card(c)}>
         <h3 style={{ marginTop: 0 }}>Session reports</h3>
         <div style={{ display: "grid", gap: 10 }}>
-          {currentReports.map((session) => <ClassReportCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} c={c} onOpenLive={() => window.location.assign(`/teacher/analytics/${session.id}`)} onOpenHistory={() => setActiveTab?.("history")} />)}
+          {currentReports.map((session) => <ClassReportCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} c={c} onOpenLive={() => window.location.assign(`/teacher/analytics/${session.id}`)} onOpenAssigned={() => window.location.assign(`/teacher/async-analytics/${session.class_id}/${session.quiz_id}`)} />)}
         </div>
       </section>}
 
@@ -276,15 +278,15 @@ function QuizFolderRow({ quiz, c }) {
   return <div style={{ ...row(c), ...templateCardChrome(quiz.template_type, c, false), marginBottom: 8 }}><span><b>{quiz.title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(quiz.template_type)} · {quiz.status}</small></span><span style={{ color: tone.accent, fontWeight: 900 }}>{templateLabel(quiz.template_type)}</span></div>;
 }
 
-function AssignmentResultRow({ r, c, onPdf, onXlsx }) {
+function AssignmentResultRow({ r, c, onAnalytics, onPdf, onXlsx }) {
   const tone = templateTone(r.template_type, c, false);
-  return <div style={{ ...row(c), ...templateCardChrome(r.template_type, c, false), marginBottom: 8 }}><span><b>{r.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(r.template_type)} · {r.submitted_count} submitted · Avg {r.avg_score || 0}/{r.max_possible || 0}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>{templateLabel(r.template_type)}</span><button onClick={onPdf} style={btn(c)}>PDF</button><button onClick={onXlsx} style={btn(c)}>XLSX</button></span></div>;
+  return <div style={{ ...row(c), ...templateCardChrome(r.template_type, c, false), marginBottom: 8 }}><span><b>{r.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(r.template_type)} · {r.submitted_count} submitted · Avg {r.avg_score || 0}/{r.max_possible || 0}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>{templateLabel(r.template_type)}</span><button onClick={onAnalytics} style={btn(c, true)}>Open Analytics</button><button onClick={onPdf} style={btn(c)}>PDF</button><button onClick={onXlsx} style={btn(c)}>XLSX</button></span></div>;
 }
 
-function ClassReportCard({ session, c, onOpenLive, onOpenHistory }) {
+function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
   const tone = templateTone(session.template_type, c, false);
-  return <div style={{ ...row(c), ...templateCardChrome(session.template_type, c, false), marginBottom: 0 }}><span><b>{session.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(session.template_type)} · {assigned ? "Assigned session" : "Live session"} · {session.participant_count || 0} {assigned ? "submitted" : "participants"}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>Avg {session.avg_score ?? 0}</span><button onClick={assigned ? onOpenHistory : onOpenLive} style={btn(c, true)}>{assigned ? "History" : "Analytics"}</button></span></div>;
+  return <div style={{ ...row(c), ...templateCardChrome(session.template_type, c, false), marginBottom: 0 }}><span><b>{session.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(session.template_type)} · {assigned ? "Assigned session" : "Live session"} · {session.participant_count || 0} {assigned ? "submitted" : "participants"}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>Avg {session.avg_score ?? 0}</span><button onClick={assigned ? onOpenAssigned : onOpenLive} style={btn(c, true)}>Open Analytics</button></span></div>;
 }
 
 function RemoveStudentModal({ c, student, onClose, onConfirm }) {
@@ -302,10 +304,10 @@ function RemoveStudentModal({ c, student, onClose, onConfirm }) {
 
 function FolderCard({ folder, c, menuFor, setMenuFor, onOpen, onRename, onDelete, onDuplicate }) {
   const open = Number(menuFor) === Number(folder.id);
-  return <div style={{ ...card(c, { padding: 0, overflow: "visible", boxShadow: "none" }), position: "relative" }}>
+  return <div className="tw-folder-card" style={{ ...card(c, { padding: 0, overflow: "visible", boxShadow: "none" }), position: "relative" }}>
     <button onClick={onOpen} style={{ width: "100%", padding: "14px 16px", border: "none", background: "transparent", color: c.text, display: "flex", gap: 12, alignItems: "center", textAlign: "left" }}>
-      <span style={{ color: c.accent, fontSize: 24 }}>📁</span>
-      <span style={{ fontWeight: 900, flex: 1 }}>{folder.name}</span>
+      <span style={{ color: c.accent, display: "inline-flex" }}><TwIcon name="folder" size={24} /></span>
+      <span title={folder.name} style={{ fontWeight: 900, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 34 }}>{folder.name}</span>
     </button>
     <button onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : folder.id); }} style={{ position: "absolute", right: 8, top: 8, ...iconBtn(c) }}>⋮</button>
     {open && <div style={{ position: "absolute", right: 8, top: 44, width: 180, zIndex: 10, ...card(c, { padding: 8 }) }}>
