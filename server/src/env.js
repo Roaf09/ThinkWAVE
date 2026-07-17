@@ -24,8 +24,8 @@ export const env = {
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || "https://thinkwave-1.onrender.com",
   JWT_SECRET: process.env.JWT_SECRET || "dev_secret_change_me",
 
-  DB_HOST: process.env.DB_HOST || "127.0.0.1",
-DB_PORT: Number(process.env.DB_PORT || 3306),
+  DB_HOST: process.env.DB_HOST || "thinkwave-mysql-thinkwave-mysql.g.aivencloud.com",
+DB_PORT: Number(process.env.DB_PORT || 15614),
 DB_USER: process.env.DB_USER || "avnadmin",
 DB_PASS: process.env.DB_PASS || "AVNS_O-159EKs9_11uTqYJ3j",
 DB_NAME: process.env.DB_NAME || "defaultdb",
