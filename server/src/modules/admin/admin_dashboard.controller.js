@@ -8,13 +8,25 @@ import { pool } from "../../db.js";
 import { makeJoinCode } from "../../utils/codes.js";
 
 async function getAdminInstitution(adminId) {
-  const [[row]] = await pool.query(
-    `SELECT id, first_name, last_name, email, institution_name, institution_setup_done, created_at, is_active
-     FROM users
-     WHERE id = :id AND role = 'ADMIN'`,
-    { id: adminId }
-  );
-  return row || null;
+  try {
+    const [[row]] = await pool.query(
+      `SELECT id, first_name, last_name, email, institution_name, institution_setup_done, created_at, is_active
+       FROM users
+       WHERE id = :id AND role = 'ADMIN'`,
+      { id: adminId }
+    );
+    return row || null;
+  } catch (error) {
+    // Compatibility fallback for databases created before institution_setup_done was added.
+    console.warn("Admin institution profile fallback:", error?.message || error);
+    const [[row]] = await pool.query(
+      `SELECT id, first_name, last_name, email, institution_name, created_at, is_active
+       FROM users
+       WHERE id = :id AND role = 'ADMIN'`,
+      { id: adminId }
+    );
+    return row ? { ...row, institution_setup_done: row.institution_name ? 1 : 0 } : null;
+  }
 }
 
 async function buildInstitutionActivity(inst, limit = 8) {
@@ -117,33 +129,24 @@ export async function getStats(req, res) {
        (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users u ON u.id=c.teacher_id WHERE u.institution_name=:inst4 AND ce.removed_at IS NULL) AS active_students`,
     { inst, inst2:inst, inst3:inst, inst4:inst }
   );
-  const [weeklySessions] = await pool.query(
-    `SELECT week_key, MIN(week_start) AS week_start,
-            SUM(live_total) AS live_total,
-            SUM(assigned_total) AS assigned_total
+  const [dailySessions] = await pool.query(
+    `SELECT day_key, SUM(live_total) AS live_total, SUM(assigned_total) AS assigned_total
        FROM (
-         SELECT YEARWEEK(s.created_at,1) AS week_key,
-                DATE_SUB(DATE(s.created_at),INTERVAL WEEKDAY(s.created_at) DAY) AS week_start,
-                COUNT(*) AS live_total, 0 AS assigned_total
-           FROM sessions s
-           JOIN users u ON u.id=s.teacher_id
+         SELECT DATE(s.created_at) AS day_key, COUNT(*) AS live_total, 0 AS assigned_total
+           FROM sessions s JOIN users u ON u.id=s.teacher_id
           WHERE u.institution_name=:inst
-            AND s.created_at>=DATE_SUB(CURDATE(),INTERVAL 11 WEEK)
-          GROUP BY YEARWEEK(s.created_at,1), DATE_SUB(DATE(s.created_at),INTERVAL WEEKDAY(s.created_at) DAY)
+            AND DATE(s.created_at) BETWEEN DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) DAY)
+                                      AND DATE_ADD(DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) DAY),INTERVAL 6 DAY)
+          GROUP BY DATE(s.created_at)
          UNION ALL
-         SELECT YEARWEEK(q.created_at,1) AS week_key,
-                DATE_SUB(DATE(q.created_at),INTERVAL WEEKDAY(q.created_at) DAY) AS week_start,
-                0 AS live_total, COUNT(*) AS assigned_total
-           FROM quizzes q
-           JOIN users u ON u.id=q.teacher_id
-          WHERE u.institution_name=:inst2
-            AND q.delivery_mode='ASYNCHRONOUS'
-            AND q.deleted_at IS NULL
-            AND q.created_at>=DATE_SUB(CURDATE(),INTERVAL 11 WEEK)
-          GROUP BY YEARWEEK(q.created_at,1), DATE_SUB(DATE(q.created_at),INTERVAL WEEKDAY(q.created_at) DAY)
-       ) weekly
-      GROUP BY week_key
-      ORDER BY week_start`, { inst, inst2: inst }
+         SELECT DATE(q.created_at) AS day_key, 0 AS live_total, COUNT(*) AS assigned_total
+           FROM quizzes q JOIN users u ON u.id=q.teacher_id
+          WHERE u.institution_name=:inst2 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL
+            AND DATE(q.created_at) BETWEEN DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) DAY)
+                                      AND DATE_ADD(DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) DAY),INTERVAL 6 DAY)
+          GROUP BY DATE(q.created_at)
+       ) days
+      GROUP BY day_key ORDER BY day_key`, { inst, inst2:inst }
   );
   const [[distribution]] = await pool.query(
     `SELECT
@@ -153,7 +156,16 @@ export async function getStats(req, res) {
   const [templates] = await pool.query(
     `SELECT q.template_type AS label,COUNT(*) AS value FROM sessions s JOIN quizzes q ON q.id=s.quiz_id JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst GROUP BY q.template_type ORDER BY value DESC LIMIT 6`, { inst }
   );
-  res.json({institutionName:inst,activeTeachers:Number(counts.active_teachers||0),activeLiveSessions:Number(counts.active_live_sessions||0),activeAssignedSessions:Number(counts.active_assigned_sessions||0),activeStudents:Number(counts.active_students||0),weeklySessions:weeklySessions.map(x=>({weekStart:x.week_start,live:Number(x.live_total||0),assigned:Number(x.assigned_total||0)})),accountDistribution:[{label:'Teachers',value:Number(distribution.teachers||0)},{label:'Students',value:Number(distribution.students||0)}],templateUsage:templates.map(x=>({label:x.label,value:Number(x.value||0)}) )});
+  res.json({
+    institutionName:inst,
+    activeTeachers:Number(counts.active_teachers||0),
+    activeLiveSessions:Number(counts.active_live_sessions||0),
+    activeAssignedSessions:Number(counts.active_assigned_sessions||0),
+    activeStudents:Number(counts.active_students||0),
+    weeklySessions:dailySessions.map(x=>({dayStart:x.day_key,live:Number(x.live_total||0),assigned:Number(x.assigned_total||0)})),
+    accountDistribution:[{label:'Teachers',value:Number(distribution.teachers||0)},{label:'Students',value:Number(distribution.students||0)}],
+    templateUsage:templates.map(x=>({label:x.label,value:Number(x.value||0)})),
+  });
 }
 
 export async function listTeachers(req, res) {
@@ -200,17 +212,70 @@ export async function deleteTeacher(req, res) {
 }
 
 export async function getInstitutionDetails(req, res) {
-  const admin=await getAdminInstitution(req.user.sub); const inst=admin?.institution_name||null;
-  const teachers=inst?(await pool.query(`SELECT id,email,first_name,last_name,is_active,created_at,last_active_at FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL ORDER BY last_name,first_name`,{inst}))[0]:[];
-  const [[summary]]=await pool.query(`SELECT
-    (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst) total_hosted_sessions,
-    (SELECT COUNT(*) FROM quizzes q JOIN users u ON u.id=q.teacher_id WHERE u.institution_name=:inst2 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) total_assigned_sessions,
-    (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst3 AND COALESCE(s.ended_at,s.created_at)>=DATE_SUB(NOW(),INTERVAL 7 DAY)) hosted_this_week,
-    (SELECT COUNT(*) FROM quizzes q JOIN users u ON u.id=q.teacher_id WHERE u.institution_name=:inst4 AND q.delivery_mode='ASYNCHRONOUS' AND q.created_at>=DATE_SUB(NOW(),INTERVAL 7 DAY) AND q.deleted_at IS NULL) assigned_this_week,
-    (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users u ON u.id=c.teacher_id WHERE u.institution_name=:inst5 AND ce.removed_at IS NULL) total_students,
-    (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE u.institution_name=:inst6) last_activity`,{inst,inst2:inst,inst3:inst,inst4:inst,inst5:inst,inst6:inst});
-  const activity=await buildInstitutionActivity(inst,8);
-  res.json({institution:{name:inst,adminName:admin?`${admin.first_name} ${admin.last_name}`:null,adminEmail:admin?.email||null,createdAt:admin?.created_at||null,totalTeachers:teachers.length,totalStudents:Number(summary.total_students||0),totalHostedSessions:Number(summary.total_hosted_sessions||0),totalAssignedSessions:Number(summary.total_assigned_sessions||0),hostedSessionsThisWeek:Number(summary.hosted_this_week||0),assignedSessionsThisWeek:Number(summary.assigned_this_week||0),lastActivity:summary.last_activity||null},teachers,recentActivity:activity});
+  try {
+    const admin = await getAdminInstitution(req.user.sub);
+    const inst = admin?.institution_name || null;
+    const base = {
+      name: inst,
+      adminName: admin ? `${admin.first_name || ""} ${admin.last_name || ""}`.trim() : null,
+      adminEmail: admin?.email || null,
+      createdAt: admin?.created_at || null,
+      totalTeachers: 0,
+      activeTeachers: 0,
+      totalStudents: 0,
+      activeStudents: 0,
+      totalClasses: 0,
+      totalLiveSessions: 0,
+      totalAssignedSessions: 0,
+      totalSessions: 0,
+      hostedSessionsThisWeek: 0,
+      assignedSessionsThisWeek: 0,
+    };
+    if (!inst) return res.json({ institution: base, teacherActivity: [], sessionTotalsThisWeek: [] });
+
+    const [[summary]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM users t WHERE t.role='TEACHER' AND t.institution_name=:inst AND t.deleted_at IS NULL) AS total_teachers,
+        (SELECT COUNT(*) FROM users t WHERE t.role='TEACHER' AND t.institution_name=:inst2 AND t.deleted_at IS NULL AND t.is_active=1) AS active_teachers,
+        (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users t ON t.id=c.teacher_id WHERE t.institution_name=:inst3 AND ce.removed_at IS NULL) AS total_students,
+        (SELECT COUNT(DISTINCT ce.student_user_id) FROM class_enrollments ce JOIN classes c ON c.id=ce.class_id JOIN users t ON t.id=c.teacher_id JOIN users su ON su.id=ce.student_user_id WHERE t.institution_name=:inst4 AND ce.removed_at IS NULL AND su.deleted_at IS NULL AND su.is_active=1) AS active_students,
+        (SELECT COUNT(*) FROM classes c JOIN users t ON t.id=c.teacher_id WHERE t.institution_name=:inst5 AND c.deleted_at IS NULL AND c.parent_id IS NOT NULL) AS total_classes,
+        (SELECT COUNT(*) FROM sessions s JOIN users t ON t.id=s.teacher_id WHERE t.institution_name=:inst6) AS total_live_sessions,
+        (SELECT COUNT(*) FROM quizzes q JOIN users t ON t.id=q.teacher_id WHERE t.institution_name=:inst7 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) AS total_assigned_sessions,
+        (SELECT COUNT(*) FROM sessions s JOIN users t ON t.id=s.teacher_id WHERE t.institution_name=:inst8 AND YEARWEEK(s.created_at,1)=YEARWEEK(CURDATE(),1)) AS hosted_this_week,
+        (SELECT COUNT(*) FROM quizzes q JOIN users t ON t.id=q.teacher_id WHERE t.institution_name=:inst9 AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL AND YEARWEEK(q.created_at,1)=YEARWEEK(CURDATE(),1)) AS assigned_this_week`,
+      { inst, inst2:inst, inst3:inst, inst4:inst, inst5:inst, inst6:inst, inst7:inst, inst8:inst, inst9:inst }
+    );
+    const totalLive = Number(summary?.total_live_sessions || 0);
+    const totalAssigned = Number(summary?.total_assigned_sessions || 0);
+    const institution = {
+      ...base,
+      totalTeachers:Number(summary?.total_teachers||0),
+      activeTeachers:Number(summary?.active_teachers||0),
+      totalStudents:Number(summary?.total_students||0),
+      activeStudents:Number(summary?.active_students||0),
+      totalClasses:Number(summary?.total_classes||0),
+      totalLiveSessions:totalLive,
+      totalAssignedSessions:totalAssigned,
+      totalSessions:totalLive+totalAssigned,
+      hostedSessionsThisWeek:Number(summary?.hosted_this_week||0),
+      assignedSessionsThisWeek:Number(summary?.assigned_this_week||0),
+    };
+    res.json({
+      institution,
+      teacherActivity:[
+        {label:'Active',value:institution.activeTeachers},
+        {label:'Inactive',value:Math.max(0,institution.totalTeachers-institution.activeTeachers)},
+      ],
+      sessionTotalsThisWeek:[
+        {label:'Live',value:institution.hostedSessionsThisWeek},
+        {label:'Assigned',value:institution.assignedSessionsThisWeek},
+      ],
+    });
+  } catch (error) {
+    console.error("Institution details failed:", error);
+    return res.status(500).json({ message: "Unable to load institution details right now." });
+  }
 }
 
 export async function getActivity(req, res) {

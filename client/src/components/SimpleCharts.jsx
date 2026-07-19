@@ -25,7 +25,8 @@ export function DualLineChart({ seriesA=[], seriesB=[], labels=[], labelA="Live"
   const aa=Array.from({length:count},(_,i)=>a[i]||0);
   const bb=Array.from({length:count},(_,i)=>b[i]||0);
   const max=Math.max(1,...aa,...bb); const w=620,h=height,p=24;
-  const makePoints=(values)=>values.map((v,i)=>{const x=p+(i*(w-p*2))/Math.max(1,count-1);const y=h-p-(v/max)*(h-p*2);return `${x},${y}`}).join(" ");
-  const pa=makePoints(aa),pb=makePoints(bb);
+  const allZero=aa.every(v=>v===0)&&bb.every(v=>v===0);
+  const makePoints=(values,zeroOffset=0)=>values.map((v,i)=>{const x=p+(i*(w-p*2))/Math.max(1,count-1);const y=allZero?(h-p-zeroOffset):(h-p-(v/max)*(h-p*2));return `${x},${y}`}).join(" ");
+  const pa=makePoints(aa,14),pb=makePoints(bb,29);
   return <div className="tw-chart-wrap tw-dual-line-chart"><svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`${labelA} and ${labelB} line chart`}><line x1={p} y1={h-p} x2={w-p} y2={h-p} stroke={c.border}/><polyline points={pa} fill="none" stroke={c.accent} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/><polyline points={pb} fill="none" stroke="#8b5cf6" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>{aa.map((_,i)=>{const [x,y]=pa.split(" ")[i].split(",");return <circle key={`a-${i}`} cx={x} cy={y} r="4.5" fill={c.cardBg} stroke={c.accent} strokeWidth="3"/>})}{bb.map((_,i)=>{const [x,y]=pb.split(" ")[i].split(",");return <circle key={`b-${i}`} cx={x} cy={y} r="4.5" fill={c.cardBg} stroke="#8b5cf6" strokeWidth="3"/>})}</svg><div className="tw-chart-labels">{labels.map((label,i)=><span key={`${label}-${i}`}>{label}</span>)}</div><div className="tw-dual-line-legend"><span><i style={{background:c.accent}}/>{labelA}</span><span><i style={{background:"#8b5cf6"}}/>{labelB}</span></div></div>;
 }

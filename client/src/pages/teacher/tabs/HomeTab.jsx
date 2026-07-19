@@ -95,7 +95,7 @@ export default function HomeTab({ setActiveTab }) {
         }
       })
     );
-    setSubmissionStats(statBatches.flat().filter((row) => Number(row.submitted_count || 0) > 0));
+    setSubmissionStats(statBatches.flat().filter((row) => { const due=row.available_until?new Date(row.available_until).getTime():Infinity; return Number(row.submitted_count || 0) > 0 && due > Date.now()-86400000; }));
   }
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function HomeTab({ setActiveTab }) {
               <div>
                 <div style={{ fontWeight: 950, fontSize: 19, color: c.text }}>Teacher overview</div>
                 {teacherInstitution ? (
-                  <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>Institution: <b style={{ color: c.text }}>{teacherInstitution}</b></div>
+                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: c.accent, display:"inline-flex" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
                 ) : (
                   <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} style={{ border: 0, background: "transparent", color: c.accent, fontWeight: 950, cursor: "pointer", padding: 0 }}>Join.</button></div>
                 )}
@@ -177,57 +177,20 @@ export default function HomeTab({ setActiveTab }) {
             </div>
 
             <div>
-              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", color: c.textSub, fontWeight: 900, marginBottom: 10 }}>Assigned quiz submissions</div>
+              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", color: c.textSub, fontWeight: 900, marginBottom: 10 }}>Assigned work submissions</div>
               {submissionStats.length === 0 ? (
                 <EmptyState c={c} icon="chart" title="No assigned submissions yet" message="Submission updates from assigned quizzes will appear here." compact />
               ) : (
                 <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 238 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
                   {submissionStats.map((row) => {
                     const rowTone = templateTone(row.template_type, c, false);
-                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "11px 12px", borderRadius: 14, border: `1px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
+                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "18px 15px", minHeight: 68, display: "flex", alignItems: "center", borderRadius: 14, border: `1px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
                       {Number(row.submitted_count || 0)} {Number(row.submitted_count || 0) === 1 ? "student" : "students"} from {row.class_name} have submitted their answers on {row.quiz_title}
                     </div>;
                   })}
                 </div>
               )}
             </div>
-          </div>
-        </section>
-
-        <section style={shellCard(c)}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>Continue where you left off</div>
-            </div>
-            <IconBubble name="spark" c={c} size={44} iconSize={22} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            <ContinueCard
-              c={c}
-              title={lastEditedQuiz?.title || "No quiz edits yet"}
-              subtitle={lastEditedQuiz ? `${templateLabel(lastEditedQuiz.template_type)} · ${lastEditedQuiz.category}` : "Create a quiz to keep working here later."}
-              buttonLabel={lastEditedQuiz ? "Continue to Quiz Builder" : "Open Create"}
-              onClick={() => lastEditedQuiz ? navigate(`/teacher/quizzes/${lastEditedQuiz.id}/builder`) : setActiveTab?.("create")}
-              templateType={lastEditedQuiz?.template_type}
-            />
-            {latestReport && (
-              <ContinueCard
-                c={c}
-                title={latestReport.quiz_title}
-                subtitle={`Latest finished ${latestReport.join_mode === "GROUP" ? "group" : "solo"} session`}
-                buttonLabel="Open Analytics"
-                onClick={() => navigate(`/teacher/analytics/${latestReport.id}`)}
-                templateType={latestReport.template_type}
-              />
-            )}
-            <ContinueCard
-              c={c}
-              title={lastBankedQuiz?.title || "No quiz bank item yet"}
-              subtitle={lastBankedQuiz ? "Return to Quiz Bank and reuse this content later." : "Bank a finished quiz so it is ready for reuse."}
-              buttonLabel={lastBankedQuiz ? "Open Quiz Bank" : "Open Live Sessions"}
-              onClick={() => setActiveTab?.(lastBankedQuiz ? "bank" : "live")}
-              templateType={lastBankedQuiz?.template_type}
-            />
           </div>
         </section>
 

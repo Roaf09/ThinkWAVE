@@ -206,10 +206,11 @@ export async function joinStudentLiveSession(req, res) {
     { uid, sid:sessionId }
   );
   if (!session) return res.status(404).json({ message:"Live session not found for your classes." });
-  if (session.status !== 'LOBBY') return res.status(400).json({ message: session.status === 'ENDED' ? 'Session has ended.' : 'The session has already started.' });
+  if (!['LOBBY','LIVE','PAUSED'].includes(session.status)) return res.status(400).json({ message: 'Session has ended.' });
   const profile = await getProfile(uid);
   if (!profile) return res.status(400).json({ message:"Complete your Student Info first." });
-  const [[existing]] = await pool.query(`SELECT id,reconnect_key FROM session_participants WHERE session_id=:sid AND student_user_id=:uid LIMIT 1`, { sid:sessionId, uid });
+  const [[existing]] = await pool.query(`SELECT id,reconnect_key,kicked_at FROM session_participants WHERE session_id=:sid AND student_user_id=:uid LIMIT 1`, { sid:sessionId, uid });
+  if (existing?.kicked_at) return res.status(403).json({ message:'You were removed from this session and cannot rejoin.' });
   if (existing) return res.json({ sessionId, participantId:existing.id, reconnectKey:existing.reconnect_key, joinMode:session.join_mode, existing:true });
   if (Number(session.max_participants || 0) > 0) {
     const [[count]] = await pool.query(`SELECT COUNT(*) AS total FROM session_participants WHERE session_id=:sid`, { sid:sessionId });

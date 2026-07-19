@@ -105,6 +105,7 @@ export default function ClassesTab({ setActiveTab }) {
   const breadcrumbs = useMemo(() => buildPath(folders, selectedFolderId), [folders, selectedFolderId]);
   const currentQuizzes = useMemo(() => (quizzes || []).filter((q) => Number(q.class_id) === Number(selectedFolderId) && q.status !== "BANKED"), [quizzes, selectedFolderId]);
   const currentReports = useMemo(() => (sessions || []).filter((s) => Number(s.class_id) === Number(selectedFolderId)), [sessions, selectedFolderId]);
+  const liveReports = useMemo(() => currentReports.filter((s) => s.session_type !== "ASSIGNED" && s.join_mode !== "ASSIGNED"), [currentReports]);
 
   function openAddFolder() {
     setFolderName("");
@@ -228,40 +229,24 @@ export default function ClassesTab({ setActiveTab }) {
           </div>
         )}
 
-        {selectedFolderId && currentQuizzes.length === 0 && children.length === 0 && (
-          <div style={{ textAlign: "center", padding: "52px 16px", color: c.textMuted }}>
-            <div style={{ fontWeight: 900, fontSize: 18, color: c.text }}>No quizzes yet?</div>
-            <p>Create the first one to get started.</p>
-            <button onClick={() => setActiveTab?.("create")} style={btn(c, true)}>Create</button>
-          </div>
-        )}
-
-        {selectedFolderId && currentQuizzes.length > 0 && (
-          <div style={{ marginTop: 22 }}>
-            <div style={{ fontWeight: 900, color: c.text, marginBottom: 10 }}>Quizzes</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {currentQuizzes.map((quiz) => <QuizFolderRow key={quiz.id} quiz={quiz} c={c} />)}
-            </div>
-          </div>
-        )}
+        {isSectionFolder && <div style={{ marginTop: 22 }}>
+          <div style={{ fontWeight: 900, color: c.text, marginBottom: 10 }}>Students</div>
+          {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : students.map((st) => <div key={st.id} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={() => setRemoveConfirm(st)} style={{ ...btn(c), color: c.redFg, background: c.redBg, borderColor: c.redBorder }}>Remove</button></div>)}
+        </div>}
       </section>
 
-      {isSectionFolder && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-        <div style={card(c)}>
-          <h3 style={{ marginTop: 0 }}>Students</h3>
-          {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : students.map((st) => <div key={st.id} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={() => setRemoveConfirm(st)} style={{ ...btn(c), color: c.redFg, background: c.redBg, borderColor: c.redBorder }}>Remove</button></div>)}
+      {isSectionFolder && <section className="tw-class-report-columns">
+        <div className="tw-class-report-panel" style={card(c)}>
+          <h3 style={{ marginTop: 0 }}>Live Session Reports</h3>
+          <div className="tw-class-report-list">
+            {liveReports.length === 0 ? <div style={{ color: c.textMuted }}>No live session reports for this class yet.</div> : liveReports.map((session) => <ClassReportCard key={`LIVE-${session.id}`} session={session} c={c} onOpenLive={() => window.location.assign(`/teacher/analytics/${session.id}`)} onOpenAssigned={() => {}} />)}
+          </div>
         </div>
-        <div style={card(c)}>
-          <h3 style={{ marginTop: 0 }}>Assignments</h3>
-          {asyncResults.length === 0 ? <div style={{ color: c.textMuted }}>No assigned quizzes for this class yet.</div> : asyncResults.map((r) => <AssignmentResultRow key={r.quiz_id} r={r} c={c} onAnalytics={() => window.location.assign(`/teacher/async-analytics/${selectedFolderId}/${r.quiz_id}`)} onPdf={() => downloadAsync(r.quiz_id, "pdf")} onXlsx={() => downloadAsync(r.quiz_id, "xlsx")} />)}
-        </div>
-      </section>}
-
-
-      {isSectionFolder && currentReports.length > 0 && <section style={card(c)}>
-        <h3 style={{ marginTop: 0 }}>Session reports</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          {currentReports.map((session) => <ClassReportCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} c={c} onOpenLive={() => window.location.assign(`/teacher/analytics/${session.id}`)} onOpenAssigned={() => window.location.assign(`/teacher/async-analytics/${session.class_id}/${session.quiz_id}`)} />)}
+        <div className="tw-class-report-panel" style={card(c)}>
+          <h3 style={{ marginTop: 0 }}>Assigned Session Reports</h3>
+          <div className="tw-class-report-list">
+            {asyncResults.length === 0 ? <div style={{ color: c.textMuted }}>No assigned session reports for this class yet.</div> : asyncResults.map((r) => <AssignmentResultRow key={r.quiz_id} r={r} c={c} onAnalytics={() => window.location.assign(`/teacher/async-analytics/${selectedFolderId}/${r.quiz_id}`)} />)}
+          </div>
         </div>
       </section>}
 
@@ -278,15 +263,18 @@ function QuizFolderRow({ quiz, c }) {
   return <div style={{ ...row(c), ...templateCardChrome(quiz.template_type, c, false), marginBottom: 8 }}><span><b>{quiz.title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(quiz.template_type)} · {quiz.status}</small></span><span style={{ color: tone.accent, fontWeight: 900 }}>{templateLabel(quiz.template_type)}</span></div>;
 }
 
-function AssignmentResultRow({ r, c, onAnalytics, onPdf, onXlsx }) {
-  const tone = templateTone(r.template_type, c, false);
-  return <div style={{ ...row(c), ...templateCardChrome(r.template_type, c, false), marginBottom: 8 }}><span><b>{r.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(r.template_type)} · {r.submitted_count} submitted · Avg {r.avg_score || 0}/{r.max_possible || 0}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>{templateLabel(r.template_type)}</span><button onClick={onAnalytics} style={btn(c, true)}>Open Analytics</button><button onClick={onPdf} style={btn(c)}>PDF</button><button onClick={onXlsx} style={btn(c)}>XLSX</button></span></div>;
+function ReportMeta({ templateType, label, countLabel, c }) {
+  const tone = templateTone(templateType, c, false);
+  return <div className="tw-class-report-meta" style={{ color: c.textMuted }}><span style={{ display:"inline-flex", alignItems:"center", padding:"4px 9px", borderRadius:999, border:`1px solid ${tone.border}`, background:tone.softBg, color:tone.accent, fontWeight:900, fontSize:12 }}>{templateLabel(templateType)}</span><span>·</span><span>{label}</span><span>·</span><span>{countLabel}</span></div>;
+}
+
+function AssignmentResultRow({ r, c, onAnalytics }) {
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(r.template_type, c, false) }}><span className="tw-class-report-copy"><b>{r.quiz_title}</b><ReportMeta templateType={r.template_type} label="Assigned session" countLabel={`${r.submitted_count || 0} submitted`} c={c}/></span><span className="tw-class-report-actions"><button onClick={onAnalytics} style={btn(c, true)}>Open Analytics</button></span></div>;
 }
 
 function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
-  const tone = templateTone(session.template_type, c, false);
-  return <div style={{ ...row(c), ...templateCardChrome(session.template_type, c, false), marginBottom: 0 }}><span><b>{session.quiz_title}</b><br/><small style={{ color: c.textMuted }}>{templateLabel(session.template_type)} · {assigned ? "Assigned session" : "Live session"} · {session.participant_count || 0} {assigned ? "submitted" : "participants"}</small></span><span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span style={{ color: tone.accent, fontWeight: 900, fontSize: 12 }}>Avg {session.avg_score ?? 0}</span><button onClick={assigned ? onOpenAssigned : onOpenLive} style={btn(c, true)}>Open Analytics</button></span></div>;
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(session.template_type, c, false) }}><span className="tw-class-report-copy"><b>{session.quiz_title}</b><ReportMeta templateType={session.template_type} label={assigned ? "Assigned session" : "Live session"} countLabel={`${session.participant_count || 0} ${assigned ? "submitted" : "participants"}`} c={c}/></span><span className="tw-class-report-actions"><button onClick={assigned ? onOpenAssigned : onOpenLive} style={btn(c, true)}>Open Analytics</button></span></div>;
 }
 
 function RemoveStudentModal({ c, student, onClose, onConfirm }) {

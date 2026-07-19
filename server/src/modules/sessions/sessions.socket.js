@@ -9,6 +9,10 @@ import { pool } from "../../db.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/thinkSpell.js";
 
+// Keeps the remaining question time while a teacher explicitly pauses a live session.
+// This does not require a database schema change and is cleared when the question advances or the session ends.
+const pausedQuestionState = new Map();
+
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
   const pendingKickTimers = new Map();
@@ -76,6 +80,7 @@ export function registerSessionSockets(io) {
       const [[s]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!s || s.status !== "LIVE") return;
 
+      pausedQuestionState.delete(Number(sessionId));
       await pool.query(
         `UPDATE sessions SET current_question_index=current_question_index+1, question_started_at=NOW() WHERE id=:sid`,
         { sid: sessionId }
@@ -108,16 +113,43 @@ export function registerSessionSockets(io) {
         }
       }
 
+      if (status === "PAUSED" && session.status === "LIVE") {
+        const snapshot = safeJson(session.questions_snapshot_json) || [];
+        const currentQuestion = snapshot[Number(session.current_question_index || 0)] || null;
+        const total = Number(currentQuestion?.config_json?.timeLimitSec || 0);
+        const startedAt = session.question_started_at ? new Date(session.question_started_at).getTime() : Date.now();
+        const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
+        await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
+        await broadcastState(io, sessionId);
+        await broadcastGroups(io, sessionId);
+        return;
+      }
+
+      let questionStartedAt = session.question_started_at || new Date();
+      if (status === "LIVE") {
+        const paused = pausedQuestionState.get(Number(sessionId));
+        if (session.status === "PAUSED" && paused) {
+          const elapsed = Math.max(0, Number(paused.total || 0) - Number(paused.remaining || 0));
+          questionStartedAt = new Date(Date.now() - elapsed * 1000);
+        } else if (session.status === "LOBBY" || !session.question_started_at) {
+          questionStartedAt = new Date();
+        }
+        pausedQuestionState.delete(Number(sessionId));
+      }
+
       await pool.query(
-        `UPDATE sessions SET status=:st, started_at=IF(:st='LIVE' AND started_at IS NULL, NOW(), started_at),
+        `UPDATE sessions SET status=:st,
+         started_at=IF(:st='LIVE' AND started_at IS NULL, NOW(), started_at),
          ended_at=IF(:st='ENDED', NOW(), ended_at),
-         question_started_at=IF(:st='LIVE', NOW(), question_started_at),
+         question_started_at=IF(:st='LIVE', :questionStartedAt, question_started_at),
          teacher_disconnected_deadline=IF(:st='LIVE', NULL, teacher_disconnected_deadline),
          end_reason=IF(:st='ENDED', 'NORMAL', end_reason)
          WHERE id=:sid`,
-        { sid: sessionId, st: status }
+        { sid: sessionId, st: status, questionStartedAt }
       );
       if (status === "ENDED") {
+        pausedQuestionState.delete(Number(sessionId));
         await pool.query(
           `UPDATE quizzes q
            JOIN sessions s ON s.quiz_id = q.id
@@ -244,24 +276,11 @@ export function registerSessionSockets(io) {
         const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM tab_events WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId, pid:participantId });
         const count = Number(row?.total || 0);
         io.to(roomTeacher(sessionId)).emit("tab:updated", { participantId:Number(participantId), count });
-        if (count === 1) {
-          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"You have left the experience, this is a warning." });
-        } else {
-          const key = `${sessionId}:${participantId}`;
-          const oldTimer = pendingKickTimers.get(key);
-          if (oldTimer) clearTimeout(oldTimer);
-          io.to(roomParticipant(participantId)).emit("antiCheat:pendingRemoval", {
-            count,
-            message:"You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher.",
-            redirectDelaySec:10,
-          });
-          io.to(roomTeacher(sessionId)).emit("antiCheat:review", {
-            participantId:Number(participantId), count,
-            firstName:participant.first_name, lastName:participant.last_name,
-            message:"Suspicious activities: a student have left the live session twice",
-          });
-          const timer = setTimeout(() => kickParticipant(io, sessionId, participantId, "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher."), 10000);
-          pendingKickTimers.set(key, timer);
+        if (count === 2) {
+          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"We noticed that you tabbed out during the live session." });
+        } else if (count >= 3) {
+          await kickParticipant(io, sessionId, participantId, "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher.");
+          return;
         }
         await broadcastRoster(io, sessionId);
       } catch (error) {
@@ -306,7 +325,7 @@ export function registerSessionSockets(io) {
         const tt = normalizeTemplateType(session.template_type);
 
         if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
-          const timeUp = await isQuestionTimeUp(session);
+          const timeUp = await isQuestionTimeUp(session, questionId);
           if (timeUp) {
             return socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up", templateType: tt });
           }
@@ -407,13 +426,27 @@ function roomTeacher(sessionId) { return `session:${sessionId}:teacher`; }
 function roomParticipant(participantId) { return `participant:${participantId}`; }
 function roomGroup(sessionId, groupId) { return `session:${sessionId}:group:${groupId}`; }
 
-async function isQuestionTimeUp(session) {
-  const [[quizMeta]] = await pool.query(`SELECT time_limit_sec FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
-  const timeLimitSec = Number(quizMeta?.time_limit_sec || 0);
-  if (timeLimitSec <= 0 || !session.question_started_at) return false;
+async function isQuestionTimeUp(session, questionId = null) {
+  if (!session?.question_started_at) return false;
+  const snapshot = safeJson(session.questions_snapshot_json) || [];
+  const question = questionId
+    ? snapshot.find((item) => Number(item?.id) === Number(questionId))
+    : snapshot[Number(session.current_question_index || 0)];
+  let timeLimitSec = Number(question?.config_json?.timeLimitSec || 0);
+  if (timeLimitSec <= 0 && questionId) {
+    const [[row]] = await pool.query(`SELECT config_json FROM quiz_questions WHERE id=:qid LIMIT 1`, { qid: questionId });
+    timeLimitSec = Number(safeJson(row?.config_json)?.timeLimitSec || 0);
+  }
+  if (timeLimitSec <= 0) {
+    const [[quizMeta]] = await pool.query(`SELECT time_limit_sec FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
+    timeLimitSec = Number(quizMeta?.time_limit_sec || 0);
+  }
+  if (timeLimitSec <= 0) return false;
   const [[t]] = await pool.query(`SELECT TIMESTAMPDIFF(SECOND, :started, NOW()) AS elapsed_sec`, { started: session.question_started_at });
   const elapsed = Number(t?.elapsed_sec || 0);
-  return elapsed > timeLimitSec;
+  // Keep a small server-side grace window so network transit cannot reject an
+  // answer while the student's visible timer still has time remaining.
+  return elapsed > timeLimitSec + 1;
 }
 
 async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
@@ -433,7 +466,7 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
     return;
   }
 
-  if (await isQuestionTimeUp(session)) {
+  if (await isQuestionTimeUp(session, questionId)) {
     try {
       await pool.query(
         `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
@@ -476,7 +509,7 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
 }
 
 async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
-  if (await isQuestionTimeUp(session)) {
+  if (await isQuestionTimeUp(session, questionId)) {
     socket.emit("answer:ack", {
       isCorrect: false,
       points: 0,
@@ -859,16 +892,17 @@ async function kickParticipant(io, sessionId, participantId, reason) {
 async function broadcastRoster(io, sessionId) {
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
-            p.kicked_at, p.kick_reason, u.profile_image,
+            p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
             gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
             COUNT(te.id) AS tab_out_count
      FROM session_participants p
      LEFT JOIN users u ON u.id = p.student_user_id
+     LEFT JOIN student_profiles stp ON stp.user_id = p.student_user_id
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
      LEFT JOIN tab_events te ON te.session_id=p.session_id AND te.participant_id=p.id
      WHERE p.session_id=:sid
-     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, u.profile_image
+     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, stp.profile_image, u.profile_image
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
     { sid: sessionId }
   );
@@ -888,7 +922,7 @@ async function broadcastGroups(io, sessionId) {
                     'first_name', p.first_name,
                     'last_name', p.last_name,
                     'connected', p.connected,
-                    'profile_image', u.profile_image
+                    'profile_image', COALESCE(stp.profile_image, u.profile_image)
                   ) END
                   ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC
                   SEPARATOR ','
@@ -901,6 +935,7 @@ async function broadcastGroups(io, sessionId) {
      LEFT JOIN session_group_members m ON m.group_id = g.id
      LEFT JOIN session_participants p ON p.id = m.participant_id
      LEFT JOIN users u ON u.id = p.student_user_id
+     LEFT JOIN student_profiles stp ON stp.user_id = p.student_user_id
      WHERE g.session_id=:sid
      GROUP BY g.id
      ORDER BY g.group_order ASC`,
@@ -946,8 +981,9 @@ async function broadcastState(io, sessionId) {
     `SELECT s.id, s.status, s.current_question_index, s.question_started_at, s.questions_snapshot_json,
             s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
             q.id AS quiz_id, q.title AS quiz_title, q.category AS quiz_category,
-            q.template_type, q.time_limit_sec, q.shuffle_answers, q.randomize_questions
-     FROM sessions s JOIN quizzes q ON q.id=s.quiz_id
+            q.template_type, q.time_limit_sec, q.shuffle_answers, q.randomize_questions,
+            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+     FROM sessions s JOIN quizzes q ON q.id=s.quiz_id JOIN users u ON u.id=s.teacher_id
      WHERE s.id=:sid`,
     { sid: sessionId }
   );
@@ -958,6 +994,7 @@ async function broadcastState(io, sessionId) {
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
   const serverNow = new Date();
   state.server_now = serverNow.toISOString();
+  state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
   state.question_deadline_at = state.question_started_at && qLimit > 0 ? new Date(new Date(state.question_started_at).getTime() + qLimit * 1000).toISOString() : null;
   io.to(roomSession(sessionId)).emit("session:state", { state, questions: qs });
   io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });

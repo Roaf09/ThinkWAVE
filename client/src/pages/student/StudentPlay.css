@@ -2298,3 +2298,6 @@ body:not(.dark) .sp-inline-theme-toggle {
 .quiz-shell-new.theme-light .qn-prompt-text,.quiz-shell-new.theme-light .choice-text,.quiz-shell-new.theme-light .match-v2-text,.quiz-shell-new.theme-light .type-input{color:#14213d!important}.quiz-shell-new.theme-light .qn-body{color:#14213d}
 .quiz-shell-new.feedback-hit-correct,.quiz-shell-new.feedback-hit-wrong{animation:none!important;transform:none!important}
 @media(max-width:640px){.sp-experience-controls{left:12px;bottom:12px}.sp-experience-controls .sp-inline-sound-toggle,.sp-experience-controls .sp-inline-theme-toggle{width:40px;height:40px}}
+
+/* Revision 25.1: student dashboard shortcut on the completed live-session screen. */
+.sp-end-dashboard-button{position:fixed;right:22px;top:22px;z-index:80;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:14px;border:1px solid rgba(43,108,255,.35);background:#2b6cff;color:#fff;font-weight:900;cursor:pointer;box-shadow:0 12px 30px rgba(43,108,255,.28);transition:transform .2s ease,filter .2s ease}.sp-end-dashboard-button:hover{transform:translateY(-2px);filter:brightness(1.06)}

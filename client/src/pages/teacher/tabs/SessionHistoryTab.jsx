@@ -45,7 +45,7 @@ const btn = (c, primary = false) => ({
   cursor: "pointer",
 });
 
-export default function SessionHistoryTab({ setActiveTab }) {
+export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -119,6 +119,10 @@ export default function SessionHistoryTab({ setActiveTab }) {
 
   if (loading) return <div className="container"><div style={card(c)}>Loading session history…</div></div>;
 
+  if (guestMode) {
+    return <GuestHistoryView c={c} sessions={filtered} query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy} navigate={navigate} />;
+  }
+
   return (
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
@@ -189,7 +193,6 @@ export default function SessionHistoryTab({ setActiveTab }) {
                           ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}`
                           : `/teacher/analytics/${session.id}`)}
                       >Open Analytics</button>
-                      {!isAssignedSession(session) && <button style={btn(c)} onClick={() => setActiveTab?.("bank")}>Reuse</button>}
                       <button style={btn(c)} disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</button>
                       <button style={btn(c)} disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</button>
                     </div>
@@ -202,6 +205,28 @@ export default function SessionHistoryTab({ setActiveTab }) {
       )}
     </div>
   );
+}
+
+
+function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, navigate }) {
+  return <div className="container" style={{ display: "grid", gap: 18 }}>
+    <section><h2 style={{ marginBottom: 4, color: c.text }}>History</h2></section>
+    <section style={{ ...card(c), display: "grid", gridTemplateColumns: "minmax(220px,1.3fr) minmax(150px,.7fr)", gap: 12 }}>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+      <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
+    </section>
+    {!sessions.length ? <div style={card(c)}>No completed Guest Host sessions yet.</div> : sessions.map((session) => {
+      const tone = templateTone(session.template_type, c, false);
+      return <div key={session.id} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+          <div><div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{new Date(session.ended_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div></div>
+          <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(150px,1fr))", gap: 10, marginTop: 14 }}><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
+        <div style={{ marginTop: 14 }}><button style={btn(c, true)} onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</button></div>
+      </div>;
+    })}
+  </div>;
 }
 
 function MiniInfo({ label, value, c }) {

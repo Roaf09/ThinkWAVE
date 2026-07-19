@@ -45,9 +45,13 @@ export function ProfileSettingsModal({ roleLabel="User", profile, setProfile, on
   return <div className="tw-profile-modal-backdrop"><form onSubmit={submit} className="tw-profile-modal-card" style={{background:c.cardBg3,borderColor:c.border,color:c.text}}>
     <button type="button" onClick={onClose} className="tw-profile-modal-close" style={{color:c.text,borderColor:c.border,background:c.cardBg2}}><TwIcon name="close" size={18}/></button>
     <h3>{roleLabel} Info</h3>
-    <div className="tw-profile-modal-head">
-      <div className="tw-profile-modal-avatar" style={{borderColor:c.accent,background:c.cardBg2}}>{profile.profileImage?<img src={profile.profileImage} alt="Profile"/>:<TwIcon name="user" size={48}/>}</div>
-      <div className="tw-profile-modal-actions"><button type="button" className="btn" onClick={()=>fileRef.current?.click()}><TwIcon name="upload" size={16}/> Upload Profile</button><button type="button" className="btn secondary" onClick={()=>setProfile(p=>({...p,profileImage:""}))} style={{color:c.redFg,borderColor:c.redBorder}}><TwIcon name="trash" size={16}/> Delete Profile</button></div>
+    <div className="tw-profile-modal-head tw-profile-modal-head-centered">
+      <div className="tw-profile-avatar-picker">
+        <button type="button" className="tw-profile-modal-avatar tw-profile-modal-avatar-button" onClick={()=>fileRef.current?.click()} aria-label="Upload profile picture" title="Upload profile picture" style={{borderColor:c.accent,background:c.cardBg2,color:c.text}}>
+          {profile.profileImage?<img src={profile.profileImage} alt="Profile"/>:<TwIcon name="user" size={48}/>}
+        </button>
+        {profile.profileImage&&<button type="button" className="tw-profile-avatar-remove" onClick={()=>setProfile(p=>({...p,profileImage:""}))} aria-label="Remove profile picture" title="Remove profile picture" style={{background:c.cardBg3,color:c.redFg,borderColor:c.redBorder}}><TwIcon name="close" size={15} strokeWidth={3}/></button>}
+      </div>
     </div>
     <input ref={fileRef} type="file" hidden accept="image/*" onChange={e=>{pickFile(e.target.files?.[0]);e.target.value=""}}/>
     <h4>{roleLabel} Details</h4>

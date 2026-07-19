@@ -94,9 +94,9 @@ async function compressImageFile(file) {
 function defaultConfig(t, c) {
   switch (normalizeTemplateType(t)) {
     case "MCQ":
-      return { options: defaultMcqOptions(c), promptImage: "", showPromptImage: false, mcqMode: "NORMAL", voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
+      return { options: defaultMcqOptions(c), promptImage: "", showPromptImage: false, mcqMode: "NORMAL", voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "TRUE_FALSE":
-      return { options: ["True", "False"], promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
+      return { options: ["True", "False"], promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "MATCHING":
       return {
         colA: [{ text: "", image: "" }],
@@ -105,15 +105,16 @@ function defaultConfig(t, c) {
         promptImage: "",
         showPromptImage: false,
         voiceRecord: false,
+        textToSpeech: false,
         voicePrompt: "",
         voiceAnswers: [],
       };
     case "GUESS_WORD_4PICS":
-      return { images: ["", "", "", ""], dummyLetters: 6, target: "", promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
+      return { images: ["", "", "", ""], dummyLetters: 6, target: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "THINK_SPELL":
-      return { gridSize: 5, answers: [], gridSeed: 1, gridFilled: false, promptImage: "", showPromptImage: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
+      return { gridSize: 5, answers: [], gridSeed: 1, gridFilled: false, promptImage: "", showPromptImage: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0, showWordList: true, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "TYPE_ANSWER":
-      return { promptImage: "", showPromptImage: false, voiceRecord: false, voicePrompt: "", voiceAnswers: [] };
+      return { promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     default:
       return {};
   }
@@ -351,7 +352,7 @@ function validateQuestion(q, templateType) {
 }
 
 // QuizBuilder is the main authoring page. Each template shares the same save/publish flow but renders different fields.
-export default function QuizBuilder() {
+export default function QuizBuilder({ guestMode = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
@@ -436,7 +437,15 @@ export default function QuizBuilder() {
       setQuestions([buildBlankQuestion(data.quiz, 0)]);
       setIsSaved(false);
     } else {
-      setQuestions(loaded);
+      // Settings toggles are quiz-wide. Harmonize legacy per-question values on load,
+      // and prefer recorded audio when older data accidentally enabled both modes.
+      const showPromptImage = institution && loaded.some((question) => !!question.config?.showPromptImage);
+      const voiceRecord = loaded.some((question) => !!question.config?.voiceRecord);
+      const textToSpeech = !voiceRecord && loaded.some((question) => !!question.config?.textToSpeech);
+      setQuestions(loaded.map((question) => ({
+        ...question,
+        config: { ...question.config, showPromptImage, voiceRecord, textToSpeech },
+      })));
       setIsSaved(true);
     }
     setQIndex(0);
@@ -492,12 +501,37 @@ export default function QuizBuilder() {
     }
   }
 
+  function applyConfigToAllQuestions(patch) {
+    markUnsaved((qs) => qs.map((question) => ({
+      ...question,
+      config: {
+        ...(question.config || {}),
+        ...patch,
+        voicePrompt: question.config?.voicePrompt || "",
+        voiceAnswers: Array.isArray(question.config?.voiceAnswers) ? question.config.voiceAnswers : [],
+      },
+    })));
+  }
+
+  function inheritedGlobalConfig(sourceQuestions = questions) {
+    const first = sourceQuestions?.[0]?.config || {};
+    return {
+      showPromptImage: !!first.showPromptImage,
+      voiceRecord: !!first.voiceRecord,
+      textToSpeech: !!first.textToSpeech,
+    };
+  }
+
   function addQuestion() {
     if (isBasic && questions.length >= planLimit.maxItems) {
       setMsg(`Basic plan allows only ${planLimit.maxItems} ${["MATCHING","THINK_SPELL"].includes(quiz?.template_type) ? "batches" : "questions"} for this template.`);
       return;
     }
-    markUnsaved((qs) => [...qs, buildBlankQuestion(quiz, qs.length)]);
+    markUnsaved((qs) => {
+      const blank = buildBlankQuestion(quiz, qs.length);
+      blank.config = { ...blank.config, ...inheritedGlobalConfig(qs) };
+      return [...qs, blank];
+    });
     setNavDir("next");
     setQIndex(questions.length);
     setNavTick((v) => v + 1);
@@ -642,7 +676,7 @@ export default function QuizBuilder() {
     try {
       await api.delete(`/quizzes/${id}`);
       setModal("deleted");
-      setTimeout(() => navigate("/teacher"), 1800);
+      setTimeout(() => navigate(guestMode ? "/guest" : "/teacher"), 1800);
     } catch {
       setMsg("Delete failed.");
     }
@@ -681,7 +715,7 @@ export default function QuizBuilder() {
     const newQ = {
       order: questions.length,
       prompt: bankQ.prompt,
-      config: parsedConfig,
+      config: { ...parsedConfig, ...inheritedGlobalConfig(questions) },
       correct: parsedCorrect,
       timeLimitSec: parsedConfig?.timeLimitSec ?? 30,
       points: parsedConfig?.points ?? 1,
@@ -708,6 +742,9 @@ export default function QuizBuilder() {
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
   const publishDisabled = !isSaved || quiz.status === "PUBLISHED";
   const isBatchTemplate = ["MATCHING", "THINK_SPELL"].includes(quiz.template_type);
+  const globalShowPromptImage = questions.length > 0 && questions.every((question) => !!question.config?.showPromptImage);
+  const globalVoiceRecord = questions.length > 0 && questions.every((question) => !!question.config?.voiceRecord);
+  const globalTextToSpeech = questions.length > 0 && questions.every((question) => !!question.config?.textToSpeech);
 
   return (
     <>
@@ -724,12 +761,12 @@ export default function QuizBuilder() {
         @keyframes twTilePop { from { opacity: 0; transform: scale(.72) rotate(-4deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
       `}</style>
 
-      {bankOpen && <div style={ui.blurOverlay} />}
+      {!guestMode && bankOpen && <div style={ui.blurOverlay} />}
 
       <div style={ui.page}>
         <div style={ui.topBar}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button style={ui.ghostBtn} onClick={() => navigate("/teacher")}>← Back</button>
+            <button style={ui.ghostBtn} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>← Back</button>
             <ThemeIconButton dark={dark} onClick={toggleTheme} style={ui.ghostBtn} />
             <div style={{ minWidth: 260, flex: 1 }}>
               {titleEditing ? (
@@ -769,7 +806,7 @@ export default function QuizBuilder() {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button title="Delete quiz" aria-label="Delete quiz" style={{ ...ui.dangerGhostBtn, width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setModal("confirmDelete")}>🗑</button>
             <button title="Quiz settings" aria-label="Quiz settings" style={{ ...ui.secondaryBtn, ...(settingsOpen ? ui.secondaryBtnActive : {}), width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setSettingsOpen((v) => !v)}>⚙</button>
-            <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>
+            {!guestMode && <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>}
             <button style={ui.secondaryBtn} onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</button>
             <button style={isSaved ? ui.savedBtn : ui.secondaryBtn} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</button>
             <button style={publishDisabled ? ui.disabledPrimaryBtn : ui.primaryBtn} onClick={publish} disabled={publishDisabled}>
@@ -801,13 +838,23 @@ export default function QuizBuilder() {
                   <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
-              {!isBasic && <button style={ui.toggleCard(!!currentQ?.config?.showPromptImage)} onClick={() => updateQ({ config: { ...(currentQ?.config || {}), showPromptImage: !currentQ?.config?.showPromptImage, promptImage: currentQ?.config?.promptImage || "" } })}>
-                <div><div style={ui.toggleTitle}>Question image</div><div style={ui.toggleHint}>Show an optional image field directly after the prompt.</div></div>
-                <span style={ui.switchTrack(!!currentQ?.config?.showPromptImage)}><span style={ui.switchThumb(!!currentQ?.config?.showPromptImage)} /></span>
+              {!isBasic && <button style={ui.toggleCard(globalShowPromptImage)} onClick={() => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage })}>
+                <div><div style={ui.toggleTitle}>Question image</div><div style={ui.toggleHint}>Show an optional image field after every prompt in this quiz.</div></div>
+                <span style={ui.switchTrack(globalShowPromptImage)}><span style={ui.switchThumb(globalShowPromptImage)} /></span>
               </button>}
-              <button style={ui.toggleCard(!!currentQ?.config?.voiceRecord)} onClick={() => updateQ({ config: { ...(currentQ?.config || {}), voiceRecord: !currentQ?.config?.voiceRecord, voicePrompt: currentQ?.config?.voicePrompt || "", voiceAnswers: Array.isArray(currentQ?.config?.voiceAnswers) ? currentQ.config.voiceAnswers : [] } })}>
-                <div><div style={ui.toggleTitle}>Voice record</div><div style={ui.toggleHint}>Record the prompt and each answer for learners who benefit from audio support.</div></div>
-                <span style={ui.switchTrack(!!currentQ?.config?.voiceRecord)}><span style={ui.switchThumb(!!currentQ?.config?.voiceRecord)} /></span>
+              <button style={ui.toggleCard(globalVoiceRecord)} onClick={() => {
+                const enabled = !globalVoiceRecord;
+                applyConfigToAllQuestions({ voiceRecord: enabled, textToSpeech: enabled ? false : globalTextToSpeech });
+              }}>
+                <div><div style={ui.toggleTitle}>Voice record</div><div style={ui.toggleHint}>Enable recording for every question and answer. Voice record and text to speech cannot be active together.</div></div>
+                <span style={ui.switchTrack(globalVoiceRecord)}><span style={ui.switchThumb(globalVoiceRecord)} /></span>
+              </button>
+              <button style={ui.toggleCard(globalTextToSpeech)} onClick={() => {
+                const enabled = !globalTextToSpeech;
+                applyConfigToAllQuestions({ textToSpeech: enabled, voiceRecord: enabled ? false : globalVoiceRecord });
+              }}>
+                <div><div style={ui.toggleTitle}>Text to speech</div><div style={ui.toggleHint}>Read every prompt and visible answer aloud. Enabling this turns voice record off for the whole quiz.</div></div>
+                <span style={ui.switchTrack(globalTextToSpeech)}><span style={ui.switchThumb(globalTextToSpeech)} /></span>
               </button>
               </div>
             </div>
@@ -827,9 +874,9 @@ export default function QuizBuilder() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: c.accent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
+                    {!guestMode && <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
                       Save to Bank
-                    </button>
+                    </button>}
                     <button title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} style={{ ...ui.dangerGhostBtn, width: 36, height: 36, padding: 0, display: "grid", placeItems: "center", fontSize: 16 }} onClick={deleteCurrentQuestion}>🗑</button>
                   </div>
                 </div>
@@ -941,7 +988,7 @@ export default function QuizBuilder() {
           )}
         />
       )}
-      {modal === "confirmBank" && (
+      {!guestMode && modal === "confirmBank" && (
         <BuilderModal
           tone="blue"
           icon="📚"
@@ -958,7 +1005,7 @@ export default function QuizBuilder() {
           )}
         />
       )}
-      {modal === "bankSaved" && <BuilderModal tone="green" icon="✓" title="Saved to Bank" message="The current question was added to your question bank." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
+      {!guestMode && modal === "bankSaved" && <BuilderModal tone="green" icon="✓" title="Saved to Bank" message="The current question was added to your question bank." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
       {modal === "duplicates" && (
         <BuilderModal
           tone="yellow"
@@ -1007,7 +1054,7 @@ export default function QuizBuilder() {
         />
       )}
 
-      {bankOpen && <BankModal templateType={quiz.template_type} onSelect={addFromBank} onClose={() => setBankOpen(false)} ui={ui} c={c} />}
+      {!guestMode && bankOpen && <BankModal templateType={quiz.template_type} onSelect={addFromBank} onClose={() => setBankOpen(false)} ui={ui} c={c} />}
     </>
   );
 }
@@ -1132,6 +1179,10 @@ function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null }) {
           <textarea rows={5} maxLength={1000} value={rawText} placeholder="cat, dog, bird, fish" onChange={handleAnswersChange} style={{ ...ui.textarea, marginTop: 7 }} />
           {maxWords && <div style={{ color: allAnswers.length > maxWords ? c.redFg : c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan uses the first {maxWords} valid words in this batch.</div>}
         </div>
+        <button type="button" style={ui.toggleCard(cfg.showWordList !== false)} onClick={() => onChange({ config: { ...cfg, answers, showWordList: cfg.showWordList === false } })}>
+          <div><div style={ui.toggleTitle}>Show valid words during gameplay</div><div style={ui.toggleHint}>{cfg.showWordList === false ? "Higher-order mode: learners discover which words to find." : "Lower-order mode: learners can see the word goals."}</div></div>
+          <span style={ui.switchTrack(cfg.showWordList !== false)}><span style={ui.switchThumb(cfg.showWordList !== false)} /></span>
+        </button>
         <div>
           <label style={ui.smallLabel}>Grid size</label>
           <select value={gridSize} onChange={(e) => setGridSize(e.target.value)} style={{ ...ui.select, display: "block", width: "100%", marginTop: 7 }} disabled={!normalized.length}>
@@ -1273,8 +1324,7 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = 
       : baseOptions;
     const MIN = mcqMode === "MODIFIED" ? 4 : 2;
     const MAX = mcqMode === "MODIFIED" ? 4 : (isBasic ? 4 : 5);
-    // Revision 5: Modified MCQ requires only one image answer, so two-answer mode is disabled.
-    const answerMode = mcqMode === "MODIFIED" ? "ONE" : (cfg.answerMode === "TWO" ? "TWO" : "ONE");
+    const answerMode = cfg.answerMode === "TWO" ? "TWO" : "ONE";
     const rawCorrect = Array.isArray(cor.choices) && cor.choices.length ? cor.choices : [cor.choice].filter(Boolean);
     const correctChoices = (answerMode === "TWO" ? rawCorrect.slice(0, 2) : rawCorrect.slice(0, 1)).filter(Boolean);
     function emitOptions(nextOptions, nextCorrect = cor, extraConfig = {}) {
@@ -1288,7 +1338,7 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = 
         ? [...opts, ...defaultMcqImageOptions()].slice(0, 4).map((opt) => ({ id: opt.id || newChoiceId(), text: "", image: opt.image || "" }))
         : (Array.isArray(cfg.options) && cfg.options.length ? cfg.options.map(normalizeChoiceOption) : defaultMcqOptions(category));
       const kept = correctChoices.filter((choice) => nextOptions.some((row) => choiceMatchesValue(row, choice) && (nextMode !== "MODIFIED" || trimText(row.image))));
-      const nextAnswerMode = nextMode === "MODIFIED" ? "ONE" : answerMode;
+      const nextAnswerMode = answerMode;
       const nextCorrect = nextAnswerMode === "TWO"
         ? { ...cor, choice: kept[0] || "", choices: kept.slice(0, 2) }
         : { ...cor, choice: kept[0] || "", choices: kept[0] ? [kept[0]] : [] };
@@ -1296,7 +1346,6 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = 
     }
 
     function setAnswerMode(nextMode) {
-      if (mcqMode === "MODIFIED" && nextMode === "TWO") return;
       // Revision 1: teacher can switch between one-answer and two-answer MCQ scoring.
       const nextCorrect = nextMode === "TWO"
         ? { ...cor, choices: correctChoices.slice(0, 2), choice: correctChoices[0] || "" }
@@ -1336,14 +1385,13 @@ function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = 
               <button type="button" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "ONE" ? c.accent : c.border }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
               <button
                 type="button"
-                disabled={mcqMode === "MODIFIED"}
                 style={{
                   ...ui.secondaryBtn,
                   padding: "4px 10px",
                   fontSize: 12,
                   borderColor: answerMode === "TWO" ? c.accent : c.border,
-                  opacity: mcqMode === "MODIFIED" ? 0.38 : 1,
-                  cursor: mcqMode === "MODIFIED" ? "not-allowed" : "pointer",
+                  opacity: 1,
+                  cursor: "pointer",
                   transition: "opacity 0.2s ease, border-color 0.2s ease",
                 }}
                 onClick={() => setAnswerMode("TWO")}

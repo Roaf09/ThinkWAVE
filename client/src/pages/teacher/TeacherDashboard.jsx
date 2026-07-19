@@ -79,9 +79,9 @@ export default function TeacherDashboard() {
     { id: "home", label: "Home", icon: "home" },
     { id: "create", label: "Create", icon: "create" },
     { id: "bank", label: bankLabel, icon: "bank" },
-    { id: "live", label: "Live Sessions", icon: "live" },
+    { id: "live", label: "Sessions", icon: "live" },
     { id: "classes", label: "Classes", icon: "classes" },
-    { id: "history", label: "Session History", icon: "history" },
+    { id: "history", label: "History", icon: "history" },
   ];
 
   function renderTab() {
@@ -137,9 +137,11 @@ function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose,
   return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...modalCard(c), width: "min(94vw,600px)", position: "relative" }}>
     <button type="button" onClick={onClose} style={{ ...iconButton(c), position: "absolute", right: 14, top: 14 }}><TwIcon name="close" size={18} /></button>
     <h3 style={{ marginTop: 0, color: c.text }}>Teacher Info</h3>
-    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 22 }}>
-      <div style={{ width: 105, height: 105, borderRadius: "50%", display: "grid", placeItems: "center", overflow: "hidden", border: `3px solid ${c.accent}`, background: c.cardBg2 }}>{profile.profileImage ? <img src={profile.profileImage} alt="Teacher profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={48} />}</div>
-      <div style={{ display: "grid", gap: 9 }}><button type="button" onClick={onUpload} style={primary(c)}><TwIcon name="upload" size={16} /> Upload Profile</button><button type="button" onClick={() => setProfile({ ...profile, profileImage: "" })} style={{ ...secondary(c), color: c.redFg, borderColor: c.redBorder }}><TwIcon name="trash" size={16} /> Delete Profile</button></div>
+    <div style={{ display: "grid", placeItems: "center", marginBottom: 22 }}>
+      <div style={{ position: "relative" }}>
+        <button type="button" onClick={onUpload} aria-label="Upload profile picture" title="Upload profile picture" style={{ width: 105, height: 105, padding: 0, borderRadius: "50%", display: "grid", placeItems: "center", overflow: "hidden", border: `3px solid ${c.accent}`, background: c.cardBg2, color: c.text, cursor: "pointer", transition: "transform .2s ease, box-shadow .2s ease" }}>{profile.profileImage ? <img src={profile.profileImage} alt="Teacher profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={48} />}</button>
+        {profile.profileImage && <button type="button" onClick={() => setProfile({ ...profile, profileImage: "" })} aria-label="Remove profile picture" title="Remove profile picture" style={{ position: "absolute", top: 0, right: 0, transform: "translate(28%,-28%)", width: 29, height: 29, padding: 0, borderRadius: "50%", display: "grid", placeItems: "center", border: `1px solid ${c.redBorder}`, background: c.cardBg3, color: c.redFg, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.22)" }}><TwIcon name="close" size={15} strokeWidth={3} /></button>}
+      </div>
     </div>
     <h4 style={{ color: c.text, marginBottom: 12 }}>Teacher Details</h4>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>

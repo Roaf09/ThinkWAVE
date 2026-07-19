@@ -12,7 +12,7 @@ import { isInstitutionPlan } from "../../lib/planLimits";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
 
-export default function Analytics() {
+export default function Analytics({ guestMode = false }) {
   const { sessionId, classId, quizId } = useParams();
   const assigned = Boolean(classId && quizId);
   const navigate = useNavigate();
@@ -24,6 +24,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [institutionPlan, setInstitutionPlan] = useState(false);
+  const [exporting, setExporting] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -44,7 +45,7 @@ export default function Analytics() {
         } else {
           const analyticsResponse = await api.get(`/sessions/${sessionId}/full-analytics`);
           let tabs = [];
-          if (hasInstitutionPlan) {
+          if (hasInstitutionPlan && !guestMode) {
             const tabsResponse = await api.get(`/sessions/${sessionId}/tab-monitoring`);
             tabs = tabsResponse.data || [];
           }
@@ -59,14 +60,31 @@ export default function Analytics() {
       }
     })();
     return () => { alive = false; };
-  }, [assigned, classId, quizId, sessionId]);
+  }, [assigned, classId, quizId, sessionId, guestMode]);
 
   const session = analytics?.session || {};
   const tone = templateTone(session.template_type, colors, dark);
   const scores = useMemo(() => buildScores(analytics), [analytics]);
+  const extendedView = institutionPlan || guestMode;
   const exportBase = assigned
-    ? `${API_BASE}/api/classes/${classId}/async-results/${quizId}/export`
-    : `${API_BASE}/api/analytics/sessions/${sessionId}/export`;
+    ? `/classes/${classId}/async-results/${quizId}/export`
+    : `/analytics/sessions/${sessionId}/export`;
+
+  async function downloadExport(format) {
+    setExporting(format);
+    try {
+      const response = await api.get(`${exportBase}/${format}`, { responseType: "blob" });
+      const type = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      const url = URL.createObjectURL(new Blob([response.data], { type }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${guestMode ? "guest-session" : assigned ? "assigned-session" : "session"}-${sessionId || quizId}.${format}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setError(error?.response?.data?.message || "Unable to export analytics.");
+    } finally { setExporting(""); }
+  }
 
   return (
     <div className="tw-analytics-page" style={{ minHeight: "100vh", background: colors.pageBg, paddingBottom: 40 }}><div className="container">
@@ -87,12 +105,12 @@ export default function Analytics() {
                 {session.quiz_title || (assigned ? `Assigned Quiz #${quizId}` : `Session #${sessionId}`)}
               </h2>
               <div style={{ color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>
-                {assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}
+                {guestMode ? formatDate(session.display_date) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}</>}
               </div>
             </div>
-            {institutionPlan && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <a style={downloadBtn(C)} href={`${exportBase}/pdf`} target="_blank" rel="noreferrer">PDF</a>
-              <a style={downloadBtn(C)} href={`${exportBase}/xlsx`} target="_blank" rel="noreferrer">Excel</a>
+            {extendedView && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" style={downloadBtn(C)} disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</button>
+              <button type="button" style={downloadBtn(C)} disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</button>
             </div>}
           </div>
         </section>
@@ -103,15 +121,15 @@ export default function Analytics() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
             <h3 style={{ margin: 0, color: C.text, fontWeight: 950, display: "flex", alignItems: "center", gap: 9 }}><TwIcon name="trophy" size={21} /> Performance Overview</h3>
             <span style={{ ...pill(C), color: tone.accent, borderColor: tone.border, background: tone.softBg }}>
-              {scores.length} {session.join_mode === "GROUP" ? "groups" : "students"}
+              {scores.length} {guestMode ? "participants" : session.join_mode === "GROUP" ? "groups" : "students"}
             </span>
           </div>
 
           {loading ? (
             <div style={{ color: C.muted, textAlign: "center", padding: 42, fontWeight: 850 }}>Loading analytics…</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: institutionPlan ? "repeat(auto-fit, minmax(300px, 1fr))" : "1fr", gap: 18, alignItems: "start" }}>
-              {institutionPlan && <Scoreboard C={C} scores={scores} tone={tone} />}
+            <div style={{ display: "grid", gridTemplateColumns: extendedView ? "repeat(auto-fit, minmax(300px, 1fr))" : "1fr", gap: 18, alignItems: "start" }}>
+              {extendedView && <Scoreboard C={C} scores={scores} tone={tone} />}
               <AnalyticsPanel C={C} analytics={analytics || {}} tabMonitoring={tabMonitoring} assigned={assigned} tone={tone} institutionPlan={institutionPlan} />
             </div>
           )}

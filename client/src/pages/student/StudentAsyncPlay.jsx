@@ -9,7 +9,7 @@ import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwIcon } from "../../components/TwUI";
-import { AudioPlayButton } from "../../components/AudioControls";
+import { QuestionAudioButton } from "../../components/AudioControls";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
@@ -38,11 +38,6 @@ function SoundTogglePill({ muted, onClick, style }) {
   return <button className="sp-inline-sound-toggle" onClick={onClick} type="button" style={style} title={muted ? "Unmute sounds" : "Mute sounds"} aria-label={muted ? "Unmute sounds" : "Mute sounds"}><span key={muted?"off":"on"} className="tw-theme-icon-swap"><TwIcon name={muted?"volumeOff":"volume"} size={19}/></span></button>;
 }
 
-function VoiceAnswerStrip({ config }) {
-  const recordings=Array.isArray(config?.voiceAnswers)?config.voiceAnswers:[];
-  if(!recordings.some(Boolean)) return null;
-  return <div className="sp-voice-answer-strip">{recordings.map((audio,index)=>audio?<div key={index}><span>{String.fromCharCode(65+index)}</span><AudioPlayButton src={audio} title={`Play answer ${index+1}`}/></div>:null)}</div>;
-}
 
 export default function StudentAsyncPlay() {
   const { quizId } = useParams();
@@ -56,8 +51,13 @@ export default function StudentAsyncPlay() {
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
-  const [remainingSec,setRemainingSec]=useState(0);
-  const [confirmNext,setConfirmNext]=useState(false);
+  const [remainingSec,setRemainingSec]=useState(null);
+  const [timerQuestionIndex,setTimerQuestionIndex]=useState(null);
+  const [introOpen,setIntroOpen]=useState(true);
+  const [antiCheat,setAntiCheat]=useState(null);
+  const [awayBlur,setAwayBlur]=useState(false);
+  const [submittingUi,setSubmittingUi]=useState(false);
+  const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
   const cardBg = dark ? "#0e1733" : "#ffffff";
@@ -69,7 +69,7 @@ export default function StudentAsyncPlay() {
     let alive = true;
     api.get(`/student/quizzes/${quizId}`).then(({ data }) => {
       if (!alive) return;
-      setQuiz(data.quiz); setQuestions(data.questions || []);
+      setQuiz(data.quiz); setQuestions(data.questions || []); setIntroOpen(true);
     }).catch((err) => setMsg(err?.response?.data?.message || "Quiz unavailable."));
     return () => { alive = false; };
   }, [quizId]);
@@ -84,69 +84,111 @@ export default function StudentAsyncPlay() {
 
   const q = questions[idx];
   const tt = normalizeTemplateType(quiz?.template_type);
-  const currentAnswer = answers[q?.id] || {};
+  // Keep each question's answer and lock state independent, even when an older API payload omits or repeats an id.
+  const currentAnswer = answers[idx] || {};
   const timeLimit=Math.max(1,Number(q?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
-  const progress = questions.length ? ((idx + 1) / questions.length) * 100 : 0;
+  const totalAssignmentSec=useMemo(()=>questions.reduce((sum,item)=>sum+Math.max(1,Number(item?.config_json?.timeLimitSec||quiz?.time_limit_sec||30)),0),[questions,quiz?.time_limit_sec]);
   const isLast = idx >= questions.length - 1;
   const done = !!result;
-  const currentLocked=!!locked[q?.id];
+  const currentLocked=!!locked[idx];
   const currentAnswered=hasAnswer(tt,currentAnswer,q);
-  const everyAnswered=questions.length>0 && questions.every(item=>hasAnswer(tt,answers[item.id],item) || locked[item.id]);
+  const everyAnswered=questions.length>0 && questions.every((item,itemIndex)=>hasAnswer(tt,answers[itemIndex],item) || locked[itemIndex]);
 
   useEffect(()=>{
-    if(!q?.id || done) return;
-    if(currentLocked){setRemainingSec(0);return;}
-    setRemainingSec(timeLimit);
-  },[q?.id,timeLimit,currentLocked,done]);
+    if(!q||done||introOpen)return;
+    setMsg("");
+    setTimerQuestionIndex(idx);
+    setRemainingSec(currentLocked?0:timeLimit);
+  },[idx,timeLimit,currentLocked,done,introOpen,q]);
   useEffect(()=>{
-    if(!q?.id || done || currentLocked || remainingSec<=0) return;
-    const timer=setTimeout(()=>setRemainingSec(v=>Math.max(0,v-1)),1000);
+    if(!q||done||introOpen||currentLocked||timerQuestionIndex!==idx||remainingSec==null||remainingSec<=0)return;
+    const timer=setTimeout(()=>setRemainingSec(v=>Math.max(0,Number(v||0)-1)),1000);
     return()=>clearTimeout(timer);
-  },[q?.id,done,currentLocked,remainingSec]);
+  },[idx,done,introOpen,currentLocked,remainingSec,timerQuestionIndex,q]);
   useEffect(()=>{
-    if(!q?.id || done || currentLocked || remainingSec!==0) return;
-    setAnswers(prev=>({...prev,[q.id]:prev[q.id]&&hasAnswer(tt,prev[q.id],q)?prev[q.id]:{timedOut:true}}));
-    setLocked(prev=>({...prev,[q.id]:true}));
-    setMsg("Time is up. This question has been counted as incorrect.");
-  },[remainingSec,q?.id,currentLocked,done,tt]);
+    if(!q||done||introOpen||currentLocked||timerQuestionIndex!==idx||remainingSec!==0)return;
+    setAnswers(prev=>({...prev,[idx]:prev[idx]&&hasAnswer(tt,prev[idx],q)?prev[idx]:{timedOut:true}}));
+    setLocked(prev=>({...prev,[idx]:true}));
+    setMsg("Time's up, you can no longer answer this question.");
+  },[remainingSec,idx,currentLocked,done,introOpen,tt,q,timerQuestionIndex]);
 
-  function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next) void soundManager.startBGM("playing");}
-  function setAnswer(answer){if(!q?.id||done||currentLocked)return;setMsg("");setAnswers(prev=>({...prev,[q.id]:answer}));}
-  function goNext(){
-    if(currentLocked){setIdx(i=>Math.min(questions.length-1,i+1));return;}
-    if(!currentAnswered){setMsg("Answer this question before moving to the next one.");return;}
-    setConfirmNext(true);
-  }
-  function confirmMoveNext(){setLocked(prev=>({...prev,[q.id]:true}));setConfirmNext(false);setIdx(i=>Math.min(questions.length-1,i+1));setMsg("");}
-  async function submit(){
-    if(!currentLocked){if(!currentAnswered){setMsg("Answer this question before submitting.");return;} setLocked(prev=>({...prev,[q.id]:true}));}
-    const completed={...answers,[q.id]:answers[q.id]};
-    const allReady=questions.every(item=>hasAnswer(tt,completed[item.id],item) || locked[item.id] || item.id===q.id);
-    if(!allReady){setMsg("Complete every question before submitting.");return;}
+  async function submitAssignment({forced=false,completedOverride=null}={}){
+    if(submittingRef.current)return null; submittingRef.current=true;
+    const completed=completedOverride ? {...completedOverride} : {...answers}; if(q&&currentAnswered)completed[idx]=answers[idx];
+    if(!forced){
+      if(!currentLocked&&!currentAnswered){setMsg("Answer this question before submitting.");submittingRef.current=false;return null;}
+      const allReady=questions.every((item,itemIndex)=>hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]||itemIndex===idx);
+      if(!allReady){setMsg("Complete every question before submitting.");submittingRef.current=false;return null;}
+    }
     try{
-      const payload=questions.map(item=>({questionId:Number(item.id),answer:completed[item.id]??{timedOut:true}}));
-      const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{answers:payload});setResult(data);soundManager.play("correct").catch(()=>{});
-    }catch(err){setMsg(err?.response?.data?.message||"Submit failed.");soundManager.play("wrong").catch(()=>{});}
+      const payload=questions.map((item,itemIndex)=>({questionId:Number(item.id),answer:completed[itemIndex]??{timedOut:true}}));
+      setRemainingSec(0);
+      setSubmittingUi(true);
+      const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{answers:payload});
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      setResult(data);soundManager.play("correct").catch(()=>{});return data;
+    }catch(err){setMsg(err?.response?.data?.message||"Submit failed.");soundManager.play("wrong").catch(()=>{});return null;}
+    finally{setSubmittingUi(false);submittingRef.current=false;}
   }
 
-  if(msg && !quiz) return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
-  if(!quiz||!q) return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
+  useEffect(()=>{
+    if(!quiz||done||introOpen)return;
+    function leave(){if(awayRef.current||done)return;awayRef.current=true;setAwayBlur(true);tabCountRef.current+=1;}
+    async function returnToPage(){if(!awayRef.current)return;awayRef.current=false;setAwayBlur(false);const count=tabCountRef.current;if(count===2)setAntiCheat({type:"warning",message:"We noticed that you tabbed out during the assigned session."});if(count>=3){setAntiCheat({type:"ended",message:"You have left the assignment three times. Your assignment ends here, and the answers completed before removal will still be counted."});await submitAssignment({forced:true});}}
+    const onVisibility=()=>document.hidden?leave():returnToPage();
+    const onBlur=()=>{if(!document.hasFocus())leave()};
+    document.addEventListener("visibilitychange",onVisibility);window.addEventListener("blur",onBlur);window.addEventListener("focus",returnToPage);window.addEventListener("pagehide",leave);
+    return()=>{document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("blur",onBlur);window.removeEventListener("focus",returnToPage);window.removeEventListener("pagehide",leave)};
+  },[quiz,done,introOpen,answers,locked,idx]);
 
-  return <div style={{minHeight:"100vh",background:pageBg,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
+  function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next)void soundManager.startBGM("playing");}
+  function setAnswer(answer){if(!q||done||currentLocked)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));}
+  async function submitCurrent(){
+    if(!q||done||currentLocked)return;
+    if(!currentAnswered){setMsg("Answer this question before submitting.");return;}
+    const completed={...answers,[idx]:currentAnswer};
+    setAnswers(completed);
+    setLocked(prev=>({...prev,[idx]:true}));
+    setRemainingSec(0);
+    setMsg("");
+    if(isLast){
+      const allReady=questions.every((item,itemIndex)=>itemIndex===idx||hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]);
+      if(!allReady){setMsg("Complete every question before submitting the assignment.");return;}
+      await submitAssignment({completedOverride:completed});
+    }
+  }
+  function moveToQuestion(nextIndex){
+    setRemainingSec(null);
+    setTimerQuestionIndex(null);
+    setIdx(Math.max(0,Math.min(questions.length-1,nextIndex)));
+    setMsg("");
+  }
+  function goNext(){if(!currentLocked){setMsg("Submit this answer before moving to the next question.");return;}moveToQuestion(idx+1);}
+
+  if(msg&&!quiz)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
+  if(!quiz||!q)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
+
+  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",background:pageBg,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
-    {confirmNext&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className="sp-anticheat-icon warning"><TwIcon name="arrowRight" size={38}/></div><h3>Move to the next question?</h3><p>Your current answer will be locked and cannot be changed when you return.</p><div style={{display:"flex",gap:10,justifyContent:"center"}}><button type="button" onClick={()=>setConfirmNext(false)} style={{background:"#64748b"}}>Cancel</button><button type="button" onClick={confirmMoveNext}>Next</button></div></div></div>}
+    {introOpen&&<div className="sp-anticheat-backdrop"><div className="sp-assignment-intro" style={{background:cardBg,borderColor:cardBor,color:textC}}><div className="sp-anticheat-icon warning"><TwIcon name="calendar" size={38}/></div><h1>{quiz.title||"Assignment"}</h1><p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p><button type="button" className="submit-btn sp-assignment-start" onClick={()=>{setRemainingSec(null);setTimerQuestionIndex(null);setIntroOpen(false)}}>Start</button><div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div></div></div>}
+    {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</button></div></div>}
     <div className={`quiz-shell-new ${dark?"theme-dark":"theme-light"}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column"}}>
-      <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(remainingSec)}</div></div></div>
-      <div className="qn-progress"><div className="qn-progress-bar" style={{width:`${Math.round(currentLocked?0:(remainingSec/timeLimit)*100)}%`}}/></div>
-      <div className="qn-body" style={{flex:1}}>{done?<div className="sp-wait-card sp-page-enter" style={{maxWidth:560,margin:"0 auto",background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={56}/></div><h3 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>You scored <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b>.</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div>:<>
-        <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span>{q?.config_json?.voicePrompt?<AudioPlayButton src={q.config_json.voicePrompt} title="Play recorded question"/>:null}</div>
-        <VoiceAnswerStrip config={q?.config_json}/><TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked}/>
-        {currentLocked&&<div style={{textAlign:"center",color:mutedC,fontWeight:800,marginTop:12}}>This answer is locked.</div>}{msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
-        <div style={{display:"flex",justifyContent:"center",gap:12,flexWrap:"wrap",marginTop:22}}>{idx>0&&<button type="button" className="spell-ctrl back" onClick={()=>setIdx(i=>Math.max(0,i-1))}>Previous</button>}{!isLast&&<button type="button" className="submit-btn" onClick={goNext} disabled={!currentAnswered&&!currentLocked}>Next</button>}{isLast&&everyAnswered&&<button type="button" className="submit-btn" onClick={submit}>Submit</button>}</div>
+      <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(done||submittingUi?0:(remainingSec??timeLimit))}</div></div></div>
+      <div className="qn-progress"><div className="qn-progress-bar" style={{width:`${Math.round(currentLocked?0:((remainingSec??timeLimit)/timeLimit)*100)}%`}}/></div>
+      <div className="qn-body" style={{flex:1}}>{submittingUi?<div className="sp-wait-card sp-page-enter sp-submitting-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><h2 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={cAccent(dark)}/></h2></div>:done?<div className="sp-wait-card sp-page-enter sp-submitted-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={70}/></div><h2 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h2><p className="sp-wait-subtitle sp-final-score" style={{color:mutedC}}>You scored: <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b></p><button className="submit-btn sp-dashboard-return" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div>:<>
+        <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
+        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked}/>
+        {msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
+        <div className="sp-assigned-navigation">
+          <span className="sp-assigned-nav-slot">{idx>0&&<button type="button" className="submit-btn" onClick={()=>moveToQuestion(idx-1)}>Previous</button>}</span>
+          <button type="button" className="submit-btn" onClick={submitCurrent} disabled={currentLocked||!currentAnswered}>{currentLocked?"Submitted":"Submit"}</button>
+          <span className="sp-assigned-nav-slot sp-assigned-nav-next">{!isLast&&<button type="button" className="submit-btn" onClick={goNext} disabled={!currentLocked}>Next</button>}</span>
+        </div>
       </>}</div>
     </div>
   </div>;
 }
+function formatDuration(seconds){const total=Math.max(0,Number(seconds||0));const mins=Math.floor(total/60);const secs=total%60;if(mins&&secs)return `${mins} minute${mins===1?"":"s"} and ${secs} second${secs===1?"":"s"}`;if(mins)return `${mins} minute${mins===1?"":"s"}`;return `${secs} second${secs===1?"":"s"}`;}
 
 function hasAnswer(templateType,answer,q){
   if(!answer||answer.timedOut) return !!answer?.timedOut;
@@ -157,6 +199,7 @@ function hasAnswer(templateType,answer,q){
   if(tt==="THINK_SPELL") return Array.isArray(answer.words||answer.foundEntries)&&(answer.words||answer.foundEntries).length>0;
   return String(answer.text||"").trim().length>0;
 }
+function cAccent(dark){return dark?"#6ea0ff":"#2b6cff";}
 function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
 
 function AsyncShell({ dark, pageBg, cardBg, cardBor, textC, mutedC, title, isMuted, onMute, onTheme, children }) {
@@ -192,7 +235,7 @@ function McqTemplate({ cfg, value, onChange, disabled }) {
   const opts = Array.isArray(cfg.options) ? cfg.options.map(normalizeChoiceOption) : [];
   const labels = "ABCDEFGHIJ".split("");
   const isModifiedMcq = cfg.mcqMode === "MODIFIED";
-  const twoMode = cfg.answerMode === "TWO" && !isModifiedMcq;
+  const twoMode = cfg.answerMode === "TWO";
   const selectedList = Array.isArray(value.choices) ? value.choices : [value.choice].filter(Boolean);
   function toggleChoice(choice) {
     if (!twoMode) return onChange({ choice });
@@ -361,5 +404,5 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   function handleGridPointerMove(e) { if (!draggingRef.current || disabled) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-bword-index]"); if (target) addIndex(Number(target.dataset.bwordIndex)); }
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
   const previewStatus = !built ? "Hold and drag across adjacent letters." : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div><div className="bword-instructions">Hold and drag across adjacent letters to find words. Find all answers before submitting.</div>{wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{linePoints.length > 1 && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none"><polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div><div className="bword-controls"><button type="button" className="spell-ctrl clr" onClick={() => patch({ selected: [], built: "" })} disabled={disabled || !selected.length}>Clear current line</button></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found before submission</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
+  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div><div className="bword-instructions">Hold and drag across adjacent letters to find words. Find all answers before submitting.</div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{linePoints.length > 1 && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none"><polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div><div className="bword-controls"><button type="button" className="spell-ctrl clr" onClick={() => patch({ selected: [], built: "" })} disabled={disabled || !selected.length}>Clear current line</button></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found before submission</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
 }

@@ -202,7 +202,7 @@ function HomePanel({ c, data, nav, setActiveTab, onJoinLive, joiningSession, onA
     <section><h2 style={{ color: c.text, marginBottom: 4 }}>Student Home</h2></section>
 
     <section style={card(c)}>
-      <div style={sectionHeader(c)}><div><h3 style={{ margin: 0 }}>Academic Overview</h3><p style={{ margin: "5px 0 0", color: c.textMuted, fontSize: 13 }}>This week at a glance</p></div><button onClick={() => setActiveTab("classes")} style={secondary(c)}>View Classes</button></div>
+      <div style={sectionHeader(c)}><div><h3 style={{ margin: 0 }}>Academic Overview</h3></div><button onClick={() => setActiveTab("classes")} style={secondary(c)}>View Classes</button></div>
       <div style={metricGrid}>
         <MiniMetric c={c} icon="classes" label="Joined classes" value={(data.classes || []).length} />
         <MiniMetric c={c} icon="calendar" label="Total assigned work this week" value={Number(weekStats.assignedThisWeek || weekAssignments.length)} />
@@ -210,10 +210,10 @@ function HomePanel({ c, data, nav, setActiveTab, onJoinLive, joiningSession, onA
       </div>
       <div className="tw-student-overview-grid">
         <div className="tw-student-work-grid">
-          <WorkCard c={c} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
           <LiveSessionsCard c={c} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
+          <WorkCard c={c} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
           <WorkCard c={c} title="Upcoming works" icon="calendar" items={upcoming} empty="No scheduled works are waiting to open." render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} />} />
-          <WorkCard c={c} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} highlight />
+          <WorkCard c={c} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
         </div>
         <div className="tw-student-progress-panel" style={{ display: "grid", gap: 16, alignContent: "start", padding: 18, borderRadius: 18, background: c.cardBg2, border: `1px solid ${c.border}` }}>
           <div style={{ color: c.text, fontWeight: 950 }}>Weekly Progress</div>
@@ -288,20 +288,27 @@ function CompletedSessionCard({ c, item, type, onClick }) {
 }
 
 function LiveSessionsCard({ c, sessions, onJoin, joiningSession }) {
-  return <div style={workCard(c)}><div style={workTitle(c)}><TwIcon name="spark" size={18} /> Join live session</div>{!sessions.length ? <div style={{ color: c.textMuted, fontSize: 13 }}>No live sessions are open right now.</div> : sessions.map((session) => {
-    const tone = templateTone(session.template_type, c);
-    const canJoin = session.status === "LOBBY";
-    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background: tone.softBg, border: `1px solid ${tone.border}` }}><div style={{ color: tone.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(session.template_type)}</div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><button disabled={!canJoin || joiningSession === session.session_id} onClick={() => onJoin(session)} style={{ ...primary(c), width: "100%", opacity: canJoin ? 1 : .55 }}>{joiningSession === session.session_id ? "Joining…" : canJoin ? "Join Now" : "In Progress"}</button></div>;
+  const green={bg:c.greenBg,border:c.greenBorder,fg:c.greenFg,accent:"#22c55e"};
+  return <div style={{...workCard(c),background:green.bg,borderColor:green.border}}><div style={{...workTitle(c),color:green.fg}}><TwIcon name="spark" size={18} /> Join live session</div>{!sessions.length ? <div style={{ color: green.fg, fontSize: 13 }}>No live sessions are open right now.</div> : sessions.map((session) => {
+    const status=session.status==="LOBBY"?"Waiting":session.status==="PAUSED"?"Paused":"Started";
+    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background:c.cardBg, border:`1px solid ${green.border}` }}><div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}><span style={{color:green.accent,fontSize:11,fontWeight:950}}>{templateLabel(session.template_type)}</span><span style={{padding:"4px 9px",borderRadius:999,background:green.bg,border:`1px solid ${green.border}`,color:green.fg,fontSize:11,fontWeight:950}}>{status}</span></div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><button disabled={joiningSession === session.session_id} onClick={() => onJoin(session)} style={{ ...primary(c), width: "100%" }}>{joiningSession === session.session_id ? "Joining…" : "Join Now"}</button></div>;
   })}</div>;
 }
 
-function WorkCard({ c, title, icon, items, empty: emptyText, render, highlight }) {
-  return <div style={{ ...workCard(c), background: highlight ? c.yellowBg : c.cardBg, borderColor: highlight ? c.yellowBorder : c.border }}><div style={{ ...workTitle(c), color: highlight ? c.yellowFg : c.text }}><TwIcon name={icon} size={18} />{title}</div>{!items.length ? <div style={{ color: highlight ? c.yellowFg : c.textMuted, fontSize: 13, lineHeight: 1.5 }}>{emptyText}</div> : items.map(render)}</div>;
+function fixedWorkTone(c,variant){
+  if(variant==="ready") return {bg:c.greenBg,border:c.greenBorder,fg:c.greenFg,accent:"#22c55e"};
+  if(variant==="deadline") return {bg:c.yellowBg,border:"#fb923c",fg:c.yellowFg,accent:"#f97316"};
+  return null;
+}
+function WorkCard({ c, title, icon, items, empty: emptyText, render, variant }) {
+  const tone=fixedWorkTone(c,variant);
+  return <div style={{ ...workCard(c), background:tone?.bg||c.cardBg, borderColor:tone?.border||c.border }}><div style={{ ...workTitle(c), color:tone?.fg||c.text }}><TwIcon name={icon} size={18} />{title}</div>{!items.length ? <div style={{ color:tone?.fg||c.textMuted, fontSize:13,lineHeight:1.5 }}>{emptyText}</div> : items.map(render)}</div>;
 }
 
-function WorkItem({ c, item, action }) {
-  const tone = templateTone(item.template_type, c);
-  return <div style={{ padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${tone.border}` }}><div style={{ color: tone.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(item.template_type)}</div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{item.title}</div><div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.5, margin: "5px 0 9px" }}>{item.class_name} · {formatAssignmentWindow(item)}</div>{action}</div>;
+function WorkItem({ c, item, action, variant }) {
+  const template=templateTone(item.template_type,c); const fixed=fixedWorkTone(c,variant);
+  const tone=fixed||{bg:c.cardBg2,border:template.border,fg:c.textMuted,accent:template.accent};
+  return <div style={{ padding:12,borderRadius:14,background:fixed?c.cardBg:tone.bg,border:`1px solid ${tone.border}` }}><div style={{color:tone.accent,fontSize:11,fontWeight:950}}>{templateLabel(item.template_type)}</div><div style={{color:c.text,fontWeight:950,marginTop:5}}>{item.title}</div><div style={{color:c.textMuted,fontSize:12,lineHeight:1.5,margin:"5px 0 9px"}}>{item.class_name} · {formatAssignmentWindow(item)}</div>{action}</div>;
 }
 
 function StudentAnalyticsModal({ c, target, onClose }) {
@@ -321,7 +328,27 @@ function StudentAnalyticsModal({ c, target, onClose }) {
 }
 
 function ProfileModal({ c, profile, setProfile, message, onSubmit, onClose, onUpload, onDelete, onBirth }) {
-  return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...card(c), width: "min(94vw,600px)", maxHeight: "90vh", overflowY: "auto", position: "relative" }}><button type="button" onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button><h3 style={{ marginTop: 0, color: c.text }}>Student Info</h3><div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginBottom: 22 }}><div style={{ width: 105, height: 105, borderRadius: "50%", display: "grid", placeItems: "center", overflow: "hidden", border: `3px solid ${c.accent}`, background: c.cardBg2 }}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={48} />}</div><div style={{ display: "grid", gap: 9 }}><button type="button" onClick={onUpload} style={primary(c)}><TwIcon name="upload" size={16} /> Upload Profile</button><button type="button" onClick={onDelete} style={{ ...secondary(c), color: c.redFg, borderColor: c.redBorder }}><TwIcon name="trash" size={16} /> Delete Profile</button></div></div><h4 style={{ color: c.text, marginBottom: 12 }}>Student Details</h4><div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}><Field c={c} label="First name *"><input required value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} style={input(c)} /></Field><Field c={c} label="Last name *"><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} style={input(c)} /></Field><Field c={c} label="Birth date"><button type="button" onClick={onBirth} style={{ ...input(c), textAlign: "left", cursor: "pointer" }}>{profile.birthDate ? formatDateOnly(profile.birthDate) : "Select birth date"}</button></Field><Field c={c} label="Student ID *"><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} style={input(c)} /></Field></div>{message && <div style={{ ...notice(c, "error"), marginTop: 14 }}>{message}</div>}<div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button style={primary(c)}>Save</button></div></form></div>;
+  return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...card(c), width: "min(94vw,600px)", maxHeight: "90vh", overflowY: "auto", position: "relative" }}>
+    <button type="button" onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button>
+    <h3 style={{ marginTop: 0, color: c.text }}>Student Info</h3>
+    <div style={{ display: "grid", placeItems: "center", marginBottom: 22 }}>
+      <div style={{ position: "relative" }}>
+        <button type="button" onClick={onUpload} aria-label="Upload profile picture" title="Upload profile picture" style={{ width: 105, height: 105, padding: 0, borderRadius: "50%", display: "grid", placeItems: "center", overflow: "hidden", border: `3px solid ${c.accent}`, background: c.cardBg2, color: c.text, cursor: "pointer", transition: "transform .2s ease, box-shadow .2s ease" }}>
+          {profile.profileImage ? <img src={profile.profileImage} alt="Student profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={48} />}
+        </button>
+        {profile.profileImage && <button type="button" onClick={onDelete} aria-label="Remove profile picture" title="Remove profile picture" style={{ position: "absolute", top: 0, right: 0, transform: "translate(28%,-28%)", width: 29, height: 29, padding: 0, borderRadius: "50%", display: "grid", placeItems: "center", border: `1px solid ${c.redBorder}`, background: c.cardBg3, color: c.redFg, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,.22)" }}><TwIcon name="close" size={15} strokeWidth={3} /></button>}
+      </div>
+    </div>
+    <h4 style={{ color: c.text, marginBottom: 12 }}>Student Details</h4>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 12 }}>
+      <Field c={c} label="First name *"><input required value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} style={input(c)} /></Field>
+      <Field c={c} label="Last name *"><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} style={input(c)} /></Field>
+      <Field c={c} label="Birth date"><button type="button" onClick={onBirth} style={{ ...input(c), textAlign: "left", cursor: "pointer" }}>{profile.birthDate ? formatDateOnly(profile.birthDate) : "Select birth date"}</button></Field>
+      <Field c={c} label="Student ID *"><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} style={input(c)} /></Field>
+    </div>
+    {message && <div style={{ ...notice(c, "error"), marginTop: 14 }}>{message}</div>}
+    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button style={primary(c)}>Save</button></div>
+  </form></div>;
 }
 
 function ProfileSavedOverlay() { return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4} /></div></div>; }

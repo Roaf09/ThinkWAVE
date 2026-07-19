@@ -15,7 +15,7 @@ import { normalizeTemplateType } from "../../lib/templateTypes";
 import { getRole } from "../../lib/auth";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwIcon } from "../../components/TwUI";
-import { AudioPlayButton } from "../../components/AudioControls";
+import { QuestionAudioButton } from "../../components/AudioControls";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
   buildThinkSpellSignature,
@@ -114,11 +114,6 @@ function AntiCheatModal({ antiCheat, countdown, onConfirm }) {
   </div></div>;
 }
 
-function VoiceAnswerStrip({ config }) {
-  const recordings=Array.isArray(config?.voiceAnswers)?config.voiceAnswers:[];
-  if(!recordings.some(Boolean)) return null;
-  return <div className="sp-voice-answer-strip">{recordings.map((audio,index)=>audio?<div key={index}><span>{String.fromCharCode(65+index)}</span><AudioPlayButton src={audio} title={`Play answer ${index+1}`}/></div>:null)}</div>;
-}
 
 // StudentPlay covers the entire student journey after joining: waiting room, current question, group flow, and leaderboard.
 export default function StudentPlay() {
@@ -157,7 +152,6 @@ export default function StudentPlay() {
   const [antiCheat, setAntiCheat] = useState(null);
   const [antiCountdown, setAntiCountdown] = useState(0);
   const [experienceBlur, setExperienceBlur] = useState(false);
-  const [frozenTimer, setFrozenTimer] = useState(null);
 
   const socketRef = useRef(null);
   const currentQRef = useRef(null);
@@ -167,6 +161,7 @@ export default function StudentPlay() {
   const feedbackPulseTimer = useRef(null);
   const antiRemovalTimer = useRef(null);
   const lastTabSignal = useRef(0);
+  const submittedRef = useRef(null);
   const participantId = Number(localStorage.getItem("qz_participantId") || "0");
   const reconnectKey = localStorage.getItem("qz_reconnectKey") || "";
 
@@ -217,6 +212,8 @@ export default function StudentPlay() {
   useEffect(() => {
     function signalTabOut() {
       if (stateRef.current?.status !== "LIVE" || !participantId) return;
+      const lastIndex=Math.max(0,(questionCountRef.current||0)-1);
+      if(Number(stateRef.current?.current_question_index||0)>=lastIndex && submittedRef.current===currentQRef.current?.id) return;
       const now = Date.now();
       if (now - lastTabSignal.current < 1500) return;
       lastTabSignal.current = now;
@@ -245,18 +242,10 @@ export default function StudentPlay() {
     s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey }));
     s.on("student:connected", () => { void soundManager.startBGM("lobby"); });
     s.on("student:error", (e) => setMsg(e?.message || "Could not join the session."));
-    s.on("antiCheat:warning", (payload) => { setAntiCheat({ type:"warning", message:payload?.message || "You have left the experience, this is a warning." }); setAntiCountdown(Number(payload?.confirmDelaySec || 5)); });
-    s.on("antiCheat:pendingRemoval", (payload) => {
-      clearTimeout(antiRemovalTimer.current);
-      const delay=Number(payload?.redirectDelaySec || 10);
-      setAntiCheat({ type:"removal", message:payload?.message || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher." });
-      setAntiCountdown(delay);
-      antiRemovalTimer.current=setTimeout(()=>navigate(getRole()==="STUDENT"?"/student":"/"),delay*1000);
-    });
-    s.on("antiCheat:allowed", () => { clearTimeout(antiRemovalTimer.current); setAntiCheat(null); setAntiCountdown(0); });
+    s.on("antiCheat:warning", (payload) => { setAntiCheat({ type:"warning", message:payload?.message || "We noticed that you tabbed out during the live session." }); setAntiCountdown(Number(payload?.confirmDelaySec || 5)); });
     s.on("antiCheat:kicked", (payload) => {
       clearTimeout(antiRemovalTimer.current);
-      setAntiCheat({ type:"kicked", message:payload?.message || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher." });
+      setAntiCheat({ type:"kicked", message:payload?.message || "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher." });
       setAntiCountdown(3);
       antiRemovalTimer.current=setTimeout(()=>navigate(getRole()==="STUDENT"?"/student":"/"),3000);
     });
@@ -274,7 +263,6 @@ export default function StudentPlay() {
           setSubmitLabel("Submit");
           setProposalStatus("");
           setGroupProposal(null);
-          setFrozenTimer(null);
         }
         return payload.state;
       });
@@ -426,6 +414,7 @@ export default function StudentPlay() {
   const questionCountRef = useRef(0);
   useEffect(() => { currentQRef.current = currentQ; }, [currentQ]);
   useEffect(() => { stateRef.current = state; questionCountRef.current = questions.length; }, [state, questions.length]);
+  useEffect(() => { submittedRef.current = submittedQId; }, [submittedQId]);
 
   const myParticipant = useMemo(() => roster.find((p) => Number(p.id) === participantId) || null, [roster, participantId]);
   const myGroupId = Number(myParticipant?.group_id || joinedGroupId || 0) || null;
@@ -462,7 +451,6 @@ export default function StudentPlay() {
 
   const timer = useMemo(() => {
     const total = Number(currentQ?.config_json?.timeLimitSec || state?.time_limit_sec || 0);
-    if (frozenTimer && submittedQId === currentQ?.id) return frozenTimer;
     if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
     if (state?.question_deadline_at) {
       const serverNowMs = nowMs - clockOffsetMs;
@@ -475,8 +463,9 @@ export default function StudentPlay() {
     const elapsed = Math.max(0, Math.floor((nowMs - started) / 1000));
     const remaining = Math.max(0, total - elapsed);
     return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
-  }, [state, nowMs, currentQ, clockOffsetMs, frozenTimer, submittedQId]);
+  }, [state, nowMs, currentQ, clockOffsetMs]);
 
+  const isGuestHosted = !!state?.is_guest_host;
   const isGroupMode = state?.join_mode === "GROUP";
   const isLastQuestion = !!state && Number(state.current_question_index || 0) >= Math.max(0, questions.length - 1);
   const matchingRequired = state?.template_type === "MATCHING" ? (Array.isArray(currentQ?.config_json?.colA) ? currentQ.config_json.colA.length : 0) : 0;
@@ -519,7 +508,7 @@ export default function StudentPlay() {
     if (tt === "MCQ") {
       // Revision 1: MCQ can submit either one choice or two selected choices.
       // Revision 5: Modified MCQ image mode always submits one selected image choice.
-      answer = currentQ?.config_json?.answerMode === "TWO" && currentQ?.config_json?.mcqMode !== "MODIFIED"
+      answer = currentQ?.config_json?.answerMode === "TWO"
         ? { choices: Array.isArray(selectedChoice) ? selectedChoice : [selectedChoice].filter(Boolean) }
         : { choice: Array.isArray(selectedChoice) ? selectedChoice[0] : selectedChoice };
     }
@@ -528,7 +517,6 @@ export default function StudentPlay() {
     else if (tt === "THINK_SPELL") answer = { words: Array.isArray(spell.foundEntries) ? spell.foundEntries : [] };
     else if (tt === "GUESS_WORD_4PICS") answer = { text: spell.built };
     else answer = { text: answerText };
-    setFrozenTimer({ ...timer });
     socketRef.current?.emit("answer:submit", { sessionId: Number(sessionId), participantId, questionId: currentQ.id, answer });
     if (isGroupMode) setSubmitLabel("Waiting for group vote…");
   }
@@ -557,7 +545,7 @@ export default function StudentPlay() {
     ? "The teacher will resume shortly."
     : isGroupMode
       ? "Groups update in real time as the teacher prepares the session."
-      : "The teacher will start the session soon.";
+      : isGuestHosted ? "The host will start the session soon." : "The teacher will start the session soon.";
   const experienceControls=<ExperienceControls dark={dark} muted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}/>;
   const antiCheatOverlay=<AntiCheatModal antiCheat={antiCheat} countdown={antiCountdown} onConfirm={()=>{setAntiCheat(null);setAntiCountdown(0)}}/>;
 
@@ -591,9 +579,8 @@ export default function StudentPlay() {
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <button onClick={() => exitTo("/play")} style={{ flex: 1, padding: "14px", borderRadius: 999, border: `1px solid ${cardBor}`, background: cardBg, color: textC, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Join Another Session</button>
-            <button onClick={() => exitTo("/")} style={{ flex: 1, padding: "14px", borderRadius: 999, border: "none", background: "#2b6cff", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 20px rgba(43,108,255,0.35)" }}>Exit</button>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button onClick={() => exitTo(isGuestHosted ? "/" : getRole()==="STUDENT" ? "/student" : "/")} style={{ width: "min(100%, 360px)", padding: "14px", borderRadius: 999, border: "none", background: "#2b6cff", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 20px rgba(43,108,255,0.35)" }}><TwIcon name={isGuestHosted ? "logout" : "home"} size={17}/> {isGuestHosted ? "Exit" : "Dashboard"}</button>
           </div>
         </div>
       </div>
@@ -699,7 +686,7 @@ export default function StudentPlay() {
                 <div className="sp-wait-icon"><TwIcon name="clock" size={34}/></div>
               </div>
               <h3 className="sp-wait-title" style={{ color: textC }}>Please wait<LoadingDots color={mutedC} /></h3>
-              <p className="sp-wait-subtitle" style={{ color: mutedC }}>Your teacher will end the session once everyone is ready.</p>
+              <p className="sp-wait-subtitle" style={{ color: mutedC }}>Your teacher will end the session once everyone is done.</p>
             </>
           )}
         </div>
@@ -776,9 +763,8 @@ export default function StudentPlay() {
         <div className="qn-prompt-box">
           {currentQ?.config_json?.showPromptImage !== false && currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
           <span className="qn-prompt-text">{currentQ.prompt}</span>
-          {currentQ?.config_json?.voicePrompt ? <AudioPlayButton src={currentQ.config_json.voicePrompt} title="Play recorded question"/> : null}
+          <QuestionAudioButton config={currentQ?.config_json} prompt={currentQ?.prompt} templateType={ttNormalized}/>
         </div>
-        <VoiceAnswerStrip config={currentQ?.config_json}/>
         <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} answerText={answerText} setAnswerText={setAnswerText} matchingMap={matchingMap} setMatchingMap={setMatchingMap} spell={spell} setSpell={setSpell} />
         {thinkSpellTimeUp && (
           <div className="bword-summary">
@@ -1254,7 +1240,7 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
         Hold and drag across adjacent letters to find words. Find all answers first, then submit once.
       </div>
 
-      {wordBank.length > 0 && (
+      {cfg.showWordList !== false && wordBank.length > 0 && (
         <div className="bword-quest-panel">
           <div className="bword-quest-title">Word goals</div>
           <div className="bword-quest-list">
@@ -1348,9 +1334,8 @@ function TemplateBody({
   if (templateType === "MCQ") {
     const opts = Array.isArray(cfg.options) ? cfg.options.map(normalizeChoiceOption) : [];
     const labels = "ABCDEFGHIJ".split("");
-    // Revision 5: Modified MCQ keeps the 4-image layout and one-answer gameplay.
     const isModifiedMcq = cfg.mcqMode === "MODIFIED";
-    const twoMode = cfg.answerMode === "TWO" && !isModifiedMcq;
+    const twoMode = cfg.answerMode === "TWO";
     const selectedList = Array.isArray(selectedChoice) ? selectedChoice : [selectedChoice].filter(Boolean);
     function toggleChoice(value) {
       // Revision 1: students may choose up to two options when the teacher enables two-answer MCQ.

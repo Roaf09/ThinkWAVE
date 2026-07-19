@@ -225,10 +225,8 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
-            <div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>{templateLabel(quiz.template_type)} · {quiz.category}</div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
-            <Badge label={templateLabel(quiz.template_type)} c={c} tone='blue' />
             <Badge label='In Quiz Bank' c={c} tone='blue' />
             <Badge label={currentFolderLabel} c={c} />
           </div>
@@ -276,10 +274,6 @@ function QuestionCard({ question: q, onRemove, c }) {
     <div style={{ ...card(c, { width: "min(100%, 780px)", padding: 0, overflow: "hidden" }), ...templateCardChrome(tt, c, false), textAlign: "center" }}>
       <div style={{ padding: 16, display: "grid", gap: 12, justifyItems: "center" }}>
         <div style={{ minWidth: 0, width: "100%" }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginBottom: 9 }}>
-            <Badge label={templateLabel(tt)} c={c} tone="blue" />
-            <Badge label={q.category} c={c} />
-          </div>
           <div style={{ fontWeight: 800, lineHeight: 1.5, color: c.text, overflowWrap: "anywhere", textAlign: "center" }}>{q.prompt}</div>
         </div>
 

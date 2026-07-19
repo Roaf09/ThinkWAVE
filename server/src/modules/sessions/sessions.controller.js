@@ -147,9 +147,11 @@ export async function getSessionStateTeacher(req, res) {
   const sessionId = Number(req.params.id);
 
   const [[session]] = await pool.query(
-    `SELECT s.*, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions
+    `SELECT s.*, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
+            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
      FROM sessions s
      JOIN quizzes q ON q.id=s.quiz_id
+     JOIN users u ON u.id=s.teacher_id
      WHERE s.id=:sid AND s.teacher_id=:tid`,
     { sid: sessionId, tid: req.user.sub }
   );
@@ -163,11 +165,17 @@ export async function getSessionStateTeacher(req, res) {
 
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
-            gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name
+            p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
+            gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
+            COUNT(te.id) AS tab_out_count
      FROM session_participants p
+     LEFT JOIN users u ON u.id=p.student_user_id
+     LEFT JOIN student_profiles stp ON stp.user_id=p.student_user_id
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
+     LEFT JOIN tab_events te ON te.session_id=p.session_id AND te.participant_id=p.id
      WHERE p.session_id=:sid
+     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, stp.profile_image, u.profile_image
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
     { sid: sessionId }
   );
@@ -189,7 +197,7 @@ export async function getSessionStateTeacher(req, res) {
     scores = rows;
   } else {
     const [rows] = await pool.query(
-      `SELECT participant_id, total_points FROM scores WHERE session_id=:sid ORDER BY total_points DESC`,
+      `SELECT s.participant_id, s.total_points, p.first_name, p.last_name, p.group_name FROM scores s JOIN session_participants p ON p.id=s.participant_id WHERE s.session_id=:sid ORDER BY s.total_points DESC, p.last_name ASC, p.first_name ASC`,
       { sid: sessionId }
     );
     scores = rows;
@@ -383,7 +391,8 @@ export async function joinSession(req, res) {
   const { code, firstName, lastName } = req.body;
 
   const [[session]] = await pool.query(
-    `SELECT * FROM sessions WHERE join_code=:code`,
+    `SELECT s.*, CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+     FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE s.join_code=:code`,
     { code: code.toUpperCase() }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
@@ -427,6 +436,7 @@ export async function joinSession(req, res) {
     participantId: r.insertId,
     reconnectKey,
     joinMode: session.join_mode,
+    isGuestHost: !!session.is_guest_host,
   });
 }
 
