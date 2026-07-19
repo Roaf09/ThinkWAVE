@@ -1,66 +1,74 @@
 /* FILE GUIDE:
  * server/src/utils/mailer.js
  * Purpose: Central email helper used by OTP and future transactional emails.
+ * Sends through the Brevo (formerly Sendinblue) HTTP API over HTTPS (port 443)
+ * instead of raw SMTP (ports 25/465/587), because Render's free tier blocks
+ * outbound SMTP ports but allows normal HTTPS traffic.
  */
 
-import nodemailer from "nodemailer";
 import { env } from "../env.js";
 
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+
 export function hasMailConfig() {
-  return Boolean((env.SMTP_HOST || env.SMTP_SERVICE) && env.SMTP_USER && env.SMTP_PASS);
-}
-
-function smtpPassword() {
-  const raw = String(env.SMTP_PASS || "");
-  // Google displays App Passwords in grouped blocks. Removing whitespace prevents
-  // accidental authentication failures when the grouped value is pasted into .env.
-  return String(env.SMTP_SERVICE || "").toLowerCase() === "gmail"
-    ? raw.replace(/\s+/g, "")
-    : raw;
-}
-
-function buildTransporter() {
-  const auth = { user: env.SMTP_USER, pass: smtpPassword() };
-  return nodemailer.createTransport(
-    env.SMTP_SERVICE
-      ? { service: env.SMTP_SERVICE, auth }
-      : {
-          host: env.SMTP_HOST,
-          port: env.SMTP_PORT,
-          secure: env.SMTP_PORT === 465,
-          auth,
-        }
-  );
+  return Boolean(env.BREVO_API_KEY && env.BREVO_SENDER_EMAIL);
 }
 
 export async function sendMail({ to, subject, text, html }) {
   if (!hasMailConfig()) {
-    console.warn("[OTP EMAIL NOT SENT] SMTP is not configured.", { to, subject });
-    return { sent: false, reason: "SMTP_NOT_CONFIGURED" };
+    console.warn("[OTP EMAIL NOT SENT] Brevo is not configured.", { to, subject });
+    return { sent: false, reason: "BREVO_NOT_CONFIGURED" };
   }
 
+  const payload = {
+    sender: { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL },
+    to: [{ email: to }],
+    subject,
+    textContent: text,
+    htmlContent: html,
+  };
+
+  let response;
   try {
-    const transporter = buildTransporter();
-    const info = await transporter.sendMail({
-      from: env.SMTP_FROM || env.SMTP_USER,
-      to,
-      subject,
-      text,
-      html,
+    response = await fetch(BREVO_ENDPOINT, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": env.BREVO_API_KEY,
+      },
+      body: JSON.stringify(payload),
     });
-    return { sent: true, messageId: info.messageId };
   } catch (error) {
     console.error("[OTP EMAIL FAILED]", {
       to,
       subject,
-      code: error?.code,
-      responseCode: error?.responseCode,
+      reason: "NETWORK_ERROR",
       message: error?.message || String(error),
     });
     return {
       sent: false,
-      reason: "SMTP_SEND_FAILED",
+      reason: "BREVO_REQUEST_FAILED",
       error: error?.message || String(error),
     };
   }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    console.error("[OTP EMAIL FAILED]", {
+      to,
+      subject,
+      status: response.status,
+      code: data?.code,
+      message: data?.message || `HTTP ${response.status}`,
+    });
+    return {
+      sent: false,
+      reason: "BREVO_SEND_FAILED",
+      error: data?.message || `HTTP ${response.status}`,
+    };
+  }
+
+  return { sent: true, messageId: data?.messageId };
 }
