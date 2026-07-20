@@ -26,6 +26,24 @@ import {
 import soundManager from "../../utils/soundmanager";
 import "./StudentPlay.css";
 
+  const [quiz, setQuiz] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);   // ← new
+  const [idx, setIdx] = useState(0);
+
+useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    api.get(`/student/quizzes/${quizId}`).then(({ data }) => {
+      if (!alive) return;
+      setQuiz(data.quiz); setQuestions(data.questions || []); setIntroOpen(true);
+    }).catch((err) => {
+      if (!alive) return;
+      setMsg(err?.response?.data?.message || "Quiz unavailable.");
+    }).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [quizId]);
+
 function LoadingDots({ color = "currentColor" }) {
   return <span className="tw-loading-dots" aria-hidden="true" style={{ color }}><span>.</span><span>.</span><span>.</span></span>;
 }
@@ -171,9 +189,11 @@ export default function StudentAsyncPlay() {
   function goNext(){if(!currentLocked){setMsg("Submit this answer before moving to the next question.");return;}moveToQuestion(idx+1);}
 
   if (loading) return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
-  if(msg&&!quiz)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
-  if(!quiz||questions.length===0)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>This assignment doesn't have any questions yet. Please check back later or ask your teacher.</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
 
+  if(msg&&!quiz)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
+
+  if(!quiz||questions.length===0)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>This assignment doesn't have any questions yet. Please check back later or ask your teacher.</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
+  
   return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",background:pageBg,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
     {introOpen&&<div className="sp-anticheat-backdrop"><div className="sp-assignment-intro" style={{background:cardBg,borderColor:cardBor,color:textC}}><div className="sp-anticheat-icon warning"><TwIcon name="calendar" size={38}/></div><h1>{quiz.title||"Assignment"}</h1><p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p><button type="button" className="submit-btn sp-assignment-start" onClick={()=>{setRemainingSec(null);setTimerQuestionIndex(null);setIntroOpen(false)}}>Start</button><div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div></div></div>}

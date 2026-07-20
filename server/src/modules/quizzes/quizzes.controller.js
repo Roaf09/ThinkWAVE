@@ -251,6 +251,7 @@ export async function duplicateQuiz(req, res) {
 }
 
 // Revision 7: create an asynchronous assignment copy from an existing quiz.
+// Revision 7: create an asynchronous assignment copy from an existing quiz.
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
   const teacherId = req.user.sub;
@@ -272,10 +273,6 @@ export async function assignQuiz(req, res) {
   // Guard: an assignment with zero questions leaves students stuck on the play screen with nothing to answer.
   if (!questions.length) return res.status(400).json({ message: "This quiz has no questions yet. Add questions before assigning it." });
 
-  // Revision 25.4 fix: the quiz row and its questions are created in one transaction now.
-  // Previously each question INSERT ran on its own connection with no rollback, so a failure
-  // partway through (e.g. the earlier config_json bug) left a PUBLISHED quiz with 0 questions —
-  // which students could open, but which would then hang forever on "Loading assignment."
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
