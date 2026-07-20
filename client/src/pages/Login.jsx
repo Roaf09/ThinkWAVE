@@ -24,16 +24,12 @@ export default function Login({ onLoginSuccess }) {
   const [showPw, setShowPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
-  const [notFound, setNotFound] = useState(false);
 
-  const errorTone = notFound
-    ? { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#fca5a5" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" }
-    : { bg: dark ? "rgba(245,158,11,0.12)" : "#fff9eb", border: dark ? "rgba(245,158,11,0.35)" : "#f4d28a", title: dark ? "#fcd34d" : "#92400e", body: dark ? "#fde68a" : "#78350f" };
+  const errorTone = { bg: dark ? "rgba(245,158,11,0.12)" : "#fff9eb", border: dark ? "rgba(245,158,11,0.35)" : "#f4d28a", title: dark ? "#fcd34d" : "#92400e", body: dark ? "#fde68a" : "#78350f" };
 
   async function submit(e) {
     e.preventDefault();
     setError("");
-    setNotFound(false);
     try {
       const { data } = await api.post("/auth/login", {
         email,
@@ -51,10 +47,10 @@ export default function Login({ onLoginSuccess }) {
       else nav("/teacher");
     } catch (err) {
       const msg = err?.response?.data?.message || "Login failed.";
-      if (msg.toLowerCase().includes("invalid credentials")) {
-        setNotFound(true);
-      }
-      setError(msg);
+      // Revision 25.4 fix: the server intentionally returns the same "Invalid credentials"
+      // message whether the email doesn't exist or the password is wrong (anti-enumeration).
+      // Don't infer "account not found" from that message — show it plainly instead.
+      setError(msg.toLowerCase().includes("invalid credentials") ? "Incorrect email or password." : msg);
     }
   }
 
@@ -143,21 +139,12 @@ export default function Login({ onLoginSuccess }) {
             </div>
 
             {error && (
-              <div style={{ ...s.errorBox(errorTone), ...(notFound ? {} : s.warnBox) }}>
+              <div style={{ ...s.errorBox(errorTone), ...s.warnBox }}>
                 <div style={s.errorHeader}>
-                  <span style={s.errorTitle(errorTone)}>{notFound ? "Account not found" : "Need help?"}</span>
-                  <button type="button" style={s.errorClose(errorTone)} onClick={() => { setError(""); setNotFound(false); }}>×</button>
+                  <span style={s.errorTitle(errorTone)}>Need help?</span>
+                  <button type="button" style={s.errorClose(errorTone)} onClick={() => setError("")}>×</button>
                 </div>
-                <p style={s.errorMsg(errorTone)}>
-                  {notFound
-                    ? `No ${isAdminLogin ? "admin " : "teacher "}account was found with that email. Please sign up first.`
-                    : error}
-                </p>
-                {notFound && (
-                  <Link to={isAdminLogin ? "/register?role=admin" : "/register"} style={s.inlineCta}>
-                    Create account
-                  </Link>
-                )}
+                <p style={s.errorMsg(errorTone)}>{error}</p>
               </div>
             )}
 

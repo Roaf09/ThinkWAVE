@@ -38,7 +38,6 @@ export default function StudentAuth({ onLoginSuccess }) {
   const [showConfPw, setShowConfPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [msg, setMsg] = useState("");
-  const [notFound, setNotFound] = useState(false);
 
   const checks = useMemo(() => passwordChecks(form.password), [form.password]);
   const isStrong = Object.values(checks).every(Boolean);
@@ -49,16 +48,13 @@ export default function StudentAuth({ onLoginSuccess }) {
   const isSuccess = msg.startsWith("✓");
 
   const patch = (next) => setForm((prev) => ({ ...prev, ...next }));
-  const errorTone = notFound
-    ? { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#fca5a5" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" }
-    : isSuccess
-      ? { bg: dark ? "rgba(34,197,94,0.10)" : c.greenBg, border: dark ? "rgba(34,197,94,0.35)" : c.greenBorder, title: dark ? "#86efac" : "#166534", body: dark ? "#bbf7d0" : "#166534" }
-      : { bg: dark ? "rgba(245,158,11,0.12)" : "#fff9eb", border: dark ? "rgba(245,158,11,0.35)" : "#f4d28a", title: dark ? "#fcd34d" : "#92400e", body: dark ? "#fde68a" : "#78350f" };
+  const errorTone = isSuccess
+    ? { bg: dark ? "rgba(34,197,94,0.10)" : c.greenBg, border: dark ? "rgba(34,197,94,0.35)" : c.greenBorder, title: dark ? "#86efac" : "#166534", body: dark ? "#bbf7d0" : "#166534" }
+    : { bg: dark ? "rgba(245,158,11,0.12)" : "#fff9eb", border: dark ? "rgba(245,158,11,0.35)" : "#f4d28a", title: dark ? "#fcd34d" : "#92400e", body: dark ? "#fde68a" : "#78350f" };
 
   async function submit(e) {
     e.preventDefault();
     setMsg("");
-    setNotFound(false);
     try {
       if (mode === "register") {
         if (!isStrong) return setMsg("Please use a stronger password.");
@@ -80,8 +76,10 @@ export default function StudentAuth({ onLoginSuccess }) {
       nav("/student");
     } catch (err) {
       const text = err?.response?.data?.message || "Student access failed.";
-      if (text.toLowerCase().includes("invalid credentials")) setNotFound(true);
-      setMsg(text);
+      // Revision 25.4 fix: the server intentionally returns the same "Invalid credentials"
+      // message whether the email doesn't exist or the password is wrong (anti-enumeration).
+      // Don't infer "account not found" from that message — show it plainly instead.
+      setMsg(text.toLowerCase().includes("invalid credentials") ? "Incorrect email or password." : text);
     }
   }
 
@@ -118,7 +116,7 @@ export default function StudentAuth({ onLoginSuccess }) {
                   <button type="button" style={s.forgotBtn} onClick={() => nav("/forgot-password")}>Forgot password?</button>
                 </div>
 
-                {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
+                {msg && <FeedbackBox tone={errorTone} clear={() => setMsg("")} />}
                 <button type="submit" style={s.submitBtn}>Login as Student</button>
               </form>
 
@@ -134,7 +132,7 @@ export default function StudentAuth({ onLoginSuccess }) {
                 <div style={s.field}><label style={s.label(c)}>Email address</label><input type="email" style={s.input(c)} value={form.email} onChange={(e) => patch({ email: e.target.value })} placeholder="you@example.com" required /></div>
                 <div style={s.field}><label style={s.label(c)}>Password</label><div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button></div></div>
                 <div style={s.field}><label style={s.label(c)}>Confirm password</label><div style={s.passwordWrap}><input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}>{showConfPw ? "Hide" : "Show"}</button></div>{form.confirmPassword && <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
-                {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
+                {msg && <FeedbackBox tone={errorTone} clear={() => setMsg("")} />}
                 <button type="submit" style={s.submitBtn}>Create Student Account</button>
                 <p style={s.footText(c)}>Already have an account? <button type="button" onClick={() => setMode("login")} style={s.inlineButton}>Log in here</button></p>
               </form>
@@ -153,8 +151,8 @@ export default function StudentAuth({ onLoginSuccess }) {
     </div>
   );
 
-  function FeedbackBox({ tone, notFound, clear }) {
-    return <div style={s.errorBox(tone)}><div style={s.errorHeader}><span style={s.errorTitle(tone)}>{isSuccess ? "Success!" : notFound ? "Account not found" : "Need help?"}</span>{!isSuccess && <button type="button" style={s.errorClose(tone)} onClick={clear}>×</button>}</div><p style={s.errorMsg(tone)}>{notFound ? "No student account was found with that email. Please sign up first." : msg}</p>{notFound && <button type="button" onClick={() => setMode("register")} style={s.inlineCta}>Create account</button>}</div>;
+  function FeedbackBox({ tone, clear }) {
+    return <div style={s.errorBox(tone)}><div style={s.errorHeader}><span style={s.errorTitle(tone)}>{isSuccess ? "Success!" : "Need help?"}</span>{!isSuccess && <button type="button" style={s.errorClose(tone)} onClick={clear}>×</button>}</div><p style={s.errorMsg(tone)}>{msg}</p></div>;
   }
 }
 
