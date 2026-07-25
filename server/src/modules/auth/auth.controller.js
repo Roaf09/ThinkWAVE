@@ -33,66 +33,189 @@ function normalizeEmail(e) { return String(e || "").trim().toLowerCase(); }
 // - regular registrations default to TEACHER
 export async function register(req, res) {
   const { email, password, firstName, lastName, role: requestedRole } = req.body;
-  const cleanEmail   = normalizeEmail(email);
-  const passwordHash = await bcrypt.hash(password, 12);
+  const cleanEmail = normalizeEmail(email);
 
   try {
-    const [[countRow]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL`
+    // ------------------------------------------------------------
+    // Check if the email already exists
+    // ------------------------------------------------------------
+    const [existingRows] = await pool.query(
+      `SELECT id, role, is_verified, approval_status
+       FROM users
+       WHERE email=:email
+         AND deleted_at IS NULL
+       LIMIT 1`,
+      { email: cleanEmail }
     );
-    const isFirst = Number(countRow?.total || 0) === 0;
 
-    let role, approvalStatus;
-    if (isFirst) {
-      role = "SUPERADMIN"; approvalStatus = "APPROVED";
-    } else if (requestedRole === "ADMIN") {
-      role = "ADMIN";      approvalStatus = "APPROVED";
-    } else if (requestedRole === "STUDENT") {
-      // Revision 6: students now register their own accounts.
-      role = "STUDENT";    approvalStatus = "APPROVED";
-    } else {
-      role = "TEACHER";    approvalStatus = "APPROVED";
+    if (existingRows.length) {
+      const existing = existingRows[0];
+
+      // ----------------------------------------------------------
+      // Already verified -> reject registration
+      // ----------------------------------------------------------
+      if (existing.is_verified) {
+        return res.status(409).json({
+          message: "Email already in use.",
+        });
+      }
+
+      // ----------------------------------------------------------
+      // Existing but not verified
+      // Generate a NEW OTP instead of rejecting
+      // ----------------------------------------------------------
+      const otpResult = await sendOtpForUser(existing.id, cleanEmail);
+      const otpPayload = otpClientPayload(otpResult);
+
+      return res.status(200).json({
+        message: otpPayload.emailSent
+          ? "Account already exists but is not yet verified. A new OTP has been sent."
+          : "Account already exists but is not yet verified. We could not send the OTP. Please try again later.",
+        role: existing.role,
+        approvalStatus: existing.approval_status,
+        existingAccount: true,
+        ...otpPayload,
+      });
     }
 
-    const [result] = await pool.query(
-      `INSERT INTO users (role, email, password_hash, first_name, last_name, approval_status)
-       VALUES (:role, :email, :ph, :fn, :ln, :as)`,
-      { role, email: cleanEmail, ph: passwordHash,
-        fn: firstName.trim(), ln: lastName.trim(), as: approvalStatus }
+    // ------------------------------------------------------------
+    // Determine role
+    // ------------------------------------------------------------
+    const [[countRow]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM users
+       WHERE deleted_at IS NULL`
     );
 
+    const isFirst = Number(countRow?.total || 0) === 0;
+
+    let role;
+    let approvalStatus;
+
+    if (isFirst) {
+      role = "SUPERADMIN";
+      approvalStatus = "APPROVED";
+    } else if (requestedRole === "ADMIN") {
+      role = "ADMIN";
+      approvalStatus = "APPROVED";
+    } else if (requestedRole === "STUDENT") {
+      role = "STUDENT";
+      approvalStatus = "APPROVED";
+    } else {
+      role = "TEACHER";
+      approvalStatus = "APPROVED";
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // ------------------------------------------------------------
+    // Create account
+    // ------------------------------------------------------------
+    const [result] = await pool.query(
+      `INSERT INTO users
+        (
+          role,
+          email,
+          password_hash,
+          first_name,
+          last_name,
+          approval_status
+        )
+       VALUES
+        (
+          :role,
+          :email,
+          :ph,
+          :fn,
+          :ln,
+          :as
+        )`,
+      {
+        role,
+        email: cleanEmail,
+        ph: passwordHash,
+        fn: firstName.trim(),
+        ln: lastName.trim(),
+        as: approvalStatus,
+      }
+    );
+
+    // ------------------------------------------------------------
+    // Activity Log
+    // ------------------------------------------------------------
     try {
       await pool.query(
-        `INSERT INTO activity_log (type, user_id, name, email, role)
-         VALUES ('REGISTERED', :uid, :name, :email, :role)`,
-        { uid: result.insertId,
+        `INSERT INTO activity_log
+        (type,user_id,name,email,role)
+        VALUES
+        ('REGISTERED',:uid,:name,:email,:role)`,
+        {
+          uid: result.insertId,
           name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-          email: cleanEmail, role }
+          email: cleanEmail,
+          role,
+        }
       );
     } catch (_) {}
+
+    // ------------------------------------------------------------
+    // Notification
+    // ------------------------------------------------------------
     try {
-      await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,payload_json) VALUES('USER_REGISTERED',:uid,:name,:email,:role,:payload)`, {
-        uid: result.insertId, name: `${firstName.trim()} ${lastName.trim()}`.trim(), email: cleanEmail, role,
-        payload: JSON.stringify({ role, email: cleanEmail })
-      });
+      await pool.query(
+        `INSERT INTO system_notifications
+        (
+            type,
+            user_id,
+            name,
+            email,
+            role,
+            payload_json
+        )
+        VALUES
+        (
+            'USER_REGISTERED',
+            :uid,
+            :name,
+            :email,
+            :role,
+            :payload
+        )`,
+        {
+          uid: result.insertId,
+          name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          email: cleanEmail,
+          role,
+          payload: JSON.stringify({
+            role,
+            email: cleanEmail,
+          }),
+        }
+      );
     } catch (_) {}
 
+    // ------------------------------------------------------------
+    // Send OTP
+    // ------------------------------------------------------------
     const otpResult = await sendOtpForUser(result.insertId, cleanEmail);
     const otpPayload = otpClientPayload(otpResult);
 
-    res.status(201).json({
+    return res.status(201).json({
       message: otpPayload.emailSent
-        ? "Registered. OTP sent to email."
-        : "Registered. OTP email was not sent because email delivery needs server setup.",
+        ? "Registration successful. Please check your email for the OTP."
+        : "Account created successfully, but the OTP email could not be delivered. You may use the Resend OTP option.",
       role,
       approvalStatus,
+      existingAccount: false,
       ...otpPayload,
     });
+
   } catch (e) {
-    if (String(e).toLowerCase().includes("duplicate"))
-      return res.status(409).json({ message: "Email already in use." });
     console.error(e);
-    res.status(500).json({ message: "Server error" });
+
+    return res.status(500).json({
+      message: "Server error.",
+    });
   }
 }
 
