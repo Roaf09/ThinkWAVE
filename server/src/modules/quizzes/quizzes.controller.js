@@ -131,55 +131,44 @@ export async function copyQuizToBank(req, res) {
   );
   if (existingCopy) return res.status(400).json({ message: "A quiz-bank copy already exists for this quiz." });
 
+  const [created] = await pool.query(
+    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
+     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'BANKED')`,
+    {
+      tid: teacherId,
+      cid: quiz.class_id ?? null,
+      sourceId: quizId,
+      title: quiz.title,
+      cat: quiz.category,
+      tt: quiz.template_type,
+      tls: quiz.time_limit_sec,
+      ppq: quiz.points_per_question,
+      rq: quiz.randomize_questions ? 1 : 0,
+      sa: quiz.shuffle_answers ? 1 : 0,
+    }
+  );
+
   const [questions] = await pool.query(
     `SELECT question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
 
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [created] = await connection.query(
-      `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
-       VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'BANKED')`,
+  for (const q of questions) {
+    await pool.query(
+      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
       {
-        tid: teacherId,
-        cid: quiz.class_id ?? null,
-        sourceId: quizId,
-        title: quiz.title,
-        cat: quiz.category,
-        tt: quiz.template_type,
-        tls: quiz.time_limit_sec,
-        ppq: quiz.points_per_question,
-        rq: quiz.randomize_questions ? 1 : 0,
-        sa: quiz.shuffle_answers ? 1 : 0,
+        qid: created.insertId,
+        ord: q.question_order,
+        prompt: q.prompt,
+        cfg: q.config_json,
+        corr: q.correct_json,
       }
     );
-
-    for (const q of questions) {
-      await connection.query(
-        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
-         VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-        {
-          qid: created.insertId,
-          ord: q.question_order,
-          prompt: q.prompt,
-          cfg: JSON.stringify(q.config_json),
-          corr: JSON.stringify(q.correct_json),
-        }
-      );
-    }
-
-    await connection.commit();
-    res.status(201).json({ ok: true, status: 'BANKED', id: created.insertId });
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
   }
+
+  res.status(201).json({ ok: true, status: 'BANKED', id: created.insertId });
 }
 
 
@@ -199,58 +188,46 @@ export async function duplicateQuiz(req, res) {
   );
   if (existing) return res.status(400).json({ message: "Only one duplicate copy is allowed for each quiz." });
 
+  const [created] = await pool.query(
+    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
+     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'DRAFT')`,
+    {
+      tid: teacherId,
+      cid: quiz.class_id ?? null,
+      sourceId: quizId,
+      title: `${quiz.title} (Copy)`,
+      cat: quiz.category,
+      tt: quiz.template_type,
+      tls: quiz.time_limit_sec,
+      ppq: quiz.points_per_question,
+      rq: quiz.randomize_questions ? 1 : 0,
+      sa: quiz.shuffle_answers ? 1 : 0,
+    }
+  );
+
   const [questions] = await pool.query(
     `SELECT question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
 
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [created] = await connection.query(
-      `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
-       VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'DRAFT')`,
+  for (const q of questions) {
+    await pool.query(
+      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
       {
-        tid: teacherId,
-        cid: quiz.class_id ?? null,
-        sourceId: quizId,
-        title: `${quiz.title} (Copy)`,
-        cat: quiz.category,
-        tt: quiz.template_type,
-        tls: quiz.time_limit_sec,
-        ppq: quiz.points_per_question,
-        rq: quiz.randomize_questions ? 1 : 0,
-        sa: quiz.shuffle_answers ? 1 : 0,
+        qid: created.insertId,
+        ord: q.question_order,
+        prompt: q.prompt,
+        cfg: q.config_json,
+        corr: q.correct_json,
       }
     );
-
-    for (const q of questions) {
-      await connection.query(
-        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
-         VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-        {
-          qid: created.insertId,
-          ord: q.question_order,
-          prompt: q.prompt,
-          cfg: JSON.stringify(q.config_json),
-          corr: JSON.stringify(q.correct_json),
-        }
-      );
-    }
-
-    await connection.commit();
-    res.status(201).json({ ok: true, id: created.insertId });
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
   }
+
+  res.status(201).json({ ok: true, id: created.insertId });
 }
 
-// Revision 7: create an asynchronous assignment copy from an existing quiz.
 // Revision 7: create an asynchronous assignment copy from an existing quiz.
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
@@ -265,53 +242,39 @@ export async function assignQuiz(req, res) {
   if (!quiz.class_id) return res.status(400).json({ message: "Assign this quiz to a class folder first." });
   if (!availableFrom || !availableUntil) return res.status(400).json({ message: "Start and end time are required." });
 
+  const [created] = await pool.query(
+    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
+     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
+    {
+      tid: teacherId,
+      cid: quiz.class_id,
+      sourceId: quizId,
+      title: quiz.title,
+      cat: quiz.category,
+      tt: quiz.template_type,
+      tls: quiz.time_limit_sec,
+      ppq: quiz.points_per_question,
+      rq: quiz.randomize_questions ? 1 : 0,
+      sa: quiz.shuffle_answers ? 1 : 0,
+      fromDt: toMysqlDateTime(availableFrom),
+      untilDt: toMysqlDateTime(availableUntil),
+    }
+  );
+
   const [questions] = await pool.query(
     `SELECT question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  // Guard: an assignment with zero questions leaves students stuck on the play screen with nothing to answer.
-  if (!questions.length) return res.status(400).json({ message: "This quiz has no questions yet. Add questions before assigning it." });
-
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [created] = await connection.query(
-      `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
-       VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
-      {
-        tid: teacherId,
-        cid: quiz.class_id,
-        sourceId: quizId,
-        title: quiz.title,
-        cat: quiz.category,
-        tt: quiz.template_type,
-        tls: quiz.time_limit_sec,
-        ppq: quiz.points_per_question,
-        rq: quiz.randomize_questions ? 1 : 0,
-        sa: quiz.shuffle_answers ? 1 : 0,
-        fromDt: toMysqlDateTime(availableFrom),
-        untilDt: toMysqlDateTime(availableUntil),
-      }
+  for (const q of questions) {
+    await pool.query(
+      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
+      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: q.config_json, corr: q.correct_json }
     );
-
-    for (const q of questions) {
-      await connection.query(
-        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
-         VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-        { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: JSON.stringify(q.config_json), corr: JSON.stringify(q.correct_json) }
-      );
-    }
-
-    await connection.commit();
-    res.status(201).json({ ok: true, id: created.insertId });
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
   }
+
+  res.status(201).json({ ok: true, id: created.insertId });
 }
 
 export async function reuseQuiz(req, res) {
