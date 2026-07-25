@@ -60,21 +60,69 @@ function buildOtpEmail({ code, email }) {
 }
 
 export async function sendOtpForUser(userId, email) {
-  const code = randomOtp();
-  const codeHash = await bcrypt.hash(code, 10);
 
-  await pool.query(
-    `INSERT INTO otp_codes(user_id, code_hash, expires_at)
-     VALUES(:uid,:ch, DATE_ADD(NOW(), INTERVAL ${OTP_EXPIRY_MINUTES} MINUTE))`,
-    { uid: userId, ch: codeHash }
-  );
+    const code = randomOtp();
 
-  const mail = buildOtpEmail({ code, email });
-  const delivery = await sendMail({ to: email, ...mail });
-  if (env.NODE_ENV !== "production") {
-    console.info(`[ThinkWAVE local OTP] ${email}: ${code}`);
-  }
-  return { code, delivery: delivery || { sent: false, reason: "UNKNOWN" } };
+    const codeHash = await bcrypt.hash(code, 10);
+
+    // Remove previous OTPs
+    await pool.query(
+        `DELETE FROM otp_codes
+         WHERE user_id=:uid`,
+        { uid: userId }
+    );
+
+    // Store the latest OTP
+    await pool.query(
+        `INSERT INTO otp_codes
+            (user_id, code_hash, expires_at)
+         VALUES
+            (
+                :uid,
+                :ch,
+                DATE_ADD(NOW(), INTERVAL ${OTP_EXPIRY_MINUTES} MINUTE)
+            )`,
+        {
+            uid: userId,
+            ch: codeHash
+        }
+    );
+
+    const mail = buildOtpEmail({
+        code,
+        email
+    });
+
+    const delivery = await sendMail({
+        to: email,
+        ...mail
+    });
+
+    if (!delivery.sent) {
+        console.error(
+            "[ThinkWAVE] OTP email failed.",
+            delivery
+        );
+    }
+
+    if (env.NODE_ENV !== "production") {
+
+        console.info(
+            `[ThinkWAVE OTP]
+Email : ${email}
+OTP   : ${code}`
+        );
+
+    }
+
+    return {
+        code,
+        delivery: delivery || {
+            sent: false,
+            reason: "UNKNOWN"
+        }
+    };
+
 }
 
 export async function verifyOtpCode(userId, code) {
