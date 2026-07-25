@@ -47,7 +47,14 @@ export async function sendMail({ to, subject, text, html }) {
       subject,
       text,
       html,
+      
     });
+    console.log("[SMTP CONFIG]", {
+  service: env.SMTP_SERVICE,
+  host: env.SMTP_HOST,
+  port: env.SMTP_PORT,
+  user: env.SMTP_USER,
+});
     return { sent: true, messageId: info.messageId };
   } catch (error) {
     console.error("[OTP EMAIL FAILED]", {
