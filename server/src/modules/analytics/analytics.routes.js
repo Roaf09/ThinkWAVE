@@ -5,13 +5,14 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { sessionSummary, sessionQuestionStats, exportSessionPdf, exportSessionXlsx } from "./analytics.controller.js";
 
 export const analyticsRouter = Router();
 
-analyticsRouter.get("/sessions/:sessionId/summary", requireAuth, requireRole("TEACHER"), sessionSummary);
-analyticsRouter.get("/sessions/:sessionId/questions", requireAuth, requireRole("TEACHER"), sessionQuestionStats);
-analyticsRouter.get("/sessions/:sessionId/export/pdf", requireAuth, requireRole("TEACHER"), exportSessionPdf);
-analyticsRouter.get("/sessions/:sessionId/export/xlsx", requireAuth, requireRole("TEACHER"), exportSessionXlsx);
+analyticsRouter.get("/sessions/:sessionId/summary", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(sessionSummary));
+analyticsRouter.get("/sessions/:sessionId/questions", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(sessionQuestionStats));
+analyticsRouter.get("/sessions/:sessionId/export/pdf", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(exportSessionPdf));
+analyticsRouter.get("/sessions/:sessionId/export/xlsx", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(exportSessionXlsx));

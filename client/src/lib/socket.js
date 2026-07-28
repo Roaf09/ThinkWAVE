@@ -6,7 +6,8 @@
 
 import { io } from "socket.io-client";
 import { API_BASE } from "./api";
+import { getToken } from "./auth";
 
 export function makeSocket() {
-  return io(API_BASE, { transports: ["websocket"] });
+  return io(API_BASE, { transports: ["websocket"], auth: { token: getToken() } });
 }

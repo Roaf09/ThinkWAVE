@@ -21,6 +21,7 @@ CREATE TABLE users (
   is_verified            TINYINT(1) NOT NULL DEFAULT 0,
   is_active              TINYINT(1) NOT NULL DEFAULT 1,
   approval_status        ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'APPROVED',
+  token_version          INT NOT NULL DEFAULT 0,
   last_active_at         TIMESTAMP NULL,
   contact_number         VARCHAR(30) NULL,
   profile_image          LONGTEXT NULL,
@@ -34,7 +35,6 @@ CREATE TABLE users (
   INDEX idx_users_institution (institution_name)
 );
 
--- Revision 6: stores one-time student profile details after first class join.
 CREATE TABLE student_profiles (
   user_id        BIGINT PRIMARY KEY,
   last_name      VARCHAR(100) NOT NULL,
@@ -59,6 +59,7 @@ CREATE TABLE otp_codes (
   code_hash  VARCHAR(255) NOT NULL,
   expires_at TIMESTAMP NOT NULL,
   used_at    TIMESTAMP NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_otp_codes_user
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -316,7 +317,6 @@ CREATE TABLE scores (
 
 -- -----------------------------------------------------------
 -- 14. class_enrollments
--- Revision 6: connects student accounts to teacher class/section folders.
 -- -----------------------------------------------------------
 CREATE TABLE class_enrollments (
   id              BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -339,7 +339,6 @@ CREATE TABLE class_enrollments (
 
 -- -----------------------------------------------------------
 -- 15. async_quiz_submissions
--- Revision 6: one-submit records for asynchronous quizzes.
 -- -----------------------------------------------------------
 CREATE TABLE async_quiz_submissions (
   id              BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -432,18 +431,41 @@ CREATE TABLE tab_events (
 -- -----------------------------------------------------------
 CREATE TABLE institution_applications (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  institution_name VARCHAR(200) NOT NULL,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   work_email VARCHAR(190) NOT NULL,
   country VARCHAR(100) NOT NULL,
   role_description VARCHAR(150) NOT NULL,
   phone_number VARCHAR(40) NOT NULL,
-  status ENUM('PENDING','APPROVED','DISAPPROVED') NOT NULL DEFAULT 'PENDING',
+  estimated_teachers INT NOT NULL DEFAULT 1,
+  estimated_students INT NOT NULL DEFAULT 0,
+  gcash_reference VARCHAR(100) NULL,
+  status ENUM('PENDING','APPROVED_FOR_PAYMENT','PAYMENT_CONFIRMED','ACTIVATED','DISAPPROVED') NOT NULL DEFAULT 'PENDING',
   reviewed_by BIGINT NULL,
   reviewed_at TIMESTAMP NULL,
+  payment_confirmed_by BIGINT NULL,
+  payment_confirmed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_institution_applications_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id),
+  CONSTRAINT fk_institution_applications_payment_reviewer FOREIGN KEY (payment_confirmed_by) REFERENCES users(id),
   INDEX idx_institution_applications_status_created (status, created_at)
+);
+
+CREATE TABLE admin_invitations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  application_id BIGINT NOT NULL,
+  institution_name VARCHAR(200) NOT NULL,
+  email VARCHAR(190) NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP NULL,
+  created_by BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_admin_invitations_application FOREIGN KEY (application_id) REFERENCES institution_applications(id),
+  CONSTRAINT fk_admin_invitations_creator FOREIGN KEY (created_by) REFERENCES users(id),
+  INDEX idx_admin_invitations_email (email),
+  INDEX idx_admin_invitations_application (application_id)
 );
 
 -- -----------------------------------------------------------

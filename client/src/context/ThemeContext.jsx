@@ -26,8 +26,8 @@ export function ThemeProvider({ children }) {
     document.body.dataset.theme = dark ? "dark" : "light";
     document.body.style.transition = "background 420ms cubic-bezier(0.22, 1, 0.36, 1), color 420ms cubic-bezier(0.22, 1, 0.36, 1)";
     document.body.style.background = dark
-      ? "radial-gradient(circle at 10% 8%, rgba(43,108,255,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(56,189,248,0.13), transparent 28%), radial-gradient(circle at 78% 84%, rgba(34,197,94,0.11), transparent 26%), linear-gradient(180deg, #06101f 0%, #0b1530 48%, #0f172f 100%)"
-      : "radial-gradient(circle at 8% 6%, rgba(43,108,255,0.16), transparent 32%), radial-gradient(circle at 88% 16%, rgba(56,189,248,0.15), transparent 30%), radial-gradient(circle at 82% 84%, rgba(34,197,94,0.10), transparent 26%), linear-gradient(180deg, #f8fbff 0%, #eef5ff 48%, #e9f0ff 100%)";
+      ? "radial-gradient(circle at 12% 8%, rgba(54,92,180,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44,126,205,0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%)"
+      : "radial-gradient(circle at 10% 8%, rgba(210,170,90,0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255,224,170,0.30), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%)";
     document.body.style.color = dark ? "#e7e9ee" : "#0f172a";
   }, [dark]);
 
@@ -46,12 +46,12 @@ export function useColors() {
 }
 
 export const DARK = {
-  pageBg:       "radial-gradient(circle at 10% 8%, rgba(43,108,255,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(56,189,248,0.13), transparent 28%), radial-gradient(circle at 78% 84%, rgba(34,197,94,0.11), transparent 26%), linear-gradient(180deg, #06101f 0%, #0b1530 48%, #0f172f 100%)",
-  cardBg:       "rgba(12, 23, 45, 0.88)",
-  cardBg2:      "rgba(15, 29, 56, 0.82)",
-  cardBg3:      "rgba(14, 26, 50, 0.92)",
+  pageBg:       "radial-gradient(circle at 12% 8%, rgba(54,92,180,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44,126,205,0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%)",
+  cardBg:       "rgba(7, 20, 43, 0.90)",
+  cardBg2:      "rgba(10, 28, 58, 0.86)",
+  cardBg3:      "rgba(5, 17, 38, 0.94)",
   border:       "rgba(132, 167, 255, 0.20)",
-  sidebarBg:    "linear-gradient(180deg, #0a1224 0%, #0d1831 100%)",
+  sidebarBg:    "linear-gradient(180deg, #030b1c 0%, #081a38 100%)",
   sidebarBorder:"rgba(132, 167, 255, 0.16)",
   navColor:     "#a8b8e8",
   text:         "#eef4ff",
@@ -76,19 +76,19 @@ export const DARK = {
 };
 
 export const LIGHT = {
-  pageBg:       "radial-gradient(circle at 8% 6%, rgba(43,108,255,0.16), transparent 32%), radial-gradient(circle at 88% 16%, rgba(56,189,248,0.15), transparent 30%), radial-gradient(circle at 82% 84%, rgba(34,197,94,0.10), transparent 26%), linear-gradient(180deg, #f8fbff 0%, #eef5ff 48%, #e9f0ff 100%)",
-  cardBg:       "rgba(255,255,255,0.82)",
-  cardBg2:      "rgba(243,247,255,0.86)",
-  cardBg3:      "rgba(255,255,255,0.92)",
-  border:       "rgba(80, 119, 210, 0.20)",
+  pageBg:       "radial-gradient(circle at 10% 8%, rgba(210,170,90,0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255,224,170,0.30), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%)",
+  cardBg:       "rgba(255,252,244,0.88)",
+  cardBg2:      "rgba(250,242,224,0.90)",
+  cardBg3:      "rgba(255,250,239,0.95)",
+  border:       "rgba(154, 116, 54, 0.22)",
   sidebarBg:    "linear-gradient(180deg, #1e2d55 0%, #22386e 100%)",
   sidebarBorder:"rgba(199,210,240,0.20)",
   navColor:     "#d7e2ff",
   text:         "#0f172a",
   textMuted:    "#475985",
   textSub:      "#64749e",
-  inputBg:      "rgba(248,250,255,0.96)",
-  inputBorder:  "rgba(80,119,210,0.28)",
+  inputBg:      "rgba(255,252,245,0.98)",
+  inputBorder:  "rgba(154,116,54,0.30)",
   accent:       "#2b6cff",
   accent2:      "#0284c7",
   violet:       "#7c3aed",
@@ -122,7 +122,6 @@ export function ThemedModal({ icon, title, message, onClose, children }) {
         zIndex: 201, padding: 20,
       }}>
         <div style={{
-          // Revision 7: light-mode logout modal uses a lighter card while keeping the icon readable.
           background: dark ? "#111e33" : "#f8fbff", border: dark ? "1px solid #1a2d4a" : "1px solid #c8d5f4",
           borderRadius: 20, padding: "36px 32px",
           width: "min(100%, 380px)", textAlign: "center",

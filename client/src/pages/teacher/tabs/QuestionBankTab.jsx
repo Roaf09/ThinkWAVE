@@ -418,7 +418,6 @@ function PreviewModal({ quiz, onClose }) {
 }
 
 function previewOverlay(dark) {
-  // Revision 10: shared preview overlay removes the visible page container seam behind modals.
   return { position: 'fixed', inset: 0, zIndex: 9200, display: 'grid', placeItems: 'center', padding: 20, background: dark ? 'rgba(0,0,0,.68)' : 'rgba(15,23,42,.46)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', isolation: 'isolate' };
 }
 

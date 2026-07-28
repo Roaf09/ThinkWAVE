@@ -133,7 +133,6 @@ export async function restoreClass(req, res) {
 }
 
 
-// Revision 7: duplicate a folder card beside the original for quick class setup.
 export async function duplicateClass(req, res) {
   const folderId = Number(req.params.id);
   const [[folder]] = await pool.query(
@@ -149,7 +148,6 @@ export async function duplicateClass(req, res) {
   res.status(201).json({ id: r.insertId });
 }
 
-// Revision 6: generate or return a class code for the selected teacher folder/section.
 export async function getOrCreateClassCode(req, res) {
   const classId = Number(req.params.id);
   const [[folder]] = await pool.query(
@@ -168,7 +166,6 @@ export async function getOrCreateClassCode(req, res) {
   res.json({ classCode: code });
 }
 
-// Revision 6: teacher roster for students enrolled in a class folder.
 export async function listClassStudents(req, res) {
   const classId = Number(req.params.id);
   const [[folder]] = await pool.query(`SELECT id FROM classes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: classId, tid: req.user.sub });
@@ -183,7 +180,6 @@ export async function listClassStudents(req, res) {
   res.json(rows);
 }
 
-// Revision 6: teacher can remove a student from a class without deleting the student account.
 export async function removeClassStudent(req, res) {
   const classId = Number(req.params.id);
   const enrollmentId = Number(req.params.enrollmentId);
@@ -195,7 +191,6 @@ export async function removeClassStudent(req, res) {
   res.json({ ok: true });
 }
 
-// Revision 6: async quiz score list shown inside the teacher's class folder.
 export async function listClassAsyncResults(req, res) {
   const classId = Number(req.params.id);
   const [[folder]] = await pool.query(`SELECT id FROM classes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: classId, tid: req.user.sub });
@@ -236,7 +231,6 @@ async function getAsyncExportData(classId, quizId, teacherId) {
   return { quiz, rows };
 }
 
-// Revision 6: downloadable async results in XLSX.
 export async function exportClassAsyncXlsx(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
@@ -263,7 +257,6 @@ export async function exportClassAsyncXlsx(req, res) {
   res.end();
 }
 
-// Revision 6: downloadable async results in PDF.
 export async function exportClassAsyncPdf(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
@@ -282,7 +275,6 @@ export async function exportClassAsyncPdf(req, res) {
   doc.end();
 }
 
-// Revision 18: full analytics for assigned/asynchronous sessions using the same UI payload as live analytics.
 export async function getClassAsyncAnalytics(req, res) {
   const classId = Number(req.params.id);
   const quizId = Number(req.params.quizId);

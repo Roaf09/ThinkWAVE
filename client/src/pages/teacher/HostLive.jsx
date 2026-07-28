@@ -88,7 +88,7 @@ export default function HostLive({ guestMode = false }) {
     socket.on("tab:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, tab_out_count: count } : row)));
     const heartbeat = setInterval(() => socket.emit("teacher:heartbeat", { sessionId: Number(id) }), 5000);
     return () => { clearInterval(heartbeat); socket.disconnect(); };
-  }, [id]);
+  }, [id, guestMode]);
 
   const currentQ = useMemo(() => state ? questions[Number(state.current_question_index || 0)] || null : null, [state, questions]);
   const isGuestHost = guestMode || !!state?.is_guest_host;

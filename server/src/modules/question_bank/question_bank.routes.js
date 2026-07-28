@@ -5,6 +5,7 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
@@ -21,6 +22,6 @@ const SaveSchema = z.object({
   correct:      z.any().optional().nullable(),
 });
 
-questionBankRouter.get(  "/",    requireAuth, requireRole("TEACHER"), listBankQuestions);
-questionBankRouter.post( "/",    requireAuth, requireRole("TEACHER"), validateBody(SaveSchema), saveToBank);
-questionBankRouter.delete("/:id", requireAuth, requireRole("TEACHER"), deleteFromBank);
+questionBankRouter.get(  "/",    requireAuth, requireRole("TEACHER"), asyncHandler(listBankQuestions));
+questionBankRouter.post( "/",    requireAuth, requireRole("TEACHER"), validateBody(SaveSchema), asyncHandler(saveToBank));
+questionBankRouter.delete("/:id", requireAuth, requireRole("TEACHER"), asyncHandler(deleteFromBank));

@@ -7,6 +7,7 @@
 // NEW FILE
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { z }      from "zod";
 import { requireAuth }  from "../../middleware/auth.js";
 import { requireRole }  from "../../middleware/rbac.js";
@@ -25,24 +26,24 @@ const ADMIN   = [requireAuth, requireRole("ADMIN")];
 const TEACHER = [requireAuth, requireRole("TEACHER")];
 
 // institution setup
-adminDashboardRouter.get( "/setup-status",       ...ADMIN, getSetupStatus);
+adminDashboardRouter.get( "/setup-status",       ...ADMIN, asyncHandler(getSetupStatus));
 adminDashboardRouter.post("/setup-institution",   ...ADMIN,
   validateBody(z.object({ institutionName: z.string().min(1) })),
-  setupInstitution
+  asyncHandler(setupInstitution)
 );
 
 // stats/teachers
-adminDashboardRouter.get("/stats",                ...ADMIN, getStats);
-adminDashboardRouter.get("/teachers",             ...ADMIN, listTeachers);
-adminDashboardRouter.get("/institution",          ...ADMIN, getInstitutionDetails);
-adminDashboardRouter.get("/activity",             ...ADMIN, getActivity);
-adminDashboardRouter.post("/teachers/:id/active", ...ADMIN, setTeacherActive);
-adminDashboardRouter.delete("/teachers/:id",      ...ADMIN, deleteTeacher);
+adminDashboardRouter.get("/stats",                ...ADMIN, asyncHandler(getStats));
+adminDashboardRouter.get("/teachers",             ...ADMIN, asyncHandler(listTeachers));
+adminDashboardRouter.get("/institution",          ...ADMIN, asyncHandler(getInstitutionDetails));
+adminDashboardRouter.get("/activity",             ...ADMIN, asyncHandler(getActivity));
+adminDashboardRouter.post("/teachers/:id/active", ...ADMIN, asyncHandler(setTeacherActive));
+adminDashboardRouter.delete("/teachers/:id",      ...ADMIN, asyncHandler(deleteTeacher));
 
 // invitation ciodes (admin side)
-adminDashboardRouter.get(   "/invitation",        ...ADMIN, getInvitation);
-adminDashboardRouter.post(  "/invitation",        ...ADMIN, createInvitation);
-adminDashboardRouter.delete("/invitation/:id",    ...ADMIN, revokeInvitation);
+adminDashboardRouter.get(   "/invitation",        ...ADMIN, asyncHandler(getInvitation));
+adminDashboardRouter.post(  "/invitation",        ...ADMIN, asyncHandler(createInvitation));
+adminDashboardRouter.delete("/invitation/:id",    ...ADMIN, asyncHandler(revokeInvitation));
 
 // teacher joins via code (teacher side)
-adminDashboardRouter.post("/join-institution",    ...TEACHER, joinViaInvitation);
+adminDashboardRouter.post("/join-institution",    ...TEACHER, asyncHandler(joinViaInvitation));

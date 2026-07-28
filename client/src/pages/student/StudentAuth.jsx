@@ -1,6 +1,5 @@
 /* FILE GUIDE:
  * client/src/pages/student/StudentAuth.jsx
- * Purpose: Revision 8 student register/login page matching the teacher login/register UI.
  */
 
 import React, { useMemo, useState } from "react";
@@ -9,6 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken } from "../../lib/auth";
 import { useColors, useTheme } from "../../context/ThemeContext";
+import { TwIcon } from "../../components/TwUI";
 
 const REQ_LABELS = {
   length: "At least 8 characters",
@@ -86,9 +86,9 @@ export default function StudentAuth({ onLoginSuccess }) {
   }
 
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
 
       <main style={s.main}>
         <div style={mode === "login" ? s.card(c) : s.registerCard(c)}>
@@ -108,8 +108,8 @@ export default function StudentAuth({ onLoginSuccess }) {
                 <div style={s.field}>
                   <label style={s.label(c)}>Password</label>
                   <div style={s.passwordWrap}>
-                    <input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 64 }} />
-                    <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button>
+                    <input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 48 }} />
+                    <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
                   </div>
                 </div>
 
@@ -132,8 +132,8 @@ export default function StudentAuth({ onLoginSuccess }) {
                   <div style={s.field}><label style={s.label(c)}>Last name</label><input style={s.input(c)} value={form.lastName} onChange={(e) => patch({ lastName: e.target.value })} placeholder="Dela Cruz" required /></div>
                 </div>
                 <div style={s.field}><label style={s.label(c)}>Email address</label><input type="email" style={s.input(c)} value={form.email} onChange={(e) => patch({ email: e.target.value })} placeholder="you@example.com" required /></div>
-                <div style={s.field}><label style={s.label(c)}>Password</label><div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button></div></div>
-                <div style={s.field}><label style={s.label(c)}>Confirm password</label><div style={s.passwordWrap}><input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}>{showConfPw ? "Hide" : "Show"}</button></div>{form.confirmPassword && <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
+                <div style={s.field}><label style={s.label(c)}>Password</label><div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button></div></div>
+                <div style={s.field}><label style={s.label(c)}>Confirm password</label><div style={s.passwordWrap}><input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button></div>{form.confirmPassword && <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
                 {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
                 <button type="submit" style={s.submitBtn}>Create Student Account</button>
                 <p style={s.footText(c)}>Already have an account? <button type="button" onClick={() => setMode("login")} style={s.inlineButton}>Log in here</button></p>

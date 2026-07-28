@@ -7,6 +7,7 @@
 
 import bcrypt from "bcryptjs";
 import jwt    from "jsonwebtoken";
+import crypto from "crypto";
 import { pool } from "../../db.js";
 import { env  } from "../../env.js";
 import { sendOtpForUser, verifyOtpCode } from "./otp.service.js";
@@ -28,38 +29,53 @@ function otpClientPayload(otpResult) {
 function normalizeEmail(e) { return String(e || "").trim().toLowerCase(); }
 
 // Registration handles the role rules used by the project:
-// - first user becomes SUPERADMIN
-// - admin registrations stay ADMIN
+// - the first SUPERADMIN is created through the protected setup form
+// - approved Admin invitations create ADMIN accounts
 // - regular registrations default to TEACHER
 export async function register(req, res) {
-  const { email, password, firstName, lastName, role: requestedRole } = req.body;
+  const { email, password, firstName, lastName, role: requestedRole, bootstrapSecret, adminInviteToken } = req.body;
   const cleanEmail   = normalizeEmail(email);
   const passwordHash = await bcrypt.hash(password, 12);
 
   try {
     const [[countRow]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL`
+      `SELECT COUNT(*) AS total FROM users WHERE role='SUPERADMIN' AND deleted_at IS NULL`
     );
-    const isFirst = Number(countRow?.total || 0) === 0;
+    const needsSuperadmin = Number(countRow?.total || 0) === 0;
 
-    let role, approvalStatus;
-    if (isFirst) {
+    let role, approvalStatus, invitation = null;
+    if (needsSuperadmin) {
+      const submittedSecret = String(bootstrapSecret || "").trim();
+      if (!env.BOOTSTRAP_SECRET) {
+        return res.status(503).json({ message: "BOOTSTRAP_SECRET is not configured. Add it to server/.env, then restart the server." });
+      }
+      if (submittedSecret !== env.BOOTSTRAP_SECRET) {
+        return res.status(403).json({ message: "The Secret Password is incorrect." });
+      }
       role = "SUPERADMIN"; approvalStatus = "APPROVED";
-    } else if (requestedRole === "ADMIN") {
-      role = "ADMIN";      approvalStatus = "APPROVED";
+    } else if (adminInviteToken) {
+      const tokenHash = crypto.createHash("sha256").update(adminInviteToken).digest("hex");
+      const [invites] = await pool.query(`SELECT * FROM admin_invitations WHERE token_hash=:tokenHash AND used_at IS NULL AND expires_at>NOW() LIMIT 1`, { tokenHash });
+      invitation = invites[0];
+      if (!invitation || normalizeEmail(invitation.email) !== cleanEmail) return res.status(403).json({ message: "This Admin invitation is invalid, expired, or belongs to another email address." });
+      role = "ADMIN"; approvalStatus = "APPROVED";
     } else if (requestedRole === "STUDENT") {
-      // Revision 6: students now register their own accounts.
-      role = "STUDENT";    approvalStatus = "APPROVED";
+      role = "STUDENT"; approvalStatus = "APPROVED";
     } else {
-      role = "TEACHER";    approvalStatus = "APPROVED";
+      role = "TEACHER"; approvalStatus = "APPROVED";
     }
 
     const [result] = await pool.query(
-      `INSERT INTO users (role, email, password_hash, first_name, last_name, approval_status)
-       VALUES (:role, :email, :ph, :fn, :ln, :as)`,
+      `INSERT INTO users (role, email, password_hash, first_name, last_name, approval_status, institution_name)
+       VALUES (:role, :email, :ph, :fn, :ln, :as, :institution)`,
       { role, email: cleanEmail, ph: passwordHash,
-        fn: firstName.trim(), ln: lastName.trim(), as: approvalStatus }
+        fn: firstName.trim(), ln: lastName.trim(), as: approvalStatus, institution: invitation?.institution_name || null }
     );
+
+    if (invitation) {
+      await pool.query(`UPDATE admin_invitations SET used_at=NOW() WHERE id=:id`, { id: invitation.id });
+      await pool.query(`UPDATE institution_applications SET status='ACTIVATED' WHERE id=:id`, { id: invitation.application_id });
+    }
 
     try {
       await pool.query(
@@ -96,6 +112,16 @@ export async function register(req, res) {
   }
 }
 
+
+export async function checkAdminInvitation(req, res) {
+  const tokenHash = crypto.createHash("sha256").update(String(req.params.token || "")).digest("hex");
+  const [[invitation]] = await pool.query(`SELECT id,email,institution_name,expires_at,used_at FROM admin_invitations WHERE token_hash=:tokenHash LIMIT 1`, { tokenHash });
+  if (!invitation) return res.status(404).json({ message: "This Admin invitation is invalid." });
+  if (invitation.used_at) return res.status(409).json({ message: "This Admin invitation has already been used and cannot create another account." });
+  if (new Date(invitation.expires_at).getTime() <= Date.now()) return res.status(410).json({ message: "This Admin invitation has expired." });
+  res.json({ valid: true, email: invitation.email, institutionName: invitation.institution_name, expiresAt: invitation.expires_at });
+}
+
 export async function verifyOtp(req, res) {
   const { email, code } = req.body;
   const cleanEmail = normalizeEmail(email);
@@ -117,7 +143,7 @@ export async function login(req, res) {
   const { email, password, loginPortal } = req.body;
   const cleanEmail = normalizeEmail(email);
   const [rows] = await pool.query(
-    `SELECT id, role, password_hash, is_verified, is_active, approval_status, last_active_at
+    `SELECT id, role, password_hash, is_verified, is_active, approval_status, last_active_at, token_version
      FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
     { email: cleanEmail }
   );
@@ -140,14 +166,26 @@ export async function login(req, res) {
     return res.status(403).json({ message: "Only superadmin accounts can use the superadmin login page." });
   }
   if (loginPortal === "STUDENT" && u.role !== "STUDENT") {
-    // Revision 6: keep the student portal separate from teacher/admin logins.
     return res.status(403).json({ message: "Only student accounts can use the student login page." });
   }
 
   const firstLogin = !u.last_active_at;
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
-  const token = jwt.sign({ sub: u.id, role: u.role }, env.JWT_SECRET, { expiresIn: "8h" });
+  const token = jwt.sign({ sub: u.id, role: u.role, ver: Number(u.token_version || 0) }, env.JWT_SECRET, { expiresIn: "8h" });
   res.json({ token, role: u.role, firstLogin });
+}
+
+
+export async function resendOtp(req, res) {
+  const cleanEmail = normalizeEmail(req.body.email);
+  const [rows] = await pool.query(
+    `SELECT id, is_verified FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+    { email: cleanEmail }
+  );
+  if (!rows.length) return res.status(404).json({ message: "Account not found." });
+  if (rows[0].is_verified) return res.status(400).json({ message: "This account is already verified." });
+  const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
+  return res.json({ message: "A new verification code has been generated.", ...otpClientPayload(otpResult) });
 }
 
 export async function requestPasswordReset(req, res) {
@@ -157,7 +195,6 @@ export async function requestPasswordReset(req, res) {
     `SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
     { email: cleanEmail }
   );
-  // Revision 1: password changes use OTP verification only, no admin approval.
   if (rows.length) {
     const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
     return res.json({
@@ -179,7 +216,7 @@ export async function confirmPasswordReset(req, res) {
   const ok = await verifyOtpCode(rows[0].id, code);
   if (!ok) return res.status(400).json({ message: "Invalid or expired OTP" });
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await pool.query(`UPDATE users SET password_hash=:ph WHERE id=:id`, { ph: passwordHash, id: rows[0].id });
+  await pool.query(`UPDATE users SET password_hash=:ph, token_version=token_version+1 WHERE id=:id`, { ph: passwordHash, id: rows[0].id });
   try {
     const [[changedUser]] = await pool.query(`SELECT first_name,last_name,email,role,institution_name FROM users WHERE id=:id`, { id: rows[0].id });
     await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`, {
@@ -200,7 +237,12 @@ export async function me(req, res) {
   const user = rows[0] || null;
   if (user?.role === "TEACHER") {
     const plan = await getTeacherPlan(req.user.sub);
-    return res.json({ ...user, plan_code: plan.code, plan_limits: plan.limits });
+    return res.json({
+      ...user,
+      role: req.user.role === "GUEST_HOST" ? "GUEST_HOST" : user.role,
+      plan_code: plan.code,
+      plan_limits: plan.limits,
+    });
   }
   res.json(user);
 }

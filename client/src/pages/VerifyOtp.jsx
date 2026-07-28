@@ -24,6 +24,7 @@ export default function VerifyOtp() {
   const [msg, setMsg] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const refs = useRef([]);
 
   function handleDigit(idx, val) {
@@ -45,6 +46,18 @@ export default function VerifyOtp() {
     pasted.split("").forEach((ch, i) => { next[i] = ch; });
     setDigits(next);
     refs.current[Math.min(pasted.length, BOX_COUNT - 1)]?.focus();
+  }
+
+  async function resend() {
+    if (!email) return setMsg("Enter your email address first.");
+    setResending(true); setMsg("");
+    try {
+      const { data } = await api.post("/auth/resend-otp", { email });
+      setDigits(Array(BOX_COUNT).fill(""));
+      setMsg(data.emailSent ? "A new code was sent to your email." : "A new code was generated. Check the server terminal for the test OTP.");
+      refs.current[0]?.focus();
+    } catch (error) { setMsg(error?.response?.data?.message || "Could not resend the code."); }
+    finally { setResending(false); }
   }
 
   async function submit(event) {
@@ -69,7 +82,7 @@ export default function VerifyOtp() {
     <div style={{ minHeight: "100vh", background: c.pageBg, color: c.text, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "fixed", width: 520, height: 520, borderRadius: "50%", background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)`, top: -180, left: -110, pointerEvents: "none" }} />
       <div style={{ position: "fixed", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,.14) 0%,transparent 70%)", bottom: -120, right: -110, pointerEvents: "none" }} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
 
       <div style={{ display: "grid", placeItems: "center", flex: 1, padding: "34px 20px 50px", zIndex: 1 }}>
         <div style={{ width: "min(100%,470px)", padding: "38px 34px", borderRadius: 26, textAlign: "center", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
@@ -86,6 +99,7 @@ export default function VerifyOtp() {
               </div>
               {msg && <div style={{ color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, fontWeight: 800, marginBottom: 16 }}>{msg}</div>}
               <button type="submit" disabled={loading || digits.join("").length < BOX_COUNT} style={{ width: "100%", minHeight: 51, borderRadius: 14, border: 0, background: c.accent, color: "#fff", fontSize: 15, fontWeight: 950, cursor: "pointer", opacity: loading || digits.join("").length < BOX_COUNT ? .55 : 1, boxShadow: `0 13px 30px ${c.accent}35` }}>{loading ? "Verifying…" : "Verify"}</button>
+              <button type="button" onClick={resend} disabled={resending} style={{marginTop:12,border:0,background:"transparent",color:c.accent,fontWeight:900,cursor:"pointer",opacity:resending?.6:1}}>{resending?"Sending new code…":"Resend code"}</button>
             </form>
           </>}
         </div>

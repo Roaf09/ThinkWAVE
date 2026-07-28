@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
 import ThemeIconButton from "./ThemeIconButton";
 
-export default function PublicHeader({ onSection, compact = false, showSuper = false }) {
+export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false }) {
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
   const nav = useNavigate();
@@ -23,10 +23,16 @@ export default function PublicHeader({ onSection, compact = false, showSuper = f
         <button onClick={() => goSection("plans")} style={{ color:c.textMuted }}>Plans</button>
       </nav>}
       <div className="tw-public-actions">
+        {setupComplete && !hideSuper && <Link
+          to="/superadmin-login"
+          aria-label="Superadmin login"
+          title="Superadmin login"
+          className="tw-public-ghost tw-super-dot"
+          style={{ color:c.text, borderColor:c.border, opacity: concealSuper ? 0 : 1 }}
+        ><span aria-hidden="true">S</span></Link>}
         <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />
-        {showSuper && <Link to="/superadmin-login" className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }}>SUPER</Link>}
-        <Link to="/login" className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }}>Login</Link>
-        <Link to="/register" className="tw-public-signup">Sign Up</Link>
+        {setupComplete && <Link to="/login" className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
+        {setupComplete && <Link to="/register" className="tw-public-signup">Sign Up</Link>}
       </div>
     </header>
   );

@@ -28,7 +28,7 @@ import {
   normalizeThinkWordKey,
   resolveThinkSpellWordBank,
   validatePathSpellsWord,
-} from "../../lib/thinkSpell";
+} from "../../templates/thinkspell/thinkSpell";
 
 const WAIT_CARD_COLORS = [
   { bg: "#dbeafe", border: "#93c5fd", text: "#1e3a8a" },
@@ -506,8 +506,6 @@ export default function StudentPlay() {
     const tt = normalizeTemplateType(state.template_type);
     let answer;
     if (tt === "MCQ") {
-      // Revision 1: MCQ can submit either one choice or two selected choices.
-      // Revision 5: Modified MCQ image mode always submits one selected image choice.
       answer = currentQ?.config_json?.answerMode === "TWO"
         ? { choices: Array.isArray(selectedChoice) ? selectedChoice : [selectedChoice].filter(Boolean) }
         : { choice: Array.isArray(selectedChoice) ? selectedChoice[0] : selectedChoice };
@@ -850,7 +848,6 @@ function choiceLabel(option, fallback) {
 
 function fmtTime(sec) { const s = Math.max(0, Number(sec || 0)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
 
-// Revision 2: light randomized matching colors for easier reading.
 const CC_A = ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe", "#cffafe", "#ffedd5"];
 const CC_B = ["#e0f2fe", "#ecfccb", "#fef9c3", "#fae8ff", "#ede9fe", "#ccfbf1", "#fee2e2"];
 const CB_A = ["#93c5fd", "#86efac", "#fcd34d", "#f9a8d4", "#c4b5fd", "#67e8f9", "#fdba74"];
@@ -1069,7 +1066,6 @@ function GuessWord4PicsTemplate({ disabled, cfg, spell, setSpell }) {
 
   useEffect(() => {
     if (spell.mode === "pics4" && spell.target === target && spell.bank?.length) return;
-    // Revision 3: 4 Pics keeps only the original word-guess gameplay.
     setSpell({ mode: "pics4", target, built: "", bank: buildLetterBank(target, Number(cfg.dummyLetters || 6)) });
   }, [cfg.dummyLetters, target]);
 
@@ -1138,7 +1134,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
   const foundEntries = Array.isArray(spell.foundEntries) ? spell.foundEntries : [];
   const foundWords = foundEntries.map((entry) => entry.text || entry.word || "");
   const foundSet = new Set(foundWords.map(normalizeThinkWordKey));
-  // Revision 2: keep found word paths visible until final submit.
   const foundPathSet = new Set(foundEntries.flatMap((entry) => Array.isArray(entry.path) ? entry.path.map(Number) : []));
   const cellGap = 8;
   const draggingRef = useRef(false);
@@ -1182,7 +1177,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
     const lastIdx = selected[selected.length - 1];
     if (!isAdjacentSelection(lastIdx, idx, activeGridSize)) return;
     const nextSelected = [...selected, idx];
-    // Revision 2: ignore off-line drag cells so the selection stays straight.
     if (!isStraightLinePath(nextSelected, activeGridSize)) return;
     setSpell((s) => ({ ...s, selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") }));
   }
@@ -1201,7 +1195,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
     const matchedKey = matchThinkSpellWord(text, wordBank);
     const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path: selected, word: text });
     if (matchedKey && pathValid && !foundSet.has(matchedKey)) {
-      // Revision 1: valid words are collected locally; students submit once after finding all they can.
       setSpell((s) => ({
         ...s,
         foundEntries: [...(s.foundEntries || []), { text, path: selected }],
@@ -1264,7 +1257,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
                 if (disabled) return;
                 e.preventDefault();
                 draggingRef.current = true;
-                // Revision 2: start the drag line from the pressed letter.
                 setSpell((sp) => ({ ...sp, selected: [idx], built: String(grid[idx] || "") }));
               }}
               onPointerEnter={() => draggingRef.current && addIndex(idx)}
@@ -1338,7 +1330,6 @@ function TemplateBody({
     const twoMode = cfg.answerMode === "TWO";
     const selectedList = Array.isArray(selectedChoice) ? selectedChoice : [selectedChoice].filter(Boolean);
     function toggleChoice(value) {
-      // Revision 1: students may choose up to two options when the teacher enables two-answer MCQ.
       if (!twoMode) return setSelectedChoice(value);
       if (selectedList.includes(value)) return setSelectedChoice(selectedList.filter((v) => v !== value));
       if (selectedList.length >= 2) return setSelectedChoice([selectedList[1], value]);

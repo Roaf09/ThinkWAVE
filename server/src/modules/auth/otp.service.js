@@ -5,6 +5,7 @@
  */
 
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { pool } from "../../db.js";
 import { sendMail } from "../../utils/mailer.js";
 import { env } from "../../env.js";
@@ -12,7 +13,7 @@ import { env } from "../../env.js";
 const OTP_EXPIRY_MINUTES = 10;
 
 function randomOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 function buildOtpEmail({ code, email }) {
@@ -72,14 +73,14 @@ export async function sendOtpForUser(userId, email) {
   const mail = buildOtpEmail({ code, email });
   const delivery = await sendMail({ to: email, ...mail });
   if (env.NODE_ENV !== "production") {
-    console.info(`[ThinkWAVE local OTP] ${email}: ${code}`);
+    console.info(`[ThinkWAVE OTP] ${email}: ${code}`);
   }
   return { code, delivery: delivery || { sent: false, reason: "UNKNOWN" } };
 }
 
 export async function verifyOtpCode(userId, code) {
   const [rows] = await pool.query(
-    `SELECT id, code_hash, expires_at, used_at
+    `SELECT id, code_hash, expires_at, used_at, attempt_count
      FROM otp_codes WHERE user_id=:uid ORDER BY id DESC LIMIT 1`,
     { uid: userId }
   );
@@ -87,9 +88,13 @@ export async function verifyOtpCode(userId, code) {
   const otp = rows[0];
   if (otp.used_at) return false;
   if (new Date(otp.expires_at).getTime() < Date.now()) return false;
+  if (Number(otp.attempt_count || 0) >= 5) return false;
 
   const ok = await bcrypt.compare(code, otp.code_hash);
-  if (!ok) return false;
+  if (!ok) {
+    await pool.query(`UPDATE otp_codes SET attempt_count=attempt_count+1 WHERE id=:id`, { id: otp.id });
+    return false;
+  }
 
   await pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=:id`, { id: otp.id });
   return true;

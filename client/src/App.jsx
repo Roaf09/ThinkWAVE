@@ -4,30 +4,14 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-// changes:
-//   - /superadmin-register route added (first-run setup)
-//   - /superadmin dashboard route added 
-//   - greeting pop up
-//   - login passes onLoginSuccess to trigger greeting pop up
-
-// changes 2:
-//   - /admin route now uses the new full AdminDashboard (with sidebar)
-//   - hideHeader includes /admin routes
-
-// changes 3:
-//   - /guest route → GuestDashboard (no auth required)
-//   - hideHeader includes /guest
-
 import React, { useEffect, useState } from "react";
-import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 
 import Landing             from "./pages/Landing.jsx";
 import Plan                from "./pages/Plan.jsx";
 import Register            from "./pages/Register.jsx";
 import SuperadminRegister  from "./pages/SuperadminRegister.jsx";
 import SuperadminLogin     from "./pages/SuperadminLogin.jsx";
-import AdminRegister       from "./pages/AdminRegister.jsx";
-import AdminLogin          from "./pages/AdminLogin.jsx";
 import VerifyOtp           from "./pages/VerifyOtp.jsx";
 import Login               from "./pages/Login.jsx";
 import ForgotPassword      from "./pages/ForgotPassword.jsx";

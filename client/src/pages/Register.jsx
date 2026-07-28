@@ -4,11 +4,12 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { TwIcon } from "../components/TwUI";
 
 function passwordChecks(p) {
   return {
@@ -30,8 +31,9 @@ const REQ_LABELS = {
 
 export default function Register() {
   const nav = useNavigate();
-  const [sp] = useSearchParams();
-  const isAdminReg = sp.get("role") === "admin";
+  const [searchParams] = useSearchParams();
+  const adminInviteToken = searchParams.get("adminInvite") || "";
+  const isAdminReg = !!adminInviteToken;
   const { dark, toggleTheme } = useTheme();
   const c = useColors();
 
@@ -42,6 +44,17 @@ export default function Register() {
   const [showPw, setShowPw] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
   const [error, setError] = useState("");
+  const [inviteState, setInviteState] = useState(isAdminReg ? "checking" : "valid");
+
+  useEffect(() => {
+    if (!isAdminReg) return;
+    api.get(`/auth/admin-invitation/${encodeURIComponent(adminInviteToken)}`)
+      .then(() => setInviteState("valid"))
+      .catch((err) => {
+        setInviteState("invalid");
+        setError(err?.response?.data?.message || "This Admin invitation is invalid, already used, or expired.");
+      });
+  }, [adminInviteToken, isAdminReg]);
 
   const checks = useMemo(() => passwordChecks(form.password), [form.password]);
   const okDot = dark ? "#22c55e" : "#16a34a";
@@ -62,7 +75,7 @@ export default function Register() {
         firstName: form.firstName,
         lastName: form.lastName,
       };
-      if (isAdminReg) payload.role = "ADMIN";
+      if (isAdminReg) payload.adminInviteToken = adminInviteToken;
 
       const { data } = await api.post("/auth/register", payload);
       const label = data.role === "ADMIN" ? "Administrator" : "Teacher";
@@ -81,10 +94,14 @@ export default function Register() {
     ? { bg: dark ? "rgba(34,197,94,0.10)" : c.greenBg, border: dark ? "rgba(34,197,94,0.35)" : c.greenBorder, title: dark ? "#86efac" : "#166534", body: dark ? "#bbf7d0" : "#166534" }
     : { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#f87171" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" };
 
+  if (isAdminReg && inviteState !== "valid") return (
+    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper/><main style={s.main}><div style={s.card(c)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
+  );
+
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
 
       <main style={s.main}>
         <div style={s.card(c)}>
@@ -116,8 +133,8 @@ export default function Register() {
               <div style={s.field}>
                 <label style={s.label(c)}>Password</label>
                 <div style={s.passwordWrap}>
-                  <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button>
+                  <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
+                  <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
               </div>
 
@@ -126,13 +143,13 @@ export default function Register() {
                 <div style={s.passwordWrap}>
                   <input
                     type={showConfPw ? "text" : "password"}
-                    style={{ ...s.input(c), paddingRight: 64, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }}
+                    style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }}
                     value={form.confirmPassword}
                     onChange={(e) => set({ confirmPassword: e.target.value })}
                     placeholder="••••••••"
                     required
                   />
-                  <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}>{showConfPw ? "Hide" : "Show"}</button>
+                  <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
                 {form.confirmPassword && (
                   <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>
@@ -157,9 +174,9 @@ export default function Register() {
                 <button type="submit" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Account"}</button>
               </div>
 
-              <p style={s.loginPrompt(c)}>
-                Already have an account? <Link to={isAdminReg ? "/login?role=admin" : "/login"} style={s.loginLink}>Log in here</Link>
-              </p>
+              {!isAdminReg && <p style={s.loginPrompt(c)}>
+                Already have an account? <Link to="/login" style={s.loginLink}>Log in here</Link>
+              </p>}
             </form>
 
             <div style={s.reqPanel(c)}>

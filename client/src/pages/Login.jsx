@@ -59,30 +59,11 @@ export default function Login({ onLoginSuccess }) {
   }
 
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
 
       <main style={s.main}>
-        <section style={s.visualPanel(c)} aria-hidden="true">
-          <IconBubble name={isAdminLogin ? "classes" : "teacher"} c={c} size={58} iconSize={30} />
-          <div>
-            <div style={s.visualKicker(c)}>{isAdminLogin ? "Institution Control" : "Teacher Workspace"}</div>
-            <h2 style={s.visualTitle(c)}>Plan, host, and review learning activities in one calm dashboard.</h2>
-          </div>
-          <div className="tw-dashboard-visual">
-            <div className="tw-mini-chart" style={{ background: c.cardBg2, border: `1px solid ${c.border}` }}>
-              <span style={{ height: "38%" }} /><span style={{ height: "68%" }} /><span style={{ height: "48%" }} /><span style={{ height: "82%" }} />
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {["Live quiz ready", "Reports organized", "Class folders synced"].map((item) => (
-                <div key={item} style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 10px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted, fontSize: 12, fontWeight: 800 }}>
-                  <TwIcon name="check" size={15} /> {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
         <div style={s.card(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminLogin ? "Admin Login" : "Welcome back"}</h1>
@@ -115,10 +96,10 @@ export default function Login({ onLoginSuccess }) {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  style={{ ...s.input(c), paddingRight: 64 }}
+                  style={{ ...s.input(c), paddingRight: 48 }}
                 />
                 <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>
-                  {showPw ? "Hide" : "Show"}
+                  <TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/>
                 </button>
               </div>
             </div>
@@ -153,10 +134,15 @@ export default function Login({ onLoginSuccess }) {
                     ? `No ${isAdminLogin ? "admin " : "teacher "}account was found with that email. Please sign up first.`
                     : error}
                 </p>
-                {notFound && (
-                  <Link to={isAdminLogin ? "/register?role=admin" : "/register"} style={s.inlineCta}>
+                {notFound && !isAdminLogin && (
+                  <Link to="/register" style={s.inlineCta}>
                     Create account
                   </Link>
+                )}
+                {notFound && isAdminLogin && (
+                  <button type="button" style={{...s.inlineCta,border:"none",cursor:"pointer"}} onClick={() => nav("/plan")}>
+                    View Institution Plan
+                  </button>
                 )}
               </div>
             )}

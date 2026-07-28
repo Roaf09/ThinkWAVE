@@ -5,6 +5,7 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { z } from "zod";
 import { requireAuth }  from "../../middleware/auth.js";
 import { requireRole }  from "../../middleware/rbac.js";
@@ -67,18 +68,18 @@ const AssignSchema = z.object({
   availableUntil: z.string().min(1),
 });
 
-quizzesRouter.get("/",    requireAuth, requireRole("TEACHER"), listQuizzes);
-quizzesRouter.post("/",   requireAuth, requireRole("TEACHER"), validateBody(QuizSchema), createQuiz);
-quizzesRouter.get("/:id", requireAuth, requireRole("TEACHER"), getQuiz);
+quizzesRouter.get("/",    requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listQuizzes));
+quizzesRouter.post("/",   requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(QuizSchema), asyncHandler(createQuiz));
+quizzesRouter.get("/:id", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getQuiz));
 
-quizzesRouter.put("/:id/questions", requireAuth, requireRole("TEACHER"), validateBody(QuestionsSchema), upsertQuestions);
-quizzesRouter.put("/:id/settings",  requireAuth, requireRole("TEACHER"), validateBody(SettingsSchema),  updateQuizSettings);
-quizzesRouter.put("/:id/meta",      requireAuth, requireRole("TEACHER"), validateBody(MetaSchema),      updateQuizMeta);
+quizzesRouter.put("/:id/questions", requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(QuestionsSchema), asyncHandler(upsertQuestions));
+quizzesRouter.put("/:id/settings",  requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(SettingsSchema),  asyncHandler(updateQuizSettings));
+quizzesRouter.put("/:id/meta",      requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(MetaSchema),      asyncHandler(updateQuizMeta));
 
-quizzesRouter.post("/:id/publish",      requireAuth, requireRole("TEACHER"), publishQuiz);
-quizzesRouter.post("/:id/copy-to-bank", requireAuth, requireRole("TEACHER"), copyQuizToBank);
-quizzesRouter.post("/:id/duplicate",    requireAuth, requireRole("TEACHER"), duplicateQuiz);
-quizzesRouter.post("/:id/assign",       requireAuth, requireRole("TEACHER"), validateBody(AssignSchema), assignQuiz);
-quizzesRouter.post("/:id/reuse",        requireAuth, requireRole("TEACHER"), validateBody(ReuseSchema), reuseQuiz);
-quizzesRouter.delete("/:id",            requireAuth, requireRole("TEACHER"), softDeleteQuiz);
-quizzesRouter.post("/:id/restore",      requireAuth, requireRole("TEACHER","ADMIN"), restoreQuiz);
+quizzesRouter.post("/:id/publish",      requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(publishQuiz));
+quizzesRouter.post("/:id/copy-to-bank", requireAuth, requireRole("TEACHER"), asyncHandler(copyQuizToBank));
+quizzesRouter.post("/:id/duplicate",    requireAuth, requireRole("TEACHER"), asyncHandler(duplicateQuiz));
+quizzesRouter.post("/:id/assign",       requireAuth, requireRole("TEACHER"), validateBody(AssignSchema), asyncHandler(assignQuiz));
+quizzesRouter.post("/:id/reuse",        requireAuth, requireRole("TEACHER"), validateBody(ReuseSchema), asyncHandler(reuseQuiz));
+quizzesRouter.delete("/:id",            requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(softDeleteQuiz));
+quizzesRouter.post("/:id/restore",      requireAuth, requireRole("TEACHER","ADMIN"), asyncHandler(restoreQuiz));

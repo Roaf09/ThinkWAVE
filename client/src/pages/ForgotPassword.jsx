@@ -1,6 +1,5 @@
 /* FILE GUIDE:
  * client/src/pages/ForgotPassword.jsx
- * Purpose: Revision 1 password reset page using OTP verification only.
  */
 
 import React, { useState } from "react";
@@ -8,6 +7,7 @@ import PublicHeader from "../components/PublicHeader";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { TwIcon } from "../components/TwUI";
 
 function passwordChecks(p) {
   return {
@@ -67,9 +67,9 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
       <main style={s.main}>
         <div style={s.card(c)}>
           <h1 style={s.title(c)}>Reset Password</h1>
@@ -88,8 +88,8 @@ export default function ForgotPassword() {
               <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={10} style={s.input(c)} placeholder="6-digit code" />
               <label style={s.label(c)}>New Password</label>
               <div style={s.passwordWrap}>
-                <input type={showPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required style={{ ...s.input(c), paddingRight: 64 }} placeholder="••••••••" />
-                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button>
+                <input type={showPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required style={{ ...s.input(c), paddingRight: 48 }} placeholder="••••••••" />
+                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
               <label style={s.label(c)}>Confirm Password</label>
               <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required style={s.input(c)} placeholder="••••••••" />

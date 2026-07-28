@@ -6,9 +6,10 @@
 
 import React, { useMemo, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { TwIcon } from "../components/TwUI";
 
 function passwordChecks(p) {
   return {
@@ -32,7 +33,8 @@ export default function SuperadminRegister() {
   const nav = useNavigate();
   const { dark, toggleTheme } = useTheme();
   const c = useColors();
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "", bootstrapSecret: "" });
+  const [showSecret, setShowSecret] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
   const [msg, setMsg] = useState("");
@@ -53,6 +55,7 @@ export default function SuperadminRegister() {
         password: form.password,
         firstName: form.firstName,
         lastName: form.lastName,
+        bootstrapSecret: form.bootstrapSecret,
       });
       const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
       setMsg(`Account created! ${otpNote} Redirecting…`);
@@ -63,16 +66,16 @@ export default function SuperadminRegister() {
   }
 
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact setupComplete={false} />
 
       <main style={s.main}>
         <div style={s.card(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>Welcome to ThinkWAVE!</h1>
             <p style={s.subtitle(c)}>
-              The first account created will become the <span style={{ color: "#60a5fa", fontWeight: 700 }}>Super Administrator</span>.
+              This account will be set as the <span style={{ color: "#2563eb", fontWeight: 700 }}>Super Administrator</span>.
             </p>
           </div>
 
@@ -95,35 +98,40 @@ export default function SuperadminRegister() {
               </div>
 
               <div style={s.field}>
+                <label style={s.label(c)}>Secret Password</label>
+                <div style={s.passwordWrap}>
+                  <input type={showSecret ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.bootstrapSecret} onChange={(e) => set({ bootstrapSecret: e.target.value })} placeholder="Enter secret password" required />
+                  <button type="button" style={s.showBtn} onClick={() => setShowSecret((v) => !v)}><TwIcon name={showSecret ? "eyeOff" : "eye"} size={19}/></button>
+                </div>
+              </div>
+
+              <div style={s.field}>
                 <label style={s.label(c)}>Password</label>
                 <div style={s.passwordWrap}>
-                  <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button>
+                  <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
+                  <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
               </div>
 
               <div style={s.field}>
                 <label style={s.label(c)}>Confirm password</label>
                 <div style={s.passwordWrap}>
-                  <input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 64 }} value={form.confirmPassword} onChange={(e) => set({ confirmPassword: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}>{showConfPw ? "Hide" : "Show"}</button>
+                  <input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.confirmPassword} onChange={(e) => set({ confirmPassword: e.target.value })} placeholder="••••••••" required />
+                  <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
                 {form.confirmPassword && (
-                  <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>
+                  <span style={{ fontSize: 12, marginTop: 4, color: matches ? (dark ? "#86efac" : "#166534") : (dark ? "#fca5a5" : "#b91c1c") }}>
                     {matches ? "✓ Passwords match" : "✗ Passwords do not match"}
                   </span>
                 )}
               </div>
 
-              {msg && <p style={s.msgBox(msg.startsWith("Account created!"))}>{msg}</p>}
+              {msg && <p role="alert" style={s.msgBox(msg.startsWith("Account created!"), dark)}>{msg}</p>}
 
               <div style={s.btnWrap}>
                 <button type="submit" style={s.submitBtn}>Create Superadmin Account</button>
               </div>
 
-              <p style={s.loginPrompt(c)}>
-                Already have an account? <Link to="/superadmin-login" style={s.link}>Log in here</Link>
-              </p>
             </form>
 
             <div style={s.reqPanel(c)}>
@@ -132,7 +140,7 @@ export default function SuperadminRegister() {
                 {Object.entries(REQ_LABELS).map(([key, label]) => (
                   <div key={key} style={s.reqItem}>
                     <span style={{ ...s.reqDot, background: checks[key] ? "#22c55e" : c.border }} />
-                    <span style={{ fontSize: 13, color: checks[key] ? "#86efac" : c.textMuted }}>{label}</span>
+                    <span style={{ fontSize: 13, color: checks[key] ? (dark ? "#86efac" : "#166534") : c.textMuted }}>{label}</span>
                   </div>
                 ))}
               </div>
@@ -171,7 +179,12 @@ const s = {
   input: (c) => ({ padding: "10px 13px", borderRadius: 11, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none" }),
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
-  msgBox: (success) => ({ background: success ? "rgba(34,197,94,0.12)" : "rgba(30,64,175,0.22)", border: `1px solid ${success ? "rgba(34,197,94,0.35)" : "rgba(96,165,250,0.4)"}`, color: success ? "#bbf7d0" : "#bfdbfe", fontSize: 13, lineHeight: 1.6, padding: "10px 12px", borderRadius: 12, margin: 0 }),
+  msgBox: (success, dark) => ({
+    background: success ? (dark ? "rgba(34,197,94,0.12)" : "#f0fdf4") : (dark ? "rgba(127,29,29,0.38)" : "#fef2f2"),
+    border: `1px solid ${success ? (dark ? "rgba(74,222,128,0.45)" : "#86efac") : (dark ? "rgba(248,113,113,0.62)" : "#fca5a5")}`,
+    color: success ? (dark ? "#bbf7d0" : "#166534") : (dark ? "#fecaca" : "#991b1b"),
+    fontSize: 13, fontWeight: 650, lineHeight: 1.6, padding: "10px 12px", borderRadius: 12, margin: 0
+  }),
   btnWrap: { display: "flex", justifyContent: "center", marginTop: 2 },
   submitBtn: { padding: "13px 28px", borderRadius: 999, background: "linear-gradient(135deg,#1d4ed8,#2563eb)", color: "white", border: "none", fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: "0 8px 22px rgba(37,99,235,0.35)" },
   loginPrompt: (c) => ({ textAlign: "center", fontSize: 13, color: c.textMuted, margin: "4px 0 0" }),

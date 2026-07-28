@@ -5,6 +5,8 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
+import { rateLimit } from "../../middleware/rateLimit.js";
 import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
@@ -39,17 +41,17 @@ const JoinSchema = z.object({
   lastName: z.string().optional(),
 });
 
-sessionsRouter.post("/join", validateBody(JoinSchema), joinSession);
-sessionsRouter.get("/history", requireAuth, requireRole("TEACHER"), getTeacherSessionHistory);
-sessionsRouter.get("/active", requireAuth, requireRole("TEACHER"), listActiveSessions);
-sessionsRouter.post("/", requireAuth, requireRole("TEACHER"), validateBody(CreateSchema), createSession);
+sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), validateBody(JoinSchema), asyncHandler(joinSession));
+sessionsRouter.get("/history", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getTeacherSessionHistory));
+sessionsRouter.get("/active", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listActiveSessions));
+sessionsRouter.post("/", requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(CreateSchema), asyncHandler(createSession));
 
-sessionsRouter.get("/:id", requireAuth, requireRole("TEACHER"), getSession);
-sessionsRouter.get("/:id/state", requireAuth, requireRole("TEACHER"), getSessionStateTeacher);
-sessionsRouter.get("/:id/full-analytics", requireAuth, requireRole("TEACHER"), getSessionFullAnalytics);
-sessionsRouter.post("/:id/start", requireAuth, requireRole("TEACHER"), startSession);
-sessionsRouter.post("/:id/pause", requireAuth, requireRole("TEACHER"), pauseSession);
-sessionsRouter.post("/:id/end", requireAuth, requireRole("TEACHER"), endSession);
-sessionsRouter.post("/:id/tab-event", logTabEvent);
-sessionsRouter.get("/:id/tab-monitoring", requireAuth, requireRole("TEACHER"), getTabMonitoring);
-sessionsRouter.delete("/:id", requireAuth, requireRole("TEACHER"), deleteTeacherSession);
+sessionsRouter.get("/:id", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getSession));
+sessionsRouter.get("/:id/state", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getSessionStateTeacher));
+sessionsRouter.get("/:id/full-analytics", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getSessionFullAnalytics));
+sessionsRouter.post("/:id/start", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(startSession));
+sessionsRouter.post("/:id/pause", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(pauseSession));
+sessionsRouter.post("/:id/end", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(endSession));
+sessionsRouter.post("/:id/tab-event", rateLimit({ windowMs: 60 * 1000, max: 10 }), asyncHandler(logTabEvent));
+sessionsRouter.get("/:id/tab-monitoring", requireAuth, requireRole("TEACHER"), asyncHandler(getTabMonitoring));
+sessionsRouter.delete("/:id", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(deleteTeacherSession));

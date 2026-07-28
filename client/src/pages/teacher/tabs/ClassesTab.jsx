@@ -116,7 +116,6 @@ export default function ClassesTab({ setActiveTab }) {
     e.preventDefault();
     if (!folderName.trim()) return;
     try {
-      // Revision 7: add folders through a compact modal instead of an always-visible form.
       await api.post("/classes", { name: folderName.trim().slice(0, 95), parentId: folderModal?.parentId || null });
       setFolderModal(null);
       await load();
@@ -129,7 +128,6 @@ export default function ClassesTab({ setActiveTab }) {
     e.preventDefault();
     if (!renameModal || !folderName.trim()) return;
     try {
-      // Revision 7: quick action rename keeps existing parent folder.
       await api.put(`/classes/${renameModal.id}`, { name: folderName.trim().slice(0, 95), parentId: renameModal.parent_id || null });
       setRenameModal(null);
       await load();
@@ -152,7 +150,6 @@ export default function ClassesTab({ setActiveTab }) {
 
   async function duplicateFolder(folder) {
     try {
-      // Revision 7: duplicate creates a folder copy beside the original.
       await api.post(`/classes/${folder.id}/duplicate`);
       setMenuFor(null);
       await load();
@@ -173,7 +170,6 @@ export default function ClassesTab({ setActiveTab }) {
 
   async function removeStudent(enrollmentId) {
     if (!selectedFolderId) return;
-    // Revision 9: student removal now requires confirmation first.
     await api.delete(`/classes/${selectedFolderId}/students/${enrollmentId}`);
     const { data } = await api.get(`/classes/${selectedFolderId}/students`);
     setStudents(data || []);

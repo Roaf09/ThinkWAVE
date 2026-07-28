@@ -6,7 +6,7 @@
 
 import { pool } from "../../db.js";
 import { makeJoinCode, makeReconnectKey } from "../../utils/codes.js";
-import { resolveThinkSpellWordBank } from "../quizzes/thinkSpell.js";
+import { resolveThinkSpellWordBank } from "../quizzes/templates/thinkspell/thinkSpell.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
 import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
@@ -375,7 +375,6 @@ export async function getTeacherSessionHistory(req, res) {
 }
 
 export async function getSessionFullAnalytics(req, res) {
-  // Revision 20: Basic and Institution teachers can both review per-question difficulty.
   const sessionId = Number(req.params.id);
   const data = await buildFullAnalyticsData(sessionId, req.user.sub);
   if (!data) return res.status(404).json({ message: "Session not found" });

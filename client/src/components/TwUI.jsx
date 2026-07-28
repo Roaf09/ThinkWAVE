@@ -68,6 +68,8 @@ const iconSet = {
   trophy: [<path key="1" d="M8 4h8v4a4 4 0 0 1-8 0V4Z" />, <path key="2" d="M8 6H4v2a4 4 0 0 0 4 4" />, <path key="3" d="M16 6h4v2a4 4 0 0 1-4 4" />, <path key="4" d="M12 12v5" />, <path key="5" d="M8 20h8" />],
   users: [<circle key="1" cx="9" cy="8" r="3" />, <circle key="2" cx="17" cy="9" r="2.3" />, <path key="3" d="M3.5 20a5.5 5.5 0 0 1 11 0" />, <path key="4" d="M14 15.5a4.5 4.5 0 0 1 6.5 4" />],
   warning: [<path key="1" d="M12 4 21 20H3L12 4Z" />, <path key="2" d="M12 9v4" />, <path key="3" d="M12 17h.01" />],
+  eye: [<path key="1" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />, <circle key="2" cx="12" cy="12" r="2.8" />],
+  eyeOff: [<path key="1" d="m4 4 16 16" />, <path key="2" d="M10.2 6.3A10.8 10.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8" />, <path key="3" d="M7.1 7.2C4.2 8.9 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8" />, <path key="4" d="M10.5 10.5a2.2 2.2 0 0 0 3 3" />],
   close: [<path key="1" d="m6 6 12 12" />, <path key="2" d="M18 6 6 18" />],
 };
 

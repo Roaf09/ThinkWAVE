@@ -114,7 +114,6 @@ export default function CreateTab({ setActiveTab }) {
         pointsPerQuestion: 1,
         randomizeQuestions: false,
         shuffleAnswers: false,
-        // Revision 7: create tab always creates a normal synchronous quiz; assignments are handled in Live Sessions.
         deliveryMode: "SYNCHRONOUS",
         availableFrom: null,
         availableUntil: null,

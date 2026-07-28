@@ -9,7 +9,6 @@ import { normalizeTemplateType } from "./templates.js";
 import { BASIC_LIMITS, getTeacherPlan, validateBasicQuestionPayload } from "../plans/plan.js";
 
 function toMysqlDateTime(value) {
-  // Revision 6: datetime-local inputs arrive as YYYY-MM-DDTHH:mm.
   return value ? String(value).replace("T", " ") : null;
 }
 
@@ -42,7 +41,6 @@ export async function createQuiz(req, res) {
       ppq: b.pointsPerQuestion,
       rq: b.randomizeQuestions ? 1 : 0,
       sa: b.shuffleAnswers ? 1 : 0,
-      // Revision 6: supports asynchronous quiz scheduling.
       mode: b.deliveryMode === "ASYNCHRONOUS" ? "ASYNCHRONOUS" : "SYNCHRONOUS",
       fromDt: b.deliveryMode === "ASYNCHRONOUS" ? toMysqlDateTime(b.availableFrom) : null,
       untilDt: b.deliveryMode === "ASYNCHRONOUS" ? toMysqlDateTime(b.availableUntil) : null
@@ -228,7 +226,6 @@ export async function duplicateQuiz(req, res) {
   res.status(201).json({ ok: true, id: created.insertId });
 }
 
-// Revision 7: create an asynchronous assignment copy from an existing quiz.
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
   const teacherId = req.user.sub;

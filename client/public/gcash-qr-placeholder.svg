@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
+  <title id="title">GCash QR placeholder</title><desc id="desc">Placeholder graphic to be replaced with the official ThinkWAVE GCash QR code.</desc>
+  <rect width="640" height="640" rx="48" fill="#f8fafc"/><rect x="34" y="34" width="572" height="572" rx="34" fill="none" stroke="#2563eb" stroke-width="10" stroke-dasharray="22 16"/>
+  <g fill="#2563eb"><rect x="110" y="110" width="140" height="140" rx="10"/><rect x="390" y="110" width="140" height="140" rx="10"/><rect x="110" y="390" width="140" height="140" rx="10"/></g>
+  <g fill="#fff"><rect x="140" y="140" width="80" height="80" rx="8"/><rect x="420" y="140" width="80" height="80" rx="8"/><rect x="140" y="420" width="80" height="80" rx="8"/></g>
+  <g fill="#2563eb"><rect x="300" y="285" width="44" height="44"/><rect x="360" y="285" width="72" height="44"/><rect x="300" y="345" width="44" height="88"/><rect x="360" y="365" width="44" height="44"/><rect x="420" y="345" width="88" height="44"/><rect x="464" y="405" width="44" height="88"/><rect x="360" y="465" width="72" height="44"/></g>
+  <text x="320" y="575" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="#0f172a">GCash QR PLACEHOLDER</text>
+</svg>

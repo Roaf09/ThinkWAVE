@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { normalizeTemplateType } from "../lib/templateTypes";
 import { templateTone } from "../lib/templatePalette";
-import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature, resolveThinkSpellWordBank } from "../lib/thinkSpell";
+import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature, resolveThinkSpellWordBank } from "../templates/thinkspell/thinkSpell";
 
 function safeJson(v) {
   if (!v) return {};

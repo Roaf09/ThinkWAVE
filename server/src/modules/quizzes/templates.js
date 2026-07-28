@@ -13,7 +13,7 @@ import {
   removeTilesAndRefill,
   resolveThinkSpellWordBank,
   validatePathSpellsWord,
-} from "./thinkSpell.js";
+} from "./templates/thinkspell/thinkSpell.js";
 
 export const TEMPLATE_TYPES = {
   // K-12
@@ -42,7 +42,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
 
   switch (normalizeTemplateType(templateType)) {
     case TEMPLATE_TYPES.MCQ: {
-      // Revision 3: MCQ two-answer mode splits the question points equally between correct answers.
       const selected = Array.isArray(answer?.choices) ? answer.choices : [answer?.choice].filter(Boolean);
       const correctChoices = Array.isArray(correct?.choices) && correct.choices.length
         ? correct.choices
@@ -66,7 +65,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       }
 
     case TEMPLATE_TYPES.TYPE_ANSWER: {
-      // Revision 1: Identification is scored as exact, case-insensitive text unless alternatives are provided.
       const actual = norm(answer?.text);
       const expectedAny = [correct?.text, ...(Array.isArray(correct?.answers) ? correct.answers : [])]
         .map(norm)
@@ -76,7 +74,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
     }
 
     case TEMPLATE_TYPES.GUESS_WORD_4PICS: {
-      // Revision 3: 4 Pics scores only the original word-guess gameplay.
       const isCorrect = normWord(answer?.text) === normWord(correct?.text);
       return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, basePoints) : 0 };
     }
@@ -97,7 +94,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
     }
 
     case TEMPLATE_TYPES.THINK_SPELL:
-      // Revision 1: students submit all found words once at the end.
       return scoreThinkSpellBatch({ correct, answer, config, basePoints, questionId: config?.questionId });
 
     case TEMPLATE_TYPES.MATCHING: {
@@ -111,7 +107,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       const totalPairs = expectedMap.size;
       const base = clamp(Number(basePoints) || 1, 1, 3);
       const isCorrect = totalPairs > 0 && correctCount === totalPairs;
-      // Revision 3: matching now uses the question's total points, distributed across pairs.
       return {
         isCorrect,
         correctCount,
@@ -149,7 +144,6 @@ export function scoreThinkSpellBatch({
     if (!validatePathSpellsWord({ grid: gridState.grid, gridSize: gridState.gridSize, path, word: text })) continue;
     acceptedKeys.add(canonical);
     accepted.push(canonical);
-    // Revision 2: Think and Spell score is question points multiplied by words found.
     pointsAwarded += Math.max(1, Number(basePoints) || 1);
   }
 

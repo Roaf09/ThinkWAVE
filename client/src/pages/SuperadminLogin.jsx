@@ -10,6 +10,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { TwIcon } from "../components/TwUI";
 
 export default function SuperadminLogin({ onLoginSuccess }) {
   const nav = useNavigate();
@@ -36,9 +37,9 @@ export default function SuperadminLogin({ onLoginSuccess }) {
   }
 
   return (
-    <div style={s.page(c)}>
+    <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact />
+      <PublicHeader compact hideSuper />
 
       <main style={s.main}>
         <div style={s.card(c)}>
@@ -56,8 +57,8 @@ export default function SuperadminLogin({ onLoginSuccess }) {
             <div style={s.field}>
               <label style={s.label(c)}>Secret Password</label>
               <div style={s.passwordWrap}>
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 64 }} />
-                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}>{showPw ? "Hide" : "Show"}</button>
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 48 }} />
+                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
             </div>
 

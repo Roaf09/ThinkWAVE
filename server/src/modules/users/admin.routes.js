@@ -5,6 +5,7 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
@@ -29,8 +30,8 @@ const CreateUserSchema = z.object({
   role: z.enum(["TEACHER", "ADMIN"]).default("TEACHER")
 });
 
-adminRouter.get("/users", requireAuth, requireRole("ADMIN"), listUsers);
-adminRouter.post("/users", requireAuth, requireRole("ADMIN"), validateBody(CreateUserSchema), createUser);
-adminRouter.post("/users/:id/active", requireAuth, requireRole("ADMIN"), setActive);
-adminRouter.delete("/users/:id", requireAuth, requireRole("ADMIN"), softDeleteUser);
-adminRouter.post("/users/:id/restore", requireAuth, requireRole("ADMIN"), restoreUser);
+adminRouter.get("/users", requireAuth, requireRole("ADMIN"), asyncHandler(listUsers));
+adminRouter.post("/users", requireAuth, requireRole("ADMIN"), validateBody(CreateUserSchema), asyncHandler(createUser));
+adminRouter.post("/users/:id/active", requireAuth, requireRole("ADMIN"), asyncHandler(setActive));
+adminRouter.delete("/users/:id", requireAuth, requireRole("ADMIN"), asyncHandler(softDeleteUser));
+adminRouter.post("/users/:id/restore", requireAuth, requireRole("ADMIN"), asyncHandler(restoreUser));

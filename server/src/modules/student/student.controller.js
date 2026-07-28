@@ -1,6 +1,5 @@
 /* FILE GUIDE:
  * server/src/modules/student/student.controller.js
- * Purpose: Revision 6 student account dashboard, class joining, and asynchronous quiz submission.
  */
 
 import { pool } from "../../db.js";
@@ -35,7 +34,6 @@ async function getProfile(userId) {
   return profile || null;
 }
 
-// Revision 6: stores the student's basic profile only once after their first class join.
 export async function upsertProfile(req, res) {
   const { lastName, firstName, middleInitial, studentId, birthDate = null, profileImage = null } = req.body;
   await pool.query(
@@ -132,7 +130,6 @@ export async function getStudentDashboard(req, res) {
   });
 }
 
-// Revision 6: students join a teacher class/section through a class code.
 export async function joinClass(req, res) {
   const { classCode, profile } = req.body;
   const code = String(classCode || "").trim().toUpperCase();

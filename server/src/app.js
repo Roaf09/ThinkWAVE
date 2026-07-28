@@ -29,7 +29,7 @@ export function makeApp() {
   // Global middleware: security headers, CORS, JSON body parsing, and request logging.
   app.use(helmet());
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
-  app.use(express.json({ limit: "28mb" }));
+  app.use(express.json({ limit: "6mb" }));
   app.use(morgan("dev"));
   app.use(metricsMiddleware);
   // Health route is useful for quick checks during deployment or local debugging.
@@ -47,5 +47,11 @@ export function makeApp() {
   app.use("/api/superadmin",      superadminRouter);
   app.use("/api/admin-dashboard", adminDashboardRouter);
   app.use("/api/student",         studentRouter);
+
+  app.use((err, _req, res, _next) => {
+    console.error("Unhandled request error:", err);
+    if (res.headersSent) return;
+    res.status(500).json({ message: "Server error" });
+  });
   return app;
 }

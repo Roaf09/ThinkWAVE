@@ -232,7 +232,6 @@ function ScheduleEditor({ c, form, setForm, onClose }) {
   useEffect(() => {
     const d = parseScheduleDate(draft[activeField], activeDate);
     setViewDate(new Date(d.getFullYear(), d.getMonth(), 1));
-    // Revision 10: keep the calendar month aligned with the active start/end schedule field.
   }, [activeField]);
 
   function setDatePart(day) {
@@ -252,7 +251,6 @@ function ScheduleEditor({ c, form, setForm, onClose }) {
     let from = parseScheduleDate(draft.availableFrom, startDefault);
     let until = parseScheduleDate(draft.availableUntil, endDefault);
     if (until <= from) until = new Date(from.getTime() + 60 * 60 * 1000);
-    // Revision 10: assignment schedule uses a calendar-style picker instead of raw datetime inputs.
     setForm({ availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) });
     onClose();
   }

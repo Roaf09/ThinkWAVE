@@ -1,6 +1,5 @@
 /* FILE GUIDE:
  * client/src/pages/student/StudentDashboard.jsx
- * Purpose: Revision 19 student home, classes, profile, automatic live-session access, and personal analytics.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -139,8 +138,8 @@ export default function StudentDashboard() {
   ];
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s" }}>
-      <aside data-sidebar="true" style={sidebar(c)}>
+    <div className="tw-responsive-dashboard" style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s" }}>
+      <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
           <div><span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span></div>
           <button onClick={() => setProfileOpen(true)} title="Student Info" style={profileGearBtn(c)}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={20} />}</button>
@@ -156,7 +155,7 @@ export default function StudentDashboard() {
         </div>
       </aside>
 
-      <main style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
+      <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
         {msg && <div className="container" style={{ paddingBottom: 0 }}><div style={notice(c, "error")}>{msg}</div></div>}
         {activeTab === "home" ? (
           <HomePanel c={c} data={data} nav={nav} setActiveTab={setActiveTab} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} />

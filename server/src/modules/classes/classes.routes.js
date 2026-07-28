@@ -5,6 +5,7 @@
  */
 
 import { Router } from "express";
+import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
@@ -18,16 +19,16 @@ const FolderSchema = z.object({
   parentId: z.coerce.number().int().positive().optional().nullable()
 });
 
-classesRouter.get("/", requireAuth, requireRole("TEACHER"), listClasses);
-classesRouter.post("/", requireAuth, requireRole("TEACHER"), validateBody(FolderSchema), createClass);
-classesRouter.put("/:id", requireAuth, requireRole("TEACHER"), validateBody(FolderSchema), updateClass);
-classesRouter.delete("/:id", requireAuth, requireRole("TEACHER"), softDeleteClass);
-classesRouter.post("/:id/duplicate", requireAuth, requireRole("TEACHER"), duplicateClass);
-classesRouter.post("/:id/restore", requireAuth, requireRole("TEACHER","ADMIN"), restoreClass);
-classesRouter.get("/:id/code", requireAuth, requireRole("TEACHER"), getOrCreateClassCode);
-classesRouter.get("/:id/students", requireAuth, requireRole("TEACHER"), listClassStudents);
-classesRouter.delete("/:id/students/:enrollmentId", requireAuth, requireRole("TEACHER"), removeClassStudent);
-classesRouter.get("/:id/async-results", requireAuth, requireRole("TEACHER"), listClassAsyncResults);
-classesRouter.get("/:id/async-results/:quizId/analytics", requireAuth, requireRole("TEACHER"), getClassAsyncAnalytics);
-classesRouter.get("/:id/async-results/:quizId/export/pdf", requireAuth, requireRole("TEACHER"), exportClassAsyncPdf);
-classesRouter.get("/:id/async-results/:quizId/export/xlsx", requireAuth, requireRole("TEACHER"), exportClassAsyncXlsx);
+classesRouter.get("/", requireAuth, requireRole("TEACHER"), asyncHandler(listClasses));
+classesRouter.post("/", requireAuth, requireRole("TEACHER"), validateBody(FolderSchema), asyncHandler(createClass));
+classesRouter.put("/:id", requireAuth, requireRole("TEACHER"), validateBody(FolderSchema), asyncHandler(updateClass));
+classesRouter.delete("/:id", requireAuth, requireRole("TEACHER"), asyncHandler(softDeleteClass));
+classesRouter.post("/:id/duplicate", requireAuth, requireRole("TEACHER"), asyncHandler(duplicateClass));
+classesRouter.post("/:id/restore", requireAuth, requireRole("TEACHER","ADMIN"), asyncHandler(restoreClass));
+classesRouter.get("/:id/code", requireAuth, requireRole("TEACHER"), asyncHandler(getOrCreateClassCode));
+classesRouter.get("/:id/students", requireAuth, requireRole("TEACHER"), asyncHandler(listClassStudents));
+classesRouter.delete("/:id/students/:enrollmentId", requireAuth, requireRole("TEACHER"), asyncHandler(removeClassStudent));
+classesRouter.get("/:id/async-results", requireAuth, requireRole("TEACHER"), asyncHandler(listClassAsyncResults));
+classesRouter.get("/:id/async-results/:quizId/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAsyncAnalytics));
+classesRouter.get("/:id/async-results/:quizId/export/pdf", requireAuth, requireRole("TEACHER"), asyncHandler(exportClassAsyncPdf));
+classesRouter.get("/:id/async-results/:quizId/export/xlsx", requireAuth, requireRole("TEACHER"), asyncHandler(exportClassAsyncXlsx));

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-labelledby="title desc">
+<title id="title">GCash payment method</title><desc id="desc">Temporary GCash-style payment method placeholder</desc>
+<rect width="320" height="120" rx="24" fill="#fff"/>
+<circle cx="65" cy="60" r="38" fill="#1473e6"/>
+<path d="M78 39a27 27 0 1 0 3 38H64V61h38v8c-4 20-20 31-39 31A40 40 0 1 1 92 33z" fill="#fff"/>
+<text x="118" y="76" font-family="Arial,Helvetica,sans-serif" font-size="48" font-weight="700" fill="#1473e6">GCash</text>
+</svg>

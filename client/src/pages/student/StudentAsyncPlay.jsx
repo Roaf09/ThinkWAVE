@@ -1,6 +1,5 @@
 /* FILE GUIDE:
  * client/src/pages/student/StudentAsyncPlay.jsx
- * Purpose: Revision 11 asynchronous quiz player styled to match the live session gameplay shell.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +21,7 @@ import {
   normalizeThinkWordKey,
   resolveThinkSpellWordBank,
   validatePathSpellsWord,
-} from "../../lib/thinkSpell";
+} from "../../templates/thinkspell/thinkSpell";
 import soundManager from "../../utils/soundmanager";
 import "./StudentPlay.css";
 
@@ -266,7 +265,6 @@ function TypeAnswerTemplate({ value, onChange, disabled }) {
   return <div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your identification answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={text} onChange={(e) => onChange({ text: e.target.value.slice(0, MAX) })} placeholder="Start typing..." disabled={disabled} autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && text && <button type="button" className="type-clear-btn" onClick={() => onChange({ text: "" })}>✕</button>}</div>{text.length > 0 && <div className="type-charboxes">{text.split("").map((ch, i) => <div key={i} className="type-charbox">{ch === " " ? "\u00A0" : ch}</div>)}</div>}<div className="type-count">{text.length} / {MAX}</div></div></div>;
 }
 
-// Revision 18: assignment matching mirrors live gameplay, including shuffled Column A and hidden paired answers.
 function matchingOrder(length, shouldShuffle, seedText) {
   const order = Array.from({ length }, (_, index) => index);
   if (!shouldShuffle || length < 2) return order;

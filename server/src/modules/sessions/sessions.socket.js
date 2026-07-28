@@ -7,7 +7,7 @@
 import { env } from "../../env.js";
 import { pool } from "../../db.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
-import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/thinkSpell.js";
+import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
 
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
@@ -18,12 +18,43 @@ export function registerSessionSockets(io) {
   const pendingKickTimers = new Map();
 
   io.on("connection", (socket) => {
+    const actionTimes = new Map();
+    const allowAction = (key, limit = 30, windowMs = 10_000) => {
+      const now = Date.now();
+      const recent = (actionTimes.get(key) || []).filter((time) => now - time < windowMs);
+      if (recent.length >= limit) return false;
+      recent.push(now);
+      actionTimes.set(key, recent);
+      return true;
+    };
+
+    const onTeacher = (eventName, handler) => {
+      socket.on(eventName, async (payload = {}) => {
+        try {
+          if (!allowAction(eventName)) return socket.emit("teacher:error", { message: "Too many host actions. Please slow down." });
+          const sessionId = Number(payload.sessionId);
+          if (!socket.data.hostAuthorized || Number(socket.data.sessionId) !== sessionId) {
+            return socket.emit("teacher:error", { message: "Unauthorized host action." });
+          }
+          await handler(payload);
+        } catch (error) {
+          console.error(`${eventName} failed:`, error);
+          socket.emit("teacher:error", { message: "Host action could not be completed." });
+        }
+      });
+    };
+
     socket.on("teacher:join", async ({ sessionId }) => {
       try {
-        const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
-        if (!session) return socket.emit("error", { message: "Session not found" });
+        const user = socket.data.user;
+        if (!user || !["TEACHER", "GUEST_HOST"].includes(user.role)) {
+          return socket.emit("teacher:error", { message: "Host authentication required." });
+        }
+        const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid AND teacher_id=:uid`, { sid: sessionId, uid: user.sub });
+        if (!session) return socket.emit("teacher:error", { message: "Session not found or not owned by this account." });
 
-        socket.data.role = "TEACHER";
+        socket.data.role = user.role;
+        socket.data.hostAuthorized = true;
         socket.data.sessionId = sessionId;
 
         socket.join(roomSession(sessionId));
@@ -43,12 +74,12 @@ export function registerSessionSockets(io) {
       }
     });
 
-    socket.on("teacher:heartbeat", async ({ sessionId }) => {
+    onTeacher("teacher:heartbeat", async ({ sessionId }) => {
       if (!sessionId) return;
       await pool.query(`UPDATE sessions SET last_heartbeat_at=NOW() WHERE id=:sid`, { sid: sessionId });
     });
 
-    socket.on("teacher:addGroup", async ({ sessionId }) => {
+    onTeacher("teacher:addGroup", async ({ sessionId }) => {
       const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!session || session.join_mode !== "GROUP" || session.status !== 'LOBBY') return;
       const [[meta]] = await pool.query(`SELECT COALESCE(MAX(group_order), 0) AS max_order FROM session_groups WHERE session_id=:sid`, { sid: sessionId });
@@ -64,7 +95,7 @@ export function registerSessionSockets(io) {
     });
 
 
-    socket.on("teacher:deleteGroup", async ({ sessionId, groupId }) => {
+    onTeacher("teacher:deleteGroup", async ({ sessionId, groupId }) => {
       const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!session || session.join_mode !== "GROUP" || session.status !== 'LOBBY') return;
       const [[group]] = await pool.query(`SELECT * FROM session_groups WHERE id=:gid AND session_id=:sid`, { gid: groupId, sid: sessionId });
@@ -76,7 +107,7 @@ export function registerSessionSockets(io) {
       await broadcastRoster(io, sessionId);
     });
 
-    socket.on("teacher:nextQuestion", async ({ sessionId }) => {
+    onTeacher("teacher:nextQuestion", async ({ sessionId }) => {
       const [[s]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!s || s.status !== "LIVE") return;
 
@@ -94,7 +125,7 @@ export function registerSessionSockets(io) {
       await broadcastGroups(io, sessionId);
     });
 
-    socket.on("teacher:setStatus", async ({ sessionId, status }) => {
+    onTeacher("teacher:setStatus", async ({ sessionId, status }) => {
       if (!["LOBBY", "LIVE", "PAUSED", "ENDED"].includes(status)) return;
       const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!session) return;
@@ -164,6 +195,7 @@ export function registerSessionSockets(io) {
 
     // Student connection flow supports both first join and reconnect.
     socket.on("student:connect", async ({ sessionId, reconnectKey }) => {
+      if (!allowAction("student:connect", 8, 60_000)) return socket.emit("student:error", { message: "Too many connection attempts." });
       const [[p]] = await pool.query(
         `SELECT * FROM session_participants WHERE session_id=:sid AND reconnect_key=:rk`,
         { sid: sessionId, rk: reconnectKey }
@@ -193,7 +225,10 @@ export function registerSessionSockets(io) {
       await broadcastGroups(io, sessionId);
     });
 
-    socket.on("student:joinGroup", async ({ sessionId, participantId, groupId }) => {
+    socket.on("student:joinGroup", async ({ sessionId, groupId }) => {
+      if (!allowAction("student:joinGroup")) return;
+      const participantId = socket.data.participantId;
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(`SELECT status FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!session || session.status !== 'LOBBY') return socket.emit("student:error", { message: "Groups can only be joined before the session starts." });
       const [[group]] = await pool.query(`SELECT * FROM session_groups WHERE id=:gid AND session_id=:sid`, { gid: groupId, sid: sessionId });
@@ -218,7 +253,10 @@ export function registerSessionSockets(io) {
       await broadcastRoster(io, sessionId);
     });
 
-    socket.on("student:renameGroup", async ({ sessionId, participantId, groupId, name }) => {
+    socket.on("student:renameGroup", async ({ sessionId, groupId, name }) => {
+      if (!allowAction("student:renameGroup")) return;
+      const participantId = socket.data.participantId;
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const trimmed = String(name || "").trim().slice(0, 120);
       if (!trimmed) return;
       const [[membership]] = await pool.query(
@@ -240,7 +278,10 @@ export function registerSessionSockets(io) {
       await broadcastRoster(io, sessionId);
     });
 
-    socket.on("student:voteGroupAnswer", async ({ sessionId, participantId, proposalId, vote }) => {
+    socket.on("student:voteGroupAnswer", async ({ sessionId, proposalId, vote }) => {
+      if (!allowAction("student:voteGroupAnswer")) return;
+      const participantId = socket.data.participantId;
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       if (!["AGREE", "DISAGREE"].includes(vote)) return;
       const [[proposal]] = await pool.query(
         `SELECT gap.*, gm.group_id
@@ -262,7 +303,9 @@ export function registerSessionSockets(io) {
       await broadcastGroups(io, sessionId);
     });
 
-    socket.on("student:tabOut", async ({ sessionId, participantId }) => {
+    socket.on("student:tabOut", async ({ sessionId }) => {
+      if (!allowAction("student:tabOut")) return;
+      const participantId = socket.data.participantId;
       try {
         if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || Number(socket.data.participantId) !== Number(participantId)) return;
         const [[participant]] = await pool.query(
@@ -288,8 +331,8 @@ export function registerSessionSockets(io) {
       }
     });
 
-    socket.on("teacher:allowStudent", async ({ sessionId, participantId }) => {
-      if (socket.data.role !== "TEACHER" || Number(socket.data.sessionId) !== Number(sessionId)) return;
+    onTeacher("teacher:allowStudent", async ({ sessionId, participantId }) => {
+      if (!["TEACHER", "GUEST_HOST"].includes(socket.data.role) || Number(socket.data.sessionId) !== Number(sessionId)) return;
       const key = `${sessionId}:${participantId}`;
       const timer = pendingKickTimers.get(key);
       if (timer) clearTimeout(timer);
@@ -297,8 +340,8 @@ export function registerSessionSockets(io) {
       io.to(roomParticipant(participantId)).emit("antiCheat:allowed", { ok:true });
     });
 
-    socket.on("teacher:kickStudent", async ({ sessionId, participantId }) => {
-      if (socket.data.role !== "TEACHER" || Number(socket.data.sessionId) !== Number(sessionId)) return;
+    onTeacher("teacher:kickStudent", async ({ sessionId, participantId }) => {
+      if (!["TEACHER", "GUEST_HOST"].includes(socket.data.role) || Number(socket.data.sessionId) !== Number(sessionId)) return;
       const key = `${sessionId}:${participantId}`;
       const timer = pendingKickTimers.get(key);
       if (timer) clearTimeout(timer);
@@ -307,7 +350,10 @@ export function registerSessionSockets(io) {
     });
 
     // All answer submission funnels through one event so template scoring stays centralized on the server.
-    socket.on("answer:submit", async ({ sessionId, participantId, questionId, answer }) => {
+    socket.on("answer:submit", async ({ sessionId, questionId, answer }) => {
+      if (!allowAction("answer:submit")) return;
+      const participantId = socket.data.participantId;
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(
         `SELECT s.*, q.template_type, q.points_per_question
          FROM sessions s JOIN quizzes q ON q.id=s.quiz_id
@@ -406,7 +452,7 @@ export function registerSessionSockets(io) {
         return;
       }
 
-      if (role === "TEACHER") {
+      if (["TEACHER", "GUEST_HOST"].includes(role)) {
         await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
         await broadcastState(io, sessionId);
         const timeout = setTimeout(async () => {
@@ -452,7 +498,6 @@ async function isQuestionTimeUp(session, questionId = null) {
 async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
   const tt = normalizeTemplateType(session.template_type);
   if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
-    // Revision 1: keep legacy single-word Think and Spell support, but use batch scoring for new one-submit gameplay.
     await handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
     return;
   }
