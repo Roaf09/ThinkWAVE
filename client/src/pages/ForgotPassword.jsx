@@ -1,136 +1,24 @@
-/* FILE GUIDE:
- * client/src/pages/ForgotPassword.jsx
- */
+import React,{useEffect,useState}from"react";
+import PublicHeader from"../components/PublicHeader";
+import{Link,useNavigate}from"react-router-dom";
+import{api}from"../lib/api";
+import{useColors}from"../context/ThemeContext";
+import{TwIcon}from"../components/TwUI";
 
-import React, { useState } from "react";
-import PublicHeader from "../components/PublicHeader";
-import { Link, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-import { useColors, useTheme } from "../context/ThemeContext";
-import { TwIcon } from "../components/TwUI";
-
-function passwordChecks(p) {
-  return {
-    len: p.length >= 8,
-    upper: /[A-Z]/.test(p),
-    lower: /[a-z]/.test(p),
-    num: /[0-9]/.test(p),
-    sym: /[^A-Za-z0-9]/.test(p),
-  };
-}
-
-export default function ForgotPassword() {
-  const nav = useNavigate();
-  const { dark, toggleTheme } = useTheme();
-  const c = useColors();
-  const [step, setStep] = useState("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
-  const checks = passwordChecks(newPassword);
-  const strong = Object.values(checks).every(Boolean);
-  const matches = newPassword && newPassword === confirmPassword;
-
-  async function requestOtp(e) {
-    e.preventDefault();
-    setErr(""); setMsg("");
-    try {
-      const { data } = await api.post("/auth/password/request-reset", { email });
-      const note = data.emailSent
-        ? "An OTP has been sent. Verify it first before your password is changed."
-        : data.devOtp
-          ? `Email delivery failed. For local testing, use OTP: ${data.devOtp}`
-          : (data.deliveryWarning || "The OTP email could not be sent. Check the server SMTP settings.");
-      setMsg(note);
-      if (data.emailSent || data.devOtp) setStep("otp");
-    } catch (error) {
-      setErr(error?.response?.data?.message || "Could not send OTP.");
-    }
-  }
-
-  async function confirmReset(e) {
-    e.preventDefault();
-    setErr(""); setMsg("");
-    if (!strong) return setErr("Please use a stronger password.");
-    if (!matches) return setErr("Passwords do not match.");
-    try {
-      await api.post("/auth/password/confirm-reset", { email, code, newPassword });
-      setMsg("Password changed successfully. You can now log in.");
-      setTimeout(() => nav("/login"), 900);
-    } catch (error) {
-      setErr(error?.response?.data?.message || "Password reset failed.");
-    }
-  }
-
-  return (
-    <div className="tw-starry-page" style={s.page(c)}>
-      <div style={s.glow} />
-      <PublicHeader compact hideSuper />
-      <main style={s.main}>
-        <div style={s.card(c)}>
-          <h1 style={s.title(c)}>Reset Password</h1>
-          <p style={s.subtitle(c)}>Enter your email and verify the OTP before changing your password.</p>
-          {msg && <p style={s.success(c)}>{msg}</p>}
-          {err && <p style={s.error(c)}>{err}</p>}
-          {step === "email" ? (
-            <form onSubmit={requestOtp} style={s.form}>
-              <label style={s.label(c)}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={s.input(c)} placeholder="user@example.com" />
-              <button type="submit" style={s.submitBtn}>Send OTP</button>
-            </form>
-          ) : (
-            <form onSubmit={confirmReset} style={s.form}>
-              <label style={s.label(c)}>OTP Code</label>
-              <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={10} style={s.input(c)} placeholder="6-digit code" />
-              <label style={s.label(c)}>New Password</label>
-              <div style={s.passwordWrap}>
-                <input type={showPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required style={{ ...s.input(c), paddingRight: 48 }} placeholder="••••••••" />
-                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
-              </div>
-              <label style={s.label(c)}>Confirm Password</label>
-              <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required style={s.input(c)} placeholder="••••••••" />
-              <div style={s.checks(c)}>
-                <span>{checks.len ? "✓" : "•"} 8+ characters</span>
-                <span>{checks.upper ? "✓" : "•"} Uppercase</span>
-                <span>{checks.lower ? "✓" : "•"} Lowercase</span>
-                <span>{checks.num ? "✓" : "•"} Number</span>
-                <span>{checks.sym ? "✓" : "•"} Symbol</span>
-              </div>
-              <button type="submit" style={s.submitBtn}>Change Password</button>
-            </form>
-          )}
-          <p style={s.back(c)}><Link to="/login" style={s.link}>Back to login</Link></p>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-const s = {
-  page: (c) => ({ minHeight: "100vh", background: c.pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text, position: "relative", overflow: "hidden" }),
-  glow: { position: "absolute", top: -200, left: "50%", transform: "translateX(-50%)", width: 600, height: 600, background: "radial-gradient(circle, rgba(43,108,255,0.12) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 },
-  header: (c) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 40px", zIndex: 1, borderBottom: `1px solid ${c.border}` }),
-  logo: { display: "flex", alignItems: "baseline", textDecoration: "none" },
-  logoThink: (c) => ({ fontSize: 20, fontWeight: 900, color: c.text }),
-  logoWave: { fontSize: 20, fontWeight: 900, color: "#2b6cff" },
-  themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
-  main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", zIndex: 1 },
-  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "40px", width: "min(100%, 440px)", boxShadow: "0 24px 80px rgba(0,0,0,0.35)" }),
-  title: (c) => ({ margin: "0 0 6px", fontSize: 28, fontWeight: 900, color: c.text }),
-  subtitle: (c) => ({ margin: "0 0 22px", fontSize: 14, color: c.textMuted, lineHeight: 1.5 }),
-  form: { display: "flex", flexDirection: "column", gap: 12 },
-  label: (c) => ({ fontSize: 13, fontWeight: 700, color: c.text }),
-  input: (c) => ({ padding: "11px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box" }),
-  passwordWrap: { position: "relative" },
-  showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
-  submitBtn: { marginTop: 6, width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#2b6cff", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" },
-  success: (c) => ({ margin: "0 0 14px", padding: "10px 12px", borderRadius: 10, background: c.greenBg, border: `1px solid ${c.greenBorder}`, color: c.greenFg, fontSize: 13 }),
-  error: (c) => ({ margin: "0 0 14px", padding: "10px 12px", borderRadius: 10, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }),
-  checks: (c) => ({ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 12, color: c.textMuted, marginTop: 2 }),
-  back: (c) => ({ margin: "20px 0 0", textAlign: "center", color: c.textMuted, fontSize: 13 }),
-  link: { color: "#2b6cff", fontWeight: 800, textDecoration: "none" },
-};
+const checks=p=>({len:p.length>=8,upper:/[A-Z]/.test(p),lower:/[a-z]/.test(p),num:/[0-9]/.test(p),sym:/[^A-Za-z0-9]/.test(p)});
+export default function ForgotPassword(){
+ const nav=useNavigate(),c=useColors();
+ const[step,setStep]=useState("email"),[email,setEmail]=useState(""),[code,setCode]=useState(""),[token,setToken]=useState(""),[pw,setPw]=useState(""),[confirm,setConfirm]=useState("");
+ const[showPw,setShowPw]=useState(false),[showConfirm,setShowConfirm]=useState(false),[seconds,setSeconds]=useState(0),[notice,setNotice]=useState(null);
+ const pc=checks(pw),strong=Object.values(pc).every(Boolean),matches=!!pw&&pw===confirm;
+ useEffect(()=>{if(seconds<=0)return;const id=setInterval(()=>setSeconds(v=>Math.max(0,v-1)),1000);return()=>clearInterval(id)},[seconds]);
+ function flash(text,type="error"){setNotice({text,type});}
+ async function send(e){e?.preventDefault();setNotice(null);if(!/^\S+@\S+\.\S+$/.test(email))return flash("Enter a valid email address.");try{const{data}=await api.post("/auth/password/request-reset",{email:email.trim()});setStep("otp");setSeconds(30);setCode("");flash(data.emailSent?"OTP sent to your email.":data.devOtp?`Testing OTP: ${data.devOtp}`:(data.deliveryWarning||"OTP generated; check the server terminal."),"success")}catch(x){flash(x?.response?.data?.message||"Could not send OTP.")}}
+ async function resend(){if(seconds>0)return;await send()}
+ async function verify(e){e.preventDefault();setNotice(null);if(!/^\d{6}$/.test(code))return flash("Enter the six-digit OTP code.");try{const{data}=await api.post("/auth/password/verify-reset",{email:email.trim(),code});setToken(data.resetToken);setStep("password");setNotice(null)}catch(x){flash(x?.response?.data?.message||"Invalid or expired OTP.")}}
+ async function reset(e){e.preventDefault();setNotice(null);if(!strong)return flash("Password must satisfy every requirement.");if(!matches)return flash("Passwords do not match.");try{await api.post("/auth/password/confirm-reset",{resetToken:token,newPassword:pw});flash("Password changed successfully.","success");setTimeout(()=>nav("/login"),1000)}catch(x){flash(x?.response?.data?.message||"Password reset failed.")}}
+ return <div className="tw-starry-page tw-reset-page" style={{background:c.pageBg,color:c.text}}><PublicHeader compact hideSuper/><main className="tw-reset-main"><section className={`tw-reset-card ${step==="password"?"wide":""}`} style={{background:c.cardBg3,borderColor:c.border,color:c.text}}><div><h1>Reset Password</h1>{step!=="password"&&<p style={{color:c.textMuted}}>Verify your email before choosing a new password.</p>}{notice&&<div className={notice.type==="success"?"tw-reset-success":"tw-reset-error"}>{notice.text}</div>}
+ {step==="email"&&<form onSubmit={send}><label>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="user@example.com" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/><button className="tw-auth-primary tw-reset-send" type="submit">Send OTP</button></form>}
+ {step==="otp"&&<form onSubmit={verify}><label>OTP Code</label><div className="tw-otp-inline"><input inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="6-digit code" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/><button type="button" disabled={seconds>0} onClick={resend}>{seconds>0?`${seconds}s`:"Resend"}</button></div><button className="tw-auth-primary" type="submit">Verify OTP</button></form>}
+ {step==="password"&&<form className="tw-reset-password-form" onSubmit={reset}><label>New password</label><div className="tw-password-row"><input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} required placeholder="Create a password" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/><button type="button" aria-label="Show password" onClick={()=>setShowPw(v=>!v)}><TwIcon name={showPw?"eyeOff":"eye"} size={19}/></button></div><label>Confirm password</label><div className="tw-password-row"><input type={showConfirm?"text":"password"} value={confirm} onChange={e=>setConfirm(e.target.value)} required placeholder="Confirm your password" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/><button type="button" aria-label="Show confirm password" onClick={()=>setShowConfirm(v=>!v)}><TwIcon name={showConfirm?"eyeOff":"eye"} size={19}/></button></div><button className="tw-auth-primary" type="submit">Change Password</button></form>}
+ <p className="tw-reset-back"><Link to="/login">Back to login</Link></p></div>{step==="password"&&<aside className="tw-reset-requirements" style={{background:c.cardBg2,border:`1px solid ${c.border}`}}><h3>Password requirements</h3>{Object.entries({len:"At least 8 characters",upper:"At least 1 uppercase letter",lower:"At least 1 lowercase letter",num:"At least 1 number",sym:"At least 1 special character"}).map(([k,v])=><span className={pc[k]?"ok":""} key={k}>{pc[k]?"●":"○"} {v}</span>)}<div className="tw-reset-strength"><i style={{width:`${Object.values(pc).filter(Boolean).length*20}%`}}/></div><small>{strong?"Strong ✓":"Complete every requirement"}</small><span className={matches?"ok":""}>{matches?"●":"○"} Passwords match</span></aside>}</section></main></div>}

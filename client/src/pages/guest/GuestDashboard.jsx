@@ -2,12 +2,16 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken, clearRole, clearToken } from "../../lib/auth";
-import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
+import { useTheme, useColors } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import GuestCreateTab from "./GuestCreateTab";
 import LiveSessionsTab from "../teacher/tabs/LiveSessionsTab";
 import SessionHistoryTab from "../teacher/tabs/SessionHistoryTab";
+import { TeacherActionModal } from "../teacher/TeacherUI";
+
+const VALID_GUEST_TABS = new Set(["create", "live", "history"]);
+function normalizeGuestTab(tab) { return VALID_GUEST_TABS.has(tab) ? tab : "create"; }
 
 const NAV = [
   { id: "create", label: "Create", icon: "create" },
@@ -23,17 +27,20 @@ export default function GuestDashboard() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [showExit, setShowExit] = useState(false);
-  const [activeTab, setActiveTabState] = useState(() => location.state?.tab || sessionStorage.getItem("guest_active_tab") || "create");
+  const [activeTab, setActiveTabState] = useState(() => normalizeGuestTab(location.state?.tab || sessionStorage.getItem("guest_active_tab")));
 
   useEffect(() => {
     let ignore = false;
     (async () => {
       try {
+        const tokenVersion = "guest-role-v2";
         let token = sessionStorage.getItem("guest_token");
-        if (!token) {
+        if (!token || sessionStorage.getItem("guest_token_version") !== tokenVersion) {
+          sessionStorage.removeItem("guest_token");
           const { data } = await api.post("/auth/guest-token");
           token = data.token;
           sessionStorage.setItem("guest_token", token);
+          sessionStorage.setItem("guest_token_version", tokenVersion);
         }
         setToken(token);
         setRole("GUEST_HOST");
@@ -48,17 +55,19 @@ export default function GuestDashboard() {
   }, []);
 
   useEffect(() => {
-    if (location.state?.tab) setActiveTab(location.state.tab);
+    if (location.state?.tab) setActiveTab(normalizeGuestTab(location.state.tab));
   }, [location.state]);
 
   function setActiveTab(tab) {
-    sessionStorage.setItem("guest_active_tab", tab);
-    setActiveTabState(tab);
+    const normalized = normalizeGuestTab(tab);
+    sessionStorage.setItem("guest_active_tab", normalized);
+    setActiveTabState(normalized);
   }
 
   function exitGuest() {
     sessionStorage.removeItem("guest_token");
     sessionStorage.removeItem("guest_active_tab");
+    sessionStorage.removeItem("guest_token_version");
     localStorage.removeItem("qz_guest_mode");
     clearToken();
     clearRole();
@@ -79,7 +88,7 @@ export default function GuestDashboard() {
   }
 
   return <div className="tw-responsive-dashboard" style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s ease" }}>
-    <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
+    <aside data-sidebar="true" className="tw-responsive-sidebar tw-guest-sidebar" style={sidebar(c)}>
       <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline" }}>
           <span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span>
@@ -93,16 +102,16 @@ export default function GuestDashboard() {
       </nav>
       <div style={{ padding: "0 12px", display: "flex", gap: 8, alignItems: "center" }}>
         <ThemeIconButton dark={dark} onClick={toggleTheme} style={{ color: c.navColor, borderColor: c.sidebarBorder, background: "transparent", flex: "0 0 auto" }} size={17} />
-        <button onClick={() => setShowExit(true)} style={{ ...sideAction(c), flex: 1, justifyContent: "center" }}><TwIcon name="logout" size={17} /><span>Exit Guest</span></button>
+        <button className="tw-guest-exit" onClick={() => setShowExit(true)} style={{ ...sideAction(c), flex: 1, justifyContent: "center" }}><TwIcon name="logout" size={17} /><span>Exit Guest</span></button>
       </div>
     </aside>
     <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
       <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
     </main>
-    {showExit && <ThemedModal icon={<TwIcon name="logout" size={30} />} title="Exit Guest Host?" message="Your temporary Guest Host access will end." onClose={() => setShowExit(false)}><button className="btn secondary" onClick={() => setShowExit(false)}>Stay</button><button className="btn" onClick={exitGuest}>Exit</button></ThemedModal>}
+    {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" message="Your temporary Guest Host access will end." tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}
   </div>;
 }
 
 function sidebar(c) { return { width: 220, minWidth: 220, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}`, display: "flex", flexDirection: "column", padding: "0 0 24px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100, boxSizing: "border-box", transition: "background .3s,border-color .3s" }; }
-function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? c.accent : "transparent", color: active ? "#fff" : c.navColor, fontSize: 14, fontWeight: 800, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s" }; }
-function sideAction(c) { return { display: "flex", alignItems: "center", gap: 9, minHeight: 40, padding: "9px 12px", borderRadius: 12, border: `1px solid ${c.sidebarBorder}`, background: "transparent", color: c.navColor, fontWeight: 800, cursor: "pointer" }; }
+function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? "linear-gradient(135deg,#2b6cff,#5b7cff)" : "transparent", boxShadow: active ? "0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18)" : "none", transform: active ? "translateY(-1px)" : "none", color: active ? "#fff" : c.navColor, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s" }; }
+function sideAction(c) { return { display: "flex", alignItems: "center", gap: 9, minHeight: 40, padding: "9px 12px", borderRadius: 12, border: `1px solid ${c.sidebarBorder}`, background: "transparent", color: c.navColor, fontWeight: 700, cursor: "pointer" }; }

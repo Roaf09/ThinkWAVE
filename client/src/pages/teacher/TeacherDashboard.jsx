@@ -10,6 +10,7 @@ import { api, setAuthToken } from "../../lib/api";
 import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
+import { TeacherActionModal } from "./TeacherUI";
 
 import HomeTab           from "./tabs/HomeTab";
 import CreateTab         from "./tabs/CreateTab";
@@ -77,10 +78,10 @@ export default function TeacherDashboard() {
 
   const navItems = [
     { id: "home", label: "Home", icon: "home" },
-    { id: "create", label: "Create", icon: "create" },
-    { id: "bank", label: bankLabel, icon: "bank" },
-    { id: "live", label: "Sessions", icon: "live" },
     { id: "classes", label: "Classes", icon: "classes" },
+    { id: "create", label: "Create", icon: "create" },
+    { id: "live", label: "Sessions", icon: "live" },
+    { id: "bank", label: bankLabel, icon: "bank" },
     { id: "history", label: "History", icon: "history" },
   ];
 
@@ -128,7 +129,7 @@ export default function TeacherDashboard() {
       {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />
       {profileSaved && <ProfileSavedOverlay />}
-      {showLogout && <ThemedModal icon={<TwIcon name="logout" size={30} />} title="Log out?" message="Are you sure you want to log out?" onClose={() => setShowLogout(false)}><button className="btn secondary" onClick={() => setShowLogout(false)}>Cancel</button><button className="btn" style={{ background: dark ? "#7f1d1d" : "#dc2626", color: dark ? "#fca5a5" : "#ffffff" }} onClick={doLogout}>Yes, Log Out</button></ThemedModal>}
+      {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the teacher dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
     </div>
   );
 }
@@ -163,7 +164,7 @@ function profileFromUser(user = {}) { return { firstName: user.first_name || "",
 const avatarImage = { width: "100%", height: "100%", objectFit: "cover" };
 const modalBackdrop = { position: "fixed", inset: 0, zIndex: 3000, display: "grid", placeItems: "center", padding: 20, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)" };
 function sidebar(c) { return { width: 220, minWidth: 220, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}`, display: "flex", flexDirection: "column", padding: "0 0 24px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100, transition: "background .3s,border-color .3s" }; }
-function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, border: "none", background: active ? "#2b6cff" : "transparent", color: active ? "#fff" : c.navColor, fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left", width: "100%", transition: "background .2s,color .2s,transform .2s" }; }
+function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? "linear-gradient(135deg,#2b6cff,#5b7cff)" : "transparent", boxShadow: active ? "0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18)" : "none", transform: active ? "translateY(-1px)" : "none", color: active ? "#fff" : c.navColor, fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s,box-shadow .18s ease" }; }
 function sideAction(c) { return { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${c.sidebarBorder}`, background: "transparent", color: c.navColor, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "color .2s,border-color .2s" }; }
 function avatarButton(c) { return { width: 38, height: 38, padding: 0, overflow: "hidden", display: "grid", placeItems: "center", borderRadius: "50%", border: 0, background: "rgba(255,255,255,.08)", color: c.navColor, cursor: "pointer" }; }
 function modalCard(c) { return { background: c.cardBg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 20, padding: 20, boxShadow: "0 28px 80px rgba(0,0,0,.28)" }; }

@@ -12,6 +12,7 @@ import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/Acti
 import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { TwIcon } from "../../../components/TwUI";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
+import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -154,6 +155,8 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
     return rows;
   }, [questions, query, sortBy]);
 
+  const currentHasItems = view === "quiz" ? quizBankItems.length > 0 : questions.length > 0;
+
   if (loading) return <div className="container"><div style={card(c)}>Loading bank content…</div></div>;
 
   return (
@@ -163,14 +166,14 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
           <h2 style={{ marginBottom: 4, color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
         </section>
 
-        <section style={card(c, { padding: 10 })}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button onClick={() => setView('quiz')} style={{ ...btn(c, view === 'quiz'), width: '100%' }}>Quiz Bank</button>
-            <button onClick={() => setView('question')} style={{ ...btn(c, view === 'question'), width: '100%' }}>Question Bank</button>
+        <section style={card(c, { padding: 12 })}>
+          <div className="tw-teacher-bank-toggle">
+            <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected' : ''} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
+            <TeacherPressButton tone="blue" className={view === 'question' ? 'is-selected' : ''} onClick={() => setView('question')}>Question Bank</TeacherPressButton>
           </div>
         </section>
 
-        <section style={card(c)}>
+        {currentHasItems && <section style={card(c)}>
           <div style={{ display: 'grid', gridTemplateColumns: view === 'quiz' ? 'minmax(220px, 1.4fr) minmax(180px, 0.8fr) minmax(150px, 0.7fr)' : 'minmax(220px, 1.4fr) minmax(150px, 0.7fr)', gap: 12 }}>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'quiz' ? 'Search by quiz title, template, or category' : 'Search saved questions'} style={inputStyle(c)} />
             {view === 'quiz' && (
@@ -185,20 +188,20 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
               {Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}
             </select>
           </div>
-        </section>
+        </section>}
 
         {msg && <div style={{ ...card(c, { padding: '12px 14px', boxShadow: 'none' }), color: c.textMuted, fontSize: 13, fontWeight: 700 }}>{msg}</div>}
 
         {view === 'quiz' ? (
           <div style={{ display: 'grid', gap: 12 }}>
-            {filteredQuizBankItems.length === 0 && <div style={card(c)}>No quizzes in the quiz bank yet.</div>}
+            {quizBankItems.length === 0 ? <ThinkBotEmptyState c={c} title="No saved quizzes yet." /> : filteredQuizBankItems.length === 0 ? <div style={card(c)}>No saved quizzes match your current filters.</div> : null}
             {filteredQuizBankItems.map((quiz) => (
               <QuizBankCard key={quiz.id} quiz={quiz} folderLabel={folderPathMap.get(Number(quiz.class_id)) || 'No folder assigned'} folderOptions={folderOptions} onPreview={() => setPreviewQuiz(quiz)} onDelete={() => setModal({ type: 'deleteQuiz', quiz })} onReuse={(classId) => setModal({ type: 'reuseQuiz', quiz, classId })} c={c} />
             ))}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12, justifyItems: 'center' }}>
-            {filteredQuestions.length === 0 && <div style={card(c, { width: 'min(100%, 780px)' })}>No saved questions yet. Use <b>Save to Bank</b> inside the Quiz Builder.</div>}
+            {questions.length === 0 ? <div style={{ width: '100%' }}><ThinkBotEmptyState c={c} title="No saved questions yet." /></div> : filteredQuestions.length === 0 ? <div style={card(c, { width: '100%' })}>No saved questions match your current filters.</div> : null}
             {filteredQuestions.map((q) => <QuestionCard key={q.id} question={q} onRemove={() => setModal({ type: 'deleteQuestion', question: q })} c={c} />)}
           </div>
         )}

@@ -38,12 +38,11 @@ export const env = {
   DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
   DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "/etc/secrets/ca.pem",
 
-  SMTP_SERVICE: process.env.SMTP_SERVICE || "",
-  SMTP_HOST: process.env.SMTP_HOST || "",
-  SMTP_PORT: Number(process.env.SMTP_PORT || 587),
-  SMTP_USER: process.env.SMTP_USER || "",
-  SMTP_PASS: process.env.SMTP_PASS || "",
-  SMTP_FROM: process.env.SMTP_FROM || "ThinkWAVE <no-reply@thinkwave.local>",
+  MAILGUN_API_KEY: process.env.MAILGUN_API_KEY || "",
+  MAILGUN_DOMAIN: process.env.MAILGUN_DOMAIN || "",
+  // Only needed for EU Mailgun accounts. Leave unset for the default US region.
+  MAILGUN_BASE_URL: process.env.MAILGUN_BASE_URL || "https://api.mailgun.net",
+  SMTP_FROM: process.env.SMTP_FROM || process.env.MAILGUN_FROM || "ThinkWAVE <no-reply@thinkwave.local>",
   OTP_DEV_FALLBACK: String(process.env.OTP_DEV_FALLBACK || "false").toLowerCase() === "true",
 
   TEACHER_GRACE_SEC: Number(process.env.TEACHER_GRACE_SEC || 30),

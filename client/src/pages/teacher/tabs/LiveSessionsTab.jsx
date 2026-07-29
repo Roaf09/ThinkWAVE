@@ -8,11 +8,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
-import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/ActionDialog";
+
 import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { isInstitutionPlan } from "../../../lib/planLimits";
 import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
+import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 
 const card = (c, extra = {}) => ({ background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 18, padding: 16, boxShadow: c.pageBg === "#eef2ff" ? "0 16px 34px rgba(43,108,255,0.08)" : "0 16px 34px rgba(0,0,0,0.14)", ...extra });
 const btn = (c, primary = false) => ({ padding: "9px 13px", borderRadius: 12, border: `1px solid ${primary ? c.accent : c.border}`, background: primary ? c.accent : c.cardBg2, color: primary ? "#fff" : c.text, fontWeight: 800, fontSize: 13, cursor: "pointer" });
@@ -71,11 +72,11 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
 
   async function load() {
     try {
-      const requests = [api.get("/quizzes"), api.get("/sessions/active"), api.get("/auth/me")];
+      const requests = guestMode ? [api.get("/quizzes"), api.get("/sessions/active")] : [api.get("/quizzes"), api.get("/sessions/active"), api.get("/auth/me")];
       if (!guestMode) requests.splice(1, 0, api.get("/classes"));
       const results = await Promise.all(requests);
       if (guestMode) {
-        const [quizRes, activeRes, meRes] = results;
+        const [quizRes, activeRes] = results;
         setQuizzes(quizRes.data || []);
         setFolders([]);
         setActiveSessions(activeRes.data || []);
@@ -135,18 +136,18 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
   return <>
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section><h2 style={{ marginBottom: 4, color: c.text }}>{guestMode ? "Sessions" : "Live Sessions"}</h2></section>
-      <section style={card(c)}><div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) repeat(2, minmax(150px, .7fr))", gap: 12 }}>
+      {liveQuizzes.length > 0 && <section style={card(c)}><div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) repeat(2, minmax(150px, .7fr))", gap: 12 }}>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search quizzes" style={inputStyle(c)} />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputStyle(c)}><option value="ALL">All quizzes</option><option value="READY">Not active yet</option><option value="ACTIVE">Active sessions</option><option value="PUBLISHED">Published only</option></select>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option>{Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}</select>
-      </div></section>
+      </div></section>}
       {flash && <div style={{ ...card(c, { padding: "12px 16px", boxShadow: "none", background: flash.kind === "error" ? c.redBg : c.greenBg, borderColor: flash.kind === "error" ? c.redBorder : c.greenBorder }), color: flash.kind === "error" ? c.redFg : c.greenFg, fontWeight: 800, fontSize: 13 }}>{flash.text}</div>}
-      {!filteredQuizzes.length ? <div style={card(c)}>No quizzes match your filters. <button onClick={() => setActiveTab?.("create")} style={{ border: "none", background: "none", color: c.accent, fontWeight: 800 }}>Create one</button>.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} guestMode={guestMode} folderLabel={folderPathMap.get(Number(quiz.class_id)) || "No folder assigned"} activeSession={activeByQuizId.get(Number(quiz.id)) || null} onHost={hostLive} onAssign={setAssignQuiz} onDelete={(q) => setConfirmState({ type: "delete", quiz: q })} onCopyToBank={(q) => setConfirmState({ type: "bank", quiz: q })} onDuplicate={(q) => setConfirmState({ type: "duplicate", quiz: q })} onPreview={setPreviewQuiz} c={c} institutionPlan={institutionPlan} expanded={Number(openQuizId) === Number(quiz.id)} onToggle={() => setOpenQuizId((current) => Number(current) === Number(quiz.id) ? null : quiz.id)} />)}</div>}
+      {!liveQuizzes.length ? <ThinkBotEmptyState c={c} title="You have not made any quizzes yet." actionLabel={guestMode ? "Create & Open Builder" : undefined} onAction={guestMode ? () => setActiveTab?.("create") : undefined} /> : !filteredQuizzes.length ? <div style={card(c)}>No quizzes match your current filters.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} guestMode={guestMode} folderLabel={folderPathMap.get(Number(quiz.class_id)) || "No folder assigned"} activeSession={activeByQuizId.get(Number(quiz.id)) || null} onHost={hostLive} onAssign={setAssignQuiz} onDelete={(q) => setConfirmState({ type: "delete", quiz: q })} onCopyToBank={(q) => setConfirmState({ type: "bank", quiz: q })} onDuplicate={(q) => setConfirmState({ type: "duplicate", quiz: q })} onPreview={setPreviewQuiz} c={c} institutionPlan={institutionPlan} expanded={Number(openQuizId) === Number(quiz.id)} onToggle={() => setOpenQuizId((current) => Number(current) === Number(quiz.id) ? null : quiz.id)} />)}</div>}
       {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
       {!guestMode && assignmentSaved && <ProfileSavedOverlay />}
     </div>
     {!guestMode && assignQuiz && <AssignModal quiz={assignQuiz} c={c} onClose={() => setAssignQuiz(null)} onSubmit={createAssignment} />}
-    {confirmState && <ActionDialog tone={confirmState.type === "delete" ? "red" : confirmState.type === "bank" ? "yellow" : "blue"} icon={confirmState.type === "delete" ? "🗑" : confirmState.type === "bank" ? "📦" : "⧉"} title={confirmState.type === "delete" ? "Delete quiz?" : confirmState.type === "bank" ? "Copy to Quiz Bank?" : "Create one duplicate copy?"} message={<><b style={{ color: c.text }}>{confirmState.quiz.title}</b></>} onClose={() => setConfirmState(null)} actions={<><button onClick={() => setConfirmState(null)} style={secondaryBtn(c, dark)}>Cancel</button><button onClick={() => confirmState.type === "delete" ? deleteQuiz(confirmState.quiz) : confirmState.type === "bank" ? addToQuizBank(confirmState.quiz) : duplicateQuiz(confirmState.quiz)} style={primaryBtn(confirmState.type === "delete" ? { bg: c.redBg, fg: c.redFg, border: c.redBorder } : confirmState.type === "bank" ? { bg: c.yellowBg, fg: c.yellowFg, border: c.yellowBorder } : { bg: `${c.accent}16`, fg: c.accent, border: c.accent })}>Confirm</button></>} />}
+    {confirmState && <TeacherActionModal c={c} textCancel tone={confirmState.type === "delete" ? "red" : "blue"} icon={confirmState.type === "delete" ? "trash" : confirmState.type === "bank" ? "bank" : "plus"} title={confirmState.type === "delete" ? "Delete quiz?" : confirmState.type === "bank" ? "Add to Quiz Bank?" : "Duplicate quiz?"} message={`${confirmState.quiz.title} will be ${confirmState.type === "delete" ? "permanently deleted" : confirmState.type === "bank" ? "copied to the Quiz Bank" : "copied as a new editable quiz"}.`} confirmLabel={confirmState.type === "delete" ? "Delete" : confirmState.type === "bank" ? "Add to Quiz Bank" : "Duplicate"} onClose={() => setConfirmState(null)} onConfirm={() => confirmState.type === "delete" ? deleteQuiz(confirmState.quiz) : confirmState.type === "bank" ? addToQuizBank(confirmState.quiz) : duplicateQuiz(confirmState.quiz)} />}
   </>;
 }
 
@@ -172,17 +173,17 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
       <div><div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
         <div className={`tw-session-closed-meta ${expanded ? "is-hidden" : ""}`} style={{ marginTop: 8 }}><span style={{ display: "inline-flex", padding: "5px 10px", borderRadius: 999, background: tone.softBg, color: tone.accent, border: `1px solid ${tone.border}`, fontSize: 12, fontWeight: 900 }}>{templateLabel(quiz.template_type)} · {quiz.category}</span></div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} />{!guestMode && <Badge c={c} label={folderLabel} tone="blue" />}</div>
-      </div><button style={btn(c, true)} onClick={onToggle}>{expanded ? "Close" : "Open"}</button>
+      </div><TeacherPressButton tone="blue" className={`tw-session-toggle${expanded ? " is-selected" : ""}`} onClick={onToggle}>{expanded ? "Close" : "Open"}</TeacherPressButton>
     </div>
     <div className={`collapsible-content ${expanded ? "open" : ""}`} style={{ marginTop: expanded ? 16 : 0 }}><div className="collapsible-inner"><div style={{ display: "grid", gap: 14 }}>
-      {!guestMode && <div style={card(c, { padding: 14, boxShadow: "none", background: c.cardBg2 })}><div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}><div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} /><Badge c={c} label={folderLabel} tone="blue" /></div></div><div style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 9001 : 1 }}><button onClick={() => onHost(quiz, joinMode, maxParticipants)} disabled={!isPublished || inSession} style={{ ...btn(c, true), opacity: !isPublished || inSession ? .6 : 1 }}>{inSession ? "Already active" : "Host Live"}</button><button onClick={() => onAssign(quiz)} disabled={!isPublished || !quiz.class_id} style={{ ...btn(c), opacity: !isPublished || !quiz.class_id ? .6 : 1 }}>Assign</button><button onClick={() => setMoreOpen((v) => !v)} style={btn(c)}>...</button>{moreOpen && <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 9500, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}><button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button><button onClick={() => { setMoreOpen(false); navigate(builderPath); }} style={menuBtn(c)}>Edit</button><button onClick={() => { setMoreOpen(false); onCopyToBank(quiz); }} style={{ ...menuBtn(c), color: c.yellowFg }}>Add to Quiz Bank</button><button onClick={() => { setMoreOpen(false); onDuplicate(quiz); }} style={menuBtn(c)}>Duplicate</button><button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button></div>}</div></div></div>}
+      {!guestMode && <div style={card(c, { padding: 14, boxShadow: "none", background: c.cardBg2 })}><div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}><div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} /><Badge c={c} label={folderLabel} tone="blue" /></div></div><div style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 9001 : 1 }}><TeacherPressButton tone="blue" onClick={() => onHost(quiz, joinMode, maxParticipants)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton><TeacherPressButton tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished || !quiz.class_id}>Assign</TeacherPressButton><button onClick={() => setMoreOpen((v) => !v)} style={btn(c)}>...</button>{moreOpen && <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 9500, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}><button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button><button onClick={() => { setMoreOpen(false); navigate(builderPath); }} style={menuBtn(c)}>Edit</button><button onClick={() => { setMoreOpen(false); onCopyToBank(quiz); }} style={{ ...menuBtn(c), color: c.yellowFg }}>Add to Quiz Bank</button><button onClick={() => { setMoreOpen(false); onDuplicate(quiz); }} style={menuBtn(c)}>Duplicate</button><button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button></div>}</div></div></div>}
       {!inSession && <div style={card(c, { padding: 14, boxShadow: "none", background: c.pageBg })}>
         <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 10 }}>Host setup</div>
         <div style={{ display: "grid", gridTemplateColumns: guestMode ? "minmax(190px,1fr) auto" : "repeat(auto-fit,minmax(190px,1fr))", gap: 12, alignItems: "end" }}>
           {!guestMode && <div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Mode</div><div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => setJoinMode("SOLO")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "SOLO" ? c.accent : c.border, color: joinMode === "SOLO" ? c.accent : c.text }}>Solo</button>{institutionPlan && <button type="button" onClick={() => setJoinMode("GROUP")} style={{ ...btn(c), flex: 1, borderColor: joinMode === "GROUP" ? c.accent : c.border, color: joinMode === "GROUP" ? c.accent : c.text }}>Group</button>}</div>{!institutionPlan && <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan supports solo sessions only.</div>}</div>}
           <div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>{guestMode ? "Maximum participants" : "Maximum students"}</div><input type="number" min={1} max={institutionPlan && !guestMode ? 500 : 45} value={maxParticipants} onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 3); setMaxParticipants(raw && (!institutionPlan || guestMode) ? String(Math.min(Number(raw), 45)) : raw); }} placeholder={institutionPlan && !guestMode ? "No cap" : "Up to 45"} style={inputStyle(c)} /></div>
           {!guestMode && <div><div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Selected folder</div><div style={{ ...inputStyle(c), background: c.cardBg2 }}>{folderLabel}</div></div>}
-          {guestMode && <button onClick={() => onHost(quiz, "SOLO", maxParticipants)} disabled={!isPublished || inSession} style={{ ...btn(c, true), minHeight: 43, opacity: !isPublished || inSession ? .6 : 1 }}>{inSession ? "Already active" : "Host Live"}</button>}
+          {guestMode && <TeacherPressButton tone="blue" onClick={() => onHost(quiz, "SOLO", maxParticipants)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>}
         </div>
         {guestMode && <div style={{ position: "relative", display: "flex", justifyContent: "flex-end", marginTop: 12, zIndex: moreOpen ? 9001 : 1 }}><button onClick={() => setMoreOpen((v) => !v)} style={btn(c)}>...</button>{moreOpen && <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 190, zIndex: 9500, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}><button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button><button onClick={() => { setMoreOpen(false); navigate(builderPath); }} style={menuBtn(c)}>Edit</button><button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button></div>}</div>}
       </div>}
@@ -210,7 +211,7 @@ function AssignModal({ quiz, c, onClose, onSubmit }) {
         <button type="button" onClick={() => setEditing(true)} style={btn(c)}>Edit</button>
       </div>
       <div style={{ color: c.textMuted, fontSize: 13 }}>Students will only be able to answer within the selected schedule.</div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}><button type="button" onClick={onClose} style={btn(c)}>Cancel</button><button disabled={!complete} style={{ ...btn(c, true), opacity: complete ? 1 : .55 }}>Create assignment</button></div>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
     </div>
     {editing && <ScheduleEditor c={c} form={form} setForm={setForm} onClose={() => setEditing(false)} />}
   </form></div>;
@@ -288,9 +289,9 @@ function ScheduleEditor({ c, form, setForm, onClose }) {
           {timeOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
       </div>
-      <div style={{ padding: "0 20px 22px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        <button type="button" onClick={onClose} style={{ ...btn(c), padding: "12px 18px" }}>Cancel</button>
-        <button type="button" onClick={apply} style={{ ...btn(c, true), padding: "12px 18px" }}>Set</button>
+      <div style={{ padding: "0 20px 22px", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14 }}>
+        <button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button>
+        <TeacherPressButton type="button" tone="blue" onClick={apply}>Set</TeacherPressButton>
       </div>
     </div>
   </div>;

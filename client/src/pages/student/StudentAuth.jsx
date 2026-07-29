@@ -33,6 +33,17 @@ export default function StudentAuth({ onLoginSuccess }) {
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
   const [mode, setMode] = useState("login");
+  const [authMotion, setAuthMotion] = useState("from-left");
+  function switchMode(next) {
+    if (next === mode) return;
+    setAuthMotion(next === "register" ? "exit-left" : "exit-right");
+    window.setTimeout(() => {
+      setMode(next);
+      setAuthMotion(next === "register" ? "from-right" : "from-left");
+      setMsg("");
+      setNotFound(false);
+    }, 210);
+  }
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
   const [showPw, setShowPw] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
@@ -91,7 +102,7 @@ export default function StudentAuth({ onLoginSuccess }) {
       <PublicHeader compact hideSuper />
 
       <main style={s.main}>
-        <div style={mode === "login" ? s.card(c) : s.registerCard(c)}>
+        <div className={`tw-auth-form-shell ${authMotion}`} style={mode === "login" ? s.card(c) : s.registerCard(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{mode === "login" ? "Welcome back" : "Create your student account"}</h1>
             <p style={s.subtitle(c)}>{mode === "login" ? "Student login only. Sign in to your ThinkWAVE account." : "Register a student account for ThinkWAVE."}</p>
@@ -119,10 +130,10 @@ export default function StudentAuth({ onLoginSuccess }) {
                 </div>
 
                 {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
-                <button type="submit" style={s.submitBtn}>Login as Student</button>
+                <button type="submit" className="tw-auth-primary" style={s.submitBtn}>Login as Student</button>
               </form>
 
-              <p style={s.footText(c)}>Need a student account? <button type="button" onClick={() => setMode("register")} style={s.inlineButton}>Register here</button></p>
+              <p style={s.footText(c)}>Need a student account? <button type="button" onClick={() => switchMode("register")} style={s.inlineButton}>Register here</button></p>
             </>
           ) : (
             <div style={s.columns}>
@@ -135,8 +146,8 @@ export default function StudentAuth({ onLoginSuccess }) {
                 <div style={s.field}><label style={s.label(c)}>Password</label><div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button></div></div>
                 <div style={s.field}><label style={s.label(c)}>Confirm password</label><div style={s.passwordWrap}><input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button></div>{form.confirmPassword && <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
                 {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
-                <button type="submit" style={s.submitBtn}>Create Student Account</button>
-                <p style={s.footText(c)}>Already have an account? <button type="button" onClick={() => setMode("login")} style={s.inlineButton}>Log in here</button></p>
+                <button type="submit" className="tw-auth-primary" style={s.submitBtn}>Create Student Account</button>
+                <p style={s.footText(c)}>Already have an account? <button type="button" onClick={() => switchMode("login")} style={s.inlineButton}>Log in here</button></p>
               </form>
               <div style={s.reqPanel(c)}>
                 <div style={s.reqTitle(c)}>Password requirements</div>
@@ -154,7 +165,7 @@ export default function StudentAuth({ onLoginSuccess }) {
   );
 
   function FeedbackBox({ tone, notFound, clear }) {
-    return <div style={s.errorBox(tone)}><div style={s.errorHeader}><span style={s.errorTitle(tone)}>{isSuccess ? "Success!" : notFound ? "Account not found" : "Need help?"}</span>{!isSuccess && <button type="button" style={s.errorClose(tone)} onClick={clear}>×</button>}</div><p style={s.errorMsg(tone)}>{notFound ? "No student account was found with that email. Please sign up first." : msg}</p>{notFound && <button type="button" onClick={() => setMode("register")} style={s.inlineCta}>Create account</button>}</div>;
+    return <div style={s.errorBox(tone)}><div style={s.errorHeader}><span style={s.errorTitle(tone)}>{isSuccess ? "Success!" : notFound ? "Account not found" : "Need help?"}</span>{!isSuccess && <button type="button" style={s.errorClose(tone)} onClick={clear}>×</button>}</div><p style={s.errorMsg(tone)}>{notFound ? "No student account was found with that email. Please sign up first." : msg}</p>{notFound && <button type="button" onClick={() => switchMode("register")} style={s.inlineCta}>Create account</button>}</div>;
   }
 }
 

@@ -6,7 +6,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
-import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
@@ -31,6 +31,7 @@ const REQ_LABELS = {
 
 export default function Register() {
   const nav = useNavigate();
+  const loc = useLocation();
   const [searchParams] = useSearchParams();
   const adminInviteToken = searchParams.get("adminInvite") || "";
   const isAdminReg = !!adminInviteToken;
@@ -45,11 +46,17 @@ export default function Register() {
   const [showConfPw, setShowConfPw] = useState(false);
   const [error, setError] = useState("");
   const [inviteState, setInviteState] = useState(isAdminReg ? "checking" : "valid");
+  const [exitClass, setExitClass] = useState("");
+  const enterClass = (loc.state?.authFrom || sessionStorage.getItem("tw_auth_from")) === "right" ? "from-right" : "from-left";
+  function moveToLogin() {
+    setExitClass("exit-right");
+    window.setTimeout(() => nav("/login", { state: { authFrom: "left" } }), 210);
+  }
 
   useEffect(() => {
     if (!isAdminReg) return;
     api.get(`/auth/admin-invitation/${encodeURIComponent(adminInviteToken)}`)
-      .then(() => setInviteState("valid"))
+      .then(({data}) => { setForm(f=>({...f,email:data.email||f.email})); setInviteState("valid"); })
       .catch((err) => {
         setInviteState("invalid");
         setError(err?.response?.data?.message || "This Admin invitation is invalid, already used, or expired.");
@@ -95,7 +102,7 @@ export default function Register() {
     : { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#f87171" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" };
 
   if (isAdminReg && inviteState !== "valid") return (
-    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper/><main style={s.main}><div style={s.card(c)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
+    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper/><main style={s.main}><div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
   );
 
   return (
@@ -104,7 +111,7 @@ export default function Register() {
       <PublicHeader compact hideSuper />
 
       <main style={s.main}>
-        <div style={s.card(c)}>
+        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminReg ? "Create your admin account" : "Create your account"}</h1>
             <p style={s.subtitle(c)}>
@@ -127,7 +134,7 @@ export default function Register() {
 
               <div style={s.field}>
                 <label style={s.label(c)}>Email address</label>
-                <input type="email" style={s.input(c)} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" required />
+                <input type="email" style={{...s.input(c),opacity:isAdminReg?0.82:1}} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly={isAdminReg} required />
               </div>
 
               <div style={s.field}>
@@ -171,15 +178,15 @@ export default function Register() {
               )}
 
               <div style={s.btnWrap}>
-                <button type="submit" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Account"}</button>
+                <button type="submit" className="tw-auth-primary" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Account"}</button>
               </div>
 
               {!isAdminReg && <p style={s.loginPrompt(c)}>
-                Already have an account? <Link to="/login" style={s.loginLink}>Log in here</Link>
+                Already have an account? <button type="button" onClick={moveToLogin} style={{...s.loginLink,background:"none",border:0,cursor:"pointer",padding:0}}>Log in here</button>
               </p>}
             </form>
 
-            <div style={s.reqPanel(c)}>
+            <div className="tw-password-requirements-panel" style={s.reqPanel(c)}>
               <div style={s.reqTitle(c)}>Password requirements</div>
               <div style={s.reqList}>
                 {Object.entries(REQ_LABELS).map(([key, label]) => (
@@ -235,7 +242,7 @@ const s = {
   submitBtn: { padding: "14px 56px", borderRadius: 12, border: "none", background: "#2b6cff", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(43,108,255,0.40)" },
   loginPrompt: (c) => ({ textAlign: "center", fontSize: 13, color: c.textMuted, margin: 0 }),
   loginLink: { color: "#2b6cff", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 },
-  reqPanel: (c) => ({ flex: 1, background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "20px", display: "flex", flexDirection: "column", gap: 12, alignSelf: "flex-start" }),
+  reqPanel: (c) => ({ flex: 1, background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "20px", display: "flex", flexDirection: "column", gap: 12, alignSelf: "stretch", justifyContent: "center" }),
   reqTitle: (c) => ({ fontSize: 13, fontWeight: 700, color: c.text }),
   reqList: { display: "flex", flexDirection: "column", gap: 10 },
   reqItem: { display: "flex", alignItems: "center", gap: 10 },

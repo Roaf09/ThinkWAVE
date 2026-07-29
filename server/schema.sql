@@ -13,7 +13,7 @@ USE thinkwave;
 -- -----------------------------------------------------------
 CREATE TABLE users (
   id                     BIGINT PRIMARY KEY AUTO_INCREMENT,
-  role                   ENUM('SUPERADMIN','ADMIN','TEACHER','STUDENT') NOT NULL,
+  role                   ENUM('SUPERADMIN','ADMIN','TEACHER','STUDENT','GUEST_HOST') NOT NULL,
   email                  VARCHAR(190) NOT NULL UNIQUE,
   password_hash          VARCHAR(255) NOT NULL,
   first_name             VARCHAR(100) NOT NULL,

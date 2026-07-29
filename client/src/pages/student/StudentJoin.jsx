@@ -48,6 +48,16 @@ export default function StudentJoin() {
       localStorage.setItem("qz_participantId", String(data.participantId));
       localStorage.setItem("qz_sessionId", String(data.sessionId));
       localStorage.setItem("qz_joinMode", data.joinMode || "SOLO");
+      const isGuestHostVisitor = localStorage.getItem("qz_guest_mode") === "1";
+      if (isGuestHostVisitor) {
+        const key = `tw_guest_join_count_${code.trim().toUpperCase()}`;
+        const count = Number(localStorage.getItem(key) || 0) + 1;
+        localStorage.setItem(key, String(count));
+        if (count === 2) {
+          const create = window.confirm("We noticed that you have joined this teacher's class twice. Would you like to create a student account?");
+          if (create) { nav("/student-login?mode=register"); return; }
+        }
+      }
       nav(`/play/${data.sessionId}`);
     } catch (err) {
       setMsg(err?.response?.data?.message || "Could not join. Check your code and try again.");

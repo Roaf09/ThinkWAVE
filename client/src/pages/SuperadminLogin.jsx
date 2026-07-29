@@ -50,12 +50,12 @@ export default function SuperadminLogin({ onLoginSuccess }) {
 
           <form onSubmit={submit} style={s.form}>
             <div style={s.field}>
-              <label style={s.label(c)}>Admin Email</label>
+              <label style={s.label(c)}>Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@thinkwave.local" required style={s.input(c)} />
             </div>
 
             <div style={s.field}>
-              <label style={s.label(c)}>Secret Password</label>
+              <label style={s.label(c)}>Password</label>
               <div style={s.passwordWrap}>
                 <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 48 }} />
                 <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
@@ -67,13 +67,9 @@ export default function SuperadminLogin({ onLoginSuccess }) {
             <button type="button" style={s.forgotBtn} onClick={() => nav("/forgot-password")}>Forgot password?</button>
 
             <div style={s.btnWrap}>
-              <button type="submit" style={s.loginBtn}>Authorize and Enter</button>
+              <button type="submit" className="tw-superadmin-primary" style={s.loginBtn}>Authorize and Enter</button>
             </div>
           </form>
-
-          <p style={s.backPrompt(c)}>
-            Not a super admin? <Link to="/login" style={s.link}>Standard Login</Link>
-          </p>
         </div>
       </main>
     </div>
@@ -86,7 +82,7 @@ const s = {
   header: (c) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 40px", zIndex: 1, borderBottom: `1px solid ${c.border}` }),
   logo: { display: "flex", alignItems: "baseline", textDecoration: "none" },
   logoThink: (c) => ({ fontSize: 20, fontWeight: 900, color: c.text }),
-  logoWave: { fontSize: 20, fontWeight: 900, color: "#2b6cff" },
+  logoWave: { fontSize: 20, fontWeight: 900, color: "#ef4444" },
   headerRight: { display: "flex", alignItems: "center", gap: 10 },
   themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
   portalBadge: { padding: "4px 12px", borderRadius: 6, background: "#450a0a", color: "#f87171", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", border: "1px solid #7f1d1d" },
@@ -100,7 +96,7 @@ const s = {
   label: (c) => ({ fontSize: 13, fontWeight: 600, color: c.text }),
   input: (c) => ({ padding: "11px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box" }),
   passwordWrap: { position: "relative" },
-  showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
+  showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#ef4444", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   forgotBtn: { alignSelf: "flex-end", background: "none", border: "none", color: "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
   msgBox: { fontSize: 13, color: "#fecaca", background: "rgba(127,29,29,0.4)", borderRadius: 8, padding: "10px 14px", margin: 0 },
   btnWrap: { display: "flex", justifyContent: "center", marginTop: 4 },

@@ -11,7 +11,7 @@ import crypto     from "crypto";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, checkAdminInvitation, verifyOtp, resendOtp, login, me, updateMe, requestPasswordReset, confirmPasswordReset } from "./auth.controller.js";
+import { register, checkAdminInvitation, verifyOtp, resendOtp, login, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
@@ -35,7 +35,8 @@ const RegisterSchema = z.object({
 
 const VerifySchema = z.object({ email: z.string().email(), code: z.string().length(6).regex(/^\d{6}$/) });
 const PasswordResetRequestSchema = z.object({ email: z.string().email() });
-const PasswordResetConfirmSchema = z.object({ email: z.string().email(), code: z.string().length(6).regex(/^\d{6}$/), newPassword: strongPassword });
+const PasswordResetVerifySchema = z.object({ email: z.string().email(), code: z.string().length(6).regex(/^\d{6}$/) });
+const PasswordResetConfirmSchema = z.object({ resetToken: z.string().min(20), newPassword: strongPassword });
 const safeImage = z.string().max(4000000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).nullable();
 
 const ProfileSchema = z.object({
@@ -65,10 +66,17 @@ authRouter.post("/guest-token", rateLimit({ windowMs: 60 * 60 * 1000, max: 10 })
     const [r] = await pool.query(
       `INSERT INTO users (role, email, password_hash, first_name, last_name,
                           is_verified, is_active, deleted_at)
-       VALUES ('TEACHER', :email, 'GUEST_NO_PASSWORD', 'Guest', 'User', 1, 1, NOW())`,
-      { email: guestEmail }
+       VALUES ('GUEST_HOST', :email, 'GUEST_NO_PASSWORD', 'Guest', :guestId, 1, 1, NULL)`,
+      { email: guestEmail, guestId: `G-${rand.slice(0,8).toUpperCase()}` }
     );
-    const token = jwt.sign({ sub: r.insertId, role: "GUEST_HOST", ver: 0 }, env.JWT_SECRET, { expiresIn: "2h" });
+    const [[createdGuest]] = await pool.query(
+      `SELECT id, role, token_version FROM users WHERE id=:id LIMIT 1`,
+      { id: r.insertId }
+    );
+    if (!createdGuest || createdGuest.role !== "GUEST_HOST") {
+      return res.status(500).json({ message: "Guest Host role is not enabled in the database. Re-import the current server/schema.sql." });
+    }
+    const token = jwt.sign({ sub: createdGuest.id, role: createdGuest.role, ver: Number(createdGuest.token_version || 0) }, env.JWT_SECRET, { expiresIn: "2h" });
     res.json({ token });
   } catch (e) { console.error(e); res.status(500).json({ message: "Could not create guest session." }); }
 }));
@@ -81,6 +89,7 @@ authRouter.post("/register", authLimiter, validateBody(RegisterSchema), asyncHan
 authRouter.post("/verify-otp", otpLimiter, validateBody(VerifySchema), asyncHandler(verifyOtp));
 authRouter.post("/resend-otp", otpLimiter, validateBody(PasswordResetRequestSchema), asyncHandler(resendOtp));
 authRouter.post("/password/request-reset", otpLimiter, validateBody(PasswordResetRequestSchema), asyncHandler(requestPasswordReset));
+authRouter.post("/password/verify-reset", otpLimiter, validateBody(PasswordResetVerifySchema), asyncHandler(verifyPasswordResetOtp));
 authRouter.post("/password/confirm-reset", otpLimiter, validateBody(PasswordResetConfirmSchema), asyncHandler(confirmPasswordReset));
 authRouter.post("/login", authLimiter, validateBody(LoginSchema), asyncHandler(login));
 authRouter.get( "/me", requireAuth, asyncHandler(me));

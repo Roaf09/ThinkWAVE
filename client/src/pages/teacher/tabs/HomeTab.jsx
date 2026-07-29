@@ -6,8 +6,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
-import { useColors } from "../../../context/ThemeContext";
-import { EmptyState, IconBubble, StatCard, TwIcon } from "../../../components/TwUI";
+import { useColors, useTheme } from "../../../context/ThemeContext";
+import { EmptyState, IconBubble, TwIcon } from "../../../components/TwUI";
+import { TeacherMetricCard, TeacherPressButton } from "../TeacherUI";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 
 const shellCard = (c, extra = {}) => ({
@@ -55,6 +56,7 @@ export default function HomeTab({ setActiveTab }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const c = useColors();
+  const { dark } = useTheme();
   const navigate = useNavigate();
 
   async function loadDashboard() {
@@ -112,10 +114,10 @@ export default function HomeTab({ setActiveTab }) {
     return () => { ignore = true; };
   }, []);
 
-  const recentSessions = sessions.slice(0, 5);
-  const recentSessionSnapshots = recentSessions.slice(0, 3);
+  const recentSessions = sessions.slice(0, 2);
   const draftQuizzes = quizzes.filter((q) => q.status !== "BANKED" && q.status !== "PUBLISHED");
   const readyToHost = quizzes.filter((q) => q.status === "PUBLISHED" || q.status === "IN_SESSION");
+  const warningCount = quizzes.filter((q) => q.status !== "PUBLISHED" || !q.class_id).length;
   const banked = quizzes.filter((q) => q.status === "BANKED");
   const lastEditedQuiz = quizzes[0] || null;
   const latestReport = recentSessions.find((session) => session.session_type !== "ASSIGNED") || null;
@@ -153,8 +155,8 @@ export default function HomeTab({ setActiveTab }) {
 
         <section style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
           <div style={{ display: "grid", gap: 14 }}>
-            <StatCard c={c} icon="live" label="Ready to Host" value={readyToHost.length} hint="Published or already active quizzes" tone="blue" accent={c.accent} />
-            <StatCard c={c} icon="history" label="Recent Sessions" value={recentSessions.length} hint="Latest live and assigned records" tone="green" accent={c.greenFg} />
+            <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Published or active quizzes" tone="blue" />
+            <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
 
           <div style={shellCard(c, { display: "grid", gap: 16 })}>
@@ -162,7 +164,7 @@ export default function HomeTab({ setActiveTab }) {
               <div>
                 <div style={{ fontWeight: 950, fontSize: 19, color: c.text }}>Teacher overview</div>
                 {teacherInstitution ? (
-                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: c.accent, display:"inline-flex" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
+                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: dark ? "#bfdbfe" : "#1d4ed8", display:"inline-flex", transition:"color .16s ease" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
                 ) : (
                   <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} style={{ border: 0, background: "transparent", color: c.accent, fontWeight: 950, cursor: "pointer", padding: 0 }}>Join.</button></div>
                 )}
@@ -171,7 +173,7 @@ export default function HomeTab({ setActiveTab }) {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
-              <MiniInfo c={c} label="Class folders" value={folders.length} />
+              <MiniInfo c={c} label="Class Handled" value={folders.length} />
               <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} />
               <MiniInfo c={c} label="Banked quizzes" value={banked.length} />
             </div>
@@ -198,15 +200,15 @@ export default function HomeTab({ setActiveTab }) {
           <div style={shellCard(c)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>Recent sessions snapshot</div>
+                <div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>Recent Sessions</div>
               </div>
-              <button style={actionBtn(c)} onClick={() => setActiveTab?.("history")}>Open Session History</button>
+              <TeacherPressButton tone="blue" onClick={() => setActiveTab?.("history")}>Open History</TeacherPressButton>
             </div>
             {recentSessions.length === 0 ? (
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {recentSessionSnapshots.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} setActiveTab={setActiveTab} />)}
+                {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} setActiveTab={setActiveTab} />)}
               </div>
             )}
           </div>
@@ -256,7 +258,7 @@ function SessionCard({ session, analytics, c, navigate, setActiveTab }) {
         <div style={{ color: c.textMuted, fontSize: 13 }}>
           {session.question_count || 0} questions · {assigned ? `${session.avg_score ?? 0} average score` : analytics?.questions?.length ? `${Math.round(Number(analytics.questions[0]?.pct_correct || 0))}% correct on the first tracked item` : "Analytics ready to open"}
         </div>
-        <button style={actionBtn(c, true)} onClick={() => assigned ? setActiveTab?.("history") : navigate(`/teacher/analytics/${session.id}`)}>{assigned ? "Open History" : "Open Analytics"}</button>
+        <TeacherPressButton tone="blue" onClick={() => assigned ? setActiveTab?.("history") : navigate(`/teacher/analytics/${session.id}`)}>{assigned ? "Open History" : "Open Analytics"}</TeacherPressButton>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { TwIcon } from "../../../components/TwUI";
+import { TeacherPressButton, ThinkBotEmptyState, TeacherActionModal } from "../TeacherUI";
 
 function card(c, extra = {}) {
   return {
@@ -69,6 +70,7 @@ export default function ClassesTab({ setActiveTab }) {
   const [folderModal, setFolderModal] = useState(null);
   const [renameModal, setRenameModal] = useState(null);
   const [removeConfirm, setRemoveConfirm] = useState(null);
+  const [folderAction, setFolderAction] = useState(null);
   const [folderName, setFolderName] = useState("");
 
   async function load() {
@@ -137,11 +139,11 @@ export default function ClassesTab({ setActiveTab }) {
   }
 
   async function deleteFolder(folder) {
-    if (!window.confirm(`Delete ${folder.name}?`)) return;
     try {
       await api.delete(`/classes/${folder.id}`);
       if (Number(selectedFolderId) === Number(folder.id)) setSelectedFolderId(folder.parent_id || null);
       setMenuFor(null);
+      setFolderAction(null);
       await load();
     } catch (err) {
       setMsg(err?.response?.data?.message || "Could not delete folder.");
@@ -152,6 +154,7 @@ export default function ClassesTab({ setActiveTab }) {
     try {
       await api.post(`/classes/${folder.id}/duplicate`);
       setMenuFor(null);
+      setFolderAction(null);
       await load();
     } catch (err) {
       setMsg(err?.response?.data?.message || "Could not duplicate folder.");
@@ -186,6 +189,15 @@ export default function ClassesTab({ setActiveTab }) {
     URL.revokeObjectURL(url);
   }
 
+  if (!loading && folders.length === 0) {
+    return <div className="container" style={{ display: "grid", gap: 18 }}>
+      <section><h2 style={{ marginBottom: 4, color: c.text }}>Classes</h2></section>
+      {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
+      <ThinkBotEmptyState c={c} title="You have not made any classes yet." actionLabel="Create a Class" onAction={openAddFolder} />
+      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} confirmLabel="Create" />}
+    </div>;
+  }
+
   return (
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
@@ -198,8 +210,8 @@ export default function ClassesTab({ setActiveTab }) {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ color: c.text, fontWeight: 900, fontSize: 17 }}>My Folders</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={openAddFolder} style={btn(c, true)}>Add Folder</button>
-            {isSectionFolder && <button onClick={getShareCode} style={btn(c, true)}>Share Code</button>}
+            <TeacherPressButton tone="blue" icon="plus" onClick={openAddFolder}>Add Folder</TeacherPressButton>
+            {isSectionFolder && <TeacherPressButton tone="blue" icon="link" onClick={getShareCode}>Share Code</TeacherPressButton>}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
@@ -221,7 +233,7 @@ export default function ClassesTab({ setActiveTab }) {
 
         {loading ? <div style={{ color: c.textMuted }}>Loading folders…</div> : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
-            {children.map((folder) => <FolderCard key={folder.id} folder={folder} c={c} menuFor={menuFor} setMenuFor={setMenuFor} onOpen={() => setSelectedFolderId(folder.id)} onRename={() => { setFolderName(folder.name); setRenameModal(folder); setMenuFor(null); }} onDelete={() => deleteFolder(folder)} onDuplicate={() => duplicateFolder(folder)} />)}
+            {children.map((folder) => <FolderCard key={folder.id} folder={folder} c={c} menuFor={menuFor} setMenuFor={setMenuFor} onOpen={() => setSelectedFolderId(folder.id)} onRename={() => { setFolderName(folder.name); setRenameModal(folder); setMenuFor(null); }} onDelete={() => { setFolderAction({ type: "delete", folder }); setMenuFor(null); }} onDuplicate={() => { setFolderAction({ type: "duplicate", folder }); setMenuFor(null); }} />)}
           </div>
         )}
 
@@ -246,8 +258,9 @@ export default function ClassesTab({ setActiveTab }) {
         </div>
       </section>}
 
-      {folderModal && <FolderModal c={c} title="Create New Folder" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} />}
-      {renameModal && <FolderModal c={c} title="Rename Folder" value={folderName} setValue={setFolderName} onSubmit={renameFolder} onClose={() => setRenameModal(null)} />}
+      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} confirmLabel="Create" />}
+      {renameModal && <FolderModal c={c} title="Rename Class" value={folderName} setValue={setFolderName} onSubmit={renameFolder} onClose={() => setRenameModal(null)} confirmLabel="Save" />}
+      {folderAction && <TeacherActionModal c={c} textCancel icon={folderAction.type === "delete" ? "trash" : "plus"} tone={folderAction.type === "delete" ? "red" : "blue"} title={folderAction.type === "delete" ? "Delete class?" : "Duplicate class?"} message={`${folderAction.folder.name} will be ${folderAction.type === "delete" ? "permanently deleted" : "copied with its current folder structure"}.`} confirmLabel={folderAction.type === "delete" ? "Delete" : "Duplicate"} onClose={() => setFolderAction(null)} onConfirm={() => folderAction.type === "delete" ? deleteFolder(folderAction.folder) : duplicateFolder(folderAction.folder)} />}
       {removeConfirm && <RemoveStudentModal c={c} student={removeConfirm} onClose={() => setRemoveConfirm(null)} onConfirm={() => removeStudent(removeConfirm.id)} />}
     </div>
   );
@@ -265,12 +278,12 @@ function ReportMeta({ templateType, label, countLabel, c }) {
 }
 
 function AssignmentResultRow({ r, c, onAnalytics }) {
-  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(r.template_type, c, false) }}><span className="tw-class-report-copy"><b>{r.quiz_title}</b><ReportMeta templateType={r.template_type} label="Assigned session" countLabel={`${r.submitted_count || 0} submitted`} c={c}/></span><span className="tw-class-report-actions"><button onClick={onAnalytics} style={btn(c, true)}>Open Analytics</button></span></div>;
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(r.template_type, c, false) }}><span className="tw-class-report-copy"><b>{r.quiz_title}</b><ReportMeta templateType={r.template_type} label="Assigned session" countLabel={`${r.submitted_count || 0} submitted`} c={c}/></span><span className="tw-class-report-actions"><TeacherPressButton tone="blue" onClick={onAnalytics}>Open Analytics</TeacherPressButton></span></div>;
 }
 
 function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
-  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(session.template_type, c, false) }}><span className="tw-class-report-copy"><b>{session.quiz_title}</b><ReportMeta templateType={session.template_type} label={assigned ? "Assigned session" : "Live session"} countLabel={`${session.participant_count || 0} ${assigned ? "submitted" : "participants"}`} c={c}/></span><span className="tw-class-report-actions"><button onClick={assigned ? onOpenAssigned : onOpenLive} style={btn(c, true)}>Open Analytics</button></span></div>;
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(session.template_type, c, false) }}><span className="tw-class-report-copy"><b>{session.quiz_title}</b><ReportMeta templateType={session.template_type} label={assigned ? "Assigned session" : "Live session"} countLabel={`${session.participant_count || 0} ${assigned ? "submitted" : "participants"}`} c={c}/></span><span className="tw-class-report-actions"><TeacherPressButton tone="blue" onClick={assigned ? onOpenAssigned : onOpenLive}>Open Analytics</TeacherPressButton></span></div>;
 }
 
 function RemoveStudentModal({ c, student, onClose, onConfirm }) {
@@ -302,15 +315,16 @@ function FolderCard({ folder, c, menuFor, setMenuFor, onOpen, onRename, onDelete
   </div>;
 }
 
-function FolderModal({ c, title, value, setValue, onSubmit, onClose }) {
-  return <div style={modalBackdrop}>
-    <form onSubmit={onSubmit} style={{ ...card(c, { width: "min(94vw, 430px)", background: c.cardBg }) }}>
-      <h3 style={{ marginTop: 0, color: c.text }}>{title}</h3>
-      <label style={{ display: "block", color: c.textMuted, fontWeight: 800, fontSize: 13, marginBottom: 7 }}>Folder name</label>
+function FolderModal({ c, title, value, setValue, onSubmit, onClose, confirmLabel = "Create" }) {
+  return <div style={modalBackdrop} onMouseDown={onClose}>
+    <form onSubmit={onSubmit} onMouseDown={(event) => event.stopPropagation()} style={{ ...card(c, { width: "min(94vw, 620px)", minHeight: 290, background: c.cardBg, display: "flex", flexDirection: "column", padding: 30 }) }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}><TwIcon name="folder" size={24} /><h3 style={{ margin: 0, color: c.text }}>{title}</h3></div>
+      <p style={{ color: c.textMuted, margin: "9px 0 22px" }}>Give the class a clear name so quizzes, students, and reports stay organised.</p>
+      <label style={{ display: "block", color: c.textMuted, fontWeight: 800, fontSize: 13, marginBottom: 7 }}>Class name</label>
       <input value={value} maxLength={95} onChange={(e) => setValue(e.target.value)} placeholder="Maximum 95 characters" required style={input(c)} />
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-        <button type="button" onClick={onClose} style={btn(c)}>Cancel</button>
-        <button style={btn(c, true)}>Confirm</button>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16, marginTop: "auto", paddingTop: 28 }}>
+        <button type="button" className="tw-teacher-text-cancel" onClick={onClose}>Cancel</button>
+        <TeacherPressButton type="submit" tone="blue">{confirmLabel}</TeacherPressButton>
       </div>
     </form>
   </div>;

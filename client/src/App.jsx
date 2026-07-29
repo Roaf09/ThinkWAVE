@@ -31,6 +31,7 @@ import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
 import { getRole, getToken } from "./lib/auth";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
+import StarField from "./components/StarField.jsx";
 
 function Guard({ role, children }) {
   const token = getToken();
@@ -75,6 +76,7 @@ function Shell({ children, toast, setToast }) {
     loc.pathname.startsWith("/play");
   return (
     <div>
+      <StarField />
       {toast && <WelcomeToast name={toast.name} firstLogin={toast.firstLogin} onDone={() => setToast(null)} />}
       {!hideHeader && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 32px", background:"#080e1f", borderBottom:"1px solid #1a2540", position:"sticky", top:0, zIndex:50 }}>
@@ -84,7 +86,19 @@ function Shell({ children, toast, setToast }) {
           </Link>
         </div>
       )}
-      {children}
+      {(() => {
+        const authRoutes = ["/login", "/register", "/student-login"];
+        const animatedPublicRoutes = [
+          "/", "/plan", "/forgot-password", "/verify",
+          "/superadmin-register", "/superadmin-login",
+        ];
+        const routeClass = authRoutes.includes(loc.pathname)
+          ? "tw-auth-route"
+          : animatedPublicRoutes.includes(loc.pathname)
+            ? "tw-public-soft-enter"
+            : "tw-dashboard-route";
+        return <div key={`${loc.pathname}${loc.search}`} className={routeClass} style={{"--tw-public-enter-x": sessionStorage.getItem("tw_public_from")==="left" ? "-18px" : "18px"}}>{children}</div>;
+      })()}
     </div>
   );
 }

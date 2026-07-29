@@ -11,11 +11,10 @@ export async function requireAuth(req, res, next) {
       `SELECT id, role, is_active, deleted_at, token_version FROM users WHERE id=:id LIMIT 1`,
       { id: payload.sub }
     );
-    const guestHost = payload.role === "GUEST_HOST" && user?.role === "TEACHER";
-    if (!user || !user.is_active || (!guestHost && user.deleted_at)) {
+    if (!user || !user.is_active || user.deleted_at) {
       return res.status(401).json({ message: "Account is no longer active" });
     }
-    if (!guestHost && user.role !== payload.role) {
+    if (user.role !== payload.role) {
       return res.status(401).json({ message: "Account permissions changed. Please log in again." });
     }
     if (Number(payload.ver || 0) !== Number(user.token_version || 0)) {

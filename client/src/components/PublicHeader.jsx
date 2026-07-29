@@ -9,13 +9,14 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
   const nav = useNavigate();
   const loc = useLocation();
   const onLanding = loc.pathname === "/";
+  const goHome = (event) => { event.preventDefault(); sessionStorage.setItem("tw_public_from", "left"); nav("/"); };
   const goSection = (id) => {
     if (onLanding) onSection?.(id);
     else nav(`/#${id}`);
   };
   return (
     <header className="tw-public-header" style={{ background:c.cardBg3, borderBottom:`1px solid ${c.border}` }}>
-      <Link to="/" className="tw-public-logo"><span style={{ color:c.text }}>Think</span><span>WAVE</span></Link>
+      <Link to="/" onClick={goHome} className="tw-public-logo"><span style={{ color:c.text }}>Think</span><span>WAVE</span></Link>
       {!compact && <nav className="tw-public-nav">
         <button onClick={() => goSection("home")} style={{ color:c.textMuted }}>Home</button>
         <button onClick={() => goSection("templates")} style={{ color:c.textMuted }}>Templates</button>
@@ -31,8 +32,8 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
           style={{ color:c.text, borderColor:c.border, opacity: concealSuper ? 0 : 1 }}
         ><span aria-hidden="true">S</span></Link>}
         <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />
-        {setupComplete && <Link to="/login" className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
-        {setupComplete && <Link to="/register" className="tw-public-signup">Sign Up</Link>}
+        {setupComplete && <Link to="/login" state={{ authFrom: "left" }} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
+        {setupComplete && <Link to="/register" state={{ authFrom: "right" }} className="tw-public-signup tw-header-signup">Sign Up</Link>}
       </div>
     </header>
   );

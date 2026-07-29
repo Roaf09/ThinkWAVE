@@ -18,8 +18,8 @@ function otpClientPayload(otpResult) {
   const sent = !!otpResult?.delivery?.sent;
   const payload = { emailSent: sent };
   if (!sent) {
-    payload.deliveryWarning = otpResult?.delivery?.reason === "SMTP_NOT_CONFIGURED"
-      ? "Email delivery is not configured on the server. Configure Gmail/SMTP in server/.env to receive OTP emails."
+    payload.deliveryWarning = otpResult?.delivery?.reason === "MAILGUN_NOT_CONFIGURED"
+      ? "Email delivery is not configured on the server. Configure MAILGUN_API_KEY/MAILGUN_DOMAIN in server/.env to receive OTP emails."
       : "The OTP email could not be sent. Check the server email settings and logs.";
   }
   return payload;
@@ -54,7 +54,7 @@ export async function register(req, res) {
       }
       role = "SUPERADMIN"; approvalStatus = "APPROVED";
     } else if (adminInviteToken) {
-      const tokenHash = crypto.createHash("sha256").update(adminInviteToken).digest("hex");
+      const tokenHash = crypto.createHash("sha256").update(String(adminInviteToken).trim()).digest("hex");
       const [invites] = await pool.query(`SELECT * FROM admin_invitations WHERE token_hash=:tokenHash AND used_at IS NULL AND expires_at>NOW() LIMIT 1`, { tokenHash });
       invitation = invites[0];
       if (!invitation || normalizeEmail(invitation.email) !== cleanEmail) return res.status(403).json({ message: "This Admin invitation is invalid, expired, or belongs to another email address." });
@@ -75,6 +75,7 @@ export async function register(req, res) {
     if (invitation) {
       await pool.query(`UPDATE admin_invitations SET used_at=NOW() WHERE id=:id`, { id: invitation.id });
       await pool.query(`UPDATE institution_applications SET status='ACTIVATED' WHERE id=:id`, { id: invitation.application_id });
+      try { await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_ACCOUNT_CREATED',:uid,:name,:email,'ADMIN',:inst,:payload)`,{uid:result.insertId,name:`${firstName.trim()} ${lastName.trim()}`.trim(),email:cleanEmail,inst:invitation.institution_name,payload:JSON.stringify({applicationId:invitation.application_id})}); } catch (_) {}
     }
 
     try {
@@ -114,7 +115,7 @@ export async function register(req, res) {
 
 
 export async function checkAdminInvitation(req, res) {
-  const tokenHash = crypto.createHash("sha256").update(String(req.params.token || "")).digest("hex");
+  const tokenHash = crypto.createHash("sha256").update(String(req.params.token || "").trim()).digest("hex");
   const [[invitation]] = await pool.query(`SELECT id,email,institution_name,expires_at,used_at FROM admin_invitations WHERE token_hash=:tokenHash LIMIT 1`, { tokenHash });
   if (!invitation) return res.status(404).json({ message: "This Admin invitation is invalid." });
   if (invitation.used_at) return res.status(409).json({ message: "This Admin invitation has already been used and cannot create another account." });
@@ -205,25 +206,24 @@ export async function requestPasswordReset(req, res) {
   res.json({ message: "If the email exists, an OTP has been sent.", emailSent: false });
 }
 
-export async function confirmPasswordReset(req, res) {
-  const { email, code, newPassword } = req.body;
-  const cleanEmail = normalizeEmail(email);
-  const [rows] = await pool.query(
-    `SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
-    { email: cleanEmail }
-  );
+export async function verifyPasswordResetOtp(req, res) {
+  const cleanEmail = normalizeEmail(req.body.email);
+  const [rows] = await pool.query(`SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`, { email: cleanEmail });
   if (!rows.length) return res.status(404).json({ message: "User not found" });
-  const ok = await verifyOtpCode(rows[0].id, code);
+  const ok = await verifyOtpCode(rows[0].id, req.body.code);
   if (!ok) return res.status(400).json({ message: "Invalid or expired OTP" });
-  const passwordHash = await bcrypt.hash(newPassword, 12);
-  await pool.query(`UPDATE users SET password_hash=:ph, token_version=token_version+1 WHERE id=:id`, { ph: passwordHash, id: rows[0].id });
-  try {
-    const [[changedUser]] = await pool.query(`SELECT first_name,last_name,email,role,institution_name FROM users WHERE id=:id`, { id: rows[0].id });
-    await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`, {
-      uid: rows[0].id, name: `${changedUser?.first_name || ''} ${changedUser?.last_name || ''}`.trim(), email: changedUser?.email || cleanEmail,
-      role: changedUser?.role || null, inst: changedUser?.institution_name || null, payload: JSON.stringify({ changedAt: new Date().toISOString() })
-    });
-  } catch (_) {}
+  const resetToken = jwt.sign({ sub: rows[0].id, purpose: "PASSWORD_RESET" }, env.JWT_SECRET, { expiresIn: "10m" });
+  res.json({ message: "OTP verified.", resetToken });
+}
+
+export async function confirmPasswordReset(req, res) {
+  let payload;
+  try { payload = jwt.verify(req.body.resetToken, env.JWT_SECRET); }
+  catch { return res.status(400).json({ message: "Reset authorisation is invalid or expired." }); }
+  if (payload?.purpose !== "PASSWORD_RESET") return res.status(400).json({ message: "Invalid reset authorisation." });
+  const passwordHash = await bcrypt.hash(req.body.newPassword, 12);
+  await pool.query(`UPDATE users SET password_hash=:ph, token_version=token_version+1 WHERE id=:id AND deleted_at IS NULL`, { ph: passwordHash, id: payload.sub });
+  try { const [[user]]=await pool.query(`SELECT id,first_name,last_name,email,role,institution_name FROM users WHERE id=:id`,{id:payload.sub}); if(user) await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({method:'OTP_RESET'})}); } catch (_) {}
   res.json({ message: "Password changed successfully." });
 }
 
@@ -235,11 +235,11 @@ export async function me(req, res) {
     { id: req.user.sub }
   );
   const user = rows[0] || null;
-  if (user?.role === "TEACHER") {
+  if (user?.role === "TEACHER" || user?.role === "GUEST_HOST") {
     const plan = await getTeacherPlan(req.user.sub);
     return res.json({
       ...user,
-      role: req.user.role === "GUEST_HOST" ? "GUEST_HOST" : user.role,
+      role: user.role,
       plan_code: plan.code,
       plan_limits: plan.limits,
     });

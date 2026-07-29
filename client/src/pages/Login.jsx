@@ -6,7 +6,7 @@
 
 import React, { useState } from "react";
 import PublicHeader from "../components/PublicHeader";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { useColors, useTheme } from "../context/ThemeContext";
@@ -14,6 +14,7 @@ import { IconBubble, TwIcon } from "../components/TwUI";
 
 export default function Login({ onLoginSuccess }) {
   const nav = useNavigate();
+  const loc = useLocation();
   const [sp] = useSearchParams();
   const isAdminLogin = sp.get("role") === "admin";
   const { dark, toggleTheme } = useTheme();
@@ -25,6 +26,14 @@ export default function Login({ onLoginSuccess }) {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [exitClass, setExitClass] = useState("");
+  const enterClass = (loc.state?.authFrom || sessionStorage.getItem("tw_auth_from")) === "left" ? "from-left" : "from-right";
+  function moveAuth(to, direction) {
+    const incoming = direction === "left" ? "right" : "left";
+    sessionStorage.setItem("tw_auth_from", incoming);
+    setExitClass(direction === "left" ? "exit-left" : "exit-right");
+    window.setTimeout(() => nav(to, { state: { authFrom: incoming } }), 190);
+  }
 
   const errorTone = notFound
     ? { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#fca5a5" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" }
@@ -64,7 +73,7 @@ export default function Login({ onLoginSuccess }) {
       <PublicHeader compact hideSuper />
 
       <main style={s.main}>
-        <div style={s.card(c)}>
+        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminLogin ? "Admin Login" : "Welcome back"}</h1>
             <p style={s.subtitle(c)}>
@@ -135,9 +144,7 @@ export default function Login({ onLoginSuccess }) {
                     : error}
                 </p>
                 {notFound && !isAdminLogin && (
-                  <Link to="/register" style={s.inlineCta}>
-                    Create account
-                  </Link>
+                  <button type="button" onClick={() => moveAuth("/register", "left")} style={{...s.inlineCta,border:"none",cursor:"pointer"}}>Create account</button>
                 )}
                 {notFound && isAdminLogin && (
                   <button type="button" style={{...s.inlineCta,border:"none",cursor:"pointer"}} onClick={() => nav("/plan")}>
@@ -147,7 +154,7 @@ export default function Login({ onLoginSuccess }) {
               </div>
             )}
 
-            <button type="submit" style={s.submitBtn}>
+            <button type="submit" className="tw-auth-primary" style={s.submitBtn}>
               {isAdminLogin ? "Login as Admin" : "Login as Teacher"}
             </button>
           </form>
@@ -155,11 +162,11 @@ export default function Login({ onLoginSuccess }) {
           <p style={s.footText(c)}>
             {isAdminLogin ? (
               <>
-                Need a teacher account? <Link to="/login" style={s.link}>Go to normal login</Link>
+                Need a teacher account? <button type="button" onClick={() => moveAuth("/login", "right")} style={{...s.link,background:"none",border:0,cursor:"pointer",padding:0}}>Go to normal login</button>
               </>
             ) : (
               <>
-                Need admin access? <Link to="/login?role=admin" style={s.link}>Use admin login</Link>
+                Need admin access? <button type="button" onClick={() => moveAuth("/login?role=admin", "left")} style={{...s.link,background:"none",border:0,cursor:"pointer",padding:0}}>Use admin login</button>
               </>
             )}
           </p>

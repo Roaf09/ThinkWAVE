@@ -11,6 +11,7 @@ import { templateLabel, templateTone } from "../../lib/templatePalette";
 import { isInstitutionPlan } from "../../lib/planLimits";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
+import { TeacherPressButton } from "./TeacherUI";
 
 export default function Analytics({ guestMode = false }) {
   const { sessionId, classId, quizId } = useParams();
@@ -109,8 +110,8 @@ export default function Analytics({ guestMode = false }) {
               </div>
             </div>
             {extendedView && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" style={downloadBtn(C)} disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</button>
-              <button type="button" style={downloadBtn(C)} disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</button>
+              <TeacherPressButton type="button" tone="neutral" disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</TeacherPressButton>
+              <TeacherPressButton type="button" tone="neutral" disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</TeacherPressButton>
             </div>}
           </div>
         </section>

@@ -115,6 +115,39 @@ export async function getStudentDashboard(req, res) {
      WHERE p.student_user_id=:uid
      ORDER BY s.ended_at DESC LIMIT 50`, { uid }
   );
+  const [achievementAssignedRows] = await pool.query(
+    `SELECT answers_json, score, max_score, submitted_at
+     FROM async_quiz_submissions
+     WHERE student_user_id=:uid
+     ORDER BY submitted_at ASC`, { uid }
+  );
+  const [[liveAchievementStats]] = await pool.query(
+    `SELECT
+       COUNT(r.id) AS answered_total,
+       SUM(CASE WHEN r.is_correct=1 THEN 1 ELSE 0 END) AS answered_correct,
+       SUM(CASE WHEN r.is_correct=0 THEN 1 ELSE 0 END) AS answered_incorrect,
+       SUM(CASE WHEN r.is_correct=1 AND s.started_at IS NOT NULL AND TIMESTAMPDIFF(SECOND,s.started_at,r.answered_at) BETWEEN 0 AND 8 THEN 1 ELSE 0 END) AS quick_correct,
+       COUNT(DISTINCT CASE WHEN s.status='ENDED' THEN s.id END) AS live_completed,
+       COALESCE(SUM(r.points_awarded),0) AS points_total
+     FROM session_participants p
+     JOIN sessions s ON s.id=p.session_id
+     LEFT JOIN responses r ON r.session_id=p.session_id AND r.participant_id=p.id
+     WHERE p.student_user_id=:uid`, { uid }
+  );
+  let assignedAnswered = 0;
+  let assignedCorrect = 0;
+  let assignedIncorrect = 0;
+  let assignedPoints = 0;
+  for (const row of achievementAssignedRows) {
+    const answers = safeJson(row.answers_json);
+    if (Array.isArray(answers)) {
+      assignedAnswered += answers.length;
+      assignedCorrect += answers.filter((answer) => answer?.isCorrect === true || answer?.isCorrect === 1).length;
+      assignedIncorrect += answers.filter((answer) => answer?.isCorrect === false || answer?.isCorrect === 0).length;
+    }
+    assignedPoints += Number(row.score || 0);
+  }
+
   const [[weekStats]] = await pool.query(
     `SELECT
        (SELECT COUNT(DISTINCT q.id) FROM class_enrollments e JOIN quizzes q ON q.class_id=e.class_id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL WHERE e.student_user_id=:uid AND e.removed_at IS NULL AND YEARWEEK(COALESCE(q.available_from,q.created_at),1)=YEARWEEK(NOW(),1)) AS assigned_this_week,
@@ -126,7 +159,17 @@ export async function getStudentDashboard(req, res) {
   const liveAttended = Number(weekStats?.live_attended_this_week || 0);
   res.json({
     profile, classes, assignments, recentCompleted: recentAssigned, recentAssigned, recentLive, openLiveSessions,
-    weekStats: { assignedThisWeek:Number(weekStats?.assigned_this_week||0), liveThisWeek:liveTotal, liveAttended, liveUnattended:Math.max(0,liveTotal-liveAttended) }
+    weekStats: { assignedThisWeek:Number(weekStats?.assigned_this_week||0), liveThisWeek:liveTotal, liveAttended, liveUnattended:Math.max(0,liveTotal-liveAttended) },
+    achievementStats: {
+      questionsAnswered: assignedAnswered + Number(liveAchievementStats?.answered_total || 0),
+      questionsCorrect: assignedCorrect + Number(liveAchievementStats?.answered_correct || 0),
+      questionsIncorrect: assignedIncorrect + Number(liveAchievementStats?.answered_incorrect || 0),
+      quickCorrect: Number(liveAchievementStats?.quick_correct || 0),
+      assignedCompleted: achievementAssignedRows.length,
+      liveCompleted: Number(liveAchievementStats?.live_completed || 0),
+      classesJoined: classes.length,
+      totalPoints: assignedPoints + Number(liveAchievementStats?.points_total || 0),
+    }
   });
 }
 

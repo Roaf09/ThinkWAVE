@@ -11,6 +11,7 @@ import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionD
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { templateLabel, templateTone } from "../../lib/templatePalette";
 import { getTemplateLimit, isInstitutionPlan } from "../../lib/planLimits";
+import { normalizeTemplateType } from "../../lib/templateTypes";
 import {
   buildBlankQuestion,
   clampQuestionPoints,
@@ -49,6 +50,7 @@ export default function QuizBuilder({ guestMode = false }) {
   const [navTick, setNavTick] = useState(0);
   const [publishFlow, setPublishFlow] = useState(false);
   const [institutionPlan, setInstitutionPlan] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const isBasic = !institutionPlan;
   const planLimit = getTemplateLimit(quiz?.template_type);
 
@@ -59,71 +61,79 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [modal]);
 
   const load = useCallback(async () => {
-    const [{ data }, { data: me }] = await Promise.all([api.get(`/quizzes/${id}`), api.get("/auth/me")]);
-    const institution = isInstitutionPlan(me);
-    setInstitutionPlan(institution);
-    setQuiz({ ...data.quiz, template_type: normalizeTemplateType(data.quiz.template_type) });
-    setTitleDraft(data.quiz.title || "");
-    setSettings({
-      randomizeQuestions: !!data.quiz.randomize_questions,
-      shuffleAnswers: !!data.quiz.shuffle_answers,
-    });
-
-    const loaded = (data.questions || []).map((q) => {
-      const cfg = safeJson(q.config_json) || {};
-      let correct = safeJson(q.correct_json) || {};
-      let nextCfg = { ...cfg, showPromptImage: cfg.showPromptImage ?? !!cfg.promptImage };
-      if (data.quiz?.template_type === "MATCHING") {
-        const normalized = normalizeMatchingPayload(cfg, correct);
-        nextCfg = { ...normalized.config, showPromptImage: normalized.config.showPromptImage ?? !!normalized.config.promptImage };
-        correct = normalized.correct;
-      }
-      if (!institution) {
-        nextCfg = { ...nextCfg, showPromptImage: false, promptImage: "" };
-        if (normalizeTemplateType(data.quiz?.template_type) === "MCQ") {
-          nextCfg.mcqMode = "NORMAL";
-          nextCfg.options = (Array.isArray(nextCfg.options) ? nextCfg.options : []).slice(0, 4).map((option) => typeof option === "object" ? { ...option, image: "" } : option);
-        }
-        if (normalizeTemplateType(data.quiz?.template_type) === "MATCHING") {
-          nextCfg.colA = (nextCfg.colA || []).slice(0, 5).map((row) => ({ ...row, image: "" }));
-          nextCfg.colB = (nextCfg.colB || []).slice(0, 6).map((row) => ({ ...row, image: "" }));
-          nextCfg.dummyB = (nextCfg.dummyB || []).slice(0, 1).map((row) => ({ ...row, image: "" }));
-        }
-        if (normalizeTemplateType(data.quiz?.template_type) === "THINK_SPELL") {
-          nextCfg.answers = (nextCfg.answers || []).slice(0, 4);
-          correct = { ...correct, answers: (correct.answers || nextCfg.answers || []).slice(0, 4) };
+    setLoadError("");
+    try {
+      const { data } = await api.get(`/quizzes/${id}`);
+      let institution = false;
+      if (!guestMode) {
+        try {
+          const { data: me } = await api.get("/auth/me");
+          institution = isInstitutionPlan(me);
+        } catch {
+          institution = false;
         }
       }
-      const basicLimit = getTemplateLimit(data.quiz?.template_type);
-      return {
-        id: q.id,
-        order: q.question_order,
-        prompt: q.prompt,
-        config: nextCfg,
-        correct,
-        timeLimitSec: institution ? (nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30) : Math.min(Number(nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30), basicLimit.maxTimeSec),
-        points: nextCfg.points ?? data.quiz.points_per_question ?? 1,
-      };
-    });
+      setInstitutionPlan(institution);
+      setQuiz({ ...data.quiz, template_type: normalizeTemplateType(data.quiz.template_type) });
+      setTitleDraft(data.quiz.title || "");
+      setSettings({
+        randomizeQuestions: !!data.quiz.randomize_questions,
+        shuffleAnswers: !!data.quiz.shuffle_answers,
+      });
 
-    if (loaded.length === 0) {
-      setQuestions([buildBlankQuestion(data.quiz, 0)]);
-      setIsSaved(false);
-    } else {
-      // Settings toggles are quiz-wide. Harmonize legacy per-question values on load,
-      // and prefer recorded audio when older data accidentally enabled both modes.
-      const showPromptImage = institution && loaded.some((question) => !!question.config?.showPromptImage);
-      const voiceRecord = loaded.some((question) => !!question.config?.voiceRecord);
-      const textToSpeech = !voiceRecord && loaded.some((question) => !!question.config?.textToSpeech);
-      setQuestions(loaded.map((question) => ({
-        ...question,
-        config: { ...question.config, showPromptImage, voiceRecord, textToSpeech },
-      })));
-      setIsSaved(true);
+      const loaded = (data.questions || []).map((q) => {
+        const cfg = safeJson(q.config_json) || {};
+        let correct = safeJson(q.correct_json) || {};
+        let nextCfg = { ...cfg, showPromptImage: cfg.showPromptImage ?? !!cfg.promptImage };
+        if (data.quiz?.template_type === "MATCHING") {
+          const normalized = normalizeMatchingPayload(cfg, correct);
+          nextCfg = { ...normalized.config, showPromptImage: normalized.config.showPromptImage ?? !!normalized.config.promptImage };
+          correct = normalized.correct;
+        }
+        if (!institution) {
+          nextCfg = { ...nextCfg, showPromptImage: false, promptImage: "" };
+          if (normalizeTemplateType(data.quiz?.template_type) === "MCQ") {
+            nextCfg.mcqMode = "NORMAL";
+            nextCfg.options = (Array.isArray(nextCfg.options) ? nextCfg.options : []).slice(0, 4).map((option) => typeof option === "object" ? { ...option, image: "" } : option);
+          }
+          if (normalizeTemplateType(data.quiz?.template_type) === "MATCHING") {
+            nextCfg.colA = (nextCfg.colA || []).slice(0, 5).map((row) => ({ ...row, image: "" }));
+            nextCfg.colB = (nextCfg.colB || []).slice(0, 6).map((row) => ({ ...row, image: "" }));
+            nextCfg.dummyB = (nextCfg.dummyB || []).slice(0, 1).map((row) => ({ ...row, image: "" }));
+          }
+          if (normalizeTemplateType(data.quiz?.template_type) === "THINK_SPELL") {
+            nextCfg.answers = (nextCfg.answers || []).slice(0, 4);
+            correct = { ...correct, answers: (correct.answers || nextCfg.answers || []).slice(0, 4) };
+          }
+        }
+        const basicLimit = getTemplateLimit(data.quiz?.template_type);
+        return {
+          id: q.id,
+          order: q.question_order,
+          prompt: q.prompt,
+          config: nextCfg,
+          correct,
+          timeLimitSec: institution ? (nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30) : Math.min(Number(nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30), basicLimit.maxTimeSec),
+          points: nextCfg.points ?? data.quiz.points_per_question ?? 1,
+        };
+      });
+
+      if (loaded.length === 0) {
+        setQuestions([buildBlankQuestion(data.quiz, 0)]);
+        setIsSaved(false);
+      } else {
+        const showPromptImage = institution && loaded.some((question) => !!question.config?.showPromptImage);
+        const voiceRecord = loaded.some((question) => !!question.config?.voiceRecord);
+        const textToSpeech = !voiceRecord && loaded.some((question) => !!question.config?.textToSpeech);
+        setQuestions(loaded.map((question) => ({ ...question, config: { ...question.config, showPromptImage, voiceRecord, textToSpeech } })));
+        setIsSaved(true);
+      }
+      setQIndex(0);
+      setNavTick((v) => v + 1);
+    } catch (error) {
+      setLoadError(error?.response?.data?.message || "The quiz builder could not load this quiz.");
     }
-    setQIndex(0);
-    setNavTick((v) => v + 1);
-  }, [id]);
+  }, [id, guestMode]);
 
   useEffect(() => {
     load();
@@ -400,12 +410,19 @@ export default function QuizBuilder({ guestMode = false }) {
     setMsg("Question added from bank.");
   }
 
-  if (!quiz || !settings) {
-    return (
-      <div className="container">
-        <div className="card">Loading...</div>
+  if (loadError) {
+    return <div className="container" style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+      <div className="card" style={{ maxWidth: 520, textAlign: "center", display: "grid", gap: 14 }}>
+        <b>Quiz Builder could not open</b>
+        <span>{loadError}</span>
+        <button className="btn" onClick={load}>Try Again</button>
+        <button className="btn secondary" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "create" } })}>Back to Create</button>
       </div>
-    );
+    </div>;
+  }
+
+  if (!quiz || !settings) {
+    return <div className="container"><div className="card">Loading Quiz Builder…</div></div>;
   }
 
   const currentQ = questions[qIndex] || null;

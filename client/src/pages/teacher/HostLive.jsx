@@ -8,6 +8,7 @@ import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionD
 import { normalizeTemplateType } from "../../lib/templateTypes";
 import { templateAccent } from "../../lib/templatePalette";
 import ThemeIconButton from "../../components/ThemeIconButton";
+import { TeacherPressButton } from "./TeacherUI";
 import { TwIcon } from "../../components/TwUI";
 
 export default function HostLive({ guestMode = false }) {
@@ -240,7 +241,7 @@ export default function HostLive({ guestMode = false }) {
             {joinMode === "GROUP" && state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
           </section>
         </div>
-      </div> : <section style={card(C)}><div className="tw-host-ended-card"><TwIcon name="check" size={58}/><h2>Session ended</h2><button onClick={() => navigate(isGuestHost ? `/guest/analytics/${id}` : `/teacher/analytics/${id}`)} style={btnStyle(C, "primary")}><TwIcon name="chart" size={17}/> Open Analytics</button></div></section>}
+      </div> : <section style={card(C)}><div className="tw-host-ended-card"><TwIcon name="check" size={58}/><h2>Session ended</h2><TeacherPressButton tone="blue" icon="chart" onClick={() => navigate(isGuestHost ? `/guest/analytics/${id}` : `/teacher/analytics/${id}`)}>Open Analytics</TeacherPressButton></div></section>}
     </main>
 
     <ActionDialog open={!!confirmAction} icon={<TwIcon name={confirmAction === "end" ? "stop" : isLive ? "pause" : "play"} size={28}/>} title={confirmAction === "end" ? "End this session?" : isLive ? "Pause this session?" : isPaused ? "Resume this session?" : "Start this session?"} message={isLive && confirmAction !== "end" ? "The question timer and gameplay will pause for everyone." : ""} onClose={() => setConfirmAction(null)}><button onClick={() => setConfirmAction(null)} style={secondaryBtn(C, dark)}>Cancel</button><button onClick={runConfirmed} style={primaryBtn({ bg: C.accent, fg: "#fff", border: C.accent })}>{confirmAction === "end" ? "End" : isLive ? "Pause" : isPaused ? "Resume" : "Start"}</button></ActionDialog>

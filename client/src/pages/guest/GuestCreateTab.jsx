@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
-import { useColors } from "../../context/ThemeContext";
+import { useColors, useTheme } from "../../context/ThemeContext";
 import { IconBubble } from "../../components/TwUI";
-import { templateCardChrome, templateTone } from "../../lib/templatePalette";
+import { normalizeTemplateType } from "../../lib/templateTypes";
+import { templateTone } from "../../lib/templatePalette";
+import { TeacherPressButton } from "../teacher/TeacherUI";
 
 const TEMPLATES = [
   { value: "MCQ", label: "Multiple Choice", icon: "mcq" },
@@ -17,6 +19,7 @@ const TEMPLATES = [
 export default function GuestCreateTab() {
   const navigate = useNavigate();
   const c = useColors();
+  const { dark } = useTheme();
   const [form, setForm] = useState({ title: "", templateType: "MCQ" });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -24,10 +27,11 @@ export default function GuestCreateTab() {
   async function submit(event) {
     event.preventDefault();
     setMsg("");
+    if (!form.title.trim()) return setMsg("Enter a quiz title.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
-        title: form.title,
+        title: form.title.trim(),
         category: "K12",
         templateType: form.templateType,
         classId: null,
@@ -45,27 +49,45 @@ export default function GuestCreateTab() {
     } finally { setSaving(false); }
   }
 
-  return <div className="container" style={{ display: "grid", gap: 18 }}>
+  return <div className="container" style={{ display: "grid", gap: 20 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
-    <section style={card(c, { maxWidth: 760 })}>
-      <form onSubmit={submit} style={{ display: "grid", gap: 20 }}>
-        <div><label style={label(c)}>Quiz Title</label><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Enter a quiz title" style={input(c)} /></div>
-        <div><label style={label(c)}>Question Template</label><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
-          {TEMPLATES.map((template) => {
-            const active = form.templateType === template.value;
-            const tone = templateTone(template.value, c, active);
-            return <button key={template.value} type="button" className={`tw-template-card${active ? " is-active" : ""}`} onClick={() => setForm({ ...form, templateType: template.value })} style={{ ...templateCardChrome(template.value, c, active), color: c.text }}>
-              <IconBubble name={template.icon} c={c} size={42} iconSize={21} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: tone.accent }} />
-              <div style={{ fontSize: 14, fontWeight: 900, color: active ? tone.accent : c.text }}>{template.label}</div>
-            </button>;
-          })}
-        </div></div>
+    <section style={card(c)}>
+      <form onSubmit={submit} style={{ display: "grid", gap: 22 }}>
+        <div>
+          <label style={label(c)}>Quiz Title</label>
+          <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" style={input(c)} />
+        </div>
+        <div>
+          <label style={label(c)}>Question Template</label>
+          <div className="tw-teacher-template-grid">
+            {TEMPLATES.map((template) => {
+              const active = form.templateType === template.value;
+              const tone = templateTone(template.value, c, active);
+              const ink = templateInk(template.value, dark);
+              return <button key={template.value} type="button" className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => setForm((current) => ({ ...current, templateType: template.value }))} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
+                <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
+              </button>;
+            })}
+          </div>
+        </div>
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-        <button disabled={saving} style={{ padding: "15px 16px", borderRadius: 16, border: "none", background: c.accent, color: "#fff", fontWeight: 900, cursor: "pointer" }}>{saving ? "Creating…" : "Create & Open Builder →"}</button>
+        <TeacherPressButton type="submit" tone="blue" disabled={saving} className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
       </form>
     </section>
   </div>;
 }
-function card(c, extra={}) { return { background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 24, boxShadow: c.pageBg === "#eef2ff" ? "0 18px 40px rgba(43,108,255,.09)" : "0 18px 40px rgba(0,0,0,.18)", ...extra }; }
+
+function templateInk(value, dark) {
+  const palette = {
+    MCQ: dark ? "#dbeafe" : "#173f9b",
+    TRUE_FALSE: dark ? "#ccfbf1" : "#075e57",
+    TYPE_ANSWER: dark ? "#ede9fe" : "#5b21b6",
+    MATCHING: dark ? "#ffedd5" : "#9a4d00",
+    GUESS_WORD_4PICS: dark ? "#dcfce7" : "#166534",
+    THINK_SPELL: dark ? "#f3e8ff" : "#6b21a8",
+  };
+  return palette[normalizeTemplateType(value)] || (dark ? "#f8fafc" : "#0f172a");
+}
+function card(c) { return { width: "100%", boxSizing: "border-box", background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 26, boxShadow: c.pageBg === "#eef2ff" ? "0 18px 40px rgba(43,108,255,.09)" : "0 18px 40px rgba(0,0,0,.18)" }; }
 function label(c) { return { display: "block", marginBottom: 7, fontSize: 13, color: c.textMuted, fontWeight: 800 }; }
-function input(c) { return { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 14, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14 }; }
+function input(c) { return { width: "100%", boxSizing: "border-box", padding: "13px 15px", borderRadius: 14, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, fontFamily: "inherit" }; }

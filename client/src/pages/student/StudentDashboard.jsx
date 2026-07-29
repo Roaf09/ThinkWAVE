@@ -6,10 +6,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { clearRole, clearToken } from "../../lib/auth";
-import { ThemedModal, useColors, useTheme } from "../../context/ThemeContext";
-import { EmptyState, TwIcon } from "../../components/TwUI";
+import { useColors, useTheme } from "../../context/ThemeContext";
+import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { templateLabel, templateTone } from "../../lib/templatePalette";
+import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../teacher/TeacherUI";
 
 
 export default function StudentDashboard() {
@@ -18,7 +19,7 @@ export default function StudentDashboard() {
   const nav = useNavigate();
   const fileRef = useRef(null);
   const [activeTab, setActiveTab] = useState("home");
-  const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {} });
+  const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {}, achievementStats: {} });
   const [joinOpen, setJoinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
@@ -32,6 +33,7 @@ export default function StudentDashboard() {
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
   const [profile, setProfile] = useState(emptyProfile());
   const [birthPickerOpen, setBirthPickerOpen] = useState(false);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   async function load({ silent = false } = {}) {
     try {
@@ -62,7 +64,14 @@ export default function StudentDashboard() {
     setMsg("");
     try {
       const payload = { classCode: classCode.trim().toUpperCase() };
-      if (joinProfileStep) payload.profile = profile;
+      if (joinProfileStep) {
+        payload.profile = {
+          firstName: String(profile.firstName || "").trim(),
+          lastName: String(profile.lastName || "").trim(),
+          middleInitial: String(profile.middleInitial || "").trim() || undefined,
+          studentId: String(profile.studentId || "").trim(),
+        };
+      }
       await api.post("/student/classes/join", payload);
       setJoinOpen(false);
       setJoinProfileStep(false);
@@ -134,7 +143,7 @@ export default function StudentDashboard() {
 
   const navItems = [
     { id: "home", label: "Home", icon: "home" },
-    { id: "classes", label: "Classes", icon: "classes" },
+    { id: "classes", label: "Class", icon: "classes" },
   ];
 
   return (
@@ -158,7 +167,7 @@ export default function StudentDashboard() {
       <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
         {msg && <div className="container" style={{ paddingBottom: 0 }}><div style={notice(c, "error")}>{msg}</div></div>}
         {activeTab === "home" ? (
-          <HomePanel c={c} data={data} nav={nav} setActiveTab={setActiveTab} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} />
+          <HomePanel c={c} dark={dark} data={data} nav={nav} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} onOpenAchievements={() => setAchievementsOpen(true)} />
         ) : (
           <ClassesPanel c={c} data={data} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} />
         )}
@@ -169,13 +178,44 @@ export default function StudentDashboard() {
       <input ref={fileRef} type="file" accept="image/*" onChange={uploadProfile} style={{ display: "none" }} />
       {birthPickerOpen && <BirthDateModal c={c} value={profile.birthDate} onSelect={(birthDate) => { setProfile((current) => ({ ...current, birthDate })); setBirthPickerOpen(false); }} onClose={() => setBirthPickerOpen(false)} />}
       {analyticsTarget && <StudentAnalyticsModal c={c} target={analyticsTarget} onClose={() => setAnalyticsTarget(null)} />}
+      {achievementsOpen && <AchievementModal c={c} dark={dark} achievements={buildAchievements(data.achievementStats || {})} onClose={() => setAchievementsOpen(false)} />}
       {profileSaved && <ProfileSavedOverlay />}
-      {showLogout && <ThemedModal icon={<TwIcon name="logout" size={30} />} title="Log out?" message="Are you sure you want to log out?" onClose={() => setShowLogout(false)}><button className="btn secondary" onClick={() => setShowLogout(false)}>Cancel</button><button className="btn" style={{ background: dark ? "#7f1d1d" : "#dc2626", color: "#fff" }} onClick={doLogout}>Yes, Log Out</button></ThemedModal>}
+      {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the student dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
     </div>
   );
 }
 
-function HomePanel({ c, data, nav, setActiveTab, onJoinLive, joiningSession, onAnalytics }) {
+const ACHIEVEMENT_DEFINITIONS = [
+  { id: "answer-1", title: "First Answer", metric: "questionsAnswered", target: 1, unit: "questions answered", tone: "blue" },
+  { id: "answer-10", title: "Getting Started", metric: "questionsAnswered", target: 10, unit: "questions answered", tone: "blue" },
+  { id: "answer-30", title: "Curious Mind", metric: "questionsAnswered", target: 30, unit: "questions answered", tone: "blue" },
+  { id: "answer-50", title: "Question Explorer", metric: "questionsAnswered", target: 50, unit: "questions answered", tone: "blue" },
+  { id: "answer-100", title: "Century Solver", metric: "questionsAnswered", target: 100, unit: "questions answered", tone: "blue" },
+  { id: "correct-1", title: "Correct Start", metric: "questionsCorrect", target: 1, unit: "correct answers", tone: "green" },
+  { id: "correct-10", title: "Accuracy Apprentice", metric: "questionsCorrect", target: 10, unit: "correct answers", tone: "green" },
+  { id: "correct-30", title: "Sharp Thinker", metric: "questionsCorrect", target: 30, unit: "correct answers", tone: "green" },
+  { id: "correct-50", title: "Accuracy Expert", metric: "questionsCorrect", target: 50, unit: "correct answers", tone: "green" },
+  { id: "correct-100", title: "Master Mind", metric: "questionsCorrect", target: 100, unit: "correct answers", tone: "green" },
+  { id: "wrong-5", title: "Learning From Mistakes", metric: "questionsIncorrect", target: 5, unit: "incorrect answers reviewed", tone: "orange" },
+  { id: "wrong-20", title: "Keep Trying", metric: "questionsIncorrect", target: 20, unit: "incorrect answers reviewed", tone: "orange" },
+  { id: "quick-1", title: "Quick Starter", metric: "quickCorrect", target: 1, unit: "quick correct answers", tone: "purple" },
+  { id: "quick-10", title: "Lightning Mind", metric: "quickCorrect", target: 10, unit: "quick correct answers", tone: "purple" },
+  { id: "assigned-1", title: "First Assignment", metric: "assignedCompleted", target: 1, unit: "assigned sessions completed", tone: "pink" },
+  { id: "assigned-5", title: "Assignment Regular", metric: "assignedCompleted", target: 5, unit: "assigned sessions completed", tone: "pink" },
+  { id: "live-1", title: "Live Learner", metric: "liveCompleted", target: 1, unit: "live sessions completed", tone: "teal" },
+  { id: "live-5", title: "Live Session Fan", metric: "liveCompleted", target: 5, unit: "live sessions completed", tone: "teal" },
+  { id: "class-1", title: "Classroom Member", metric: "classesJoined", target: 1, unit: "classes joined", tone: "yellow" },
+  { id: "class-3", title: "Community Learner", metric: "classesJoined", target: 3, unit: "classes joined", tone: "yellow" },
+];
+
+function buildAchievements(stats) {
+  return ACHIEVEMENT_DEFINITIONS.map((definition) => {
+    const value = Math.max(0, Number(stats?.[definition.metric] || 0));
+    return { ...definition, value, completed: value >= definition.target };
+  });
+}
+
+function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics, onOpenAchievements }) {
   const assignments = data.assignments || [];
   const recentAssigned = data.recentAssigned || data.recentCompleted || [];
   const recentLive = data.recentLive || [];
@@ -190,29 +230,22 @@ function HomePanel({ c, data, nav, setActiveTab, onJoinLive, joiningSession, onA
   const answeredThisWeek = weekAssignments.filter((item) => item.submission_id).length;
   const unansweredThisWeek = Math.max(0, weekAssignments.length - answeredThisWeek);
   const liveTotal = Number(weekStats.liveThisWeek || 0);
-  const threeMostRecent = [
-    ...recentLive.map((item) => ({ ...item, _completedType: "LIVE" })),
-    ...recentAssigned.map((item) => ({ ...item, _completedType: "ASSIGNED" })),
-  ].sort((a, b) => completedTimestamp(b) - completedTimestamp(a)).slice(0, 3);
-  const recentLiveTop = threeMostRecent.filter((item) => item._completedType === "LIVE");
-  const recentAssignedTop = threeMostRecent.filter((item) => item._completedType === "ASSIGNED");
+  const achievements = buildAchievements(data.achievementStats || {});
+  const recentLiveTop = [...recentLive].sort((a, b) => completedTimestamp(b) - completedTimestamp(a)).slice(0, 1);
+  const recentAssignedTop = [...recentAssigned].sort((a, b) => completedTimestamp(b) - completedTimestamp(a)).slice(0, 1);
 
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section><h2 style={{ color: c.text, marginBottom: 4 }}>Student Home</h2></section>
 
     <section style={card(c)}>
-      <div style={sectionHeader(c)}><div><h3 style={{ margin: 0 }}>Academic Overview</h3></div><button onClick={() => setActiveTab("classes")} style={secondary(c)}>View Classes</button></div>
-      <div style={metricGrid}>
-        <MiniMetric c={c} icon="classes" label="Joined classes" value={(data.classes || []).length} />
-        <MiniMetric c={c} icon="calendar" label="Total assigned work this week" value={Number(weekStats.assignedThisWeek || weekAssignments.length)} />
-        <MiniMetric c={c} icon="spark" label="Total live sessions this week" value={liveTotal} />
-      </div>
+      <div style={sectionHeader(c)}><div><h3 style={{ margin: 0 }}>Achievements</h3><div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>Complete activities to bring each achievement card to life.</div></div><TeacherPressButton tone="blue" onClick={onOpenAchievements}>View Achievements</TeacherPressButton></div>
+      <AchievementCarousel c={c} dark={dark} achievements={achievements} />
       <div className="tw-student-overview-grid">
         <div className="tw-student-work-grid">
-          <LiveSessionsCard c={c} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
-          <WorkCard c={c} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
-          <WorkCard c={c} title="Upcoming works" icon="calendar" items={upcoming} empty="No scheduled works are waiting to open." render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} />} />
-          <WorkCard c={c} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
+          <LiveSessionsCard c={c} dark={dark} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
+          <WorkCard c={c} dark={dark} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
+          <WorkCard c={c} dark={dark} title="Upcoming works" icon="calendar" items={upcoming} empty="No scheduled works are waiting to open." variant="upcoming" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} />} />
+          <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<button onClick={() => nav(`/student/async/${item.quiz_id}`)} style={primary(c)}>Answer Now</button>} />} />
         </div>
         <div className="tw-student-progress-panel" style={{ display: "grid", gap: 16, alignContent: "start", padding: 18, borderRadius: 18, background: c.cardBg2, border: `1px solid ${c.border}` }}>
           <div style={{ color: c.text, fontWeight: 950 }}>Weekly Progress</div>
@@ -227,11 +260,49 @@ function HomePanel({ c, data, nav, setActiveTab, onJoinLive, joiningSession, onA
     <section style={card(c)}>
       <h3 style={{ marginTop: 0, color: c.text }}>Most Recent Completed Sessions</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
-        <CompletedColumn c={c} title="Live Sessions" items={recentLiveTop} type="LIVE" onAnalytics={onAnalytics} />
-        <CompletedColumn c={c} title="Assigned Sessions" items={recentAssignedTop} type="ASSIGNED" onAnalytics={onAnalytics} />
+        <CompletedColumn c={c} title="Live Session" items={recentLiveTop} type="LIVE" onAnalytics={onAnalytics} />
+        <CompletedColumn c={c} title="Assigned Session" items={recentAssignedTop} type="ASSIGNED" onAnalytics={onAnalytics} />
       </div>
     </section>
   </div>;
+}
+
+function AchievementCarousel({ c, dark, achievements }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(achievements.length / 4));
+  const visible = achievements.slice(page * 4, page * 4 + 4);
+  function move(delta) { setPage((current) => Math.min(pageCount - 1, Math.max(0, current + delta))); }
+  return <div className="tw-achievement-carousel">
+    <button type="button" aria-label="Previous achievements" disabled={page === 0} onClick={() => move(-1)} className="tw-achievement-arrow is-left" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
+    <div key={page} className="tw-achievement-page">{visible.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
+    <button type="button" aria-label="Next achievements" disabled={page >= pageCount - 1} onClick={() => move(1)} className="tw-achievement-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
+  </div>;
+}
+
+function AchievementCard({ c, dark, item }) {
+  const palettes = {
+    blue: ["#a9c3ff", "#204aa8"], green: ["#9ee6b6", "#126532"], orange: ["#ffd08a", "#944807"],
+    purple: ["#c8b5ff", "#5b239f"], pink: ["#f8b4d9", "#8f245b"], teal: ["#91e2da", "#0c625b"], yellow: ["#ffe38e", "#8a6200"],
+  };
+  const [lightBg, darkBg] = palettes[item.tone] || palettes.blue;
+  const completeBg = dark ? darkBg : lightBg;
+  const paleBg = dark ? "#17233d" : "#eef1f6";
+  const ink = item.completed ? (dark ? "#fff" : "#101827") : c.textMuted;
+  const progress = Math.min(item.target, item.value);
+  return <article className={`tw-achievement-card${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
+    <div className="tw-achievement-card-title">{item.title}</div>
+    <div className="tw-achievement-progress">{progress} / {item.target} {item.unit}</div>
+    <div className="tw-achievement-track"><span style={{ width: `${Math.min(100, item.value / item.target * 100)}%` }} /></div>
+  </article>;
+}
+
+function AchievementModal({ c, dark, achievements, onClose }) {
+  return <div style={modalBackdrop} onClick={onClose}><section onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(94vw,1040px)", maxHeight: "88vh", overflowY: "auto", position: "relative" }}>
+    <button onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button>
+    <h2 style={{ marginTop: 0, color: c.text }}>Achievements</h2>
+    <p style={{ color: c.textMuted, marginTop: -4 }}>All 20 starter achievements and your current progress.</p>
+    <div className="tw-achievement-modal-grid">{achievements.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
+  </section></div>;
 }
 
 function ClassesPanel({ c, data, onJoinClass, onAnalytics }) {
@@ -239,13 +310,11 @@ function ClassesPanel({ c, data, onJoinClass, onAnalytics }) {
   const assigned = data.recentAssigned || data.recentCompleted || [];
   const live = data.recentLive || [];
   return <div className="container" style={{ display: "grid", gap: 18 }}>
-    <section style={sectionHeader(c)}><div><h2 style={{ marginBottom: 4 }}>Classes</h2></div><button onClick={onJoinClass} style={primary(c)}>+ Join Class</button></section>
-    <section style={card(c)}>
+    <section style={sectionHeader(c)}><div><h2 style={{ marginBottom: 4 }}>Class</h2></div>{classes.length > 0 && <TeacherPressButton tone="blue" onClick={onJoinClass}>Join a Class</TeacherPressButton>}</section>
+    {!classes.length ? <ThinkBotEmptyState c={c} title="It seems you have yet to join a class." actionLabel="Join a Class" onAction={onJoinClass} /> : <section style={card(c)}>
       <h3 style={{ marginTop: 0 }}>Joined Classes</h3>
-      <div style={{ display: "grid", gap: 16 }}>
-        {!classes.length ? <EmptyState c={c} icon="classes" title="No joined classes yet" message="Use a class code to join your teacher's class folder." action={<button onClick={onJoinClass} style={primary(c)}>Join Class</button>} /> : classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}
-      </div>
-    </section>
+      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
+    </section>}
   </div>;
 }
 
@@ -286,28 +355,32 @@ function CompletedSessionCard({ c, item, type, onClick }) {
   </button>;
 }
 
-function LiveSessionsCard({ c, sessions, onJoin, joiningSession }) {
-  const green={bg:c.greenBg,border:c.greenBorder,fg:c.greenFg,accent:"#22c55e"};
-  return <div style={{...workCard(c),background:green.bg,borderColor:green.border}}><div style={{...workTitle(c),color:green.fg}}><TwIcon name="spark" size={18} /> Join live session</div>{!sessions.length ? <div style={{ color: green.fg, fontSize: 13 }}>No live sessions are open right now.</div> : sessions.map((session) => {
-    const status=session.status==="LOBBY"?"Waiting":session.status==="PAUSED"?"Paused":"Started";
-    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background:c.cardBg, border:`1px solid ${green.border}` }}><div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}><span style={{color:green.accent,fontSize:11,fontWeight:950}}>{templateLabel(session.template_type)}</span><span style={{padding:"4px 9px",borderRadius:999,background:green.bg,border:`1px solid ${green.border}`,color:green.fg,fontSize:11,fontWeight:950}}>{status}</span></div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><button disabled={joiningSession === session.session_id} onClick={() => onJoin(session)} style={{ ...primary(c), width: "100%" }}>{joiningSession === session.session_id ? "Joining…" : "Join Now"}</button></div>;
+function studentWorkTone(dark, variant) {
+  const palettes = {
+    live: dark ? { bg: "#14532d", border: "#22c55e", fg: "#ffffff", accent: "#86efac" } : { bg: "#a7f3d0", border: "#16a34a", fg: "#0f172a", accent: "#15803d" },
+    ready: dark ? { bg: "#0f766e", border: "#2dd4bf", fg: "#ffffff", accent: "#99f6e4" } : { bg: "#99f6e4", border: "#0f766e", fg: "#0f172a", accent: "#0f766e" },
+    upcoming: dark ? { bg: "#1e3a8a", border: "#60a5fa", fg: "#ffffff", accent: "#bfdbfe" } : { bg: "#bfdbfe", border: "#2563eb", fg: "#0f172a", accent: "#1d4ed8" },
+    deadline: dark ? { bg: "#9a3412", border: "#fb923c", fg: "#ffffff", accent: "#fed7aa" } : { bg: "#fed7aa", border: "#ea580c", fg: "#0f172a", accent: "#c2410c" },
+  };
+  return palettes[variant] || palettes.upcoming;
+}
+
+function LiveSessionsCard({ c, dark, sessions, onJoin, joiningSession }) {
+  const tone = studentWorkTone(dark, "live");
+  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}><div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name="spark" size={18} /> Join live session</div>{!sessions.length ? <div style={{ color: tone.fg, fontSize: 13 }}>No live sessions are open right now.</div> : sessions.map((session) => {
+    const status = session.status === "LOBBY" ? "Waiting in lobby" : session.status === "PAUSED" ? "Paused" : "Session started";
+    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background: c.cardBg, border: `2px solid ${tone.border}` }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ color: tone.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(session.template_type)}</span><span style={{ padding: "4px 9px", borderRadius: 999, background: tone.bg, border: `1px solid ${tone.border}`, color: tone.fg, fontSize: 11, fontWeight: 950 }}>{status}</span></div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><button disabled={joiningSession === session.session_id} onClick={() => onJoin(session)} style={{ ...primary(c), width: "100%" }}>{joiningSession === session.session_id ? "Joining…" : session.status === "LOBBY" ? "Join Lobby" : "Join Current Question"}</button></div>;
   })}</div>;
 }
 
-function fixedWorkTone(c,variant){
-  if(variant==="ready") return {bg:c.greenBg,border:c.greenBorder,fg:c.greenFg,accent:"#22c55e"};
-  if(variant==="deadline") return {bg:c.yellowBg,border:"#fb923c",fg:c.yellowFg,accent:"#f97316"};
-  return null;
-}
-function WorkCard({ c, title, icon, items, empty: emptyText, render, variant }) {
-  const tone=fixedWorkTone(c,variant);
-  return <div style={{ ...workCard(c), background:tone?.bg||c.cardBg, borderColor:tone?.border||c.border }}><div style={{ ...workTitle(c), color:tone?.fg||c.text }}><TwIcon name={icon} size={18} />{title}</div>{!items.length ? <div style={{ color:tone?.fg||c.textMuted, fontSize:13,lineHeight:1.5 }}>{emptyText}</div> : items.map(render)}</div>;
+function WorkCard({ c, dark, title, icon, items, empty: emptyText, render, variant = "upcoming" }) {
+  const tone = studentWorkTone(dark, variant);
+  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}><div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name={icon} size={18} />{title}</div>{!items.length ? <div style={{ color: tone.fg, fontSize: 13, lineHeight: 1.5 }}>{emptyText}</div> : items.map(render)}</div>;
 }
 
-function WorkItem({ c, item, action, variant }) {
-  const template=templateTone(item.template_type,c); const fixed=fixedWorkTone(c,variant);
-  const tone=fixed||{bg:c.cardBg2,border:template.border,fg:c.textMuted,accent:template.accent};
-  return <div style={{ padding:12,borderRadius:14,background:fixed?c.cardBg:tone.bg,border:`1px solid ${tone.border}` }}><div style={{color:tone.accent,fontSize:11,fontWeight:950}}>{templateLabel(item.template_type)}</div><div style={{color:c.text,fontWeight:950,marginTop:5}}>{item.title}</div><div style={{color:c.textMuted,fontSize:12,lineHeight:1.5,margin:"5px 0 9px"}}>{item.class_name} · {formatAssignmentWindow(item)}</div>{action}</div>;
+function WorkItem({ c, item, action }) {
+  const template = templateTone(item.template_type, c);
+  return <div style={{ padding: 12, borderRadius: 14, background: c.cardBg, border: `2px solid ${template.border}` }}><div style={{ color: template.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(item.template_type)}</div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{item.title}</div><div style={{ color: c.textMuted, fontSize: 12, lineHeight: 1.5, margin: "5px 0 9px" }}>{item.class_name} · {formatAssignmentWindow(item)}</div>{action}</div>;
 }
 
 function StudentAnalyticsModal({ c, target, onClose }) {
@@ -353,7 +426,13 @@ function ProfileModal({ c, profile, setProfile, message, onSubmit, onClose, onUp
 function ProfileSavedOverlay() { return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4} /></div></div>; }
 
 function JoinClassModal({ c, classCode, setClassCode, profile, setProfile, profileStep, countdown, onSubmit, onClose }) {
-  return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...card(c), width: "min(94vw,450px)" }}><h3 style={{ marginTop: 0 }}>Join Class</h3><Field c={c} label="Class code"><input value={classCode} onChange={(e) => setClassCode(e.target.value.toUpperCase())} placeholder="Enter class code" required style={input(c)} /></Field>{profileStep && <div style={{ display: "grid", gap: 10, marginTop: 14 }}><p style={{ color: c.textMuted, fontSize: 13 }}>Complete your student details before joining your first class.</p><input required value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} placeholder="First name" style={input(c)} /><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} placeholder="Last name" style={input(c)} /><input value={profile.middleInitial} onChange={(e) => setProfile({ ...profile, middleInitial: e.target.value })} placeholder="Middle initial (optional)" style={input(c)} /><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} placeholder="Student ID" style={input(c)} /><div style={{ color: c.textMuted, fontSize: 12 }}>Confirm unlocks in {Math.max(0, countdown - 5)}s.</div></div>}<div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}><button type="button" onClick={onClose} style={secondary(c)}>Cancel</button><button disabled={profileStep && countdown > 5} style={{ ...primary(c), opacity: profileStep && countdown > 5 ? .5 : 1 }}>Confirm</button></div></form></div>;
+  return <div style={modalBackdrop} onClick={onClose}><form onSubmit={onSubmit} onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(94vw,620px)", padding: 28 }}>
+    <h2 style={{ marginTop: 0, color: c.text }}>Join a Class</h2>
+    <p style={{ color: c.textMuted, marginTop: -4 }}>Enter the class code provided by your teacher.</p>
+    <Field c={c} label="Class code"><input value={classCode} onChange={(e) => setClassCode(e.target.value.toUpperCase())} placeholder="Enter class code" required style={input(c)} /></Field>
+    {profileStep && <div style={{ display: "grid", gap: 10, marginTop: 16, padding: 16, borderRadius: 16, background: c.cardBg2, border: `1px solid ${c.border}` }}><p style={{ color: c.textMuted, fontSize: 13, margin: 0 }}>Complete your student details before joining your first class.</p><div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}><input required value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} placeholder="First name" style={input(c)} /><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} placeholder="Last name" style={input(c)} /></div><input value={profile.middleInitial} onChange={(e) => setProfile({ ...profile, middleInitial: e.target.value })} placeholder="Middle initial (optional)" style={input(c)} /><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} placeholder="Student ID" style={input(c)} /><div style={{ color: c.textMuted, fontSize: 12 }}>Join unlocks in {Math.max(0, countdown - 5)}s.</div></div>}
+    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 16, marginTop: 22 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="submit" tone="blue" disabled={profileStep && countdown > 5}>{profileStep && countdown > 5 ? "Please wait…" : "Join"}</TeacherPressButton></div>
+  </form></div>;
 }
 
 function BirthDateModal({ c, value, onSelect, onClose }) {
@@ -396,7 +475,7 @@ function formatDateOnly(value) { const date = new Date(`${String(value).slice(0,
 const metricGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginTop: 16 };
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 20, zIndex: 3000 };
 function sidebar(c) { return { width: 220, minWidth: 220, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}`, display: "flex", flexDirection: "column", padding: "0 0 24px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100, transition: "background .3s,border-color .3s" }; }
-function navBtn(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 10, border: 0, background: active ? "#2b6cff" : "transparent", color: active ? "#fff" : c.navColor, fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }; }
+function navBtn(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? "linear-gradient(135deg,#2b6cff,#5b7cff)" : "transparent", boxShadow: active ? "0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18)" : "none", transform: active ? "translateY(-1px)" : "none", color: active ? "#fff" : c.navColor, fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s,box-shadow .18s ease" }; }
 function card(c) { return { background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 18, padding: 18, color: c.text, boxShadow: c.pageBg === "#eef2ff" ? "0 16px 34px rgba(43,108,255,.08)" : "0 16px 34px rgba(0,0,0,.14)" }; }
 function workCard(c) { return { ...card(c), display: "grid", gap: 11, alignContent: "start", minHeight: 170 }; }
 function workTitle(c) { return { display: "flex", alignItems: "center", gap: 9, color: c.text, fontWeight: 950, marginBottom: 3 }; }

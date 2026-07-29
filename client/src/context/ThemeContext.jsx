@@ -6,12 +6,13 @@
 
 
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
 const ThemeContext = createContext({ dark: false, toggleTheme: () => {} });
 
 // Provides the global light/dark theme flag so every page can stay visually consistent.
 export function ThemeProvider({ children }) {
+  const firstThemeRun = useRef(true);
   const [dark, setDark] = useState(() => {
     try {
       const saved = localStorage.getItem("tw_theme");
@@ -20,11 +21,17 @@ export function ThemeProvider({ children }) {
   });
 
   useEffect(() => {
+    if (!firstThemeRun.current) {
+      document.documentElement.classList.add("tw-theme-switching");
+      window.clearTimeout(window.__twThemeTimer);
+      window.__twThemeTimer = window.setTimeout(() => document.documentElement.classList.remove("tw-theme-switching"), 210);
+    }
+    firstThemeRun.current = false;
     try { localStorage.setItem("tw_theme", dark ? "dark" : "light"); } catch {}
     document.body.classList.toggle("light-mode", !dark);
     document.body.classList.toggle("dark-mode", dark);
     document.body.dataset.theme = dark ? "dark" : "light";
-    document.body.style.transition = "background 420ms cubic-bezier(0.22, 1, 0.36, 1), color 420ms cubic-bezier(0.22, 1, 0.36, 1)";
+    document.body.style.transition = "background 145ms ease, color 145ms ease";
     document.body.style.background = dark
       ? "radial-gradient(circle at 12% 8%, rgba(54,92,180,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44,126,205,0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%)"
       : "radial-gradient(circle at 10% 8%, rgba(210,170,90,0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255,224,170,0.30), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%)";

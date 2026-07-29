@@ -21,12 +21,19 @@ const profileSchema = z.object({
   profileImage: z.string().max(5000000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional().nullable(),
 });
 
+const joinProfileSchema = z.object({
+  lastName: z.string().trim().min(1).max(100),
+  firstName: z.string().trim().min(1).max(100),
+  middleInitial: z.string().trim().max(10).optional().nullable(),
+  studentId: z.string().trim().min(1).max(80),
+});
+
 studentRouter.use(requireAuth, requireRole("STUDENT"));
 studentRouter.get("/dashboard", asyncHandler(getStudentDashboard));
 studentRouter.get("/classes", asyncHandler(getStudentClasses));
 studentRouter.post("/profile", validateBody(profileSchema), asyncHandler(upsertProfile));
 studentRouter.delete("/profile/image", asyncHandler(deleteProfileImage));
-studentRouter.post("/classes/join", validateBody(z.object({ classCode: z.string().min(4), profile: profileSchema.optional() })), asyncHandler(joinClass));
+studentRouter.post("/classes/join", validateBody(z.object({ classCode: z.string().trim().min(4).max(20), profile: joinProfileSchema.optional() })), asyncHandler(joinClass));
 studentRouter.post("/live-sessions/:sessionId/join", asyncHandler(joinStudentLiveSession));
 studentRouter.get("/analytics/assigned/:quizId", asyncHandler(getAssignedStudentAnalytics));
 studentRouter.get("/analytics/live/:sessionId", asyncHandler(getLiveStudentAnalytics));

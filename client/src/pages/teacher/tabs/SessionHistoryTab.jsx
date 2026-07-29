@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -129,7 +130,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
         <h2 style={{ marginBottom: 4, color: c.text }}>Session History</h2>
       </section>
 
-      <section style={{ ...card(c), display: "grid", gap: 14 }}>
+      {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gap: 14 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.3fr) repeat(2, minmax(140px, 0.7fr))", gap: 12 }}>
           <input
             value={query}
@@ -148,10 +149,12 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
             <option value="title">Title A–Z</option>
           </select>
         </div>
-      </section>
+      </section>}
 
-      {filtered.length === 0 ? (
-        <div style={card(c)}>No session history matches your current filters yet.</div>
+      {sessions.length === 0 ? (
+        <ThinkBotEmptyState c={c} title="You have not done any sessions yet." />
+      ) : filtered.length === 0 ? (
+        <div style={card(c)}>No session history matches your current filters.</div>
       ) : (
         Object.entries(grouped).map(([group, rows]) => (
           <section key={group} style={{ display: "grid", gap: 12 }}>
@@ -187,14 +190,14 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
                     </div>
 
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button
-                        style={btn(c, true)}
+                      <TeacherPressButton
+                        tone="blue"
                         onClick={() => navigate(isAssignedSession(session)
                           ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}`
                           : `/teacher/analytics/${session.id}`)}
-                      >Open Analytics</button>
-                      <button style={btn(c)} disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</button>
-                      <button style={btn(c)} disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</button>
+                      >Open Analytics</TeacherPressButton>
+                      <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
+                      <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
                     </div>
                   </div>
                 </div>
@@ -211,11 +214,11 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
 function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, navigate }) {
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>History</h2></section>
-    <section style={{ ...card(c), display: "grid", gridTemplateColumns: "minmax(220px,1.3fr) minmax(150px,.7fr)", gap: 12 }}>
+    {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gridTemplateColumns: "minmax(220px,1.3fr) minmax(150px,.7fr)", gap: 12 }}>
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
       <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
-    </section>
-    {!sessions.length ? <div style={card(c)}>No completed Guest Host sessions yet.</div> : sessions.map((session) => {
+    </section>}
+    {!sessions.length ? <ThinkBotEmptyState c={c} title="You have not done any sessions yet." /> : sessions.map((session) => {
       const tone = templateTone(session.template_type, c, false);
       return <div key={session.id} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
@@ -223,7 +226,7 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
           <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(150px,1fr))", gap: 10, marginTop: 14 }}><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
-        <div style={{ marginTop: 14 }}><button style={btn(c, true)} onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</button></div>
+        <div style={{ marginTop: 14 }}><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton></div>
       </div>;
     })}
   </div>;
