@@ -64,6 +64,7 @@ const ReuseSchema = z.object({
 });
 
 const AssignSchema = z.object({
+  classId: z.coerce.number().int().positive(),
   availableFrom: z.string().min(1),
   availableUntil: z.string().min(1),
 });

@@ -10,7 +10,7 @@ import { useColors, useTheme } from "../../../context/ThemeContext";
 import { IconBubble, TwIcon } from "../../../components/TwUI";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateTone, templateCardChrome } from "../../../lib/templatePalette";
-import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import { TeacherPressButton } from "../TeacherUI";
 
 const ALL_TEMPLATES = [
   { value: "MCQ", label: "Multiple Choice", icon: "mcq", tone: "blue" },
@@ -21,21 +21,6 @@ const ALL_TEMPLATES = [
   { value: "THINK_SPELL", label: "Think and Spell", icon: "spell", tone: "purple" },
 ];
 
-function buildFolderPathMap(rows) {
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  const pathMap = new Map();
-  function getPath(id) {
-    if (pathMap.has(id)) return pathMap.get(id);
-    const current = byId.get(id);
-    if (!current) return "";
-    const parentPath = current.parent_id ? getPath(current.parent_id) : "";
-    const value = parentPath ? `${parentPath} / ${current.name}` : current.name;
-    pathMap.set(id, value);
-    return value;
-  }
-  rows.forEach((row) => getPath(row.id));
-  return pathMap;
-}
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -50,41 +35,28 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
   const navigate = useNavigate();
   const c = useColors();
   const { dark } = useTheme();
-  const [folders, setFolders] = useState([]);
   const [recentQuizzes, setRecentQuizzes] = useState([]);
   const [form, setForm] = useState({ title: "", category: "K12", templateType: "MCQ", classId: null });
   const [msg, setMsg] = useState("");
-  const [loadingFolders, setLoadingFolders] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let ignore = false;
     (async () => {
       try {
-        const [folderRes, quizRes] = await Promise.all([api.get("/classes"), api.get("/quizzes")]);
-        if (!ignore) {
-          setFolders(folderRes.data || []);
-          setRecentQuizzes((quizRes.data || []).slice(0, 6));
-        }
+        const { data } = await api.get("/quizzes");
+        if (!ignore) setRecentQuizzes((data || []).slice(0, 3));
       } catch {
-        if (!ignore) { setFolders([]); setRecentQuizzes([]); }
-      } finally {
-        if (!ignore) setLoadingFolders(false);
+        if (!ignore) setRecentQuizzes([]);
       }
     })();
     return () => { ignore = true; };
   }, []);
 
-  const folderOptions = useMemo(() => {
-    const rows = folders || [];
-    const pathMap = buildFolderPathMap(rows);
-    return rows.map((row) => ({ ...row, pathLabel: pathMap.get(row.id) || row.name })).sort((a, b) => a.pathLabel.localeCompare(b.pathLabel));
-  }, [folders]);
-  const hasFolders = folderOptions.length > 0;
   const recentTemplates = useMemo(() => {
     const byType = new Map();
     for (const quiz of recentQuizzes) if (!byType.has(quiz.template_type)) byType.set(quiz.template_type, quiz);
-    return Array.from(byType.values()).slice(0, 6);
+    return Array.from(byType.values()).slice(0, 3);
   }, [recentQuizzes]);
 
   function patch(next) { setForm((prev) => ({ ...prev, ...next })); }
@@ -92,7 +64,6 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setMsg("");
-    if (!form.classId) return setMsg("Choose a class for this quiz first.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
@@ -113,13 +84,6 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
     }
   }
 
-  if (!loadingFolders && !hasFolders) {
-    return <div className="container" style={{ display: "grid", gap: 18 }}>
-      <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
-      <ThinkBotEmptyState c={c} title="You have not made any classes yet." actionLabel="Go to Class" onAction={() => setActiveTab?.("classes")} />
-    </div>;
-  }
-
   return <div className="container" style={{ display: "grid", gap: 20 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
 
@@ -130,22 +94,10 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
           <input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required style={inputStyle(c)} />
         </div>
 
-        <div className="tw-teacher-create-two-col">
-          <div>
-            <label style={labelStyle(c)}>Category</label>
-            <div style={{ display: "flex", gap: 10 }}>
-              {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => patch({ category: cat })} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle(c)}>Class</label>
-            <div style={{ position: "relative" }}>
-              <select value={form.classId ?? ""} disabled={loadingFolders} onChange={(e) => patch({ classId: e.target.value ? Number(e.target.value) : null })} style={{ ...inputStyle(c), appearance: "none", paddingRight: 40 }}>
-                <option value="">{loadingFolders ? "Loading classes..." : "Select a class"}</option>
-                {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.pathLabel}</option>)}
-              </select>
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: c.textMuted }}><TwIcon name="folder" size={16} /></span>
-            </div>
+        <div>
+          <label style={labelStyle(c)}>Category</label>
+          <div style={{ display: "flex", gap: 10, maxWidth: 560 }}>
+            {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => patch({ category: cat })} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
           </div>
         </div>
 
@@ -191,7 +143,7 @@ function templateInk(value, dark) {
     TYPE_ANSWER: dark ? "#ede9fe" : "#5b21b6",
     MATCHING: dark ? "#ffedd5" : "#9a4d00",
     GUESS_WORD_4PICS: dark ? "#dcfce7" : "#166534",
-    THINK_SPELL: dark ? "#f3e8ff" : "#6b21a8",
+    THINK_SPELL: dark ? "#bae6fd" : "#0369a1",
   };
   return palette[normalized] || (dark ? "#f8fafc" : "#0f172a");
 }

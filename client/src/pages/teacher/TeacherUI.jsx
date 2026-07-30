@@ -53,7 +53,7 @@ export function TeacherActionModal({ c, icon = "alert", title, message, tone = "
       <div className="tw-admin-logout-backdrop" onClick={onClose} />
       <div className="tw-admin-logout-layer" onClick={onClose}>
         <section className="tw-admin-logout-modal tw-teacher-action-modal" onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
-          <header><TwIcon name={icon} size={24} /><strong>{title}</strong></header>
+          <header><TwIcon name={icon} size={58} /><strong>{title}</strong></header>
           {message && <p style={{ color: c.textMuted }}>{message}</p>}
           {children}
           <div className="tw-admin-logout-actions tw-teacher-action-actions">

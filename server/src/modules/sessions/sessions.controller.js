@@ -68,7 +68,7 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
-  const { quizId, joinMode = "SOLO", maxParticipants = null } = req.body;
+  const { quizId, joinMode = "SOLO", classId = null } = req.body;
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC" && joinMode === "GROUP") {
     return res.status(403).json({ message: "Group mode is available on the Institution plan." });
@@ -99,17 +99,25 @@ export async function createSession(req, res) {
     code = makeJoinCode();
   }
 
-  const snapshot = await buildQuestionsSnapshot(quizId, quiz.randomize_questions, quiz.shuffle_answers);
+  let selectedClassId = null;
+  if (req.user.role !== "GUEST_HOST") {
+    if (!classId) return res.status(400).json({ message: "Choose a class before starting the live session." });
+    const [[ownedClass]] = await pool.query(
+      `SELECT id FROM classes WHERE id=:cid AND teacher_id=:tid AND deleted_at IS NULL LIMIT 1`,
+      { cid: classId, tid: req.user.sub }
+    );
+    if (!ownedClass) return res.status(400).json({ message: "The selected class is not available." });
+    selectedClassId = Number(ownedClass.id);
+  }
 
-  const requestedCap = Number(maxParticipants || 0) > 0 ? Number(maxParticipants) : null;
-  const maxCap = plan.code === "BASIC"
-    ? Math.min(requestedCap || BASIC_LIMITS.live.maxStudents, BASIC_LIMITS.live.maxStudents)
-    : requestedCap;
+  const snapshot = await buildQuestionsSnapshot(quizId, quiz.randomize_questions, quiz.shuffle_answers);
+  // Capacity is now automatic instead of being exposed as a teacher-facing field.
+  const maxCap = plan.code === "BASIC" ? BASIC_LIMITS.live.maxStudents : null;
 
   const [r] = await pool.query(
     `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json)
      VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot)`,
-    { qid: quizId, tid: req.user.sub, cid: quiz.class_id ?? null, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot) }
+    { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot) }
   );
 
   await pool.query(
@@ -123,9 +131,10 @@ export async function createSession(req, res) {
 export async function listActiveSessions(req, res) {
   const [rows] = await pool.query(
     `SELECT s.id, s.quiz_id, s.join_code, s.join_mode, s.max_participants, s.status, s.class_id, s.created_at, s.started_at,
-            q.title AS quiz_title
+            q.title AS quiz_title, c.name AS class_name
      FROM sessions s
      JOIN quizzes q ON q.id = s.quiz_id
+     LEFT JOIN classes c ON c.id = s.class_id
      WHERE s.teacher_id=:tid AND s.status IN ('LOBBY','LIVE','PAUSED')
      ORDER BY s.id DESC`,
     { tid: req.user.sub }

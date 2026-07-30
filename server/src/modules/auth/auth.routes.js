@@ -52,6 +52,34 @@ const LoginSchema  = z.object({
   loginPortal: z.enum(["TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"]).optional(),
 });
 
+const GuestTokenSchema = z.object({
+  guestKey: z.string().regex(/^[a-f0-9]{64}$/i),
+});
+
+function persistentGuestEmail(guestKey) {
+  const digest = crypto.createHmac("sha256", env.JWT_SECRET).update(guestKey).digest("hex").slice(0, 48);
+  return `guest_${digest}@thinkwave.guest`;
+}
+
+async function findLegacyGuestFromBearer(req) {
+  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET);
+    if (payload.role !== "GUEST_HOST") return null;
+    const [[user]] = await pool.query(
+      `SELECT id, role, token_version, last_name
+       FROM users
+       WHERE id=:id AND role='GUEST_HOST' AND is_active=1 AND deleted_at IS NULL
+       LIMIT 1`,
+      { id: payload.sub }
+    );
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+
 authRouter.get("/setup-status", async (_req, res) => {
   try {
     const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM users WHERE role='SUPERADMIN' AND deleted_at IS NULL`);
@@ -59,26 +87,72 @@ authRouter.get("/setup-status", async (_req, res) => {
   } catch { res.status(500).json({ message: "Server error" }); }
 });
 
-authRouter.post("/guest-token", rateLimit({ windowMs: 60 * 60 * 1000, max: 10 }), asyncHandler(async (_req, res) => {
-  try {
-    const rand = crypto.randomBytes(12).toString("hex");
-    const guestEmail = `guest_${rand}@thinkwave.guest`;
-    const [r] = await pool.query(
-      `INSERT INTO users (role, email, password_hash, first_name, last_name,
-                          is_verified, is_active, deleted_at)
-       VALUES ('GUEST_HOST', :email, 'GUEST_NO_PASSWORD', 'Guest', :guestId, 1, 1, NULL)`,
-      { email: guestEmail, guestId: `G-${rand.slice(0,8).toUpperCase()}` }
-    );
-    const [[createdGuest]] = await pool.query(
-      `SELECT id, role, token_version FROM users WHERE id=:id LIMIT 1`,
-      { id: r.insertId }
-    );
-    if (!createdGuest || createdGuest.role !== "GUEST_HOST") {
-      return res.status(500).json({ message: "Guest Host role is not enabled in the database. Re-import the current server/schema.sql." });
+authRouter.post("/guest-token", rateLimit({ windowMs: 60 * 60 * 1000, max: 60, keyGenerator: (req) => `${req.ip || req.socket?.remoteAddress || "unknown"}:${String(req.body?.guestKey || "").slice(0, 16)}` }), validateBody(GuestTokenSchema), asyncHandler(async (req, res) => {
+  const guestEmail = persistentGuestEmail(req.body.guestKey);
+  let [[guest]] = await pool.query(
+    `SELECT id, role, token_version, last_name
+     FROM users
+     WHERE email=:email AND role='GUEST_HOST'
+     LIMIT 1`,
+    { email: guestEmail }
+  );
+
+  // Preserve quizzes made before Revision 9.1 by binding the currently valid
+  // legacy Guest Host token to the browser's new persistent guest key.
+  if (!guest) {
+    const legacyGuest = await findLegacyGuestFromBearer(req);
+    if (legacyGuest) {
+      try {
+        await pool.query(
+          `UPDATE users
+           SET email=:email, is_active=1, deleted_at=NULL
+           WHERE id=:id AND role='GUEST_HOST'`,
+          { email: guestEmail, id: legacyGuest.id }
+        );
+        guest = legacyGuest;
+      } catch (error) {
+        if (error?.code !== "ER_DUP_ENTRY") throw error;
+      }
     }
-    const token = jwt.sign({ sub: createdGuest.id, role: createdGuest.role, ver: Number(createdGuest.token_version || 0) }, env.JWT_SECRET, { expiresIn: "2h" });
-    res.json({ token });
-  } catch (e) { console.error(e); res.status(500).json({ message: "Could not create guest session." }); }
+  }
+
+  if (!guest) {
+    try {
+      const guestId = `G-${crypto.createHash("sha256").update(req.body.guestKey).digest("hex").slice(0, 8).toUpperCase()}`;
+      const [created] = await pool.query(
+        `INSERT INTO users (role, email, password_hash, first_name, last_name,
+                            is_verified, is_active, deleted_at)
+         VALUES ('GUEST_HOST', :email, 'GUEST_NO_PASSWORD', 'Guest', :guestId, 1, 1, NULL)`,
+        { email: guestEmail, guestId }
+      );
+      [[guest]] = await pool.query(
+        `SELECT id, role, token_version, last_name FROM users WHERE id=:id LIMIT 1`,
+        { id: created.insertId }
+      );
+    } catch (error) {
+      if (error?.code !== "ER_DUP_ENTRY") throw error;
+      [[guest]] = await pool.query(
+        `SELECT id, role, token_version, last_name
+         FROM users WHERE email=:email AND role='GUEST_HOST' LIMIT 1`,
+        { email: guestEmail }
+      );
+    }
+  }
+
+  if (!guest || guest.role !== "GUEST_HOST") {
+    return res.status(500).json({ message: "Guest Host role is not enabled in the database. Re-import the current server/schema.sql." });
+  }
+
+  await pool.query(
+    `UPDATE users SET is_active=1, deleted_at=NULL WHERE id=:id AND role='GUEST_HOST'`,
+    { id: guest.id }
+  );
+  const token = jwt.sign(
+    { sub: guest.id, role: "GUEST_HOST", ver: Number(guest.token_version || 0) },
+    env.JWT_SECRET,
+    { expiresIn: "8h" }
+  );
+  res.json({ token, guestId: guest.last_name || null });
 }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });

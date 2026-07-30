@@ -18,8 +18,8 @@ function otpClientPayload(otpResult) {
   const sent = !!otpResult?.delivery?.sent;
   const payload = { emailSent: sent };
   if (!sent) {
-    payload.deliveryWarning = otpResult?.delivery?.reason === "MAILGUN_NOT_CONFIGURED"
-      ? "Email delivery is not configured on the server. Configure MAILGUN_API_KEY/MAILGUN_DOMAIN in server/.env to receive OTP emails."
+    payload.deliveryWarning = otpResult?.delivery?.reason === "SMTP_NOT_CONFIGURED"
+      ? "Email delivery is not configured on the server. Configure Gmail/SMTP in server/.env to receive OTP emails."
       : "The OTP email could not be sent. Check the server email settings and logs.";
   }
   return payload;

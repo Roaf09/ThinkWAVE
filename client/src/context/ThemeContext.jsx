@@ -32,9 +32,9 @@ export function ThemeProvider({ children }) {
     document.body.classList.toggle("dark-mode", dark);
     document.body.dataset.theme = dark ? "dark" : "light";
     document.body.style.transition = "background 145ms ease, color 145ms ease";
-    document.body.style.background = dark
-      ? "radial-gradient(circle at 12% 8%, rgba(54,92,180,0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44,126,205,0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%)"
-      : "radial-gradient(circle at 10% 8%, rgba(210,170,90,0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255,224,170,0.30), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%)";
+    // Keep the browser canvas flat. Individual pages own their visual backgrounds,
+    // so a short page can never reveal the old purple system gradient underneath.
+    document.body.style.background = dark ? "#07142b" : "#fbf1dd";
     document.body.style.color = dark ? "#e7e9ee" : "#0f172a";
   }, [dark]);
 

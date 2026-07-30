@@ -8,11 +8,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
-import ActionDialog, { primaryBtn, secondaryBtn } from "../../../components/ActionDialog";
 import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { TwIcon } from "../../../components/TwUI";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
-import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -168,8 +167,8 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 
         <section style={card(c, { padding: 12 })}>
           <div className="tw-teacher-bank-toggle">
-            <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected' : ''} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
-            <TeacherPressButton tone="blue" className={view === 'question' ? 'is-selected' : ''} onClick={() => setView('question')}>Question Bank</TeacherPressButton>
+            <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected is-muted-selected' : ''} disabled={view === 'quiz'} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
+            <TeacherPressButton tone="blue" className={view === 'question' ? 'is-selected is-muted-selected' : ''} disabled={view === 'question'} onClick={() => setView('question')}>Question Bank</TeacherPressButton>
           </div>
         </section>
 
@@ -209,9 +208,9 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
         {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
       </div>
 
-      {modal?.type === 'deleteQuiz' && <ActionDialog tone='red' icon='🗑' title='Delete quiz from Quiz Bank?' message={<><b style={{ color: c.text }}>{modal.quiz.title}</b> will be permanently removed.</>} onClose={() => setModal(null)} actions={<><button onClick={() => setModal(null)} style={secondaryBtn(c, dark)}>Cancel</button><button onClick={() => deleteQuiz(modal.quiz)} style={primaryBtn({ bg: c.redBg, fg: c.redFg, border: c.redBorder })}>Delete</button></>} />}
-      {modal?.type === 'reuseQuiz' && <ActionDialog tone='blue' icon='♻️' title='Send quiz back to Live Sessions?' message={<><b style={{ color: c.text }}>{modal.quiz.title}</b> will return to Live Sessions using the folder you selected.</>} onClose={() => setModal(null)} actions={<><button onClick={() => setModal(null)} style={secondaryBtn(c, dark)}>Cancel</button><button onClick={() => reuseQuiz(modal.quiz, modal.classId)} style={primaryBtn({ bg: `${c.accent}18`, fg: c.accent, border: c.accent })}>Reuse Quiz</button></>} />}
-      {modal?.type === 'deleteQuestion' && <ActionDialog tone='red' icon='🗑' title='Remove question?' message='This saved question will be removed from the question bank.' onClose={() => setModal(null)} actions={<><button onClick={() => setModal(null)} style={secondaryBtn(c, dark)}>Cancel</button><button onClick={() => removeQuestion(modal.question.id)} style={primaryBtn({ bg: c.redBg, fg: c.redFg, border: c.redBorder })}>Remove question</button></>} />}
+      {modal?.type === 'deleteQuiz' && <TeacherActionModal c={c} tone='red' icon='trash' title='Delete quiz from Quiz Bank?' message={`${modal.quiz.title} will be permanently removed.`} confirmLabel='Delete' textCancel onClose={() => setModal(null)} onConfirm={() => deleteQuiz(modal.quiz)} />}
+      {modal?.type === 'reuseQuiz' && <TeacherActionModal c={c} tone='blue' icon='history' title='Send quiz back to Live Sessions?' message={`${modal.quiz.title} will return to Live Sessions using the folder you selected.`} confirmLabel='Reuse Quiz' textCancel onClose={() => setModal(null)} onConfirm={() => reuseQuiz(modal.quiz, modal.classId)} />}
+      {modal?.type === 'deleteQuestion' && <TeacherActionModal c={c} tone='red' icon='trash' title='Remove question?' message='This saved question will be removed from the question bank.' confirmLabel='Remove question' textCancel onClose={() => setModal(null)} onConfirm={() => removeQuestion(modal.question.id)} />}
     </>
   );
 }
@@ -222,6 +221,12 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
   const currentFolderLabel = folderOptions.find((folder) => Number(folder.id) === Number(reuseFolderId))?.pathLabel || folderLabel;
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const close = (event) => { if (!event.target.closest(`[data-bank-more="${quiz.id}"]`)) setMoreOpen(false); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [moreOpen, quiz.id]);
   return (
     <div style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false) }}>
       <div style={{ display: 'grid', gap: 12 }}>
@@ -243,14 +248,14 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
             </select>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button onClick={onPreview} style={btn(c)}>Preview</button>
-            <button onClick={() => onReuse(reuseFolderId)} style={btn(c, true)} disabled={!reuseFolderId}>Reuse</button>
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setMoreOpen((v) => !v)} style={btn(c)}>More ▾</button>
+            <button onClick={() => { setMoreOpen(false); onPreview(); }} className="tw-analytics-text-link" style={{ color: c.accent }}>Preview</button>
+            <TeacherPressButton tone="blue" onClick={() => onReuse(reuseFolderId)} disabled={!reuseFolderId}>Reuse</TeacherPressButton>
+            <div data-bank-more={quiz.id} style={{ position: 'relative' }}>
+              <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((v) => !v)} className="tw-bank-more-button">⋮</button>
               {moreOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 200, zIndex: 20, ...card(c, { padding: 8 }) }}>
-                  <button onClick={() => navigate(`/teacher/quizzes/${quiz.id}/builder`)} style={menuBtn(c)}>Edit</button>
-                  <button onClick={onDelete} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 200, zIndex: 1200, ...card(c, { padding: 8, boxShadow: '0 22px 50px rgba(15,23,42,.24)' }) }}>
+                  <button onClick={() => { setMoreOpen(false); navigate(`/teacher/quizzes/${quiz.id}/builder`); }} style={menuBtn(c)}>Edit</button>
+                  <button onClick={() => { setMoreOpen(false); onDelete(); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
                 </div>
               )}
             </div>

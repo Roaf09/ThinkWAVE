@@ -229,22 +229,26 @@ export async function duplicateQuiz(req, res) {
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
   const teacherId = req.user.sub;
-  const { availableFrom, availableUntil } = req.body;
+  const { classId, availableFrom, availableUntil } = req.body;
 
   const [[quiz]] = await pool.query(
     `SELECT * FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
     { id: quizId, tid: teacherId }
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found." });
-  if (!quiz.class_id) return res.status(400).json({ message: "Assign this quiz to a class folder first." });
   if (!availableFrom || !availableUntil) return res.status(400).json({ message: "Start and end time are required." });
+  const [[ownedClass]] = await pool.query(
+    `SELECT id FROM classes WHERE id=:cid AND teacher_id=:tid AND deleted_at IS NULL LIMIT 1`,
+    { cid: classId, tid: teacherId }
+  );
+  if (!ownedClass) return res.status(400).json({ message: "Choose an available class for this assignment." });
 
   const [created] = await pool.query(
     `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
      VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
     {
       tid: teacherId,
-      cid: quiz.class_id,
+      cid: Number(ownedClass.id),
       sourceId: quizId,
       title: quiz.title,
       cat: quiz.category,

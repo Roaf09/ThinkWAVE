@@ -164,7 +164,7 @@ export default function HomeTab({ setActiveTab }) {
               <div>
                 <div style={{ fontWeight: 950, fontSize: 19, color: c.text }}>Teacher overview</div>
                 {teacherInstitution ? (
-                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: dark ? "#bfdbfe" : "#1d4ed8", display:"inline-flex", transition:"color .16s ease" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
+                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: dark ? "#ffffff" : "#000000", display:"inline-flex", transition:"color .16s ease" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
                 ) : (
                   <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} style={{ border: 0, background: "transparent", color: c.accent, fontWeight: 950, cursor: "pointer", padding: 0 }}>Join.</button></div>
                 )}
@@ -208,7 +208,7 @@ export default function HomeTab({ setActiveTab }) {
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} setActiveTab={setActiveTab} />)}
+                {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} />)}
               </div>
             )}
           </div>
@@ -237,7 +237,7 @@ export default function HomeTab({ setActiveTab }) {
   );
 }
 
-function SessionCard({ session, analytics, c, navigate, setActiveTab }) {
+function SessionCard({ session, analytics, c, navigate }) {
   const tone = templateTone(session.template_type, c, false);
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
   return (
@@ -258,7 +258,7 @@ function SessionCard({ session, analytics, c, navigate, setActiveTab }) {
         <div style={{ color: c.textMuted, fontSize: 13 }}>
           {session.question_count || 0} questions · {assigned ? `${session.avg_score ?? 0} average score` : analytics?.questions?.length ? `${Math.round(Number(analytics.questions[0]?.pct_correct || 0))}% correct on the first tracked item` : "Analytics ready to open"}
         </div>
-        <TeacherPressButton tone="blue" onClick={() => assigned ? setActiveTab?.("history") : navigate(`/teacher/analytics/${session.id}`)}>{assigned ? "Open History" : "Open Analytics"}</TeacherPressButton>
+        <button type="button" className="tw-analytics-text-link" onClick={() => navigate(assigned ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}` : `/teacher/analytics/${session.id}`)}>Open Analytics</button>
       </div>
     </div>
   );

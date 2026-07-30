@@ -2,7 +2,7 @@ import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateLabel } from "../../../lib/templatePalette";
 
 export function normalizeSemanticText(value) {
-  const stopWords = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in", "is", "it", "its", "of", "on", "or", "that", "the", "these", "this", "to", "was", "were", "what", "which", "who", "whom", "with"]);
+  const stopWords = new Set(["a", "an", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in", "is", "it", "its", "of", "on", "that", "the", "these", "this", "to", "was", "were", "what", "which", "who", "whom", "with"]);
   return String(value || "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -17,13 +17,27 @@ export function similarity(a, b) {
   const wordsA = normalizeSemanticText(a);
   const wordsB = normalizeSemanticText(b);
   if (wordsA.length === 0 || wordsB.length === 0) return 0;
+
   const setA = new Set(wordsA);
   const setB = new Set(wordsB);
-  const intersection = [...setA].filter((w) => setB.has(w)).length;
+  const intersection = [...setA].filter((word) => setB.has(word)).length;
   const union = new Set([...setA, ...setB]).size || 1;
-  const containment = intersection / Math.min(setA.size, setB.size);
+  const minSize = Math.max(1, Math.min(setA.size, setB.size));
+  const maxSize = Math.max(setA.size, setB.size, 1);
+
   const jaccard = intersection / union;
-  return Math.max(jaccard, containment * 0.9);
+  const dice = (2 * intersection) / Math.max(1, setA.size + setB.size);
+  const containment = intersection / minSize;
+  const lengthRatio = minSize / maxSize;
+  const unmatchedRatio = (union - intersection) / union;
+
+  // Shared words matter, but additional or missing words reduce the score.
+  // This prevents a short question from being marked duplicate merely because
+  // all of its words also appear inside a much longer, meaningfully different one.
+  const lexicalScore = (jaccard * 0.5) + (dice * 0.3) + (containment * 0.2);
+  const lengthPenalty = 0.65 + (lengthRatio * 0.35);
+  const differencePenalty = 1 - (unmatchedRatio * 0.35);
+  return Math.max(0, Math.min(1, lexicalScore * lengthPenalty * differencePenalty));
 }
 
 export function findDuplicates(questions) {
@@ -31,7 +45,7 @@ export function findDuplicates(questions) {
   for (let i = 0; i < questions.length; i++) {
     for (let j = i + 1; j < questions.length; j++) {
       const score = similarity(questions[i].prompt || "", questions[j].prompt || "");
-      if (score >= 0.7) dupes.push({ i: i + 1, j: j + 1, score: Math.round(score * 100) });
+      if (score >= 0.58) dupes.push({ i: i + 1, j: j + 1, score: Math.round(score * 100) });
     }
   }
   return dupes;
@@ -85,7 +99,7 @@ export function defaultConfig(t, c) {
       return {
         colA: [{ text: "", image: "" }],
         colB: [{ text: "", image: "" }],
-        dummyB: [{ text: "", image: "" }], // Revision 1: matching requires at least one dummy answer.
+        dummyB: [],
         promptImage: "",
         showPromptImage: false,
         voiceRecord: false,
@@ -223,7 +237,7 @@ export function normalizeMatchingPayload(config, correct) {
   const pairedB = colA.length ? colA.map((_, index) => rawB[pairMap.get(index)] || rawB[index] || { text: "", image: "" }) : rawB;
   const dummyB = Array.isArray(cfg.dummyB) ? cfg.dummyB.map((item) => ({ text: item?.text || "", image: item?.image || "" })) : rawB.slice(colA.length);
   return {
-    config: { ...cfg, colA, colB: [...pairedB, ...dummyB], dummyB: dummyB.length ? dummyB : [{ text: "", image: "" }] },
+    config: { ...cfg, colA, colB: [...pairedB, ...dummyB], dummyB },
     correct: { ...cor, pairs: colA.map((_, i) => ({ aIndex: i, bIndex: i })) },
   };
 }
@@ -244,7 +258,7 @@ export function validateQuestion(q, templateType) {
     if (isModifiedMcq && opts.some((opt) => !trimText(opt?.image))) issues.push("modified MCQ needs an image for all 4 choices");
     if (!isModifiedMcq && opts.some((opt) => !choiceHasContent(opt))) issues.push("one or more choices are empty");
     if (opts.some((opt) => trimText(opt?.text).length > 255)) issues.push("choices must be 255 characters or fewer");
-    if (!isModifiedMcq && opts.filter(choiceHasContent).length < 2) issues.push("needs at least 2 completed choices");
+    if (!isModifiedMcq && opts.filter(choiceHasContent).length < 3) issues.push("needs at least 3 completed choices");
     if (!correctChoices.length || correctChoices.some((choice) => !opts.some((opt) => choiceMatchesValue(opt, choice)))) issues.push("correct answer is not selected");
     if (cfg.answerMode === "TWO" && correctChoices.length !== 2) issues.push("two-answer mode needs exactly 2 correct answers");
     if (hasDuplicateRows(opts)) issues.push("choices must be unique — remove duplicate options");
@@ -305,8 +319,8 @@ export function validateQuestion(q, templateType) {
     const dummyB = Array.isArray(cfg.dummyB) ? cfg.dummyB : colB.slice(colA.length);
     const pairs = Array.isArray(cor.pairs) ? cor.pairs : [];
     const usedB = new Set();
-    if (colA.length === 0 || colB.length < colA.length + 1) issues.push("matching needs all pairs plus at least one dummy answer");
-    if (dummyB.length < 1 || dummyB.length > 2) issues.push("matching dummy answers must be minimum 1 and maximum 2");
+    if (colA.length === 0 || colB.length < colA.length) issues.push("matching needs a completed answer for every pair");
+    if (dummyB.length > 2) issues.push("matching supports a maximum of 2 dummy answers");
     if (colA.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column A items are empty");
     if (colB.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column B items are empty");
     if ([...colA, ...colB].some((item) => trimText(item?.text).length > 255)) issues.push("matching labels must be 255 characters or fewer");

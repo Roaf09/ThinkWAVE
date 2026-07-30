@@ -122,7 +122,7 @@ export default function TeacherDashboard() {
         </div>
       </aside>
 
-      <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
+      <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
         <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
       </main>
 

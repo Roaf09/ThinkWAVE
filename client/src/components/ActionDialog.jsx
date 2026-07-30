@@ -7,13 +7,31 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
+import { TwIcon } from "./TwUI";
 
 const TONES = {
-  red:   { icon: "🗑", lightTint: "rgba(252,165,165,0.45)", darkTint: "rgba(127,29,29,0.32)" },
-  yellow:{ icon: "⚠️", lightTint: "rgba(253,224,71,0.35)", darkTint: "rgba(120,53,15,0.32)" },
-  blue:  { icon: "ℹ️", lightTint: "rgba(147,197,253,0.35)", darkTint: "rgba(43,108,255,0.28)" },
-  green: { icon: "✓",  lightTint: "rgba(134,239,172,0.35)", darkTint: "rgba(20,83,45,0.32)" },
+  red:   { icon: "trash", lightTint: "rgba(252,165,165,0.45)", darkTint: "rgba(127,29,29,0.32)" },
+  yellow:{ icon: "warning", lightTint: "rgba(253,224,71,0.35)", darkTint: "rgba(120,53,15,0.32)" },
+  blue:  { icon: "alert", lightTint: "rgba(147,197,253,0.35)", darkTint: "rgba(43,108,255,0.28)" },
+  green: { icon: "check",  lightTint: "rgba(134,239,172,0.35)", darkTint: "rgba(20,83,45,0.32)" },
 };
+
+const ICON_ALIASES = {
+  "🗑": "trash", "🗑️": "trash", trash: "trash", delete: "trash",
+  "⚠": "warning", "⚠️": "warning", warning: "warning",
+  "✓": "check", check: "check", success: "check",
+  "🚀": "spark", publish: "spark", spark: "spark",
+  "📚": "bank", bank: "bank",
+  "ℹ": "alert", "ℹ️": "alert", info: "alert", alert: "alert",
+  plus: "plus", history: "history", logout: "logout", calendar: "calendar",
+};
+
+function DialogIcon({ icon, fallback }) {
+  if (React.isValidElement(icon)) return icon;
+  const raw = String(icon || fallback || "alert");
+  const name = ICON_ALIASES[raw] || raw;
+  return <TwIcon name={name} size={48} strokeWidth={2.7} />;
+}
 
 // Reusable modal for confirmations, warnings, and success/error notices across the app.
 export default function ActionDialog({
@@ -102,8 +120,8 @@ export default function ActionDialog({
           }}
         >
           <div style={{ padding: "28px 30px 18px", background: dark ? `linear-gradient(180deg, ${toneConfig.darkTint}, transparent)` : `linear-gradient(180deg, ${toneConfig.lightTint}, transparent)` }}>
-            <div style={{ width: 60, height: 60, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", background: toneConfig.bg, color: toneConfig.fg, fontSize: 28, marginBottom: 18, border: `1px solid ${toneConfig.border}` }}>
-              {icon || toneConfig.icon}
+            <div style={{ width: 76, height: 76, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: toneConfig.bg, color: toneConfig.fg, marginBottom: 16, border: `1px solid ${toneConfig.border}` }}>
+              <DialogIcon icon={icon} fallback={toneConfig.icon} />
             </div>
             {title && <h3 style={{ margin: 0, color: c.text, fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>{title}</h3>}
             {message !== undefined && (

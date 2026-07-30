@@ -228,7 +228,6 @@ export default function ClassesTab({ setActiveTab }) {
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
           <div style={{ color: c.text, fontWeight: 900 }}>{selectedFolderId ? current?.name || "Folder" : "Folders"}</div>
-          {selectedFolderId && <button onClick={() => setSelectedFolderId(current?.parent_id || null)} style={btn(c)}>Back</button>}
         </div>
 
         {loading ? <div style={{ color: c.textMuted }}>Loading folders…</div> : (
@@ -306,7 +305,7 @@ function FolderCard({ folder, c, menuFor, setMenuFor, onOpen, onRename, onDelete
       <span style={{ color: c.accent, display: "inline-flex" }}><TwIcon name="folder" size={24} /></span>
       <span title={folder.name} style={{ fontWeight: 900, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 34 }}>{folder.name}</span>
     </button>
-    <button onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : folder.id); }} style={{ position: "absolute", right: 8, top: 8, ...iconBtn(c) }}>⋮</button>
+    <button onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : folder.id); }} style={{ position: "absolute", right: 8, top: 8, ...iconBtn(c), border: "none", background: "transparent" }}>⋮</button>
     {open && <div style={{ position: "absolute", right: 8, top: 44, width: 180, zIndex: 10, ...card(c, { padding: 8 }) }}>
       <button onClick={onRename} style={menuBtn(c)}>Rename</button>
       <button onClick={onDuplicate} style={menuBtn(c)}>Duplicate</button>
@@ -331,7 +330,7 @@ function FolderModal({ c, title, value, setValue, onSubmit, onClose, confirmLabe
 }
 
 function btn(c, primary = false) { return { padding: "9px 13px", borderRadius: 12, border: `1px solid ${primary ? c.accent : c.border}`, background: primary ? c.accent : c.cardBg2, color: primary ? "#fff" : c.text, fontWeight: 900, fontSize: 13, cursor: "pointer" }; }
-function iconBtn(c) { return { width: 34, height: 34, borderRadius: 10, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, fontWeight: 900, cursor: "pointer" }; }
+function iconBtn(c) { return { width: 34, height: 34, borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 900, cursor: "pointer" }; }
 function menuBtn(c) { return { width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 800, cursor: "pointer" }; }
 function input(c) { return { width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }; }
 function row(c) { return { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, marginBottom: 8, flexWrap: "wrap" }; }

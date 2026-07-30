@@ -84,7 +84,7 @@ function templateInk(value, dark) {
     TYPE_ANSWER: dark ? "#ede9fe" : "#5b21b6",
     MATCHING: dark ? "#ffedd5" : "#9a4d00",
     GUESS_WORD_4PICS: dark ? "#dcfce7" : "#166534",
-    THINK_SPELL: dark ? "#f3e8ff" : "#6b21a8",
+    THINK_SPELL: dark ? "#bae6fd" : "#0369a1",
   };
   return palette[normalizeTemplateType(value)] || (dark ? "#f8fafc" : "#0f172a");
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
-import { setRole, setToken, clearRole, clearToken } from "../../lib/auth";
+import { getToken, setRole, setToken, clearRole, clearToken } from "../../lib/auth";
 import { useTheme, useColors } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
@@ -12,6 +12,18 @@ import { TeacherActionModal } from "../teacher/TeacherUI";
 
 const VALID_GUEST_TABS = new Set(["create", "live", "history"]);
 function normalizeGuestTab(tab) { return VALID_GUEST_TABS.has(tab) ? tab : "create"; }
+
+const GUEST_IDENTITY_KEY = "thinkwave_guest_identity_v1";
+
+function getOrCreateGuestKey() {
+  const current = localStorage.getItem(GUEST_IDENTITY_KEY) || "";
+  if (/^[a-f0-9]{64}$/i.test(current)) return current;
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const next = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  localStorage.setItem(GUEST_IDENTITY_KEY, next);
+  return next;
+}
 
 const NAV = [
   { id: "create", label: "Create", icon: "create" },
@@ -33,15 +45,27 @@ export default function GuestDashboard() {
     let ignore = false;
     (async () => {
       try {
-        const tokenVersion = "guest-role-v2";
-        let token = sessionStorage.getItem("guest_token");
-        if (!token || sessionStorage.getItem("guest_token_version") !== tokenVersion) {
-          sessionStorage.removeItem("guest_token");
-          const { data } = await api.post("/auth/guest-token");
-          token = data.token;
-          sessionStorage.setItem("guest_token", token);
-          sessionStorage.setItem("guest_token_version", tokenVersion);
+        const existingToken = localStorage.getItem("thinkwave_guest_token") || getToken();
+        if (existingToken) {
+          setToken(existingToken);
+          setRole("GUEST_HOST");
+          localStorage.setItem("qz_guest_mode", "1");
+          setAuthToken(existingToken);
+          try {
+            const { data: me } = await api.get("/auth/me");
+            if (me?.role === "GUEST_HOST") {
+              if (!ignore) setReady(true);
+              return;
+            }
+          } catch {
+            // The saved Guest token is no longer valid. Renew it below.
+          }
         }
+
+        const guestKey = getOrCreateGuestKey();
+        const { data } = await api.post("/auth/guest-token", { guestKey });
+        const token = data.token;
+        localStorage.setItem("thinkwave_guest_token", token);
         setToken(token);
         setRole("GUEST_HOST");
         localStorage.setItem("qz_guest_mode", "1");
@@ -65,9 +89,7 @@ export default function GuestDashboard() {
   }
 
   function exitGuest() {
-    sessionStorage.removeItem("guest_token");
     sessionStorage.removeItem("guest_active_tab");
-    sessionStorage.removeItem("guest_token_version");
     localStorage.removeItem("qz_guest_mode");
     clearToken();
     clearRole();
@@ -105,10 +127,10 @@ export default function GuestDashboard() {
         <button className="tw-guest-exit" onClick={() => setShowExit(true)} style={{ ...sideAction(c), flex: 1, justifyContent: "center" }}><TwIcon name="logout" size={17} /><span>Exit Guest</span></button>
       </div>
     </aside>
-    <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
+    <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
       <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
     </main>
-    {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" message="Your temporary Guest Host access will end." tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}
+    {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}
   </div>;
 }
 

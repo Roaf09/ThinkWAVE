@@ -2,10 +2,10 @@ import { pool } from "../../db.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
 
 export const BASIC_LIMITS = Object.freeze({
-  MCQ: { maxItems: 20, maxTimeSec: 120, maxChoices: 4, minChoices: 2, allowModified: false, allowImages: false },
+  MCQ: { maxItems: 20, maxTimeSec: 120, maxChoices: 4, minChoices: 3, allowModified: false, allowImages: false },
   TRUE_FALSE: { maxItems: 20, maxTimeSec: 120, allowImages: false },
   TYPE_ANSWER: { maxItems: 20, maxTimeSec: 120, allowImages: false },
-  MATCHING: { maxItems: 10, maxTimeSec: 300, maxPairs: 5, maxDummyAnswers: 1, allowImages: false },
+  MATCHING: { maxItems: 10, maxTimeSec: 300, maxPairs: 5, maxDummyAnswers: 1, allowImages: true },
   GUESS_WORD_4PICS: { maxItems: 10, maxTimeSec: 300, allowImages: false },
   THINK_SPELL: { maxItems: 5, maxTimeSec: 300, maxWords: 4, allowImages: false },
   questionBankPerTemplate: 5,
@@ -44,7 +44,7 @@ export function validateBasicQuestionPayload(templateType, questions = []) {
     if (template === "MCQ") {
       if (config.mcqMode === "MODIFIED") return "Modified multiple choice is available on the Institution plan.";
       const count = Array.isArray(config.options) ? config.options.length : 0;
-      if (count < 2 || count > 4) return "Basic plan multiple choice supports 2 to 4 choices.";
+      if (count < 3 || count > 4) return "Basic plan multiple choice supports 3 to 4 choices.";
     }
     if (template === "MATCHING") {
       const pairs = Array.isArray(config.colA) ? config.colA.length : 0;

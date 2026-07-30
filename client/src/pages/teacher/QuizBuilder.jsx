@@ -9,22 +9,21 @@ import { api } from "../../lib/api";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
 import ThemeIconButton from "../../components/ThemeIconButton";
-import { templateLabel, templateTone } from "../../lib/templatePalette";
+import { TwIcon } from "../../components/TwUI";
+import { TeacherPressButton } from "./TeacherUI";
 import { getTemplateLimit, isInstitutionPlan } from "../../lib/planLimits";
 import { normalizeTemplateType } from "../../lib/templateTypes";
 import {
   buildBlankQuestion,
   clampQuestionPoints,
   compressImageFile,
-  defaultConfig,
-  defaultCorrect,
-  displayTemplateName,
   findDuplicates,
-  normalizeChoiceOptions,
+  normalizeMatchingPayload,
   safeJson,
+  trimText,
   validateQuestion,
 } from "./quiz-builder/quizBuilderUtils";
-import { BankModal, BuilderModal, getUi, TemplateEditor } from "./quiz-builder/QuizBuilderParts";
+import { BankModal, BuilderModal, getUi, MediaInput, TemplateEditor, VoiceRecordingPanel } from "./quiz-builder/QuizBuilderParts";
 
 export default function QuizBuilder({ guestMode = false }) {
   const { id } = useParams();
@@ -97,9 +96,9 @@ export default function QuizBuilder({ guestMode = false }) {
             nextCfg.options = (Array.isArray(nextCfg.options) ? nextCfg.options : []).slice(0, 4).map((option) => typeof option === "object" ? { ...option, image: "" } : option);
           }
           if (normalizeTemplateType(data.quiz?.template_type) === "MATCHING") {
-            nextCfg.colA = (nextCfg.colA || []).slice(0, 5).map((row) => ({ ...row, image: "" }));
-            nextCfg.colB = (nextCfg.colB || []).slice(0, 6).map((row) => ({ ...row, image: "" }));
-            nextCfg.dummyB = (nextCfg.dummyB || []).slice(0, 1).map((row) => ({ ...row, image: "" }));
+            nextCfg.colA = (nextCfg.colA || []).slice(0, 5);
+            nextCfg.colB = (nextCfg.colB || []).slice(0, 6);
+            nextCfg.dummyB = (nextCfg.dummyB || []).slice(0, 1);
           }
           if (normalizeTemplateType(data.quiz?.template_type) === "THINK_SPELL") {
             nextCfg.answers = (nextCfg.answers || []).slice(0, 4);
@@ -379,8 +378,8 @@ export default function QuizBuilder({ guestMode = false }) {
         config: q.config,
         correct: q.correct,
       });
+      setMsg("");
       setModal("bankSaved");
-      setMsg("Saved to question bank.");
     } catch {
       setMsg("Failed to save to bank.");
     }
@@ -452,55 +451,46 @@ export default function QuizBuilder({ guestMode = false }) {
 
       {!guestMode && bankOpen && <div style={ui.blurOverlay} />}
 
-      <div style={ui.page}>
+      <div className="tw-quiz-builder-page" style={ui.page}>
+        <ThemeIconButton dark={dark} onClick={toggleTheme} size={22} className="tw-builder-floating-theme" aria-label={dark ? "Use light mode" : "Use dark mode"} />
         <div style={ui.topBar}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button style={ui.ghostBtn} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>← Back</button>
-            <ThemeIconButton dark={dark} onClick={toggleTheme} style={ui.ghostBtn} />
-            <div style={{ minWidth: 260, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
+            <button className="tw-builder-press tw-builder-press-neutral" style={ui.ghostBtn} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>← Back</button>
+            <button className={`tw-builder-settings-flat${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => setSettingsOpen((v) => !v)}><TwIcon name="gear" size={22} /></button>
+            <div style={{ minWidth: 220, flex: "0 1 540px" }}>
               {titleEditing ? (
-                <div style={ui.titleEditorWrap}>
-                  <input
-                    autoFocus
-                    value={titleDraft}
-                    maxLength={255}
-                    onChange={(e) => setTitleDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveTitle();
-                      if (e.key === "Escape") {
-                        setTitleDraft(quiz.title || "");
-                        setTitleEditing(false);
-                      }
-                    }}
-                    style={ui.titleInput}
-                    placeholder="Quiz title"
-                  />
-                  <button style={ui.secondaryBtn} onClick={saveTitle} disabled={titleSaving}>{titleSaving ? "Saving..." : "Save title"}</button>
-                  <button style={ui.ghostBtn} onClick={() => { setTitleDraft(quiz.title || ""); setTitleEditing(false); }}>Cancel</button>
-                </div>
+                <input
+                  autoFocus
+                  value={titleDraft}
+                  maxLength={255}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={saveTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      setTitleDraft(quiz.title || "");
+                      setTitleEditing(false);
+                    }
+                  }}
+                  style={ui.titleInput}
+                  placeholder="Quiz title"
+                  aria-label="Quiz title"
+                  disabled={titleSaving}
+                />
               ) : (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <div style={{ fontWeight: 900, fontSize: 20, color: c.text }}>{quiz.title}</div>
-                    <button style={ui.inlineEditBtn} onClick={() => setTitleEditing(true)}>✎ Edit title</button>
-                  </div>
-                  <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>
-                    {displayTemplateName(quiz.template_type)} · {quiz.category} · {quiz.status}
-                  </div>
-                </>
+                <button type="button" className="tw-builder-title-button" onClick={() => setTitleEditing(true)} title="Click to edit the quiz title" style={{ color: c.text }}>
+                  {quiz.title}
+                </button>
               )}
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button title="Delete quiz" aria-label="Delete quiz" style={{ ...ui.dangerGhostBtn, width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setModal("confirmDelete")}>🗑</button>
-            <button title="Quiz settings" aria-label="Quiz settings" style={{ ...ui.secondaryBtn, ...(settingsOpen ? ui.secondaryBtnActive : {}), width: 42, height: 42, padding: 0, display: "grid", placeItems: "center", fontSize: 18 }} onClick={() => setSettingsOpen((v) => !v)}>⚙</button>
-            {!guestMode && <button style={ui.secondaryBtn} onClick={() => setBankOpen(true)}>Add from Bank</button>}
-            <button style={ui.secondaryBtn} onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</button>
-            <button style={isSaved ? ui.savedBtn : ui.secondaryBtn} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</button>
-            <button style={publishDisabled ? ui.disabledPrimaryBtn : ui.primaryBtn} onClick={publish} disabled={publishDisabled}>
-              {quiz.status === "PUBLISHED" ? "Published" : "Publish"}
-            </button>
+            <TeacherPressButton tone="red" className="tw-builder-icon-press" title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
+            {!guestMode && <TeacherPressButton tone="blue" onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
+            <TeacherPressButton tone="blue" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
           </div>
         </div>
 
@@ -551,9 +541,9 @@ export default function QuizBuilder({ guestMode = false }) {
         </div>
 
         <div style={ui.pagerBar}>
-          <button style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible" }} onClick={goPrev}>‹ Previous</button>
+          <button className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible" }} onClick={goPrev}>‹ Previous</button>
           <div style={{ textAlign: "center", color: c.text, fontSize: 15, fontWeight: 800 }}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</div>
-          <button style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible" }} onClick={goNext}>Next ›</button>
+          <button className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible" }} onClick={goNext}>Next ›</button>
         </div>
 
         <div style={ui.editorArea}>
@@ -561,12 +551,10 @@ export default function QuizBuilder({ guestMode = false }) {
             <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
               <div style={ui.questionCard}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 900, fontSize: 17, color: c.accent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
+                  <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <button style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>
-                      Save to Bank
-                    </button>}
-                    <button title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} style={{ ...ui.dangerGhostBtn, width: 36, height: 36, padding: 0, display: "grid", placeItems: "center", fontSize: 16 }} onClick={deleteCurrentQuestion}>🗑</button>
+                    {!guestMode && <TeacherPressButton tone="blue" className="tw-builder-small-press" disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>Save to Bank</TeacherPressButton>}
+                    <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
                   </div>
                 </div>
 
@@ -592,16 +580,22 @@ export default function QuizBuilder({ guestMode = false }) {
                         })}
                         style={ui.metaInput}
                       />
-                      <span style={ui.metaSuffix}>{quiz.template_type === "THINK_SPELL" ? "per word" : "per question"}</span>
+                      <span style={ui.metaSuffix}>{quiz.template_type === "THINK_SPELL" ? "per word" : quiz.template_type === "MATCHING" ? "per pair" : "per question"}</span>
                     </div>
                   </div>
                 </div>
 
-                <label style={ui.fieldLabel}>
-                  Prompt
-                  <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/255</span>
-                </label>
-                <textarea rows={4} maxLength={255} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value })} style={ui.textarea} />
+                <div className={quiz.template_type === "MCQ" && currentQ.config?.voiceRecord ? "tw-builder-question-voice-grid" : undefined}>
+                  <div>
+                    <label style={ui.fieldLabel}>
+                      Question
+                      <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/255</span>
+                    </label>
+                    <textarea rows={4} maxLength={255} value={currentQ.prompt} onChange={(e) => updateQ({ prompt: e.target.value })} style={ui.textarea} />
+                  </div>
+                  {quiz.template_type === "MCQ" && currentQ.config?.voiceRecord && <VoiceRecordingPanel question={currentQ} templateType={quiz.template_type} onChange={updateQ} ui={ui} c={c} compactQuestionOnly />}
+                </div>
+                {quiz.template_type !== "MCQ" && currentQ.config?.voiceRecord && <VoiceRecordingPanel question={currentQ} templateType={quiz.template_type} onChange={updateQ} ui={ui} c={c} />}
                 {!isBasic && currentQ.config?.showPromptImage && <div style={{ marginTop: 10, marginBottom: 16 }}>
                   <MediaInput
                     label="Question image (optional)"
@@ -613,7 +607,6 @@ export default function QuizBuilder({ guestMode = false }) {
                   />
                 </div>}
 
-                {currentQ.config?.voiceRecord && <VoiceRecordingPanel question={currentQ} templateType={quiz.template_type} onChange={updateQ} ui={ui} c={c} />}
 
                 <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} isBasic={isBasic} />
               </div>
@@ -622,13 +615,13 @@ export default function QuizBuilder({ guestMode = false }) {
         </div>
       </div>
 
-      {modal === "saved" && <BuilderModal tone="green" icon="✓" title="Progress Saved" message="Quiz questions saved successfully." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
-      {modal === "published" && <BuilderModal tone="green" icon="🚀" title="Quiz Published!" message="Your quiz is now published and ready to host live." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
-      {modal === "deleted" && <BuilderModal tone="red" icon="🗑" title="Quiz Deleted" message="Deleted. Returning to dashboard…" onClose={() => {}} ui={ui} c={c} autoDismiss />}
+      {modal === "saved" && <BuilderModal tone="green" icon="check" title="Progress Saved" message="Quiz questions saved successfully." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
+      {modal === "published" && <BuilderModal tone="green" icon="spark" title="Quiz Published!" message="Your quiz is now published and ready to host live." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
+      {modal === "deleted" && <BuilderModal tone="red" icon="trash" title="Quiz Deleted" message="Deleted. Returning to dashboard…" onClose={() => {}} ui={ui} c={c} autoDismiss />}
       {modal === "confirmDelete" && (
         <BuilderModal
           tone="red"
-          icon="🗑"
+          icon="trash"
           title="Delete Quiz?"
           message={<>Delete <b style={{ color: c.text }}>{quiz.title}</b>? This cannot be undone.</>}
           onClose={() => setModal(null)}
@@ -636,8 +629,8 @@ export default function QuizBuilder({ guestMode = false }) {
           c={c}
           actions={(
             <>
-              <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Cancel</button>
-              <button style={primaryBtn({ bg: c.redBg, fg: c.redFg, border: c.redBorder })} onClick={deleteQuiz}>Yes, delete</button>
+              <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
+              <TeacherPressButton tone="red" onClick={deleteQuiz}>Yes, delete</TeacherPressButton>
             </>
           )}
         />
@@ -645,7 +638,7 @@ export default function QuizBuilder({ guestMode = false }) {
       {modal === "confirmDeleteQuestion" && (
         <BuilderModal
           tone="red"
-          icon="🗑"
+          icon="trash"
           title="Delete question?"
           message={questions.length === 1 ? "This will reset the builder to one blank question." : <>{quiz?.template_type === "MATCHING" ? "Batch" : "Question"} <b style={{ color: c.text }}>{qIndex + 1}</b> will be removed from this quiz.</>}
           onClose={() => setModal(null)}
@@ -653,8 +646,8 @@ export default function QuizBuilder({ guestMode = false }) {
           c={c}
           actions={(
             <>
-              <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Cancel</button>
-              <button style={primaryBtn({ bg: c.redBg, fg: c.redFg, border: c.redBorder })} onClick={performDeleteCurrentQuestion}>Yes, delete</button>
+              <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
+              <TeacherPressButton tone="red" onClick={performDeleteCurrentQuestion}>Yes, delete</TeacherPressButton>
             </>
           )}
         />
@@ -662,7 +655,7 @@ export default function QuizBuilder({ guestMode = false }) {
       {modal === "confirmPublish" && (
         <BuilderModal
           tone="blue"
-          icon="🚀"
+          icon="spark"
           title="Publish Quiz?"
           message="Students will now be able to host and join this quiz live. You can still view and edit it later if needed."
           onClose={() => setModal(null)}
@@ -670,8 +663,8 @@ export default function QuizBuilder({ guestMode = false }) {
           c={c}
           actions={(
             <>
-              <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Cancel</button>
-              <button style={primaryBtn({ bg: `${c.accent}18`, fg: c.accent, border: c.accent })} onClick={confirmPublish}>Yes, publish</button>
+              <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
+              <TeacherPressButton tone="blue" onClick={confirmPublish}>Yes, publish</TeacherPressButton>
             </>
           )}
         />
@@ -679,7 +672,7 @@ export default function QuizBuilder({ guestMode = false }) {
       {!guestMode && modal === "confirmBank" && (
         <BuilderModal
           tone="blue"
-          icon="📚"
+          icon="bank"
           title="Save question to bank?"
           message={quiz?.template_type === "MATCHING" ? "This will add the current batch to your question bank so you can reuse it later." : "This will add the current question to your question bank so you can reuse it later."}
           onClose={() => setModal(null)}
@@ -687,17 +680,17 @@ export default function QuizBuilder({ guestMode = false }) {
           c={c}
           actions={(
             <>
-              <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Cancel</button>
-              <button style={primaryBtn({ bg: `${c.accent}18`, fg: c.accent, border: c.accent })} onClick={async () => { const issues = validateQuestion(currentQ, quiz?.template_type); if (issues.length) { setMsg(`Complete this ${quiz?.template_type === "MATCHING" ? "batch" : "question"} first: ${issues[0]}.`); setModal(null); return; } setModal(null); await doSaveToBank(currentQ); }}>Yes, save to bank</button>
+              <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
+              <TeacherPressButton tone="blue" onClick={async () => { const issues = validateQuestion(currentQ, quiz?.template_type); if (issues.length) { setMsg(`Complete this ${quiz?.template_type === "MATCHING" ? "batch" : "question"} first: ${issues[0]}.`); setModal(null); return; } setModal(null); await doSaveToBank(currentQ); }}>Yes, save to bank</TeacherPressButton>
             </>
           )}
         />
       )}
-      {!guestMode && modal === "bankSaved" && <BuilderModal tone="green" icon="✓" title="Saved to Bank" message="The current question was added to your question bank." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
+      {!guestMode && modal === "bankSaved" && <BuilderModal tone="green" icon="check" title="Saved to Bank" message="The current question was added to your question bank." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
       {modal === "duplicates" && (
         <BuilderModal
           tone="yellow"
-          icon="⚠️"
+          icon="warning"
           title="Duplicate Questions Detected"
           onClose={() => setModal(null)}
           ui={ui}
@@ -725,7 +718,7 @@ export default function QuizBuilder({ guestMode = false }) {
       {modal === "invalid" && (
         <BuilderModal
           tone="yellow"
-          icon="⚠️"
+          icon="warning"
           title="Some questions are incomplete"
           onClose={() => setModal(null)}
           ui={ui}
@@ -742,6 +735,16 @@ export default function QuizBuilder({ guestMode = false }) {
         />
       )}
 
+      {msg && !modal && <BuilderModal
+        tone={/failed|error|cannot|only|complete/i.test(msg) ? "yellow" : "green"}
+        icon={/failed|error|cannot|only|complete/i.test(msg) ? "warning" : "check"}
+        title={/failed|error|cannot|only|complete/i.test(msg) ? "Action needed" : "Updated"}
+        message={msg}
+        onClose={() => setMsg("")}
+        ui={ui}
+        c={c}
+        autoDismiss={!/failed|error|cannot|only|complete/i.test(msg)}
+      />}
       {!guestMode && bankOpen && <BankModal templateType={quiz.template_type} onSelect={addFromBank} onClose={() => setBankOpen(false)} ui={ui} c={c} />}
     </>
   );
