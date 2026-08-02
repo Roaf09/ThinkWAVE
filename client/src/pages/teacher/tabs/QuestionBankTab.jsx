@@ -45,6 +45,7 @@ function Badge({ label, c, tone = "neutral" }) {
     neutral: { bg: c.cardBg2, fg: c.text, border: c.border },
     blue: { bg: `${c.accent}16`, fg: c.accent, border: c.accent },
     green: { bg: c.greenBg, fg: c.greenFg, border: c.greenBorder },
+    yellow: { bg: c.yellowBg, fg: c.yellowFg, border: c.yellowBorder },
   }[tone];
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: map.bg, color: map.fg, border: `1px solid ${map.border}` }}>{label}</span>;
 }
@@ -64,27 +65,31 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
   const [view, setView] = useState("quiz");
   const [quizzes, setQuizzes] = useState([]);
   const [questions, setQuestions] = useState([]);
-  const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [previewQuiz, setPreviewQuiz] = useState(null);
   const [modal, setModal] = useState(null);
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
-  const [folderFilter, setFolderFilter] = useState("ALL");
   const c = useColors();
   const { dark } = useTheme();
 
-  const folderPathMap = useMemo(() => buildFolderPathMap(folders || []), [folders]);
-  const folderOptions = useMemo(() => (folders || []).map((folder) => ({ ...folder, pathLabel: folderPathMap.get(Number(folder.id)) || folder.name })).sort((a, b) => a.pathLabel.localeCompare(b.pathLabel)), [folders, folderPathMap]);
-  const quizBankItems = useMemo(() => (quizzes || []).filter((quiz) => quiz.status === "BANKED"), [quizzes]);
+  const quizBankItems = useMemo(() => {
+    const unique = new Map();
+    for (const quiz of (quizzes || []).filter((item) => item.status === "BANKED")) {
+      const canonical = quiz.source_quiz_id
+        ? `source:${quiz.source_quiz_id}`
+        : `quiz:${String(quiz.title || "").trim().toLowerCase()}|${normalizeBankTemplate(quiz.template_type)}|${quiz.category || ""}`;
+      if (!unique.has(canonical)) unique.set(canonical, quiz);
+    }
+    return [...unique.values()];
+  }, [quizzes]);
 
   async function load() {
     try {
-      const [quizRes, bankRes, folderRes] = await Promise.all([api.get("/quizzes"), api.get("/question-bank"), api.get("/classes")]);
+      const [quizRes, bankRes] = await Promise.all([api.get("/quizzes"), api.get("/question-bank")]);
       setQuizzes(quizRes.data || []);
       setQuestions(bankRes.data || []);
-      setFolders(folderRes.data || []);
     } catch (e) {
       console.error(e);
       setMsg("Failed to load bank content.");
@@ -107,9 +112,9 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
     }
   }
 
-  async function reuseQuiz(quiz, classId) {
+  async function reuseQuiz(quiz) {
     try {
-      await api.post(`/quizzes/${quiz.id}/reuse`, { classId });
+      await api.post(`/quizzes/${quiz.id}/reuse`, {});
       setModal(null);
       setMsg("Quiz sent back to Live Sessions.");
       await load();
@@ -134,14 +139,13 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
     const q = query.trim().toLowerCase();
     const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
     const rows = quizBankItems.filter((quiz) => {
-      if (folderFilter !== "ALL" && Number(quiz.class_id || 0) !== Number(folderFilter)) return false;
       if (templateFilter && normalizeBankTemplate(quiz.template_type) !== templateFilter) return false;
       if (!q) return true;
       return [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
     rows.sort((a, b) => sortBy === "title" ? String(a.title || "").localeCompare(String(b.title || "")) : Number(b.id) - Number(a.id));
     return rows;
-  }, [quizBankItems, query, folderFilter, sortBy]);
+  }, [quizBankItems, query, sortBy]);
 
   const filteredQuestions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -173,14 +177,8 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
         </section>
 
         {currentHasItems && <section style={card(c)}>
-          <div style={{ display: 'grid', gridTemplateColumns: view === 'quiz' ? 'minmax(220px, 1.4fr) minmax(180px, 0.8fr) minmax(150px, 0.7fr)' : 'minmax(220px, 1.4fr) minmax(150px, 0.7fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(150px, 0.7fr)', gap: 12 }}>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'quiz' ? 'Search by quiz title, template, or category' : 'Search saved questions'} style={inputStyle(c)} />
-            {view === 'quiz' && (
-              <select value={folderFilter} onChange={(e) => setFolderFilter(e.target.value)} style={inputStyle(c)}>
-                <option value='ALL'>All folders</option>
-                {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.pathLabel}</option>)}
-              </select>
-            )}
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}>
               <option value='recent'>Newest first</option>
               <option value='title'>Title A–Z</option>
@@ -195,7 +193,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
           <div style={{ display: 'grid', gap: 12 }}>
             {quizBankItems.length === 0 ? <ThinkBotEmptyState c={c} title="No saved quizzes yet." /> : filteredQuizBankItems.length === 0 ? <div style={card(c)}>No saved quizzes match your current filters.</div> : null}
             {filteredQuizBankItems.map((quiz) => (
-              <QuizBankCard key={quiz.id} quiz={quiz} folderLabel={folderPathMap.get(Number(quiz.class_id)) || 'No folder assigned'} folderOptions={folderOptions} onPreview={() => setPreviewQuiz(quiz)} onDelete={() => setModal({ type: 'deleteQuiz', quiz })} onReuse={(classId) => setModal({ type: 'reuseQuiz', quiz, classId })} c={c} />
+              <QuizBankCard key={quiz.id} quiz={quiz} onPreview={() => setPreviewQuiz(quiz)} onDelete={() => setModal({ type: 'deleteQuiz', quiz })} onReuse={() => setModal({ type: 'reuseQuiz', quiz })} c={c} />
             ))}
           </div>
         ) : (
@@ -209,18 +207,18 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
       </div>
 
       {modal?.type === 'deleteQuiz' && <TeacherActionModal c={c} tone='red' icon='trash' title='Delete quiz from Quiz Bank?' message={`${modal.quiz.title} will be permanently removed.`} confirmLabel='Delete' textCancel onClose={() => setModal(null)} onConfirm={() => deleteQuiz(modal.quiz)} />}
-      {modal?.type === 'reuseQuiz' && <TeacherActionModal c={c} tone='blue' icon='history' title='Send quiz back to Live Sessions?' message={`${modal.quiz.title} will return to Live Sessions using the folder you selected.`} confirmLabel='Reuse Quiz' textCancel onClose={() => setModal(null)} onConfirm={() => reuseQuiz(modal.quiz, modal.classId)} />}
+      {modal?.type === 'reuseQuiz' && <TeacherActionModal c={c} tone='blue' icon='history' title='Send quiz back to Live Sessions?' message={`${modal.quiz.title} will return to Live Sessions. You can choose its class when hosting or assigning it.`} confirmLabel='Reuse Quiz' textCancel onClose={() => setModal(null)} onConfirm={() => reuseQuiz(modal.quiz)} />}
       {modal?.type === 'deleteQuestion' && <TeacherActionModal c={c} tone='red' icon='trash' title='Remove question?' message='This saved question will be removed from the question bank.' confirmLabel='Remove question' textCancel onClose={() => setModal(null)} onConfirm={() => removeQuestion(modal.question.id)} />}
     </>
   );
 }
 
-function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, onReuse, c }) {
+function QuizBankCard({ quiz, onPreview, onDelete, onReuse, c }) {
   const tone = templateTone(quiz.template_type, c, false);
-  const [reuseFolderId, setReuseFolderId] = useState(Number(quiz.class_id) || Number(folderOptions[0]?.id) || '');
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
-  const currentFolderLabel = folderOptions.find((folder) => Number(folder.id) === Number(reuseFolderId))?.pathLabel || folderLabel;
+  const questionCount = Number(quiz.question_count || 0);
+  const totalScore = Number(quiz.total_score || 0);
   useEffect(() => {
     if (!moreOpen) return undefined;
     const close = (event) => { if (!event.target.closest(`[data-bank-more="${quiz.id}"]`)) setMoreOpen(false); };
@@ -228,38 +226,25 @@ function QuizBankCard({ quiz, folderLabel, folderOptions, onPreview, onDelete, o
     return () => document.removeEventListener("pointerdown", close);
   }, [moreOpen, quiz.id]);
   return (
-    <div style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false) }}>
-      <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
-            <Badge label='In Quiz Bank' c={c} tone='blue' />
-            <Badge label={currentFolderLabel} c={c} />
-          </div>
+    <div className="tw-bank-content-card tw-bank-quiz-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})` }}>
+      <div className="tw-bank-card-main">
+        <div className="tw-bank-card-title" style={{ color: c.text }}>{quiz.title}</div>
+        <div className="tw-bank-card-badges">
+          <TemplateBadge label={templateLabel(quiz.template_type)} tone={tone} />
+          <Badge label={quiz.category === "K12" ? "K-12" : "College"} c={c} tone="yellow" />
+          <Badge label={`${questionCount} question${questionCount === 1 ? "" : "s"}`} c={c} tone="blue" />
+          <Badge label={`${totalScore} total point${totalScore === 1 ? "" : "s"}`} c={c} tone="green" />
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: 12, alignItems: 'center' }}>
-          <div>
-            <div style={{ color: c.textMuted, fontSize: 12, marginBottom: 6 }}>Folder after the next finished live session</div>
-            <select value={reuseFolderId} onChange={(e) => setReuseFolderId(Number(e.target.value))} style={inputStyle(c)}>
-              {folderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folder.pathLabel}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button onClick={() => { setMoreOpen(false); onPreview(); }} className="tw-analytics-text-link" style={{ color: c.accent }}>Preview</button>
-            <TeacherPressButton tone="blue" onClick={() => onReuse(reuseFolderId)} disabled={!reuseFolderId}>Reuse</TeacherPressButton>
-            <div data-bank-more={quiz.id} style={{ position: 'relative' }}>
-              <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((v) => !v)} className="tw-bank-more-button">⋮</button>
-              {moreOpen && (
-                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 200, zIndex: 1200, ...card(c, { padding: 8, boxShadow: '0 22px 50px rgba(15,23,42,.24)' }) }}>
-                  <button onClick={() => { setMoreOpen(false); navigate(`/teacher/quizzes/${quiz.id}/builder`); }} style={menuBtn(c)}>Edit</button>
-                  <button onClick={() => { setMoreOpen(false); onDelete(); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
-                </div>
-              )}
-            </div>
-          </div>
+      </div>
+      <div className="tw-bank-card-actions">
+        <button onClick={() => { setMoreOpen(false); onPreview(); }} className="tw-analytics-text-link tw-bank-preview-link" style={{ color: c.accent }}>Preview</button>
+        <TeacherPressButton tone="blue" onClick={onReuse}>Reuse</TeacherPressButton>
+        <div data-bank-more={quiz.id} style={{ position: "relative" }}>
+          <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
+          {moreOpen && <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 200, zIndex: 1200, ...card(c, { padding: 8, boxShadow: "0 22px 50px rgba(15,23,42,.24)" }) }}>
+            <button onClick={() => { setMoreOpen(false); navigate(`/teacher/quizzes/${quiz.id}/builder`); }} style={menuBtn(c)}>Edit</button>
+            <button onClick={() => { setMoreOpen(false); onDelete(); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
+          </div>}
         </div>
       </div>
     </div>
@@ -274,36 +259,65 @@ function QuestionCard({ question: q, onRemove, c }) {
   const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING";
   const [expanded, setExpanded] = useState(false);
   const answers = getBankAnswers(tt, cfg, correct);
-  const answerAreaStyle = tt === "MATCHING"
-    ? { display: "grid", justifyItems: "center", gap: 8, width: "100%" }
-    : { display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", width: "100%" };
 
   return (
-    <div style={{ ...card(c, { width: "min(100%, 780px)", padding: 0, overflow: "hidden" }), ...templateCardChrome(tt, c, false), textAlign: "center" }}>
-      <div style={{ padding: 16, display: "grid", gap: 12, justifyItems: "center" }}>
-        <div style={{ minWidth: 0, width: "100%" }}>
-          <div style={{ fontWeight: 800, lineHeight: 1.5, color: c.text, overflowWrap: "anywhere", textAlign: "center" }}>{q.prompt}</div>
-        </div>
+    <div className="tw-bank-content-card tw-bank-question-card" style={{ ...card(c, { width: "100%", padding: 0, overflow: "visible" }), ...templateCardChrome(tt, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 12%, ${c.cardBg})`, textAlign: "center", position: "relative" }}>
+      <TeacherPressButton tone="red" className="tw-question-bank-delete" title="Remove question" aria-label="Remove question" onClick={onRemove}><TwIcon name="trash" size={19} /></TeacherPressButton>
+      <div className="tw-bank-question-inner">
+        <TemplateBadge label={templateLabel(tt)} tone={tone} />
+        <div className="tw-bank-question-prompt" style={{ color: c.text }}>{q.prompt}</div>
 
-        <div style={answerAreaStyle}>
-          {answers.length ? answers.map((answer, i) => <CorrectAnswer key={`${answer}-${i}`} value={answer} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
-        </div>
+        {tt === "MCQ" ? <McqBankAnswers cfg={cfg} correct={correct} c={c} />
+          : tt === "TRUE_FALSE" ? <TrueFalseBankAnswers correct={correct} c={c} />
+          : <div className={`tw-bank-answer-summary${tt === "THINK_SPELL" ? " is-think-spell" : ""}${answers.length === 1 ? " is-single" : ""}${tt === "MATCHING" && expanded ? " is-hidden" : ""}`}>
+              {answers.length ? answers.map((answer, index) => <CorrectAnswer key={`${answer}-${index}`} value={answer} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
+            </div>}
 
-        {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((v) => !v)} style={{ width: 46, height: 40, display: "grid", placeItems: "center", borderRadius: 13, border: `1.5px solid ${tone.border}`, color: tone.accent, background: tone.softBg, cursor: "pointer" }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
+        {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((value) => !value)} className="tw-bank-expand-button" style={{ borderColor: tone.border, color: tone.accent, background: tone.softBg }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
 
-        {collapsible && expanded && (
-          <div style={{ width: "100%", padding: 14, borderRadius: 16, border: `1px solid ${tone.border}`, background: tone.softBg }}>
-            {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
-          </div>
-        )}
+        {collapsible && expanded && <div className="tw-bank-expanded-preview" style={{ borderColor: tone.border, background: tone.softBg }}>
+          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
+        </div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", width: "100%" }}>
-          <span /><div style={{ fontSize: 12, color: c.textSub, textAlign: "center" }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
-          <button onClick={onRemove} style={{ ...btn(c), borderColor: c.redBorder, background: c.redBg, color: c.redFg }}>Remove</button>
-        </div>
+        <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
       </div>
     </div>
   );
+}
+
+function TemplateBadge({ label, tone }) {
+  return <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px 11px", borderRadius: 999, fontSize: 12, fontWeight: 900, background: tone.softBg, color: tone.accent, border: `2px solid ${tone.border}` }}>{label}</span>;
+}
+
+function McqBankAnswers({ cfg, correct, c }) {
+  const options = Array.isArray(cfg.options) ? cfg.options : [];
+  const values = Array.isArray(correct.choices) && correct.choices.length ? correct.choices : [correct.choice].filter(Boolean);
+  return <div className="tw-bank-mcq-grid">{options.map((option, index) => {
+    const label = optionLabel(option, index);
+    const isCorrect = values.some((value) => optionMatchesBankValue(option, value, index));
+    const oddLast = options.length % 2 === 1 && index === options.length - 1;
+    return <div key={option?.id || `${label}-${index}`} className={`tw-bank-answer-option${isCorrect ? " is-correct" : ""}${oddLast ? " is-odd-last" : ""}`} style={isCorrect ? undefined : { background: c.cardBg2, borderColor: c.border, color: c.text }}>
+      {option?.image && <img src={option.image} alt="" />}
+      <span>{label}</span>{isCorrect && <TwIcon name="check" size={17} />}
+    </div>;
+  })}</div>;
+}
+
+function TrueFalseBankAnswers({ correct, c }) {
+  const selected = String(correct.choice ?? correct.text ?? "").trim().toLowerCase();
+  return <div className="tw-bank-true-false">{["True", "False"].map((value) => {
+    const isCorrect = selected === value.toLowerCase();
+    const className = isCorrect ? (value === "True" ? " is-true" : " is-false") : "";
+    return <div key={value} className={`tw-bank-tf-option${className}`} style={!isCorrect ? { background: c.cardBg2, borderColor: c.border, color: c.text } : undefined}>{value}{isCorrect && <TwIcon name={value === "True" ? "check" : "close"} size={18} />}</div>;
+  })}</div>;
+}
+
+function optionMatchesBankValue(option, value, index) {
+  const normalizedValue = String(value ?? "").trim().toLowerCase();
+  if (option && typeof option === "object") {
+    return [option.id, option.value, option.text, option.label, optionLabel(option, index)].some((candidate) => String(candidate ?? "").trim().toLowerCase() === normalizedValue);
+  }
+  return String(option ?? "").trim().toLowerCase() === normalizedValue;
 }
 
 function normalizeBankTemplate(value) {
@@ -341,7 +355,7 @@ function getBankAnswers(tt, cfg, correct) {
 }
 
 function CorrectAnswer({ value }) {
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 11px', borderRadius: 12, border: '2px solid #22c55e', background: 'rgba(34,197,94,.10)', color: '#15803d', fontWeight: 900, fontSize: 13 }}><span style={{ width: 18, height: 18, borderRadius: 999, background: '#22c55e', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11 }}>✓</span>{value}</span>;
+  return <div className="tw-bank-correct-answer"><span className="tw-bank-correct-check">✓</span><span>{value}</span></div>;
 }
 
 function GuessWordBankPreview({ cfg, c, tone }) {
@@ -354,11 +368,11 @@ function MatchingBankPreview({ cfg, c, tone }) {
   const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14, alignItems: "start", textAlign: "center" }}>
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: "#f97316", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Choices</div>
+      <div style={{ color: "#f97316", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column A</div>
       {colA.map((item, i) => <div key={`a-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(249,115,22,.11)", border: "1.5px solid rgba(249,115,22,.62)" }}><MiniBankItem item={item} fallback={`Item ${i + 1}`} c={c} /></div>)}
     </div>
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: "#16a34a", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Answers</div>
+      <div style={{ color: "#16a34a", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column B</div>
       {colB.map((item, i) => <div key={`b-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(34,197,94,.11)", border: "1.5px solid rgba(34,197,94,.62)" }}><MiniBankItem item={item} fallback={i < colA.length ? `Match ${i + 1}` : `Dummy ${i - colA.length + 1}`} c={c} />{i >= colA.length && <div style={{ marginTop: 5, color: c.textMuted, fontSize: 10, fontWeight: 850 }}>Dummy answer</div>}</div>)}
     </div>
   </div>;

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
-import { getStudentDashboard, getStudentClasses, joinClass, upsertProfile, deleteProfileImage, joinStudentLiveSession, getAssignedStudentAnalytics, getLiveStudentAnalytics, getStudentQuiz, submitStudentQuiz } from "./student.controller.js";
+import { getStudentDashboard, getStudentClasses, joinClass, acknowledgeClassRemoval, upsertProfile, deleteProfileImage, joinStudentLiveSession, getAssignedStudentAnalytics, getLiveStudentAnalytics, getStudentQuiz, submitStudentQuiz } from "./student.controller.js";
 
 export const studentRouter = Router();
 
@@ -34,6 +34,7 @@ studentRouter.get("/classes", asyncHandler(getStudentClasses));
 studentRouter.post("/profile", validateBody(profileSchema), asyncHandler(upsertProfile));
 studentRouter.delete("/profile/image", asyncHandler(deleteProfileImage));
 studentRouter.post("/classes/join", validateBody(z.object({ classCode: z.string().trim().min(4).max(20), profile: joinProfileSchema.optional() })), asyncHandler(joinClass));
+studentRouter.post("/class-removals/:enrollmentId/ack", asyncHandler(acknowledgeClassRemoval));
 studentRouter.post("/live-sessions/:sessionId/join", asyncHandler(joinStudentLiveSession));
 studentRouter.get("/analytics/assigned/:quizId", asyncHandler(getAssignedStudentAnalytics));
 studentRouter.get("/analytics/live/:sessionId", asyncHandler(getLiveStudentAnalytics));

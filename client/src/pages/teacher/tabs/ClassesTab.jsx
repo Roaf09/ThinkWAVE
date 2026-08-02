@@ -191,7 +191,7 @@ export default function ClassesTab({ setActiveTab }) {
 
   if (!loading && folders.length === 0) {
     return <div className="container" style={{ display: "grid", gap: 18 }}>
-      <section><h2 style={{ marginBottom: 4, color: c.text }}>Classes</h2></section>
+      <section><h2 style={{ marginBottom: 4, color: c.text }}>Class</h2></section>
       {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
       <ThinkBotEmptyState c={c} title="You have not made any classes yet." actionLabel="Create a Class" onAction={openAddFolder} />
       {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} confirmLabel="Create" />}
@@ -201,7 +201,7 @@ export default function ClassesTab({ setActiveTab }) {
   return (
     <div className="container" style={{ display: "grid", gap: 18 }}>
       <section>
-        <h2 style={{ marginBottom: 4, color: c.text }}>Classes</h2>
+        <h2 style={{ marginBottom: 4, color: c.text }}>Class</h2>
       </section>
 
       {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
@@ -238,7 +238,7 @@ export default function ClassesTab({ setActiveTab }) {
 
         {isSectionFolder && <div style={{ marginTop: 22 }}>
           <div style={{ fontWeight: 900, color: c.text, marginBottom: 10 }}>Students</div>
-          {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : students.map((st) => <div key={st.id} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={() => setRemoveConfirm(st)} style={{ ...btn(c), color: c.redFg, background: c.redBg, borderColor: c.redBorder }}>Remove</button></div>)}
+          {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : <div className="tw-class-student-list">{students.map((st) => <div key={st.id} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={() => setRemoveConfirm(st)} style={{ ...btn(c), color: c.redFg, background: c.redBg, border: `3px solid ${c.redBorder}` }}>Remove</button></div>)}</div>}
         </div>}
       </section>
 

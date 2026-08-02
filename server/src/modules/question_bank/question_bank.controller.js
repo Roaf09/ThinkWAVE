@@ -43,6 +43,19 @@ export async function listBankQuestions(req, res) {
 export async function saveToBank(req, res) {
   const { templateType, category, prompt, config, correct } = req.body;
   const normalizedTemplate = normalizeTemplateType(templateType);
+  const normalizedPrompt = String(prompt || "").trim().toLowerCase();
+  const [existingRows] = await pool.query(
+    `SELECT id, config_json, correct_json
+     FROM question_bank
+     WHERE teacher_id=:tid AND template_type=:tt AND category=:cat
+       AND LOWER(TRIM(prompt))=:prompt AND deleted_at IS NULL`,
+    { tid: req.user.sub, tt: normalizedTemplate, cat: category, prompt: normalizedPrompt }
+  );
+  const incomingConfig = stableStringify(config || null);
+  const incomingCorrect = stableStringify(correct || null);
+  const duplicate = existingRows.some((row) => stableStringify(safeJson(row.config_json)) === incomingConfig && stableStringify(safeJson(row.correct_json)) === incomingCorrect);
+  if (duplicate) return res.status(409).json({ message: "This question has already been saved." });
+
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC") {
     const [[count]] = await pool.query(
@@ -84,4 +97,11 @@ function safeJson(v) {
   if (!v) return null;
   if (typeof v === "object") return v;
   try { return JSON.parse(v); } catch { return null; }
+}
+
+function stableStringify(value) {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
 }

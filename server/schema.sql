@@ -329,6 +329,7 @@ CREATE TABLE class_enrollments (
   middle_initial  VARCHAR(10) NULL,
   joined_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   removed_at      TIMESTAMP NULL,
+  removal_notice_pending TINYINT(1) NOT NULL DEFAULT 0,
   CONSTRAINT fk_class_enrollments_class FOREIGN KEY (class_id) REFERENCES classes(id),
   CONSTRAINT fk_class_enrollments_teacher FOREIGN KEY (teacher_id) REFERENCES users(id),
   CONSTRAINT fk_class_enrollments_student FOREIGN KEY (student_user_id) REFERENCES users(id),

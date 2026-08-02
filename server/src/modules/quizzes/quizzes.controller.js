@@ -14,7 +14,13 @@ function toMysqlDateTime(value) {
 
 export async function listQuizzes(req, res) {
   const [rows] = await pool.query(
-    `SELECT * FROM quizzes WHERE teacher_id=:tid AND deleted_at IS NULL ORDER BY id DESC`,
+    `SELECT q.*,
+       (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS question_count,
+       (SELECT COALESCE(SUM(COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)), 0)
+          FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS total_score
+     FROM quizzes q
+     WHERE q.teacher_id=:tid AND q.deleted_at IS NULL
+     ORDER BY q.id DESC`,
     { tid: req.user.sub }
   );
   res.json(rows);
@@ -123,9 +129,14 @@ export async function copyQuizToBank(req, res) {
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found" });
 
+  if (quiz.status === "BANKED") return res.status(400).json({ message: "This quiz is already in the Quiz Bank." });
+  const canonicalSourceId = Number(quiz.source_quiz_id || quiz.id);
   const [[existingCopy]] = await pool.query(
-    `SELECT id FROM quizzes WHERE source_quiz_id=:sourceId AND teacher_id=:tid AND status='BANKED' AND deleted_at IS NULL LIMIT 1`,
-    { sourceId: quizId, tid: teacherId }
+    `SELECT id FROM quizzes
+     WHERE teacher_id=:tid AND status='BANKED' AND deleted_at IS NULL
+       AND (source_quiz_id=:sourceId OR id=:sourceId2)
+     LIMIT 1`,
+    { sourceId: canonicalSourceId, sourceId2: canonicalSourceId, tid: teacherId }
   );
   if (existingCopy) return res.status(400).json({ message: "A quiz-bank copy already exists for this quiz." });
 
@@ -135,7 +146,7 @@ export async function copyQuizToBank(req, res) {
     {
       tid: teacherId,
       cid: quiz.class_id ?? null,
-      sourceId: quizId,
+      sourceId: canonicalSourceId,
       title: quiz.title,
       cat: quiz.category,
       tt: quiz.template_type,

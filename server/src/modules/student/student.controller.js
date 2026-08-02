@@ -77,6 +77,13 @@ export async function getStudentDashboard(req, res) {
      WHERE e.student_user_id=:uid AND e.removed_at IS NULL
      ORDER BY COALESCE(p.name,c.name) ASC, c.name ASC`, { uid }
   );
+  const [removalNotices] = await pool.query(
+    `SELECT e.id AS enrollment_id, e.removed_at, c.name AS class_name
+     FROM class_enrollments e
+     JOIN classes c ON c.id=e.class_id
+     WHERE e.student_user_id=:uid AND e.removed_at IS NOT NULL AND e.removal_notice_pending=1
+     ORDER BY e.removed_at ASC`, { uid }
+  );
   const [recentAssigned] = await pool.query(
     `SELECT a.id, a.quiz_id, q.title AS quiz_title, q.template_type, c.name AS class_name, c.id AS class_id, a.score, a.max_score, a.submitted_at, 'ASSIGNED' AS session_type
      FROM async_quiz_submissions a
@@ -158,7 +165,7 @@ export async function getStudentDashboard(req, res) {
   const liveTotal = Number(weekStats?.live_this_week || 0);
   const liveAttended = Number(weekStats?.live_attended_this_week || 0);
   res.json({
-    profile, classes, assignments, recentCompleted: recentAssigned, recentAssigned, recentLive, openLiveSessions,
+    profile, classes, assignments, recentCompleted: recentAssigned, recentAssigned, recentLive, openLiveSessions, removalNotices,
     weekStats: { assignedThisWeek:Number(weekStats?.assigned_this_week||0), liveThisWeek:liveTotal, liveAttended, liveUnattended:Math.max(0,liveTotal-liveAttended) },
     achievementStats: {
       questionsAnswered: assignedAnswered + Number(liveAchievementStats?.answered_total || 0),
@@ -171,6 +178,16 @@ export async function getStudentDashboard(req, res) {
       totalPoints: assignedPoints + Number(liveAchievementStats?.points_total || 0),
     }
   });
+}
+
+export async function acknowledgeClassRemoval(req, res) {
+  const enrollmentId = Number(req.params.enrollmentId);
+  await pool.query(
+    `UPDATE class_enrollments SET removal_notice_pending=0
+     WHERE id=:id AND student_user_id=:uid AND removed_at IS NOT NULL`,
+    { id: enrollmentId, uid: req.user.sub }
+  );
+  res.json({ ok: true });
 }
 
 export async function joinClass(req, res) {
@@ -202,9 +219,9 @@ export async function joinClass(req, res) {
   }
 
   await pool.query(
-    `INSERT INTO class_enrollments(class_id,teacher_id,student_user_id,student_id,first_name,last_name,middle_initial,removed_at)
-     VALUES(:cid,:tid,:uid,:sid,:fn,:ln,:mi,NULL)
-     ON DUPLICATE KEY UPDATE removed_at=NULL, student_id=:sid2, first_name=:fn2, last_name=:ln2, middle_initial=:mi2`,
+    `INSERT INTO class_enrollments(class_id,teacher_id,student_user_id,student_id,first_name,last_name,middle_initial,removed_at,removal_notice_pending)
+     VALUES(:cid,:tid,:uid,:sid,:fn,:ln,:mi,NULL,0)
+     ON DUPLICATE KEY UPDATE removed_at=NULL, removal_notice_pending=0, student_id=:sid2, first_name=:fn2, last_name=:ln2, middle_initial=:mi2`,
     {
       cid: folder.id,
       tid: folder.teacher_id,

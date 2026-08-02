@@ -60,7 +60,7 @@ const MetaSchema = z.object({
 });
 
 const ReuseSchema = z.object({
-  classId: z.coerce.number().int().positive(),
+  classId: z.coerce.number().int().positive().optional().nullable(),
 });
 
 const AssignSchema = z.object({

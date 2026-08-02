@@ -793,8 +793,8 @@ export function getUi(c, dark, templateType) {
       boxSizing: "border-box",
     },
     questionCard: {
-      background: palette.cardBg,
-      border: `1.5px solid ${palette.border}`,
+      background: `linear-gradient(145deg, ${palette.accent}2e 0%, ${c.cardBg} 52%, ${palette.accent}14 100%)`,
+      border: `3px solid ${palette.border}`,
       borderRadius: 22,
       padding: "28px 32px",
       boxShadow: dark ? `0 10px 34px ${palette.accent}20` : `0 12px 34px ${palette.accent}24`,
@@ -809,7 +809,7 @@ export function getUi(c, dark, templateType) {
       padding: "14px 16px",
       borderRadius: 16,
       background: palette.softBg,
-      border: `1px solid ${palette.border}`,
+      border: `2px solid ${palette.border}`,
       boxShadow: dark ? "inset 0 1px 0 rgba(255,255,255,0.03)" : "inset 0 1px 0 rgba(255,255,255,0.55)",
     },
     metaLabel: { fontSize: 12, fontWeight: 850, color: palette.accent, marginBottom: 10, letterSpacing: "0.03em", textTransform: "uppercase" },
@@ -912,7 +912,7 @@ export function getUi(c, dark, templateType) {
     innerCard: {
       marginTop: 16,
       background: `linear-gradient(145deg, ${palette.softBg}, ${c.cardBg2})`,
-      border: `1px solid ${palette.border}`,
+      border: `2.5px solid ${palette.border}`,
       borderRadius: 16,
       padding: 16,
     },

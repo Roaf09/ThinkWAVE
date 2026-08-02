@@ -78,7 +78,7 @@ export default function TeacherDashboard() {
 
   const navItems = [
     { id: "home", label: "Home", icon: "home" },
-    { id: "classes", label: "Classes", icon: "classes" },
+    { id: "classes", label: "Class", icon: "classes" },
     { id: "create", label: "Create", icon: "create" },
     { id: "live", label: "Sessions", icon: "live" },
     { id: "bank", label: bankLabel, icon: "bank" },

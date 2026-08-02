@@ -184,7 +184,7 @@ export async function removeClassStudent(req, res) {
   const classId = Number(req.params.id);
   const enrollmentId = Number(req.params.enrollmentId);
   await pool.query(
-    `UPDATE class_enrollments SET removed_at=NOW()
+    `UPDATE class_enrollments SET removed_at=NOW(), removal_notice_pending=1
      WHERE id=:eid AND class_id=:cid AND teacher_id=:tid AND removed_at IS NULL`,
     { eid: enrollmentId, cid: classId, tid: req.user.sub }
   );

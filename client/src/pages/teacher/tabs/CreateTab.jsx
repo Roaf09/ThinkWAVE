@@ -91,7 +91,7 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>
         <div>
           <label style={labelStyle(c)}>Quiz Title</label>
-          <input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required style={inputStyle(c)} />
+          <input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required style={{ ...inputStyle(c), fontWeight: 850, letterSpacing: ".04em" }} />
         </div>
 
         <div>

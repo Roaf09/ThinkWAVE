@@ -24,14 +24,6 @@ const TEMPLATE_IMAGES = {
   THINK_SPELL: { landscape: "/media/templates/think-and-spell.svg", mobile: "/media/templates/think-and-spell-mobile.svg" },
 };
 
-const TEMPLATE_DESCRIPTIONS = {
-  MCQ: "Learners choose from clear answer choices while results update live for the host.",
-  TRUE_FALSE: "Learners make a fast True or False decision and immediately see the next challenge.",
-  TYPE_ANSWER: "Learners recall the answer and type it themselves instead of selecting from choices.",
-  MATCHING: "Learners connect each prompt card with its correct match before the timer ends.",
-  GUESS_WORD_4PICS: "Four visual clues guide learners toward one correct word.",
-  THINK_SPELL: "Learners search a letter grid and build valid words before time runs out.",
-};
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -189,7 +181,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
         key={quiz.id}
         quiz={quiz}
         guestMode={guestMode}
-        folderLabel={folderPathMap.get(Number(quiz.class_id)) || "Class will be selected when starting"}
+        folderLabel={folderPathMap.get(Number(quiz.class_id)) || ""}
         activeSession={activeByQuizId.get(Number(quiz.id)) || null}
         onHost={(selectedQuiz) => guestMode ? createLiveSession(selectedQuiz, "SOLO", null) : setHostSetupQuiz(selectedQuiz)}
         onAssign={setAssignQuiz}
@@ -234,7 +226,7 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
       <div>
         <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
         <div className={`tw-session-closed-meta ${expanded ? "is-hidden" : ""}`} style={{ marginTop: 8 }}><span style={{ display: "inline-flex", padding: "5px 10px", borderRadius: 999, background: tone.softBg, color: tone.accent, border: `1px solid ${tone.border}`, fontSize: 12, fontWeight: 900 }}>{templateLabel(quiz.template_type)} · {quiz.category}</span></div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} />{!guestMode && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div>
       </div>
       <TeacherPressButton tone="blue" className={`tw-session-toggle${expanded ? " is-selected" : ""}`} onClick={onToggle}>{expanded ? "Close" : "Open"}</TeacherPressButton>
     </div>
@@ -242,7 +234,7 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
     <div className={`collapsible-content ${expanded ? "open" : ""}`} style={{ marginTop: expanded ? 16 : 0 }}><div className="collapsible-inner"><div style={{ display: "grid", gap: 14 }}>
       <div style={card(c, { padding: 14, boxShadow: "none", background: c.cardBg2 })}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} />{!guestMode && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div></div>
+          <div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div></div>
           <div data-session-actions={quiz.id} style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 12001 : 1 }}>
             <TeacherPressButton tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
             {!guestMode && <TeacherPressButton tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
@@ -277,18 +269,16 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, onClose, onStart }
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
   return <div className="tw-host-launch-backdrop" onClick={onClose}>
     <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
-      <button type="button" className="tw-host-launch-close" onClick={onClose} style={{ color: c.text }}><TwIcon name="close" size={22} /></button>
       <div className="tw-host-preview-dual">
         <div className="tw-host-preview-desktop"><img src={TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} desktop gameplay preview`} /></div>
         <div className="tw-host-preview-mobile"><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></div>
       </div>
-      <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>{TEMPLATE_DESCRIPTIONS[template]}</p></div>
-      {institutionPlan && <div className="tw-host-mode-row"><button type="button" className={joinMode === "SOLO" ? "is-selected" : ""} onClick={() => setJoinMode("SOLO")}>Solo</button><button type="button" className={joinMode === "GROUP" ? "is-selected" : ""} onClick={() => setJoinMode("GROUP")}>Group</button></div>}
+      <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Pick a class, choose how everyone will play, then launch the fun when your learners are ready!</p></div>
+      {institutionPlan && <div className="tw-host-mode-row"><button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} onClick={() => setJoinMode("SOLO")}><span>Solo</span></button><button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} onClick={() => setJoinMode("GROUP")}><span>Group</span></button></div>}
       <div className="tw-host-launch-controls">
         <button type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
         <TeacherPressButton tone="blue" disabled={!classId} onClick={() => onStart(quiz, joinMode, classId)}>Start</TeacherPressButton>
       </div>
-      {!folders.length && <div style={{ color: c.redFg, fontSize: 13, fontWeight: 800 }}>Create a class before hosting a live session.</div>}
     </section>
     {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); }} />}
   </div>;
@@ -327,7 +317,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
       <div className="tw-class-picker-header">
         <div>
           <h3>Choose a class</h3>
-          <p style={{ color: c.textMuted }}>{currentFolder ? currentFolder.name : "Select a top-level folder to view its classes."}</p>
+          <p style={{ color: c.textMuted }}>{currentFolder ? currentFolder.name : folders.length ? "Choose a folder or class to continue." : ""}</p>
         </div>
         <button type="button" onClick={onClose} style={{ color: c.text }}><TwIcon name="close" size={20} /></button>
       </div>
@@ -342,7 +332,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
             {hasChildren && <small style={{ color: c.textMuted }}>{(childrenByParent.get(Number(folder.id)) || []).length} folder{(childrenByParent.get(Number(folder.id)) || []).length === 1 ? "" : "s"}</small>}
           </button>;
         })}
-        {!visibleFolders.length && <div className="tw-class-picker-empty" style={{ color: c.textMuted }}>No class folders are available here.</div>}
+        {!visibleFolders.length && <div className="tw-class-picker-empty tw-class-picker-thinkbot" style={{ color: c.textMuted }}><img src="/media/thinkbotbot.png" alt="ThinkBOT" /><p>You have not made any classes yet.</p></div>}
       </div>
     </section>
   </div>;

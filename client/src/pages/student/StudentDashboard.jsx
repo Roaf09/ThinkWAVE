@@ -19,7 +19,7 @@ export default function StudentDashboard() {
   const nav = useNavigate();
   const fileRef = useRef(null);
   const [activeTab, setActiveTab] = useState("home");
-  const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {}, achievementStats: {} });
+  const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {}, achievementStats: {}, removalNotices: [] });
   const [joinOpen, setJoinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
@@ -34,12 +34,18 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(emptyProfile());
   const [birthPickerOpen, setBirthPickerOpen] = useState(false);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [removalNotices, setRemovalNotices] = useState([]);
 
   async function load({ silent = false } = {}) {
     try {
       const response = await api.get("/student/dashboard");
       const next = response.data || {};
       setData(next);
+      setRemovalNotices((current) => {
+        const byId = new Map(current.map((notice) => [Number(notice.enrollment_id), notice]));
+        for (const notice of next.removalNotices || []) byId.set(Number(notice.enrollment_id), notice);
+        return [...byId.values()].sort((a, b) => new Date(a.removed_at || 0) - new Date(b.removed_at || 0));
+      });
       setProfile((current) => profileFromData(next, current));
     } catch (error) {
       if (!silent) setMsg(error?.response?.data?.message || "Unable to load your dashboard.");
@@ -134,6 +140,16 @@ export default function StudentDashboard() {
     }
   }
 
+  async function acknowledgeRemoval(notice) {
+    if (!notice) return;
+    try {
+      await api.post(`/student/class-removals/${notice.enrollment_id}/ack`);
+    } catch {
+      // The notice is still dismissed locally; a later dashboard refresh can retry if needed.
+    }
+    setRemovalNotices((current) => current.filter((item) => Number(item.enrollment_id) !== Number(notice.enrollment_id)));
+  }
+
   function doLogout() {
     clearToken();
     clearRole();
@@ -169,7 +185,7 @@ export default function StudentDashboard() {
         {activeTab === "home" ? (
           <HomePanel c={c} dark={dark} data={data} nav={nav} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} onOpenAchievements={() => setAchievementsOpen(true)} />
         ) : (
-          <ClassesPanel c={c} data={data} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} />
+          <ClassesPanel c={c} dark={dark} data={data} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} />
         )}
       </main>
 
@@ -181,6 +197,7 @@ export default function StudentDashboard() {
       {achievementsOpen && <AchievementModal c={c} dark={dark} achievements={buildAchievements(data.achievementStats || {})} onClose={() => setAchievementsOpen(false)} />}
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the student dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
+      {removalNotices[0] && <ClassRemovalModal c={c} notice={removalNotices[0]} onClose={() => acknowledgeRemoval(removalNotices[0])} />}
     </div>
   );
 }
@@ -245,9 +262,9 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
           <LiveSessionsCard c={c} dark={dark} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
           <WorkCard c={c} dark={dark} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<TeacherPressButton tone="blue" className="tw-student-live-action" onClick={() => nav(`/student/async/${item.quiz_id}`)}>Answer Now</TeacherPressButton>} />} />
           <WorkCard c={c} dark={dark} title="Upcoming works" icon="calendar" items={upcoming} empty="No scheduled works are waiting to open." variant="upcoming" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} />} />
-          <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<TeacherPressButton tone="blue" className="tw-student-live-action" onClick={() => nav(`/student/async/${item.quiz_id}`)}>Answer Now</TeacherPressButton>} />} />
+          <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<TeacherPressButton tone="blue" onClick={() => nav(`/student/async/${item.quiz_id}`)}>Answer Now</TeacherPressButton>} />} />
         </div>
-        <div className="tw-student-progress-panel" style={{ display: "grid", gap: 16, alignContent: "start", padding: 18, borderRadius: 18, background: c.cardBg2, border: `1px solid ${c.border}` }}>
+        <div className="tw-student-progress-panel" style={{ display: "grid", gap: 16, alignContent: "start", padding: 18, borderRadius: 18, background: c.cardBg2, border: `3px solid ${dark ? "#39527f" : "#9a8f7a"}`, boxShadow: dark ? "0 18px 34px rgba(0,0,0,.28)" : "0 18px 34px rgba(91,72,40,.16)" }}>
           <div style={{ color: c.text, fontWeight: 950 }}>Weekly Progress</div>
           <ProgressLine c={c} label="Answered assigned work" value={answeredThisWeek} total={weekAssignments.length} accent="#22c55e" />
           <ProgressLine c={c} label="Unanswered assigned work" value={unansweredThisWeek} total={weekAssignments.length} accent="#f97316" />
@@ -268,14 +285,18 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
 }
 
 function AchievementCarousel({ c, dark, achievements }) {
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(achievements.length / 4));
-  const visible = achievements.slice(page * 4, page * 4 + 4);
-  function move(delta) { setPage((current) => Math.min(pageCount - 1, Math.max(0, current + delta))); }
+  const [startIndex, setStartIndex] = useState(0);
+  const [direction, setDirection] = useState("next");
+  const maxStart = Math.max(0, achievements.length - 4);
+  const visible = achievements.slice(startIndex, startIndex + 4);
+  function move(delta) {
+    setDirection(delta < 0 ? "prev" : "next");
+    setStartIndex((current) => Math.min(maxStart, Math.max(0, current + delta)));
+  }
   return <div className="tw-achievement-carousel">
-    <button type="button" aria-label="Previous achievements" disabled={page === 0} onClick={() => move(-1)} className="tw-achievement-arrow is-left" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
-    <div key={page} className="tw-achievement-page">{visible.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
-    <button type="button" aria-label="Next achievements" disabled={page >= pageCount - 1} onClick={() => move(1)} className="tw-achievement-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
+    <button type="button" aria-label="Previous achievement" disabled={startIndex === 0} onClick={() => move(-1)} className="tw-achievement-arrow is-left" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
+    <div key={`${startIndex}-${direction}`} className={`tw-achievement-page is-${direction}`}>{visible.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
+    <button type="button" aria-label="Next achievement" disabled={startIndex >= maxStart} onClick={() => move(1)} className="tw-achievement-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
   </div>;
 }
 
@@ -289,7 +310,7 @@ function AchievementCard({ c, dark, item }) {
   const paleBg = dark ? "#17233d" : "#eef1f6";
   const ink = item.completed ? (dark ? "#fff" : "#101827") : c.textMuted;
   const progress = Math.min(item.target, item.value);
-  return <article className={`tw-achievement-card${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
+  return <article className={`tw-achievement-card tw-achievement-gloss${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
     <div className="tw-achievement-card-title">{item.title}</div>
     <div className="tw-achievement-progress">{progress} / {item.target} {item.unit}</div>
     <div className="tw-achievement-track"><span style={{ width: `${Math.min(100, item.value / item.target * 100)}%` }} /></div>
@@ -305,7 +326,7 @@ function AchievementModal({ c, dark, achievements, onClose }) {
   </section></div>;
 }
 
-function ClassesPanel({ c, data, onJoinClass, onAnalytics }) {
+function ClassesPanel({ c, dark, data, onJoinClass, onAnalytics }) {
   const classes = data.classes || [];
   const assigned = data.recentAssigned || data.recentCompleted || [];
   const live = data.recentLive || [];
@@ -313,15 +334,15 @@ function ClassesPanel({ c, data, onJoinClass, onAnalytics }) {
     <section style={sectionHeader(c)}><div><h2 style={{ marginBottom: 4 }}>Class</h2></div>{classes.length > 0 && <TeacherPressButton tone="blue" onClick={onJoinClass}>Join a Class</TeacherPressButton>}</section>
     {!classes.length ? <ThinkBotEmptyState c={c} title="It seems you have yet to join a class." actionLabel="Join a Class" onAction={onJoinClass} /> : <section style={card(c)}>
       <h3 style={{ marginTop: 0 }}>Joined Classes</h3>
-      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
+      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} dark={dark} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
     </section>}
   </div>;
 }
 
-function JoinedClassCard({ c, item, live, assigned, onAnalytics }) {
+function JoinedClassCard({ c, dark, item, live, assigned, onAnalytics }) {
   const [expanded, setExpanded] = useState(false);
   const subjectName = item.parent_name || item.class_name || "Subject";
-  return <article style={{ ...card(c), padding: 0, background: c.cardBg2, overflow: "hidden" }}>
+  return <article className="tw-student-class-card" style={{ ...card(c), padding: 0, background: c.cardBg2, overflow: "hidden", border: `3px solid ${dark ? "#405987" : "#a49882"}` }}>
     <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} style={{ width: "100%", border: 0, background: "transparent", color: c.text, padding: 16, cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center" }}>
       <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
         <div style={{ color: c.text, fontWeight: 950, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subjectName}</div>
@@ -347,7 +368,7 @@ function CompletedColumn({ c, title, items, type, onAnalytics, compact = false }
 
 function CompletedSessionCard({ c, item, type, onClick }) {
   const tone = templateTone(item.template_type, c);
-  return <button onClick={onClick} style={{ textAlign: "left", padding: 13, borderRadius: 15, border: `1.5px solid ${tone.border}`, background: tone.cardBg, color: c.text, cursor: "pointer", fontFamily: "inherit", transition: "transform .18s ease, box-shadow .18s ease" }} onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = tone.shadow; }} onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+  return <button onClick={onClick} style={{ textAlign: "left", padding: 13, borderRadius: 15, border: `4px solid ${tone.border}`, background: tone.cardBg, color: c.text, cursor: "pointer", fontFamily: "inherit", transition: "transform .18s ease, box-shadow .18s ease" }} onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = tone.shadow; }} onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
     <div style={{ color: tone.accent, fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{templateLabel(item.template_type)}</div>
     <div style={{ fontWeight: 950, marginTop: 6 }}>{item.quiz_title || item.title || "Completed session"}</div>
     <div style={{ color: c.textMuted, fontSize: 12, marginTop: 5 }}>{item.class_name || "Class"}</div>
@@ -397,6 +418,17 @@ function StudentAnalyticsModal({ c, target, onClose }) {
   const question = questions[index];
   const tone = templateTone(payload?.session?.template_type, c);
   return <div style={modalBackdrop}><div style={{ ...card(c), width: "min(94vw,680px)", maxHeight: "88vh", overflowY: "auto", position: "relative" }}><button onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button><div style={{ color: tone.accent, fontWeight: 950, textTransform: "uppercase", fontSize: 12 }}>{templateLabel(payload?.session?.template_type)}</div><h3 style={{ color: c.text, paddingRight: 45 }}>{payload?.session?.title || target.title || "Session Analytics"}</h3>{error ? <div style={notice(c, "error")}>{error}</div> : !payload ? <div style={{ color: c.textMuted, padding: 30, textAlign: "center" }}>Loading analytics…</div> : !question ? <div style={empty(c)}>No question details are available.</div> : <div><div style={{ padding: 18, borderRadius: 18, border: `2px solid ${tone.border}`, background: tone.softBg }}><div style={{ color: tone.accent, fontWeight: 950, marginBottom: 10 }}>Question {question.number || index + 1}</div><div style={{ color: c.text, fontSize: 18, fontWeight: 950, lineHeight: 1.55 }}>{question.prompt || "Untitled question"}</div></div><div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, padding: 15, borderRadius: 16, background: question.isCorrect ? c.greenBg : c.redBg, color: question.isCorrect ? c.greenFg : c.redFg, border: `1px solid ${question.isCorrect ? c.greenBorder : c.redBorder}` }}><span style={{ fontSize: 25, fontWeight: 950 }}>{question.isCorrect ? "✓" : "✕"}</span><div><div style={{ fontWeight: 950 }}>{question.isCorrect ? "You answered right" : "You answered wrong"}</div>{question.isCorrect && <div style={{ marginTop: 5, fontSize: 13 }}>Answer: {formatAnswer(question.correctAnswer ?? question.answer)}</div>}</div></div><div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 20 }}>{index > 0 ? <button onClick={() => setIndex((value) => value - 1)} style={secondary(c)}>← Previous</button> : <span />}{index < questions.length - 1 && <button onClick={() => setIndex((value) => value + 1)} style={primary(c)}>Next →</button>}</div></div>}</div></div>;
+}
+
+function ClassRemovalModal({ c, notice, onClose }) {
+  return <div style={modalBackdrop} onClick={onClose}>
+    <section onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(92vw,560px)", textAlign: "center", padding: "34px 30px" }}>
+      <div style={{ width: 64, height: 64, margin: "0 auto 18px", display: "grid", placeItems: "center", borderRadius: 18, background: c.redBg, color: c.redFg, border: `2px solid ${c.redBorder}` }}><TwIcon name="alert" size={34} /></div>
+      <h2 style={{ color: c.text, margin: "0 0 12px" }}>Class membership updated</h2>
+      <p style={{ color: c.textMuted, fontSize: 16, lineHeight: 1.65, margin: "0 0 24px" }}>You have been removed from the class <b style={{ color: c.text }}>{notice.class_name}</b>.</p>
+      <TeacherPressButton tone="blue" onClick={onClose}>Okay</TeacherPressButton>
+    </section>
+  </div>;
 }
 
 function ProfileModal({ c, profile, setProfile, message, onSubmit, onClose, onUpload, onDelete, onBirth }) {
