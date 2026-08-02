@@ -171,8 +171,8 @@ export async function copyQuizToBank(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: q.config_json,
-        corr: q.correct_json,
+        cfg: JSON.stringify(q.config_json),
+        corr: JSON.stringify(q.correct_json),
       }
     );
   }
@@ -228,8 +228,8 @@ export async function duplicateQuiz(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: q.config_json,
-        corr: q.correct_json,
+        cfg: JSON.stringify(q.config_json),
+        corr: JSON.stringify(q.correct_json),
       }
     );
   }
@@ -282,7 +282,7 @@ export async function assignQuiz(req, res) {
     await pool.query(
       `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: q.config_json, corr: q.correct_json }
+      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: JSON.stringify(q.config_json), corr: JSON.stringify(q.correct_json) }
     );
   }
 
