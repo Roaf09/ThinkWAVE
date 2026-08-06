@@ -15,7 +15,9 @@ import { normalizeTemplateType } from "../../lib/templateTypes";
 import { getRole } from "../../lib/auth";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwIcon } from "../../components/TwUI";
+import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { QuestionAudioButton } from "../../components/AudioControls";
+import MatchingConnectorGame from "../../components/MatchingConnectorGame";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
   buildThinkSpellSignature,
@@ -110,10 +112,30 @@ function AntiCheatModal({ antiCheat, countdown, onConfirm }) {
     <div className={`sp-anticheat-icon ${warning ? "warning" : "danger"}`}><TwIcon name={warning ? "warning" : "logout"} size={38}/></div>
     <h3>{warning ? "Activity warning" : "Session access removed"}</h3>
     <p>{antiCheat.message}</p>
-    {warning ? <button type="button" disabled={countdown>0} onClick={onConfirm}>{countdown>0 ? `Confirm in ${countdown}s` : "Confirm"}</button> : <div className="sp-anticheat-countdown">Redirecting in {Math.max(0,countdown)}s…</div>}
+    {warning ? <button type="button" className="tw-dialog-press is-blue" disabled={countdown>0} onClick={onConfirm}><span>{countdown>0 ? `Confirm in ${countdown}s` : "Confirm"}</span></button> : <div className="sp-anticheat-countdown">Redirecting in {Math.max(0,countdown)}s…</div>}
   </div></div>;
 }
 
+
+function feedbackStatus(payload) {
+  if (payload?.feedbackType === "almost" || (!payload?.isCorrect && Number(payload?.points || 0) > 0)) return "almost";
+  return payload?.isCorrect ? "correct" : "wrong";
+}
+
+function feedbackCopy(payload) {
+  const status = feedbackStatus(payload);
+  if (status === "correct") return { title: `Correct! +${payload.points || 0} pts`, subtitle: "Nice one — keep the streak going!", icon: "check" };
+  if (status === "almost") {
+    const count = Number(payload?.correctCount || 0);
+    const total = Number(payload?.totalCorrect || 0);
+    const title = payload?.templateType === "MCQ" && total === 2 && count === 1 ? "Almost!" : `Almost! +${payload.points || 0} pts`;
+    const subtitle = payload?.templateType === "MCQ" && total === 2 && count === 1
+      ? "You chose 1 correct"
+      : total > 0 ? `${count} of ${total} correct` : "Some of your answers were correct.";
+    return { title, subtitle, icon: "warning" };
+  }
+  return { title: "Incorrect", subtitle: "No worries — the next question is yours.", icon: "close" };
+}
 
 // StudentPlay covers the entire student journey after joining: waiting room, current question, group flow, and leaderboard.
 export default function StudentPlay() {
@@ -133,6 +155,7 @@ export default function StudentPlay() {
   const [matchingMap, setMatchingMap] = useState({});
   const [spell, setSpell] = useState({ built: "", bank: [] });
   const [submittedQId, setSubmittedQId] = useState(null);
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState(() => new Set());
   const [submitLabel, setSubmitLabel] = useState("Submit");
   const [feedbackQ, setFeedbackQ] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -170,6 +193,16 @@ export default function StudentPlay() {
   const cardBor = dark ? "#1e2d55" : "#c7d2fe";
   const textC = dark ? "#e7e9ee" : "#0f172a";
   const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
+  const selectedBackground = getSessionBackground(state?.background_key);
+  const experienceBgStyle = selectedBackground
+    ? {
+        backgroundImage: `url("${selectedBackground.src}")`,
+        backgroundColor: pageBg,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }
+    : { background: pageBg };
   const currentSoundMode = state?.status === "LIVE"
     ? "playing"
     : (!state?.status || state?.status === "LOBBY" || state?.status === "PAUSED")
@@ -308,7 +341,13 @@ export default function StudentPlay() {
       const isThinkSpell = tt === "THINK_SPELL" || normalizeTemplateType(a.templateType) === "THINK_SPELL";
 
       if (a?.locked && currentQRef.current?.id) {
+        const answeredId = Number(currentQRef.current.id);
         setSubmittedQId(currentQRef.current.id);
+        setAnsweredQuestionIds((current) => {
+          const next = new Set(current);
+          next.add(answeredId);
+          return next;
+        });
       }
 
       if (a.message && !isThinkSpell) {
@@ -340,17 +379,23 @@ export default function StudentPlay() {
         }
 
         if (a.isCorrect !== null && a.isCorrect !== undefined) {
-          setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
+          setFeedbackQ({ ...a, status: feedbackStatus(a) });
           setShowFeedback(true);
           setFeedbackFxKey((v) => v + 1);
-          setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
+          setFeedbackPulse(feedbackStatus(a));
           feedbackHideTimer.current = setTimeout(() => {
             setShowFeedback(false);
             setFeedbackQ(null);
           }, 1200);
           feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
-          const effectPromise = a.isCorrect ? soundManager.play("correct") : soundManager.play("wrong");
+          const effectPromise = feedbackStatus(a) === "correct" ? soundManager.play("correct") : soundManager.play("wrong");
           void effectPromise;
+        }
+
+        if (a.locked && !a.thinkSpell) {
+          setSubmitLabel(feedbackStatus(a) === "correct" ? "Submitted ✓" : feedbackStatus(a) === "almost" ? "Partially correct" : "Submitted");
+          setTimeout(() => setPostAnswerPhase("wait"), 1250);
+          return;
         }
 
         if (a.thinkSpell?.remainingWords === 0 && Number(a.thinkSpell?.requiredWords || 0) > 0) {
@@ -366,10 +411,10 @@ export default function StudentPlay() {
 
       if (a?.locked && currentQRef.current?.id) setSubmittedQId(currentQRef.current.id);
 
-      setFeedbackQ({ isCorrect: a.isCorrect, points: a.points });
+      setFeedbackQ({ ...a, status: feedbackStatus(a) });
       setShowFeedback(true);
       setFeedbackFxKey((v) => v + 1);
-      setFeedbackPulse(a.isCorrect ? "correct" : "wrong");
+      setFeedbackPulse(feedbackStatus(a));
       feedbackHideTimer.current = setTimeout(() => {
         setShowFeedback(false);
         setFeedbackQ(null);
@@ -378,7 +423,7 @@ export default function StudentPlay() {
 
       setSubmitLabel(a.viaGroup ? "Group Submitted ✓" : a.isCorrect ? "Submitted ✓" : "Submitted");
       const isLast = currentQRef.current && stateRef.current && Number(stateRef.current.current_question_index || 0) >= Math.max(0, questionCountRef.current - 1);
-      const effectPromise = a.isCorrect ? soundManager.play("correct") : soundManager.play("wrong");
+      const effectPromise = feedbackStatus(a) === "correct" ? soundManager.play("correct") : soundManager.play("wrong");
 
       if (isLast) {
         setWaitingForFinalFx(true);
@@ -452,15 +497,16 @@ export default function StudentPlay() {
   const timer = useMemo(() => {
     const total = Number(currentQ?.config_json?.timeLimitSec || state?.time_limit_sec || 0);
     if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
+    const serverNowMs = nowMs - clockOffsetMs;
+    const started = state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
+    if (started && started > serverNowMs) return { remainingSec: total, progress: total > 0 ? 1 : 0, total };
     if (state?.question_deadline_at) {
-      const serverNowMs = nowMs - clockOffsetMs;
       const remainingMs = Math.max(0, new Date(state.question_deadline_at).getTime() - serverNowMs);
       const remaining = Math.ceil(remainingMs / 1000);
-      return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
+      return { remainingSec: remaining, progress: total > 0 ? Math.min(1, remaining / total) : 0, total };
     }
-    if (!state?.question_started_at) return { remainingSec: 0, progress: 0, total };
-    const started = new Date(state.question_started_at).getTime();
-    const elapsed = Math.max(0, Math.floor((nowMs - started) / 1000));
+    if (!started) return { remainingSec: 0, progress: 0, total };
+    const elapsed = Math.max(0, Math.floor((serverNowMs - started) / 1000));
     const remaining = Math.max(0, total - elapsed);
     return { remainingSec: remaining, progress: total > 0 ? remaining / total : 0, total };
   }, [state, nowMs, currentQ, clockOffsetMs]);
@@ -500,6 +546,8 @@ export default function StudentPlay() {
   const thinkSpellTimeUp = ttNormalized === "THINK_SPELL" && timer.remainingSec === 0 && state?.status === "LIVE";
   const thinkSpellAllFound = ttNormalized === "THINK_SPELL" && thinkSpellAllWordsFound && !thinkSpellTimeUp;
   const thinkSpellSubmitLabel = ttNormalized === "THINK_SPELL" ? "Submit Answers" : submitLabel;
+  const completedLiveCount = Math.min(questions.length, answeredQuestionIds.size);
+  const liveQuestionProgress = questions.length ? Math.round((completedLiveCount / questions.length) * 100) : 0;
 
   function submit() {
     if (isLocked) return;
@@ -551,13 +599,13 @@ export default function StudentPlay() {
     const myScore = scores.find((s) => s.participant_id === participantId);
     const myRank = scores.findIndex((s) => s.participant_id === participantId) + 1;
     return (
-      <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
+      <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
         {experienceControls}{antiCheatOverlay}
         <div className="sp-page-enter" style={{ maxWidth: 640, margin: "0 auto", padding: "32px 16px 48px" }}>
           <div style={{ textAlign: "center", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-              <div style={{ fontSize: 52 }}>🏆</div>
-                          </div>
+              <TwIcon name="trophy" size={58} style={{ color: "#f5b700", filter: "drop-shadow(0 8px 12px rgba(15,23,42,.24))" }} />
+            </div>
             {/* <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
               <SoundTogglePill muted={isMuted} onClick={handleToggleMute} />
               <ThemeTogglePill dark={dark} onClick={toggleTheme} />
@@ -566,19 +614,18 @@ export default function StudentPlay() {
             {myScore && <p style={{ fontSize: 15, color: mutedC }}>You scored <b style={{ color: "#2b6cff" }}>{myScore.total_points} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
           </div>
           <div style={{ background: cardBg, border: `1px solid ${cardBor}`, borderRadius: 22, padding: 20, marginBottom: 16, transition: "background 0.3s" }}>
-            <h3 style={{ margin: "0 0 14px", fontWeight: 800, fontSize: 17, color: textC }}>🏅 Leaderboard</h3>
-            {scores.slice(0, 10).map((s, i) => (
-              <div key={s.participant_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, marginBottom: 6, background: s.participant_id === participantId ? "rgba(43,108,255,0.12)" : "transparent", border: `1px solid ${s.participant_id === participantId ? "rgba(43,108,255,0.25)" : "transparent"}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
-                  <span style={{ fontWeight: s.participant_id === participantId ? 800 : 600, color: textC }}>{isGroupMode ? (s.group_name || `${s.first_name} ${s.last_name}`) : `${s.first_name} ${s.last_name}`}</span>
-                </div>
-                <span style={{ fontWeight: 900, color: "#2b6cff" }}>{s.total_points} pts</span>
-              </div>
-            ))}
+            <h3 style={{ margin: "0 0 14px", fontWeight: 800, fontSize: 17, color: textC, display: "flex", alignItems: "center", gap: 8 }}><TwIcon name="trophy" size={21} style={{ color: "#f5b700" }} /> Leaderboard</h3>
+            {scores.slice(0, 10).map((s, i) => {
+              const medalColor = i === 0 ? "#f5b700" : i === 1 ? "#aeb9c6" : i === 2 ? "#c7793e" : null;
+              return <div key={s.participant_id} className="tw-student-leader-row" style={{ background: s.participant_id === participantId ? "rgba(43,108,255,0.12)" : "transparent", borderColor: s.participant_id === participantId ? "rgba(43,108,255,0.25)" : "transparent" }}>
+                <span className="tw-student-leader-rank">{medalColor ? <TwIcon name="medal" size={24} style={{ color: medalColor }} /> : `#${i + 1}`}</span>
+                <span className="tw-student-leader-name" style={{ fontWeight: s.participant_id === participantId ? 800 : 600, color: textC }}>{isGroupMode ? (s.group_name || `${s.first_name} ${s.last_name}`) : `${s.first_name} ${s.last_name}`}</span>
+                <span className="tw-student-leader-points">{s.total_points} pts</span>
+              </div>;
+            })}
           </div>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <button onClick={() => exitTo(isGuestHosted ? "/" : getRole()==="STUDENT" ? "/student" : "/")} style={{ width: "min(100%, 360px)", padding: "14px", borderRadius: 999, border: "none", background: "#2b6cff", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 20px rgba(43,108,255,0.35)" }}><TwIcon name={isGuestHosted ? "logout" : "home"} size={17}/> {isGuestHosted ? "Exit" : "Dashboard"}</button>
+            <button className="tw-student-dashboard-press" onClick={() => exitTo(isGuestHosted ? "/" : getRole()==="STUDENT" ? "/student" : "/")}><span><TwIcon name={isGuestHosted ? "logout" : "home"} size={18}/> {isGuestHosted ? "Exit" : "Dashboard"}</span></button>
           </div>
         </div>
       </div>
@@ -587,7 +634,7 @@ export default function StudentPlay() {
 
   if (!state || state.status === "LOBBY" || state.status === "PAUSED") {
     return (
-      <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
+      <div style={{ minHeight: "100vh", ...experienceBgStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
         {experienceControls}{antiCheatOverlay}
         <div className="sp-wait-card sp-page-enter" style={{ width: "min(100%, 820px)", background: cardBg, borderColor: cardBor }}>
           <div className="sp-wait-icon-wrap" style={{ background: dark ? "rgba(255,255,255,0.05)" : "#eef3ff", borderColor: cardBor }}>
@@ -655,7 +702,7 @@ export default function StudentPlay() {
 
   if (state?.status === "LIVE" && countdown > 0) {
     return (
-      <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
+      <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
         {experienceControls}{antiCheatOverlay}
         <div className="countdown-overlay" style={{ background: dark ? undefined : "radial-gradient(circle at center, rgba(255,255,255,0.86), rgba(219,230,255,0.95))" }}>
           <div className="countdown-card">
@@ -670,7 +717,7 @@ export default function StudentPlay() {
 
   if (postAnswerPhase && state?.status === "LIVE") {
     return (
-      <div style={{ minHeight: "100vh", background: pageBg, fontFamily: "'Segoe UI',system-ui,sans-serif", display: "grid", placeItems: "center", padding: 20, transition: "background 0.45s" }}>
+      <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "'Segoe UI',system-ui,sans-serif", display: "grid", placeItems: "center", padding: 20, transition: "background 0.45s" }}>
         {experienceControls}{antiCheatOverlay}
         <div className={`sp-wait-card ${postAnswerPhase === "complete" ? "sp-phase-complete" : "sp-phase-wait"}`} style={{ maxWidth: 520, background: cardBg, borderColor: cardBor, textAlign: "center" }}>
           {postAnswerPhase === "complete" ? (
@@ -696,26 +743,22 @@ export default function StudentPlay() {
   const timerRed = (timer.remainingSec ?? 999) <= 5;
 
   return (
-    <div style={{ minHeight: "100vh", background: pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
+    <div style={{ minHeight: "100vh", ...experienceBgStyle, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
         {experienceControls}{antiCheatOverlay}
-      {showFeedback && feedbackQ && (
-        <div className={`sp-feedback-overlay ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
+      {showFeedback && feedbackQ && (() => {
+        const status = feedbackQ.status || feedbackStatus(feedbackQ);
+        const copy = feedbackCopy(feedbackQ);
+        return <div className={`sp-feedback-overlay is-${status}`}>
           <div className="sp-feedback-burst" aria-hidden="true">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <span key={i} style={{ "--i": i }} />
-            ))}
+            {Array.from({ length: 10 }).map((_, i) => <span key={i} style={{ "--i": i }} />)}
           </div>
-          <div key={feedbackFxKey} className={`sp-feedback-card ${feedbackQ.isCorrect ? "is-correct" : "is-wrong"}`}>
-            <div className="sp-feedback-icon"><TwIcon name={feedbackQ.isCorrect ? "check" : "close"} size={44}/></div>
-            <div className="sp-feedback-title">
-              {feedbackQ.isCorrect ? `Correct! +${feedbackQ.points} pts` : "Incorrect"}
-            </div>
-            <div className="sp-feedback-subtitle">
-              {feedbackQ.isCorrect ? "Nice one — keep the streak going!" : "No worries — the next question is yours."}
-            </div>
+          <div key={feedbackFxKey} className={`sp-feedback-card is-${status}`}>
+            <div className="sp-feedback-icon"><TwIcon name={copy.icon} size={44}/></div>
+            <div className="sp-feedback-title">{copy.title}</div>
+            <div className="sp-feedback-subtitle">{copy.subtitle}</div>
           </div>
-        </div>
-      )}
+        </div>;
+      })()}
 
       {groupProposal && isGroupMode && (
         <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: dark ? "rgba(0,0,0,0.56)" : "rgba(30,45,85,0.24)", backdropFilter: "blur(6px)" }}>
@@ -736,17 +779,18 @@ export default function StudentPlay() {
         </div>
       )}
 
-      <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"} ${feedbackPulse ? `feedback-hit-${feedbackPulse}` : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
+      <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"} ${selectedBackground ? "has-session-background" : ""} ${feedbackPulse ? `feedback-hit-${feedbackPulse}` : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
         <div className="qn-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div className="qn-title-cluster">
             <div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{state.quiz_title || "Quiz"}</div>
           </div>
           <div className="qn-meta">
             <div className="qn-qcount">{state?.template_type === "MATCHING" ? "Batch" : "Q"} {(state.current_question_index || 0) + 1}/{questions.length}</div>
-            <div className={`qn-timer ${state.quiz_category === "K12" ? "is-k12" : ""}`} style={{ background: timerRed ? "#ef4444" : undefined }}><TwIcon name="clock" size={17}/> {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
+            <div className={`qn-timer qn-pixel-timer ${state.quiz_category === "K12" ? "is-k12" : ""}`} style={{ background: timerRed ? "#ef4444" : undefined }}><TwIcon name="clock" size={17}/> {fmtTime(timer.remainingSec ?? Number(timer.total || state.time_limit_sec || 0))}</div>
           </div>
         </div>
-        <div className="qn-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
+        <div className="qn-question-progress" aria-label={`${completedLiveCount} of ${questions.length} questions answered`}><div className="qn-question-progress-bar" style={{ width: `${liveQuestionProgress}%` }} /></div>
+        <div className="qn-progress qn-timer-progress"><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%`, background: timerRed ? "#ef4444" : undefined }} /></div>
 
         <div className="qn-body" style={{ flex: 1 }}>
         {isGroupMode && myGroup && (
@@ -803,11 +847,7 @@ export default function StudentPlay() {
         </div>
         {msg && <div style={{ textAlign: "center", color: "#ef4444", fontWeight: 700, marginTop: 12 }}>{msg}</div>}
         {state?.template_type === "MATCHING" && isMatchingIncomplete && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>Match every question with an answer to unlock Submit.</div>}
-        {ttNormalized === "THINK_SPELL" && !thinkSpellTimeUp && !interactionLocked && !thinkSpellWordReady && (
-          <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>
-            Find at least one valid word before submitting.
-          </div>
-        )}
+
         {isLastQuestion && submittedQId === currentQ?.id && ttNormalized !== "THINK_SPELL" && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>You have reached the end.</div>}
         </div>
       </div>
@@ -868,196 +908,7 @@ function seededOrder(length, shouldShuffle, seedInput) {
   return arr;
 }
 function MatchingTemplate({ disabled, q, cfg, matchingMap, setMatchingMap }) {
-  const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
-  const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
-  const shuffleA = !!cfg.shuffleColA;
-  const questionSeed = `${q?.id || q?.prompt || "matching"}-${colA.length}-${colB.length}`;
-  const orderA = useMemo(() => seededOrder(colA.length, shuffleA, `${questionSeed}-A`), [colA.length, shuffleA, questionSeed]);
-  const orderB = useMemo(() => seededOrder(colB.length, true, `${questionSeed}-B-always`), [colB.length, questionSeed]);
-  const [selectedA, setSelectedA] = useState(null);
-  const [needPickQuestion, setNeedPickQuestion] = useState(false);
-
-  useEffect(() => {
-    setSelectedA(null);
-    setNeedPickQuestion(false);
-  }, [questionSeed]);
-
-  const total = colA.length;
-  const matchedCount = Object.keys(matchingMap).length;
-  const allDone = total > 0 && matchedCount === total;
-  const usedB = new Set(Object.values(matchingMap).map(Number));
-
-  function assignPair(aIndex, bIndex) {
-    if (disabled || aIndex == null || bIndex == null) return;
-    const next = { ...matchingMap };
-    Object.keys(next).forEach((key) => {
-      if (Number(key) === Number(aIndex)) delete next[key];
-      else if (Number(next[key]) === Number(bIndex)) delete next[key];
-    });
-    next[Number(aIndex)] = Number(bIndex);
-    setMatchingMap(next);
-    setSelectedA(null);
-    setNeedPickQuestion(false);
-  }
-
-  function clearPair(aIndex) {
-    if (disabled) return;
-    const next = { ...matchingMap };
-    delete next[Number(aIndex)];
-    setMatchingMap(next);
-    if (selectedA === aIndex) setSelectedA(null);
-  }
-
-  const hintMessage = (() => {
-    if (allDone) return "All pairs matched — press Submit when you're ready.";
-    if (selectedA !== null) return "Now tap the answer on the right that belongs with your highlighted question.";
-    if (needPickQuestion) return "Start on the left — tap a question first, then tap its answer.";
-    if (matchedCount === 0) return "Tap a question on the left, then tap the matching answer on the right.";
-    const left = total - matchedCount;
-    return `${left} more ${left === 1 ? "pair" : "pairs"} to go — tap a question, then its answer.`;
-  })();
-
-  return (
-    <div className="match-v2">
-      <div className="match-v2-intro">
-        <div className="match-v2-steps" aria-hidden="true">
-          <span className="match-v2-step"><span className="match-v2-step-num">1</span> Pick a question</span>
-          <span className="match-v2-step-arrow">→</span>
-          <span className="match-v2-step"><span className="match-v2-step-num">2</span> Pick its answer</span>
-        </div>
-        <div className="match-v2-progress">
-          <div className="match-v2-progress-top">
-            <span className="match-v2-progress-label">{matchedCount} of {total} matched</span>
-            {allDone ? <span className="match-v2-badge-done">Done</span> : null}
-          </div>
-          <div className="match-v2-progress-track" role="progressbar" aria-valuenow={matchedCount} aria-valuemin={0} aria-valuemax={total}>
-            <div className="match-v2-progress-fill" style={{ width: `${total ? Math.round((matchedCount / total) * 100) : 0}%` }} />
-          </div>
-        </div>
-      </div>
-
-      <p className="match-v2-hint" role="status">{hintMessage}</p>
-
-      <div className="match-v2-columns">
-        <section className="match-v2-col" aria-label="Questions">
-          <h3 className="match-v2-col-title">Questions</h3>
-          <ul className="match-v2-list">
-            {orderA.map((ai, rowIndex) => {
-              const a = colA[ai] || {};
-              const bIndex = matchingMap[ai] !== undefined ? Number(matchingMap[ai]) : null;
-              const matched = bIndex !== null && !Number.isNaN(bIndex);
-              const bItem = matched ? colB[bIndex] : null;
-              const isSelected = selectedA === ai;
-              return (
-                <li key={`q-${ai}`}>
-                  <button
-                    type="button"
-                    className={["match-v2-card", "match-v2-card-q", isSelected ? "is-selected" : "", matched ? "is-matched" : ""].filter(Boolean).join(" ")}
-                    style={{ background: CC_A[rowIndex % CC_A.length], borderColor: CB_A[rowIndex % CB_A.length], color: MATCH_TEXT, "--match-accent": CB_A[rowIndex % CB_A.length] }}
-                    onClick={() => {
-                      if (disabled) return;
-                      if (matched) clearPair(ai);
-                      else setSelectedA(isSelected ? null : ai);
-                      setNeedPickQuestion(false);
-                    }}
-                    disabled={disabled}
-                    aria-pressed={isSelected}
-                  >
-
-                    <span className="match-v2-card-main">
-                      {a.image ? <img src={a.image} alt="" className="match-v2-img" /> : null}
-                      {(trimText(a.text) || !a.image) ? (
-                        <span className="match-v2-text">{trimText(a.text) || `Question ${ai + 1}`}</span>
-                      ) : null}
-                      {matched && bItem ? (
-                        <span className="match-v2-paired">
-                          <span className="match-v2-paired-label">Your answer:</span>
-                          {bItem.image ? <img src={bItem.image} alt="" className="match-v2-img match-v2-img-small" /> : null}
-                          {(trimText(bItem.text) || !bItem.image) ? (
-                            <strong>{trimText(bItem.text) || `Answer ${bIndex + 1}`}</strong>
-                          ) : null}
-                          {!disabled ? <span className="match-v2-change">Tap to change</span> : null}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        <section className="match-v2-col" aria-label="Answers">
-          <h3 className="match-v2-col-title">Answers</h3>
-          <ul className="match-v2-list">
-            {orderB.map((bi, rowIndex) => {
-              const b = colB[bi] || {};
-              const isUsed = usedB.has(bi);
-              if (isUsed) return null;
-              const canPick = selectedA !== null;
-              return (
-                <li key={`a-${bi}`}>
-                  <button
-                    type="button"
-                    className={["match-v2-card", "match-v2-card-ans", isUsed ? "is-used" : "", canPick ? "is-targetable" : ""].filter(Boolean).join(" ")}
-                    style={{ background: isUsed ? undefined : CC_B[rowIndex % CC_B.length], borderColor: CB_A[rowIndex % CB_A.length], color: MATCH_TEXT, "--match-accent": CB_A[rowIndex % CB_A.length] }}
-                    onClick={() => {
-                      if (disabled || isUsed) return;
-                      if (selectedA === null) {
-                        setNeedPickQuestion(true);
-                        return;
-                      }
-                      assignPair(selectedA, bi);
-                    }}
-                    disabled={disabled || isUsed}
-                  >
-
-                    <span className="match-v2-card-main">
-                      {b.image ? <img src={b.image} alt="" className="match-v2-img" /> : null}
-                      {(trimText(b.text) || !b.image) ? (
-                        <span className="match-v2-text">{trimText(b.text) || `Answer ${bi + 1}`}</span>
-                      ) : null}
-                    </span>
-                    {isUsed ? <span className="match-v2-used-tag">Matched</span> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      </div>
-
-      {matchedCount > 0 ? (
-        <div className="match-v2-summary">
-          <div className="match-v2-summary-title">Your pairs</div>
-          <div className="match-v2-summary-chips">
-            {Object.keys(matchingMap)
-              .map(Number)
-              .sort((x, y) => x - y)
-              .map((ai) => {
-                const bi = Number(matchingMap[ai]);
-                const b = colB[bi];
-                const aItem = colA[ai];
-                const chipQ = (() => { const t = trimText(aItem?.text); return t ? (t.length > 22 ? t.slice(0, 22) + "…" : t) : (aItem?.image ? "🖼" : `Q${ai + 1}`); })();
-                const chipA = (() => { const t = trimText(b?.text); return t ? (t.length > 22 ? t.slice(0, 22) + "…" : t) : (b?.image ? "🖼" : `Answer ${bi + 1}`); })();
-                return (
-                  <div key={`pair-${ai}-${bi}`} className="match-v2-chip">
-                    <span className="match-v2-chip-q">{chipQ}</span>
-                    <span className="match-v2-chip-arrow" aria-hidden="true">↔</span>
-                    <span className="match-v2-chip-a">{chipA}</span>
-                    {!disabled ? (
-                      <button type="button" className="match-v2-chip-remove" onClick={() => clearPair(ai)} aria-label={`Remove match for question ${ai + 1}`}>
-                        ×
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  return <MatchingConnectorGame config={cfg} valueMap={matchingMap} onChange={setMatchingMap} disabled={disabled} questionKey={q?.id || q?.prompt || "matching"} />;
 }
 function GuessWord4PicsTemplate({ disabled, cfg, spell, setSpell }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
@@ -1213,7 +1064,7 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
   }
 
   const previewStatus = (() => {
-    if (!built.length) return "Hold and drag across adjacent letters.";
+    if (!built.length) return "";
     if (built.length < minWordLength) return `Need at least ${minWordLength} letters`;
     const matchedKey = matchThinkSpellWord(built, wordBank);
     if (matchedKey && foundSet.has(matchedKey)) return "Already found";
@@ -1221,16 +1072,14 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
     return "Release to add this word";
   })();
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
+  const foundLines = foundEntries
+    .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
+    .filter((points) => points.length > 1);
 
   return (
     <div className="bword-wrap">
       <div className="bword-hud">
         <div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div>
-        <div className="bword-hud-stat"><span className="bword-hud-label">Submit</span><span className="bword-hud-value">Once</span></div>
-      </div>
-
-      <div className="bword-instructions">
-        Hold and drag across adjacent letters to find words. Find all answers first, then submit once.
       </div>
 
       {cfg.showWordList !== false && wordBank.length > 0 && (
@@ -1268,9 +1117,10 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
             </button>
           ))}
         </div>
-        {linePoints.length > 1 && (
+        {(foundLines.length > 0 || linePoints.length > 1) && (
           <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">
-            <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            {foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}
+            {linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
           </svg>
         )}
       </div>
@@ -1282,13 +1132,9 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
         <div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div>
       </div>
 
-      <div className="bword-controls">
-        <button type="button" className="spell-ctrl clr" onClick={clearCurrent} disabled={disabled || !selected.length}>Clear current line</button>
-      </div>
-
       {foundEntries.length > 0 && (
         <div className="bword-found-panel">
-          <div className="bword-found-title">Words found before submission</div>
+          <div className="bword-found-title">Words found:</div>
           <div className="bword-found-list">
             {foundEntries.map((entry, index) => (
               <span key={`${entry.text}-${index}`} className="bword-found-chip">

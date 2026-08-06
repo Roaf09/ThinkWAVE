@@ -66,6 +66,7 @@ const iconSet = {
   link: [<path key="1" d="M9.5 14.5 14.5 9" />, <path key="2" d="M7.5 16.5 6 18a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0" />, <path key="3" d="m16.5 7.5 1.5-1.5a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0" />],
   plus: [<path key="1" d="M12 5v14" />, <path key="2" d="M5 12h14" />],
   trophy: [<path key="1" d="M8 4h8v4a4 4 0 0 1-8 0V4Z" />, <path key="2" d="M8 6H4v2a4 4 0 0 0 4 4" />, <path key="3" d="M16 6h4v2a4 4 0 0 1-4 4" />, <path key="4" d="M12 12v5" />, <path key="5" d="M8 20h8" />],
+  medal: [<path key="1" d="m8 3 4 6 4-6" />, <path key="2" d="M7 3h3l2 6 2-6h3" />, <circle key="3" cx="12" cy="15" r="5" />, <path key="4" d="m10.2 15 1.2 1.2 2.5-2.6" />],
   users: [<circle key="1" cx="9" cy="8" r="3" />, <circle key="2" cx="17" cy="9" r="2.3" />, <path key="3" d="M3.5 20a5.5 5.5 0 0 1 11 0" />, <path key="4" d="M14 15.5a4.5 4.5 0 0 1 6.5 4" />],
   warning: [<path key="1" d="M12 4 21 20H3L12 4Z" />, <path key="2" d="M12 9v4" />, <path key="3" d="M12 17h.01" />],
   eye: [<path key="1" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />, <circle key="2" cx="12" cy="12" r="2.8" />],

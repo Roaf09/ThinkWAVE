@@ -7,6 +7,8 @@
 import { pool } from "../../db.js";
 import { normalizeTemplateType } from "./templates.js";
 import { BASIC_LIMITS, getTeacherPlan, validateBasicQuestionPayload } from "../plans/plan.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
+import { normalizeQuizBackgroundKey, rememberQuizBackground } from "./quizBackground.runtime.js";
 
 function toMysqlDateTime(value) {
   return value ? String(value).replace("T", " ") : null;
@@ -16,7 +18,17 @@ export async function listQuizzes(req, res) {
   const [rows] = await pool.query(
     `SELECT q.*,
        (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS question_count,
-       (SELECT COALESCE(SUM(COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)), 0)
+       (SELECT COALESCE(SUM(
+          CASE
+            WHEN q.template_type='MATCHING' THEN
+              COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
+              * COALESCE(JSON_LENGTH(JSON_EXTRACT(qq.correct_json, '$.pairs')), 0)
+            WHEN q.template_type IN ('THINK_SPELL','THINK_AND_SPELL') THEN
+              COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
+              * COALESCE(JSON_LENGTH(JSON_EXTRACT(qq.correct_json, '$.answers')), JSON_LENGTH(JSON_EXTRACT(qq.config_json, '$.answers')), 0)
+            ELSE COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
+          END
+        ), 0)
           FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS total_score
      FROM quizzes q
      WHERE q.teacher_id=:tid AND q.deleted_at IS NULL
@@ -85,6 +97,15 @@ export async function upsertQuestions(req, res) {
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
   const items = req.body.questions;
+  const normalizedTemplate = normalizeTemplateType(q[0].template_type);
+  if (normalizedTemplate === "MATCHING") {
+    const invalidMatching = items.some((item) => {
+      const colA = Array.isArray(item?.config?.colA) ? item.config.colA : [];
+      const colB = Array.isArray(item?.config?.colB) ? item.config.colB : [];
+      return colA.length < 2 || colB.length < colA.length;
+    });
+    if (invalidMatching) return res.status(400).json({ message: "Matching questions require at least 2 completed pairs." });
+  }
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC") {
     const issue = validateBasicQuestionPayload(q[0].template_type, items);
@@ -140,9 +161,13 @@ export async function copyQuizToBank(req, res) {
   );
   if (existingCopy) return res.status(400).json({ message: "A quiz-bank copy already exists for this quiz." });
 
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
   const [created] = await pool.query(
-    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
-     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'BANKED')`,
+    quizzesHaveBackground
+      ? `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,background_key)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'BANKED',:backgroundKey)`
+      : `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'BANKED')`,
     {
       tid: teacherId,
       cid: quiz.class_id ?? null,
@@ -154,6 +179,7 @@ export async function copyQuizToBank(req, res) {
       ppq: quiz.points_per_question,
       rq: quiz.randomize_questions ? 1 : 0,
       sa: quiz.shuffle_answers ? 1 : 0,
+      backgroundKey: quiz.background_key || "background-01",
     }
   );
 
@@ -171,8 +197,8 @@ export async function copyQuizToBank(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: JSON.stringify(q.config_json),
-        corr: JSON.stringify(q.correct_json),
+        cfg: q.config_json,
+        corr: q.correct_json,
       }
     );
   }
@@ -197,9 +223,13 @@ export async function duplicateQuiz(req, res) {
   );
   if (existing) return res.status(400).json({ message: "Only one duplicate copy is allowed for each quiz." });
 
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
   const [created] = await pool.query(
-    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
-     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'DRAFT')`,
+    quizzesHaveBackground
+      ? `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,background_key)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'DRAFT',:backgroundKey)`
+      : `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'DRAFT')`,
     {
       tid: teacherId,
       cid: quiz.class_id ?? null,
@@ -211,6 +241,7 @@ export async function duplicateQuiz(req, res) {
       ppq: quiz.points_per_question,
       rq: quiz.randomize_questions ? 1 : 0,
       sa: quiz.shuffle_answers ? 1 : 0,
+      backgroundKey: quiz.background_key || "background-01",
     }
   );
 
@@ -228,8 +259,8 @@ export async function duplicateQuiz(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: JSON.stringify(q.config_json),
-        corr: JSON.stringify(q.correct_json),
+        cfg: q.config_json,
+        corr: q.correct_json,
       }
     );
   }
@@ -240,7 +271,7 @@ export async function duplicateQuiz(req, res) {
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
   const teacherId = req.user.sub;
-  const { classId, availableFrom, availableUntil } = req.body;
+  const { classId, availableFrom, availableUntil, backgroundKey = null } = req.body;
 
   const [[quiz]] = await pool.query(
     `SELECT * FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
@@ -254,9 +285,13 @@ export async function assignQuiz(req, res) {
   );
   if (!ownedClass) return res.status(400).json({ message: "Choose an available class for this assignment." });
 
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
   const [created] = await pool.query(
-    `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
-     VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
+    quizzesHaveBackground
+      ? `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until,background_key)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt,:backgroundKey)`
+      : `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
+         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
     {
       tid: teacherId,
       cid: Number(ownedClass.id),
@@ -270,8 +305,10 @@ export async function assignQuiz(req, res) {
       sa: quiz.shuffle_answers ? 1 : 0,
       fromDt: toMysqlDateTime(availableFrom),
       untilDt: toMysqlDateTime(availableUntil),
+      backgroundKey: normalizeQuizBackgroundKey(backgroundKey || quiz.background_key),
     }
   );
+  rememberQuizBackground(created.insertId, normalizeQuizBackgroundKey(backgroundKey || quiz.background_key));
 
   const [questions] = await pool.query(
     `SELECT question_order, prompt, config_json, correct_json
@@ -282,9 +319,18 @@ export async function assignQuiz(req, res) {
     await pool.query(
       `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: JSON.stringify(q.config_json), corr: JSON.stringify(q.correct_json) }
+      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: q.config_json, corr: q.correct_json }
     );
   }
+
+  // Once scheduled, return the reusable source quiz to Quiz Bank rather than
+  // leaving a second copy in the Sessions workspace.
+  await pool.query(
+    `UPDATE quizzes
+     SET status='BANKED', class_id=NULL, updated_at=NOW()
+     WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
+    { id: quizId, tid: teacherId }
+  );
 
   res.status(201).json({ ok: true, id: created.insertId });
 }
@@ -293,7 +339,7 @@ export async function reuseQuiz(req, res) {
   const classId = req.body.classId ?? null;
   await pool.query(
     `UPDATE quizzes
-     SET status='PUBLISHED', class_id=:cid
+     SET status='PUBLISHED', class_id=:cid, updated_at=NOW()
      WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
     { id: req.params.id, tid: req.user.sub, cid: classId }
   );

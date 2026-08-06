@@ -5,23 +5,26 @@ import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { IconBubble, TwIcon } from "../components/TwUI";
 import PublicHeader from "../components/PublicHeader";
+import ThemeIconButton from "../components/ThemeIconButton";
 import { TEMPLATE_PALETTES } from "../lib/templatePalette";
 
-/* Replace these image files in client/public/media/landing/ without changing this code. */
+/* Revision 10: the landing carousel uses every image supplied in carousel.zip. */
 const HERO_SLIDES = [
-  { src: "/media/landing/core-quiz-builder.svg", alt: "ThinkWAVE quiz builder" },
-  { src: "/media/landing/core-live-session.svg", alt: "ThinkWAVE live session" },
-  { src: "/media/landing/core-analytics.svg", alt: "ThinkWAVE classroom analytics" },
-  { src: "/media/landing/core-classes.svg", alt: "ThinkWAVE class organization" },
+  { src: "/media/landing/carousel/1.png", alt: "ThinkWAVE learning experience preview 1" },
+  { src: "/media/landing/carousel/2.png", alt: "ThinkWAVE learning experience preview 2" },
+  { src: "/media/landing/carousel/3.png", alt: "ThinkWAVE learning experience preview 3" },
+  { src: "/media/landing/carousel/4.png", alt: "ThinkWAVE learning experience preview 4" },
+  { src: "/media/landing/carousel/5.png", alt: "ThinkWAVE learning experience preview 5" },
+  { src: "/media/landing/carousel/6.png", alt: "ThinkWAVE learning experience preview 6" },
 ];
-/* Replace the files in client/public/media/templates/ to show your own gameplay screenshots. */
+/* Revision 10: desktop/mobile previews supplied in preview.zip. */
 const TEMPLATE_IMAGES = {
-  MCQ: { landscape: "/media/templates/multiple-choice.svg", mobile: "/media/templates/multiple-choice-mobile.svg" },
-  TRUE_FALSE: { landscape: "/media/templates/true-false.svg", mobile: "/media/templates/true-false-mobile.svg" },
-  TYPE_ANSWER: { landscape: "/media/templates/identification.svg", mobile: "/media/templates/identification-mobile.svg" },
-  MATCHING: { landscape: "/media/templates/matching.svg", mobile: "/media/templates/matching-mobile.svg" },
-  GUESS_WORD_4PICS: { landscape: "/media/templates/guess-word.svg", mobile: "/media/templates/guess-word-mobile.svg" },
-  THINK_SPELL: { landscape: "/media/templates/think-and-spell.svg", mobile: "/media/templates/think-and-spell-mobile.svg" },
+  MCQ: { landscape: "/media/templates/previews/mcq-landscape.png", mobile: "/media/templates/previews/mcq-mobile.png" },
+  TRUE_FALSE: { landscape: "/media/templates/previews/tof-landscape.png", mobile: "/media/templates/previews/tof-mobile.png" },
+  TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.png", mobile: "/media/templates/previews/identification-mobile.png" },
+  MATCHING: { landscape: "/media/templates/previews/matching-landscape.png", mobile: "/media/templates/previews/matching-mobile.png" },
+  GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.png", mobile: "/media/templates/previews/guess-word-mobile.png" },
+  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.png", mobile: "/media/templates/previews/think-spell-mobile.png" },
 };
 
 const benefits = [
@@ -37,7 +40,7 @@ const templateCopy = {
 };
 
 export default function Landing(){
-  const c=useColors(); const {dark}=useTheme(); const nav=useNavigate();
+  const c=useColors(); const {dark,toggleTheme}=useTheme(); const nav=useNavigate();
   const [isFirstRun,setIsFirstRun]=useState(true); const [stats,setStats]=useState({sessionsCompleted:0,institutionsEmpowered:0,classesCreated:0});
   const [modalOpen,setModalOpen]=useState(false); const [modalStep,setModalStep]=useState("root"); const [entryMode,setEntryMode]=useState(""); const [joinCode,setJoinCode]=useState(""); const [modalMsg,setModalMsg]=useState(""); const [checking,setChecking]=useState(false);
   const [slide,setSlide]=useState(0); const [starOpacity,setStarOpacity]=useState(1); const [showBackTop,setShowBackTop]=useState(false); const [templatePreview,setTemplatePreview]=useState(null); const [previewClosing,setPreviewClosing]=useState(false); const hoverTimer=useRef(null); const closeTimer=useRef(null);
@@ -74,7 +77,7 @@ export default function Landing(){
   }
   const modalTitle=useMemo(()=>modalStep==="joinRole"?"Join Session":modalStep==="hostRole"?"Host Session":modalStep==="joinCode"?"Enter Session Code":"Get Started",[modalStep]);
   return <div id="home" className="tw-landing-page tw-starry-page" style={{"--tw-star-opacity":starOpacity,background:c.pageBg,color:c.text}}>
-    <PublicHeader onSection={scroll} setupComplete={!isFirstRun} concealSuper/>
+    <PublicHeader onSection={scroll} setupComplete={!isFirstRun} concealSuper hideTheme/>
     <main>
       <section className="tw-landing-hero">
         <div className="tw-landing-hero-copy"><div className="tw-eyebrow">Playful learning. Clear progress.</div><h1>Turn every lesson into a learning experience students want to join.</h1><div className="tw-landing-cta"><button className="tw-cta-primary tw-landing-highlight-action" onClick={getStarted} disabled={checking}>{checking?"Please wait…":"Get Started"}</button>{!isFirstRun&&<button className="tw-cta-secondary tw-landing-highlight-action" style={{color:c.text,borderColor:c.accent}} onClick={()=>nav("/login?role=admin")}>Join as Admin</button>}</div></div>
@@ -92,8 +95,9 @@ export default function Landing(){
 
       <section className="tw-flat-section tw-stat-section"><div className="tw-centered-heading"><p className="tw-stat-lead">ThinkWAVE is an interactive learning space that brings engaging activities and meaningful results together for <b>teachers and institutions</b>. Every completed session helps build a clearer picture of learning.</p></div><div className="tw-stat-grid"><Stat value={stats.sessionsCompleted} label="Sessions Completed" c={c}/><Stat value={stats.institutionsEmpowered} label="Institutions Empowered" c={c}/><Stat value={stats.classesCreated} label="Classes Created" c={c}/></div></section>
 
-      <section id="plans" className="tw-flat-section"><div className="tw-centered-heading"><span className="tw-eyebrow">Start where you are</span><h2>Choose your plan</h2></div><div className="tw-plan-grid"><PlanCard c={c} title="Basic" subtitle="Explore core features with essential access" price="₱0" features={["All six templates with Basic question and time limits","Save up to 5 Question Bank items per template","Solo live sessions for up to 45 students","Class folders, assigned work, and core analytics"]} action="Get Started" basic onClick={()=>nav("/register")}/><PlanCard c={c} title="Institution" subtitle="Bring full classroom tools to your institution" price="₱999" highlighted features={["Everything in Basic without template limits","Modified choices, image tools, and full Question Bank access","Solo or group live sessions with expanded capacity","Advanced analytics, tab monitoring, PDF and XLSX reports"]} action="Contact Us" onClick={()=>{sessionStorage.setItem("tw_public_from","right");nav("/plan")}}/></div></section>
+      <section id="plans" className="tw-flat-section"><div className="tw-centered-heading"><span className="tw-eyebrow">Start where you are</span><h2>Choose your plan</h2></div><div className="tw-plan-grid tw-plan-grid-three"><PlanCard c={c} title="ThinkWAVE Basic" subtitle="Explore core features with essential access" price="₱0" features={["All six templates with Basic question and time limits","Save up to 5 Question Bank items per template","Solo live sessions for up to 45 students","Class folders, assigned work, and core analytics"]} action="Get Started" basic onClick={()=>nav("/register")}/><PlanCard c={c} title="ThinkWAVE Pro" subtitle="Full classroom tools for one individual teacher" price="₱499" priceNote="/per month for 1 person" highlighted features={["Everything in Basic without template limits","Modified choices, image tools, and full Question Bank access","Solo or group live sessions with expanded capacity","Advanced analytics, PDF and XLSX reports"]} action="Contact Us" onClick={()=>{sessionStorage.setItem("tw_public_from","right");nav("/plan?type=pro")}}/><PlanCard c={c} title="ThinkWAVE Institution" subtitle="Bring full classroom tools to your institution" price="₱999" priceNote="/per month for an institution" features={["Everything in Pro for institution members","Shared institution privileges for approved teachers","Institution-level administration and teacher management","Thirty-day access after every approved payment"]} action="Contact Us" onClick={()=>{sessionStorage.setItem("tw_public_from","right");nav("/plan?type=institution")}}/></div></section>
     </main>
+    {createPortal(<ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22}/>, document.body)}
     <div className="tw-back-top-wrap"><button type="button" className={`tw-back-top ${showBackTop?"visible":""}`} aria-label="Back to top" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} style={{background:c.cardBg3,color:c.text,borderColor:c.border}}><TwIcon name="chevronUp" size={21}/></button></div>
     <footer id="footer" className="tw-landing-footer" style={{background:c.cardBg3,borderColor:c.border}}><div><div className="tw-footer-logo"><span style={{color:c.text}}>Think</span><span>WAVE</span></div><p style={{color:c.textMuted}}>Create moments of learning that move with your classroom.</p></div><div className="tw-footer-links"><div><b>Legal</b><span>Privacy</span><span>Terms</span></div><div><b>Links</b><button onClick={()=>scroll("templates")}>Templates</button><button onClick={()=>scroll("plans")}>Plans</button></div><div><b>Contacts</b><span>ThinkWAVE Support</span><span>Philippines</span></div></div><div className="tw-footer-copy" style={{borderColor:c.border,color:c.textMuted}}>© 2026 ThinkWAVE · All Rights Reserved.</div></footer>
 
@@ -102,4 +106,4 @@ export default function Landing(){
   </div>
 }
 function Stat({value,label,c}){return <div className="tw-stat-item"><b style={{color:c.text}}>{Number(value||0).toLocaleString()}</b><span style={{color:c.textMuted}}>{label}</span></div>}
-function PlanCard({c,title,subtitle,price,features,action,onClick,highlighted,basic}){return <article className={`tw-plan-card ${highlighted?"featured":""}`} style={{background:c.cardBg,borderColor:highlighted?c.accent:c.border}}><div className="tw-plan-top"><div><h3>{title}</h3><p style={{color:c.textMuted}}>{subtitle}</p></div><strong>{price}</strong></div><hr style={{borderColor:c.border}}/><b>Includes:</b><ul>{features.map(x=><li key={x}><TwIcon name="check" size={17}/>{x}</li>)}</ul><button className={basic?"tw-plan-basic-action":"tw-plan-contact-action"} onClick={onClick}>{action} <TwIcon name="arrow" size={17}/></button></article>}
+function PlanCard({c,title,subtitle,price,priceNote,features,action,onClick,highlighted,basic}){return <article className={`tw-plan-card ${highlighted?"featured":""}`} style={{background:c.cardBg,borderColor:highlighted?c.accent:c.border}}><div className="tw-plan-top"><div><h3>{title}</h3><p style={{color:c.textMuted}}>{subtitle}</p></div><div className="tw-plan-price"><strong>{price}</strong>{priceNote&&<small style={{color:c.textMuted}}>{priceNote}</small>}</div></div><hr style={{borderColor:c.border}}/><b>Includes:</b><ul>{features.map(x=><li key={x}><TwIcon name="check" size={17}/>{x}</li>)}</ul><button className={basic?"tw-plan-basic-action":"tw-plan-contact-action"} onClick={onClick}>{action}</button></article>}

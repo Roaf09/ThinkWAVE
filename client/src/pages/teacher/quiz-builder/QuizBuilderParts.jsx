@@ -36,6 +36,7 @@ export function BuilderModal({ title, message, onClose, actions, ui, c, autoDism
       autoDismiss={autoDismiss}
       closeOnBackdrop={!autoDismiss}
       width="min(100%, 560px)"
+      plainIcon
     />
   );
 }
@@ -55,7 +56,7 @@ export function BankModal({ templateType, onSelect, onClose, ui, c }) {
   return (
     <div style={ui.modalWrap} onClick={onClose}>
       <section className="tw-builder-bank-dialog" style={{ ...ui.modalCard, maxWidth: 620, maxHeight: "82vh", overflowY: "auto", textAlign: "left" }} onClick={(e) => e.stopPropagation()}>
-        <div className="tw-builder-dialog-icon" style={{ color: c.accent, background: `${c.accent}16`, borderColor: `${c.accent}55` }}><TwIcon name="bank" size={38} /></div>
+        <div className="tw-builder-dialog-icon tw-builder-dialog-icon-plain" style={{ color: c.text, background: "transparent", borderColor: "transparent" }}><TwIcon name="bank" size={44} /></div>
         <h3 style={{ margin: "14px 0 4px", color: c.text, fontSize: 24 }}>Add from Question Bank</h3>
         <p style={{ fontSize: 13, color: c.textMuted, margin: "0 0 18px" }}>Choose a saved {templateType} question to add to this quiz.</p>
         {loading && <p style={{ color: c.textMuted }}>Loading…</p>}
@@ -100,11 +101,15 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
   const gridSize = Math.min(maxGrid, Math.max(minGrid, Number(cfg.gridSize || minGrid)));
   const gridSeed = Number(cfg.gridSeed || 1);
   const canFill = normalized.length > 0 && gridSize >= longest;
+  const savedGridKey = Array.isArray(cfg.grid) ? cfg.grid.join("") : "";
   const preview = useMemo(() => {
     if (!cfg.gridFilled || !canFill) return { grid: new Array(gridSize * gridSize).fill(""), gridSize };
+    if (Array.isArray(cfg.grid) && cfg.grid.length === gridSize * gridSize) {
+      return { grid: cfg.grid.map((letter) => String(letter || "").toUpperCase()), gridSize };
+    }
     const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: normalized })}-${gridSeed}`;
     return buildThinkSpellGrid({ gridSize, words: normalized, seed: buildThinkSpellSeed(signature) });
-  }, [cfg.gridFilled, canFill, gridSize, gridSeed, normalized.join("|")]);
+  }, [cfg.gridFilled, canFill, gridSize, gridSeed, savedGridKey, normalized.join("|")]);
 
   function handleAnswersChange(e) {
     const next = e.target.value;
@@ -118,23 +123,32 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
     const nextSize = Math.min(nextMax, Math.max(nextMin, Number(cfg.gridSize || nextMin)));
     onChange({
       correct: { ...cor, answers: parsed, text: parsed[0] || "" },
-      config: { ...cfg, answers: parsed, gridSize: nextSize, gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 },
+      config: { ...cfg, answers: parsed, gridSize: nextSize, grid: [], gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 },
     });
   }
 
   function setGridSize(value) {
     const next = Math.min(maxGrid, Math.max(minGrid, Number(value) || minGrid));
-    onChange({ config: { ...cfg, answers, gridSize: next, gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+    onChange({ config: { ...cfg, answers, gridSize: next, grid: [], gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+  }
+
+  function buildSavedGrid(seedValue) {
+    const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: normalized })}-${seedValue}`;
+    return buildThinkSpellGrid({ gridSize, words: normalized, seed: buildThinkSpellSeed(signature) });
   }
 
   function fillGrid() {
     if (!canFill) return;
-    onChange({ config: { ...cfg, answers, gridSize, gridFilled: true, gridSeed: gridSeed || 1, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+    const seedValue = gridSeed || 1;
+    const filled = buildSavedGrid(seedValue);
+    onChange({ config: { ...cfg, answers, gridSize: filled.gridSize, grid: filled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
   }
 
   function shuffleGrid() {
     if (!canFill || !cfg.gridFilled) return;
-    onChange({ config: { ...cfg, answers, gridSize, gridFilled: true, gridSeed: gridSeed + 1, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+    const seedValue = gridSeed + 1;
+    const shuffled = buildSavedGrid(seedValue);
+    onChange({ config: { ...cfg, answers, gridSize: shuffled.gridSize, grid: shuffled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
   }
 
   return (
@@ -414,8 +428,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
             const letter = String.fromCharCode(65 + i);
             if (mcqMode === "MODIFIED") {
               return <div key={opt.id || i} className={`tw-mcq-image-choice${isCorrect ? " is-correct" : ""}`} style={{ borderColor: isCorrect ? c.accent : c.border, background: isCorrect ? `${c.accent}12` : c.cardBg }}>
-                <button type="button" className="tw-mcq-correct-dot" title="Mark as correct answer" onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ borderColor: isCorrect ? c.accent : c.textMuted, background: isCorrect ? c.accent : c.cardBg }}>{isCorrect ? "✓" : ""}</button>
-                <span className="tw-mcq-image-letter" style={{ background: c.yellowBg, color: c.yellowFg }}>{letter}</span>
+                <button type="button" className="tw-mcq-correct-dot tw-mcq-image-correct-letter" title={`Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ borderColor: isCorrect ? c.accent : c.textMuted, background: isCorrect ? c.accent : c.cardBg, color: isCorrect ? "#fff" : c.text }}>{letter}</button>
                 <ImageUploadTile value={opt.image} label={`Upload image ${letter}`} onChange={(value) => updateImage(i, value)} c={c} accent={ui.templateAccent} />
                 {cfg.voiceRecord && <div className="tw-builder-choice-record"><span>Choice {letter} recording</span><VoiceRecorderButton value={(Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [])[i] || ""} onChange={(value) => updateRecording(i, value)} /></div>}
               </div>;
@@ -439,7 +452,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
           {selectedOpt ? <>✓ Correct answer{answerMode === "TWO" ? "s" : ""}: <span style={{ fontWeight: 900 }}>{correctChoices.map((choice) => choiceDisplay(opts.find((row) => choiceMatchesValue(row, choice)), "Selected choice")).join(" + ")}</span></> : <>○ No correct answer selected yet</>}
         </div>
 
-        {showMatchingSuggest && <ActionDialog tone="blue" icon="matching" title="Too many choices?" message={<><p style={{ margin: "0 0 12px" }}>MCQ is capped at <strong style={{ color: c.text }}>5 choices</strong>. If you need more options, the <strong style={{ color: c.accent }}>Matching</strong> template is a better fit.</p><div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, lineHeight: 1.6 }}>Converting will <strong style={{ color: c.text }}>reset this question&apos;s choices and correct answer</strong>. Your question text will be kept.</div></>} onClose={() => setShowMatchingSuggest(false)} width="min(100%, 440px)" actions={<div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}><button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...primaryBtn({ bg: c.accent, fg: "#fff", border: c.accent }), width: "100%", padding: "13px 16px", boxShadow: `0 12px 26px ${c.accent}38` }} onClick={() => { setShowMatchingSuggest(false); onChange({ config: { colA: [{ text: "", image: "" }], colB: [{ text: "", image: "" }], dummyB: [] }, correct: { pairs: [{ aIndex: 0, bIndex: 0 }] }, _convertToMatching: true }); }}>Yes, convert to Matching</button><button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, width: "100%", padding: "13px 16px", fontSize: 14, fontWeight: 800 }} onClick={() => setShowMatchingSuggest(false)}>Keep MCQ</button></div>} />}
+        {showMatchingSuggest && <ActionDialog tone="blue" icon="matching" plainIcon title="Too many choices?" message={<><p style={{ margin: "0 0 12px" }}>MCQ is capped at <strong style={{ color: c.text }}>5 choices</strong>. If you need more options, the <strong style={{ color: c.accent }}>Matching</strong> template is a better fit.</p><div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, lineHeight: 1.6 }}>Converting will <strong style={{ color: c.text }}>reset this question&apos;s choices and correct answer</strong>. Your question text will be kept.</div></>} onClose={() => setShowMatchingSuggest(false)} width="min(100%, 440px)" actions={<div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}><button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...primaryBtn({ bg: c.accent, fg: "#fff", border: c.accent }), width: "100%", padding: "13px 16px", boxShadow: `0 12px 26px ${c.accent}38` }} onClick={() => { setShowMatchingSuggest(false); onChange({ config: { colA: [{ text: "", image: "" }], colB: [{ text: "", image: "" }], dummyB: [] }, correct: { pairs: [{ aIndex: 0, bIndex: 0 }] }, _convertToMatching: true }); }}>Yes, convert to Matching</button><button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, width: "100%", padding: "13px 16px", fontSize: 14, fontWeight: 800 }} onClick={() => setShowMatchingSuggest(false)}>Keep MCQ</button></div>} />}
       </div>
     );
   }
@@ -642,8 +655,10 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
               {activeDummy.map((row, index) => (
                 <div key={index} className="tw-matching-dummy-card" style={{ borderColor: c.border, background: c.cardBg }}>
                   <div className="tw-matching-dummy-label"><label style={ui.smallLabel}>Dummy {index + 1}</label><button type="button" className="tw-builder-flat-danger" onClick={() => removeDummy(index)}>Delete</button></div>
-                  <input maxLength={255} value={row.text || ""} placeholder="Wrong choice (optional)" onChange={(e) => updateDummy(index, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                  {!isBasic && <ImageUploadTile compact value={row.image || ""} label="Upload dummy image" onChange={(value) => updateDummy(index, { image: value })} c={c} accent={ui.templateAccent} />}
+                  <div className="tw-matching-dummy-fields">
+                    <input className="tw-matching-dummy-input" maxLength={255} value={row.text || ""} placeholder="Wrong choice (optional)" onChange={(e) => updateDummy(index, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                    <ImageUploadTile compact value={row.image || ""} label="Upload image (optional)" onChange={(value) => updateDummy(index, { image: value })} c={c} accent={ui.templateAccent} />
+                  </div>
                 </div>
               ))}
             </div>

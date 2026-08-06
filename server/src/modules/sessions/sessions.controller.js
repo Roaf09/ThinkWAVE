@@ -10,12 +10,50 @@ import { resolveThinkSpellWordBank } from "../quizzes/templates/thinkspell/think
 import { normalizeTemplateType } from "../quizzes/templates.js";
 import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
+import { getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
   if (!v) return null;
   if (typeof v === "object") return v;
   try { return JSON.parse(v); } catch { return null; }
+}
+
+
+function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
+function responseChoiceKeys(templateType, answer, config = {}) {
+  const tt = normalizeTemplateType(templateType);
+  if (tt === "TRUE_FALSE") {
+    const value = normalizeChoiceValue(answer?.choice);
+    return value === "true" ? ["0"] : value === "false" ? ["1"] : [];
+  }
+  if (tt !== "MCQ") return [];
+  const options = Array.isArray(config?.options) ? config.options : [];
+  const selected = Array.isArray(answer?.choices) ? answer.choices : [answer?.choice].filter((value) => value !== undefined && value !== null && value !== "");
+  const keys = [];
+  for (const choice of selected) {
+    const actual = normalizeChoiceValue(choice);
+    const index = options.findIndex((option, optionIndex) => {
+      const row = option && typeof option === "object" ? option : { text: String(option ?? ""), id: `option-${optionIndex + 1}` };
+      return [row.id, row.text, row.label].some((value) => normalizeChoiceValue(value) === actual);
+    });
+    if (index >= 0) keys.push(String(index));
+  }
+  return Array.from(new Set(keys));
+}
+function sortScoreRows(rows, templateType) {
+  const timedTemplates = new Set(["TYPE_ANSWER", "MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"]);
+  return [...rows].sort((a, b) => {
+    const points = Number(b.total_points || 0) - Number(a.total_points || 0);
+    if (points) return points;
+    if (timedTemplates.has(normalizeTemplateType(templateType))) {
+      const aTime = Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER);
+      const bTime = Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER);
+      if (aTime !== bTime) return aTime - bTime;
+    }
+    return `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`);
+  });
 }
 
 function shuffle(arr) {
@@ -68,14 +106,19 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
-  const { quizId, joinMode = "SOLO", classId = null } = req.body;
+  const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null } = req.body;
+  const hasRequestedBackground = /^background-(?:0[1-9]|1[0-9]|2[0-2])$/.test(String(backgroundKey || ""));
+  const safeBackgroundKey = normalizeSessionBackgroundKey(backgroundKey);
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC" && joinMode === "GROUP") {
     return res.status(403).json({ message: "Group mode is available on the Institution plan." });
   }
 
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
+  const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
   const [[quiz]] = await pool.query(
-    `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode
+    `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode,
+            ${quizzesHaveBackground ? "background_key" : "NULL AS background_key"}
      FROM quizzes
      WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`,
     { qid: quizId, tid: req.user.sub }
@@ -89,6 +132,15 @@ export async function createSession(req, res) {
     { qid: quizId, tid: req.user.sub }
   );
   if (active) {
+    if (hasRequestedBackground) {
+      rememberSessionBackground(active.id, safeBackgroundKey);
+      if (sessionsHaveBackground) {
+        await pool.query(`UPDATE sessions SET background_key=:backgroundKey WHERE id=:sid`, { sid: active.id, backgroundKey: safeBackgroundKey });
+      }
+      if (quizzesHaveBackground) {
+        await pool.query(`UPDATE quizzes SET background_key=:backgroundKey WHERE id=:qid AND teacher_id=:tid`, { qid: quizId, tid: req.user.sub, backgroundKey: safeBackgroundKey });
+      }
+    }
     return res.status(200).json({ id: active.id, joinCode: active.join_code, joinMode: active.join_mode, existing: true });
   }
 
@@ -114,15 +166,21 @@ export async function createSession(req, res) {
   // Capacity is now automatic instead of being exposed as a teacher-facing field.
   const maxCap = plan.code === "BASIC" ? BASIC_LIMITS.live.maxStudents : null;
 
-  const [r] = await pool.query(
-    `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json)
-     VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot)`,
-    { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot) }
+  const insertSql = sessionsHaveBackground
+    ? `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json, background_key)
+       VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot,:backgroundKey)`
+    : `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json)
+       VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot)`;
+  const [r] = await pool.query(insertSql,
+    { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot), backgroundKey: safeBackgroundKey }
   );
+  rememberSessionBackground(r.insertId, safeBackgroundKey);
 
   await pool.query(
-    `UPDATE quizzes SET status='IN_SESSION' WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`,
-    { qid: quizId, tid: req.user.sub }
+    quizzesHaveBackground
+      ? `UPDATE quizzes SET status='IN_SESSION', background_key=:backgroundKey WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`
+      : `UPDATE quizzes SET status='IN_SESSION' WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`,
+    { qid: quizId, tid: req.user.sub, backgroundKey: safeBackgroundKey }
   );
 
   res.status(201).json({ id: r.insertId, joinCode: code, joinMode, maxParticipants: maxCap });
@@ -155,8 +213,17 @@ export async function getSession(req, res) {
 export async function getSessionStateTeacher(req, res) {
   const sessionId = Number(req.params.id);
 
+  const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
+  const backgroundSelect = sessionsHaveBackground && quizzesHaveBackground
+    ? "COALESCE(s.background_key, q.background_key) AS resolved_background_key,"
+    : sessionsHaveBackground
+      ? "s.background_key AS resolved_background_key,"
+      : quizzesHaveBackground
+        ? "q.background_key AS resolved_background_key,"
+        : "NULL AS resolved_background_key,";
   const [[session]] = await pool.query(
-    `SELECT s.*, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
+    `SELECT s.*, ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
             CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
      FROM sessions s
      JOIN quizzes q ON q.id=s.quiz_id
@@ -165,6 +232,10 @@ export async function getSessionStateTeacher(req, res) {
     { sid: sessionId, tid: req.user.sub }
   );
   if (!session) return res.status(404).json({ message: "Session not found" });
+  session.background_key = normalizeSessionBackgroundKey(
+    session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
+  );
+  delete session.resolved_background_key;
 
   const questions = safeJson(session.questions_snapshot_json) || [];
   const currentQ = questions[Number(session.current_question_index || 0)] || null;
@@ -193,23 +264,34 @@ export async function getSessionStateTeacher(req, res) {
   if (session.join_mode === "GROUP") {
     const [rows] = await pool.query(
       `SELECT MIN(sp.id) AS participant_id, COALESCE(sg.display_name, sg.default_name) AS group_name, MAX(COALESCE(sc.total_points,0)) AS total_points,
-              MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name
+              MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name,
+              CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
+                   ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, MIN(sp.joined_at)), MAX(r.answered_at)) / 1000 END AS completion_ms
        FROM session_groups sg
+       JOIN sessions session_row ON session_row.id=sg.session_id
        LEFT JOIN session_group_members gm ON gm.group_id = sg.id
        LEFT JOIN session_participants sp ON sp.id = gm.participant_id
        LEFT JOIN scores sc ON sc.session_id = sg.session_id AND sc.participant_id = sp.id
+       LEFT JOIN responses r ON r.session_id=sg.session_id AND r.participant_id=sp.id
        WHERE sg.session_id=:sid
-       GROUP BY sg.id, sg.display_name, sg.default_name
-       ORDER BY total_points DESC, group_name ASC`,
+       GROUP BY sg.id, sg.display_name, sg.default_name, session_row.started_at`,
       { sid: sessionId }
     );
-    scores = rows;
+    scores = sortScoreRows(rows, session.template_type);
   } else {
     const [rows] = await pool.query(
-      `SELECT s.participant_id, s.total_points, p.first_name, p.last_name, p.group_name FROM scores s JOIN session_participants p ON p.id=s.participant_id WHERE s.session_id=:sid ORDER BY s.total_points DESC, p.last_name ASC, p.first_name ASC`,
+      `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name,
+              CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
+                   ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, p.joined_at), MAX(r.answered_at)) / 1000 END AS completion_ms
+       FROM scores sc
+       JOIN session_participants p ON p.id=sc.participant_id
+       JOIN sessions session_row ON session_row.id=sc.session_id
+       LEFT JOIN responses r ON r.session_id=sc.session_id AND r.participant_id=sc.participant_id
+       WHERE sc.session_id=:sid
+       GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
-    scores = rows;
+    scores = sortScoreRows(rows, session.template_type);
   }
 
   const [groups] = await pool.query(
@@ -240,10 +322,24 @@ export async function getSessionStateTeacher(req, res) {
     { sid: sessionId }
   );
 
+  const choiceCounts = {};
+  if (currentQ && ["MCQ", "TRUE_FALSE"].includes(normalizeTemplateType(session.template_type))) {
+    const [responseRows] = await pool.query(
+      `SELECT answer_json FROM responses WHERE session_id=:sid AND question_id=:qid`,
+      { sid: sessionId, qid: currentQ.id }
+    );
+    for (const row of responseRows) {
+      for (const key of responseChoiceKeys(session.template_type, safeJson(row.answer_json) || {}, currentQ.config_json || {})) {
+        choiceCounts[key] = Number(choiceCounts[key] || 0) + 1;
+      }
+    }
+  }
+
   res.json({
     session,
     questions,
     participants,
+    choiceCounts,
     groups: groups.map((g) => ({
       ...g,
       members: (safeJson(g.members_json) || []).filter(Boolean),
@@ -276,7 +372,7 @@ export async function startSession(req, res) {
 
   await pool.query(
     `UPDATE sessions
-     SET status='LIVE', started_at=COALESCE(started_at,NOW()), question_started_at=NOW(), last_heartbeat_at=NOW()
+     SET status='LIVE', started_at=COALESCE(started_at,NOW()), question_started_at=DATE_ADD(NOW(), INTERVAL 3 SECOND), last_heartbeat_at=NOW()
      WHERE id=:sid AND teacher_id=:tid`,
     { sid: sessionId, tid: req.user.sub }
   );
@@ -465,7 +561,7 @@ export async function logTabEvent(req, res) {
 
 export async function getTabMonitoring(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code !== "INSTITUTION") {
+  if (plan.code === "BASIC") {
     return res.status(403).json({ message: "Tab monitoring is available on the Institution plan." });
   }
   const sessionId = Number(req.params.id);

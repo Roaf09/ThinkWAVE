@@ -27,6 +27,8 @@ CREATE TABLE users (
   profile_image          LONGTEXT NULL,
   institution_name       VARCHAR(200) NULL,
   institution_setup_done TINYINT(1) NOT NULL DEFAULT 0,
+  plan_code              ENUM('BASIC','PRO','INSTITUTION') NOT NULL DEFAULT 'BASIC',
+  plan_expires_at        TIMESTAMP NULL,
   created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at             TIMESTAMP NULL,
@@ -107,6 +109,7 @@ CREATE TABLE quizzes (
   delivery_mode        ENUM('SYNCHRONOUS','ASYNCHRONOUS') NOT NULL DEFAULT 'SYNCHRONOUS', -- Revision 6
   available_from       DATETIME NULL, -- Revision 6: async start time
   available_until      DATETIME NULL, -- Revision 6: async end time
+  background_key       VARCHAR(80) NOT NULL DEFAULT 'background-01', -- Selected gameplay background
   created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at           TIMESTAMP NULL,
@@ -157,6 +160,7 @@ CREATE TABLE sessions (
   teacher_disconnected_deadline TIMESTAMP NULL,
   end_reason               ENUM('NORMAL','TEACHER_DISCONNECTED') NOT NULL DEFAULT 'NORMAL',
   questions_snapshot_json  JSON NULL,
+  background_key            VARCHAR(80) NOT NULL DEFAULT 'background-01', -- Session gameplay background snapshot
   created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_sessions_quiz
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
@@ -432,7 +436,9 @@ CREATE TABLE tab_events (
 -- -----------------------------------------------------------
 CREATE TABLE institution_applications (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  institution_name VARCHAR(200) NOT NULL,
+  plan_type ENUM('PRO','INSTITUTION') NOT NULL DEFAULT 'INSTITUTION',
+  user_id BIGINT NULL,
+  institution_name VARCHAR(200) NULL,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   work_email VARCHAR(190) NOT NULL,
@@ -442,12 +448,17 @@ CREATE TABLE institution_applications (
   estimated_teachers INT NOT NULL DEFAULT 1,
   estimated_students INT NOT NULL DEFAULT 0,
   gcash_reference VARCHAR(100) NULL,
-  status ENUM('PENDING','APPROVED_FOR_PAYMENT','PAYMENT_CONFIRMED','ACTIVATED','DISAPPROVED') NOT NULL DEFAULT 'PENDING',
+  status ENUM('PENDING','APPROVED_FOR_PAYMENT','PAYMENT_CONFIRMED','ACTIVATED','DISAPPROVED','REFUNDED') NOT NULL DEFAULT 'PENDING',
   reviewed_by BIGINT NULL,
   reviewed_at TIMESTAMP NULL,
   payment_confirmed_by BIGINT NULL,
   payment_confirmed_at TIMESTAMP NULL,
+  plan_starts_at TIMESTAMP NULL,
+  plan_expires_at TIMESTAMP NULL,
+  refund_status ENUM('NONE','REFUNDED') NOT NULL DEFAULT 'NONE',
+  refunded_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_institution_applications_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT fk_institution_applications_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id),
   CONSTRAINT fk_institution_applications_payment_reviewer FOREIGN KEY (payment_confirmed_by) REFERENCES users(id),
   INDEX idx_institution_applications_status_created (status, created_at)

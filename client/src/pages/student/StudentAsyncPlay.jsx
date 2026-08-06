@@ -8,7 +8,9 @@ import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwIcon } from "../../components/TwUI";
+import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { QuestionAudioButton } from "../../components/AudioControls";
+import MatchingConnectorGame from "../../components/MatchingConnectorGame";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
@@ -29,6 +31,15 @@ function LoadingDots({ color = "currentColor" }) {
   return <span className="tw-loading-dots" aria-hidden="true" style={{ color }}><span>.</span><span>.</span><span>.</span></span>;
 }
 
+function asyncFeedbackCopy(payload) {
+  const status = payload?.feedbackType === "almost" || (!payload?.isCorrect && Number(payload?.points || 0) > 0)
+    ? "almost"
+    : payload?.isCorrect ? "correct" : "wrong";
+  if (status === "correct") return { status, title: `Correct! +${payload.points || 0} pts`, subtitle: "Nice one — keep going!", icon: "check" };
+  if (status === "almost") return { status, title: `Almost! +${payload.points || 0} pts`, subtitle: Number(payload?.totalCorrect || 0) > 0 ? `${Number(payload.correctCount || 0)} of ${Number(payload.totalCorrect)} correct` : "Some of your answers were correct.", icon: "warning" };
+  return { status, title: "Incorrect", subtitle: "Keep going — you can still finish strong.", icon: "close" };
+}
+
 function ThemeTogglePill({ dark, onClick, style }) {
   return <ThemeIconButton dark={dark} onClick={onClick} className="sp-inline-theme-toggle" style={style} size={18}/>;
 }
@@ -45,17 +56,18 @@ export default function StudentAsyncPlay() {
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [idx, setIdx] = useState(0);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [locked, setLocked] = useState({});
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
   const [remainingSec,setRemainingSec]=useState(null);
-  const [timerQuestionIndex,setTimerQuestionIndex]=useState(null);
   const [introOpen,setIntroOpen]=useState(true);
   const [antiCheat,setAntiCheat]=useState(null);
   const [awayBlur,setAwayBlur]=useState(false);
   const [submittingUi,setSubmittingUi]=useState(false);
+  const [feedback,setFeedback]=useState(null);
   const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
@@ -63,6 +75,16 @@ export default function StudentAsyncPlay() {
   const cardBor = dark ? "#1e2d55" : "#c7d2fe";
   const textC = dark ? "#e7e9ee" : "#0f172a";
   const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
+  const selectedBackground = getSessionBackground(quiz?.background_key);
+  const assignmentBgStyle = selectedBackground
+    ? {
+        backgroundImage: `url("${selectedBackground.src}")`,
+        backgroundColor: pageBg,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }
+    : { background: pageBg };
 
   useEffect(() => {
     let alive = true;
@@ -82,41 +104,52 @@ export default function StudentAsyncPlay() {
   useEffect(() => { void soundManager.startBGM("playing"); }, [isMuted]);
 
   const q = questions[idx];
+  const activeQ = questions[activeIdx];
   const tt = normalizeTemplateType(quiz?.template_type);
   // Keep each question's answer and lock state independent, even when an older API payload omits or repeats an id.
   const currentAnswer = answers[idx] || {};
-  const timeLimit=Math.max(1,Number(q?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
+  const activeAnswer = answers[activeIdx] || {};
+  const activeTimeLimit=Math.max(1,Number(activeQ?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
   const totalAssignmentSec=useMemo(()=>questions.reduce((sum,item)=>sum+Math.max(1,Number(item?.config_json?.timeLimitSec||quiz?.time_limit_sec||30)),0),[questions,quiz?.time_limit_sec]);
-  const isLast = idx >= questions.length - 1;
+  const activeIsLast = activeIdx >= questions.length - 1;
   const done = !!result;
   const currentLocked=!!locked[idx];
+  const activeLocked=!!locked[activeIdx];
   const currentAnswered=hasAnswer(tt,currentAnswer,q);
-  const everyAnswered=questions.length>0 && questions.every((item,itemIndex)=>hasAnswer(tt,answers[itemIndex],item) || locked[itemIndex]);
+  const activeAnswered=hasAnswer(tt,activeAnswer,activeQ);
+  const answeredCount=Object.keys(locked).filter((key) => locked[key]).length;
+  const questionProgress=questions.length ? Math.round((answeredCount/questions.length)*100) : 0;
 
   useEffect(()=>{
-    if(!q||done||introOpen)return;
+    if(!activeQ||done||introOpen)return;
     setMsg("");
-    setTimerQuestionIndex(idx);
-    setRemainingSec(currentLocked?0:timeLimit);
-  },[idx,timeLimit,currentLocked,done,introOpen,q]);
+    setRemainingSec(activeLocked?0:activeTimeLimit);
+  },[activeIdx,activeQ?.id,done,introOpen]);
   useEffect(()=>{
-    if(!q||done||introOpen||currentLocked||timerQuestionIndex!==idx||remainingSec==null||remainingSec<=0)return;
+    if(!activeQ||done||introOpen||activeLocked||remainingSec==null||remainingSec<=0)return;
     const timer=setTimeout(()=>setRemainingSec(v=>Math.max(0,Number(v||0)-1)),1000);
     return()=>clearTimeout(timer);
-  },[idx,done,introOpen,currentLocked,remainingSec,timerQuestionIndex,q]);
+  },[activeIdx,done,introOpen,activeLocked,remainingSec,activeQ]);
   useEffect(()=>{
-    if(!q||done||introOpen||currentLocked||timerQuestionIndex!==idx||remainingSec!==0)return;
-    setAnswers(prev=>({...prev,[idx]:prev[idx]&&hasAnswer(tt,prev[idx],q)?prev[idx]:{timedOut:true}}));
-    setLocked(prev=>({...prev,[idx]:true}));
+    if(!activeQ||done||introOpen||activeLocked||remainingSec!==0)return;
+    setAnswers(prev=>({...prev,[activeIdx]:prev[activeIdx]&&hasAnswer(tt,prev[activeIdx],activeQ)?prev[activeIdx]:{timedOut:true}}));
+    setLocked(prev=>({...prev,[activeIdx]:true}));
     setMsg("Time's up, you can no longer answer this question.");
-  },[remainingSec,idx,currentLocked,done,introOpen,tt,q,timerQuestionIndex]);
+  },[remainingSec,activeIdx,activeLocked,done,introOpen,tt,activeQ]);
+
+  useEffect(()=>{
+    if(!activeQ||done||introOpen||!activeIsLast||!activeLocked||!answers[activeIdx]?.timedOut)return undefined;
+    setMsg("Time's up. Your assignment will finish in 3 seconds.");
+    const timeout=setTimeout(()=>submitAssignment({forced:true}),3000);
+    return()=>clearTimeout(timeout);
+  },[activeQ?.id,activeIdx,activeIsLast,activeLocked,answers,done,introOpen]);
 
   async function submitAssignment({forced=false,completedOverride=null}={}){
     if(submittingRef.current)return null; submittingRef.current=true;
-    const completed=completedOverride ? {...completedOverride} : {...answers}; if(q&&currentAnswered)completed[idx]=answers[idx];
+    const completed=completedOverride ? {...completedOverride} : {...answers}; if(activeQ&&activeAnswered)completed[activeIdx]=answers[activeIdx];
     if(!forced){
-      if(!currentLocked&&!currentAnswered){setMsg("Answer this question before submitting.");submittingRef.current=false;return null;}
-      const allReady=questions.every((item,itemIndex)=>hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]||itemIndex===idx);
+      if(!activeLocked&&!activeAnswered){setMsg("Answer this question before submitting.");submittingRef.current=false;return null;}
+      const allReady=questions.every((item,itemIndex)=>hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]||itemIndex===activeIdx);
       if(!allReady){setMsg("Complete every question before submitting.");submittingRef.current=false;return null;}
     }
     try{
@@ -133,7 +166,7 @@ export default function StudentAsyncPlay() {
   useEffect(()=>{
     if(!quiz||done||introOpen)return;
     function leave(){if(awayRef.current||done)return;awayRef.current=true;setAwayBlur(true);tabCountRef.current+=1;}
-    async function returnToPage(){if(!awayRef.current)return;awayRef.current=false;setAwayBlur(false);const count=tabCountRef.current;if(count===2)setAntiCheat({type:"warning",message:"We noticed that you tabbed out during the assigned session."});if(count>=3){setAntiCheat({type:"ended",message:"You have left the assignment three times. Your assignment ends here, and the answers completed before removal will still be counted."});await submitAssignment({forced:true});}}
+    async function returnToPage(){if(!awayRef.current)return;awayRef.current=false;setAwayBlur(false);const count=tabCountRef.current;if(count>=2)setAntiCheat({type:"warning",message:"We noticed that you tabbed out during the assigned session. Automatic removal is temporarily disabled for testing."});}
     const onVisibility=()=>document.hidden?leave():returnToPage();
     const onBlur=()=>{if(!document.hasFocus())leave()};
     document.addEventListener("visibilitychange",onVisibility);window.addEventListener("blur",onBlur);window.addEventListener("focus",returnToPage);window.addEventListener("pagehide",leave);
@@ -141,47 +174,65 @@ export default function StudentAsyncPlay() {
   },[quiz,done,introOpen,answers,locked,idx]);
 
   function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next)void soundManager.startBGM("playing");}
-  function setAnswer(answer){if(!q||done||currentLocked)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));}
+  function setAnswer(answer){if(!q||done||currentLocked||idx!==activeIdx)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));}
   async function submitCurrent(){
-    if(!q||done||currentLocked)return;
+    if(!q||done||currentLocked||idx!==activeIdx)return;
     if(!currentAnswered){setMsg("Answer this question before submitting.");return;}
+    let feedbackData=null;
+    try{
+      const response=await api.post(`/student/quizzes/${quizId}/check-answer`,{questionId:Number(q.id),answer:currentAnswer});
+      feedbackData=response.data;
+      setFeedback(asyncFeedbackCopy(feedbackData));
+      void soundManager.play(feedbackData?.isCorrect?"correct":"wrong");
+      setTimeout(()=>setFeedback(null),1500);
+    }catch(err){
+      setMsg(err?.response?.data?.message||"Could not check this answer.");
+      return;
+    }
     const completed={...answers,[idx]:currentAnswer};
     setAnswers(completed);
     setLocked(prev=>({...prev,[idx]:true}));
     setRemainingSec(0);
     setMsg("");
-    if(isLast){
+    if(activeIsLast){
       const allReady=questions.every((item,itemIndex)=>itemIndex===idx||hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]);
       if(!allReady){setMsg("Complete every question before submitting the assignment.");return;}
+      await new Promise(resolve=>setTimeout(resolve,1500));
       await submitAssignment({completedOverride:completed});
     }
   }
-  function moveToQuestion(nextIndex){
-    setRemainingSec(null);
-    setTimerQuestionIndex(null);
-    setIdx(Math.max(0,Math.min(questions.length-1,nextIndex)));
-    setMsg("");
+  function viewQuestion(nextIndex){setIdx(Math.max(0,Math.min(questions.length-1,nextIndex)));setMsg("");}
+  function goPrevious(){
+    viewQuestion(idx-1);
   }
-  function goNext(){if(!currentLocked){setMsg("Submit this answer before moving to the next question.");return;}moveToQuestion(idx+1);}
+  function goNext(){
+    if(idx<activeIdx){viewQuestion(idx+1);return;}
+    if(!activeLocked){setMsg("Submit this answer before moving to the next question.");return;}
+    if(activeIdx<questions.length-1){const next=activeIdx+1;setActiveIdx(next);setIdx(next);setRemainingSec(null);setMsg("");}
+  }
+  const canGoPrevious=idx>0;
+  const canGoNext=idx<questions.length-1&&(idx<activeIdx||(idx===activeIdx&&activeLocked));
 
-  if(msg&&!quiz)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
-  if(!quiz||!q)return <AsyncShell dark={dark} pageBg={pageBg} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
+  if(msg&&!quiz)return <AsyncShell dark={dark} pageBg={pageBg} backgroundStyle={assignmentBgStyle} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Assignment unavailable</h3><p className="sp-wait-subtitle" style={{color:mutedC}}>{msg}</p><button className="submit-btn" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div></AsyncShell>;
+  if(!quiz||!q)return <AsyncShell dark={dark} pageBg={pageBg} backgroundStyle={assignmentBgStyle} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}><div className="sp-wait-card sp-page-enter" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}><h3 className="sp-wait-title" style={{color:textC}}>Loading assignment<LoadingDots color={mutedC}/></h3></div></AsyncShell>;
 
-  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",background:pageBg,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
+  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
-    {introOpen&&<div className="sp-anticheat-backdrop"><div className="sp-assignment-intro" style={{background:cardBg,borderColor:cardBor,color:textC}}><div className="sp-anticheat-icon warning"><TwIcon name="calendar" size={38}/></div><h1>{quiz.title||"Assignment"}</h1><p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p><button type="button" className="submit-btn sp-assignment-start" onClick={()=>{setRemainingSec(null);setTimerQuestionIndex(null);setIntroOpen(false)}}>Start</button><div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div></div></div>}
-    {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</button></div></div>}
-    <div className={`quiz-shell-new ${dark?"theme-dark":"theme-light"}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column"}}>
-      <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(done||submittingUi?0:(remainingSec??timeLimit))}</div></div></div>
-      <div className="qn-progress"><div className="qn-progress-bar" style={{width:`${Math.round(currentLocked?0:((remainingSec??timeLimit)/timeLimit)*100)}%`}}/></div>
-      <div className="qn-body" style={{flex:1}}>{submittingUi?<div className="sp-wait-card sp-page-enter sp-submitting-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><h2 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={cAccent(dark)}/></h2></div>:done?<div className="sp-wait-card sp-page-enter sp-submitted-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={70}/></div><h2 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h2><p className="sp-wait-subtitle sp-final-score" style={{color:mutedC}}>You scored: <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b></p><button className="submit-btn sp-dashboard-return" type="button" onClick={()=>nav('/student')}>Back to Dashboard</button></div>:<>
+    {feedback&&<div className={`sp-feedback-overlay is-${feedback.status}`}><div className={`sp-feedback-card is-${feedback.status}`}><div className="sp-feedback-icon"><TwIcon name={feedback.icon} size={44}/></div><div className="sp-feedback-title">{feedback.title}</div><div className="sp-feedback-subtitle">{feedback.subtitle}</div></div></div>}
+    {introOpen&&<div className="sp-anticheat-backdrop"><div className="sp-assignment-intro" style={{background:cardBg,borderColor:cardBor,color:textC}}><div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div><h1>{quiz.title||"Assignment"}</h1><p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p><button type="button" className="tw-student-dashboard-press sp-assignment-start" onClick={()=>{setRemainingSec(null);setActiveIdx(0);setIdx(0);setIntroOpen(false)}}><span>Start</span></button><div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div></div></div>}
+    {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" className="tw-dialog-press is-blue" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}><span>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</span></button></div></div>}
+    <div className={`quiz-shell-new sp-assigned-shell ${dark?"theme-dark":"theme-light"} ${selectedBackground ? "has-session-background" : ""}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column"}}>
+      <div className="qn-header"><div className="qn-title-cluster"><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer qn-pixel-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(done||submittingUi?0:(remainingSec??activeTimeLimit))}</div></div></div>
+      <div className="qn-question-progress" aria-label={`${answeredCount} of ${questions.length} questions answered`}><div className="qn-question-progress-bar" style={{width:`${questionProgress}%`}}/></div>
+      <div className="qn-progress qn-timer-progress"><div className="qn-progress-bar" style={{width:`${Math.round(activeLocked?0:((remainingSec??activeTimeLimit)/activeTimeLimit)*100)}%`}}/></div>
+      <div className="qn-body" style={{flex:1}}>{submittingUi?<div className="sp-wait-card sp-page-enter sp-submitting-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><h2 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={cAccent(dark)}/></h2></div>:done?<div className="sp-wait-card sp-page-enter sp-submitted-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={70}/></div><h2 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h2><p className="sp-wait-subtitle sp-final-score" style={{color:mutedC}}>You scored: <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b></p><button className="tw-student-dashboard-press sp-dashboard-return" type="button" onClick={()=>nav('/student')}><span><TwIcon name="home" size={18}/> Dashboard</span></button></div>:<>
         <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
-        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked}/>
+        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx}/>
         {msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
         <div className="sp-assigned-navigation">
-          <span className="sp-assigned-nav-slot">{idx>0&&<button type="button" className="submit-btn" onClick={()=>moveToQuestion(idx-1)}>Previous</button>}</span>
-          <button type="button" className="submit-btn" onClick={submitCurrent} disabled={currentLocked||!currentAnswered}>{currentLocked?"Submitted":"Submit"}</button>
-          <span className="sp-assigned-nav-slot sp-assigned-nav-next">{!isLast&&<button type="button" className="submit-btn" onClick={goNext} disabled={!currentLocked}>Next</button>}</span>
+          <button type="button" className="sp-assigned-arrow is-left" aria-label="Previous question" onClick={goPrevious} disabled={!canGoPrevious}><TwIcon name="arrow" size={24}/></button>
+          <button type="button" className="tw-assignment-submit-press" onClick={submitCurrent} disabled={currentLocked||!currentAnswered||idx!==activeIdx}><span>{currentLocked?"Submitted":"Submit"}</span></button>
+          <button type="button" className="sp-assigned-arrow" aria-label="Next question" onClick={goNext} disabled={!canGoNext}><TwIcon name="arrow" size={24}/></button>
         </div>
       </>}</div>
     </div>
@@ -201,11 +252,12 @@ function hasAnswer(templateType,answer,q){
 function cAccent(dark){return dark?"#6ea0ff":"#2b6cff";}
 function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
 
-function AsyncShell({ dark, pageBg, cardBg, cardBor, textC, mutedC, title, isMuted, onMute, onTheme, children }) {
+function AsyncShell({ dark, pageBg, backgroundStyle, cardBg, cardBor, textC, mutedC, title, isMuted, onMute, onTheme, children }) {
+  const hasBackground = Boolean(backgroundStyle?.backgroundImage);
   return (
-    <div style={{ minHeight: "100vh", background: pageBg, color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", ...(backgroundStyle || { background: pageBg }), color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={onMute}/><ThemeTogglePill dark={dark} onClick={onTheme}/></div>
-      <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
+      <div className={`quiz-shell-new sp-assigned-shell ${dark ? "theme-dark" : "theme-light"} ${hasBackground ? "has-session-background" : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
         <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{title}</div></div><div className="qn-meta"><div className="qn-timer"><TwIcon name="clock" size={17}/> Assignment</div></div></div>
         <div className="qn-body" style={{ flex: 1, display: "grid", placeItems: "center" }}>{children}</div>
       </div>
@@ -224,7 +276,7 @@ function TemplateBody({ templateType, q, value, onChange, disabled }) {
   const cfg = q?.config_json || {};
   if (templateType === TEMPLATE_TYPES.MCQ) return <McqTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.TRUE_FALSE) return <TrueFalseTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
-  if (templateType === TEMPLATE_TYPES.MATCHING) return <MatchingTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
+  if (templateType === TEMPLATE_TYPES.MATCHING) return <MatchingTemplate q={q} cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.GUESS_WORD_4PICS) return <GuessWord4PicsTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <BookwormThinkSpellTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} questionId={q?.id} />;
   return <TypeAnswerTemplate value={value} onChange={onChange} disabled={disabled} />;
@@ -282,65 +334,14 @@ function matchingOrder(length, shouldShuffle, seedText) {
   return order;
 }
 
-function MatchingTemplate({ cfg, value, onChange, disabled }) {
-  const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
-  const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
-  const pairs = Array.isArray(value.pairs) ? value.pairs : [];
-  const matchingMap = Object.fromEntries(pairs.map((pair) => [Number(pair.aIndex), Number(pair.bIndex)]));
-  const [selectedA, setSelectedA] = useState(null);
-  const usedB = new Set(Object.values(matchingMap).map(Number));
-  const total = colA.length;
-  const matchedCount = Object.keys(matchingMap).length;
-  const seed = `${colA.map((row) => row?.text || "").join("|")}-${colB.length}`;
-  const orderA = useMemo(() => matchingOrder(colA.length, !!cfg.shuffleColA, `${seed}-A`), [colA.length, cfg.shuffleColA, seed]);
-  const orderB = useMemo(() => matchingOrder(colB.length, true, `${seed}-B`), [colB.length, seed]);
-
-  function updateMap(next) {
-    onChange({ pairs: Object.entries(next).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })) });
+function MatchingTemplate({ q, cfg, value, onChange, disabled }) {
+  const map = Object.fromEntries((Array.isArray(value?.pairs) ? value.pairs : []).map((pair) => [Number(pair.aIndex), Number(pair.bIndex)]));
+  function updateMap(nextMap) {
+    const pairs = Object.entries(nextMap).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })).sort((a, b) => a.aIndex - b.aIndex);
+    onChange({ ...(value || {}), pairs });
   }
-  function assignPair(aIndex, bIndex) {
-    const next = { ...matchingMap };
-    Object.keys(next).forEach((key) => {
-      if (Number(key) === Number(aIndex) || Number(next[key]) === Number(bIndex)) delete next[key];
-    });
-    next[Number(aIndex)] = Number(bIndex);
-    updateMap(next);
-    setSelectedA(null);
-  }
-
-  return (
-    <div className="match-v2">
-      <div className="match-v2-intro">
-        <div className="match-v2-steps"><span className="match-v2-step"><span className="match-v2-step-num">1</span> Pick a question</span><span className="match-v2-step-arrow">→</span><span className="match-v2-step"><span className="match-v2-step-num">2</span> Pick its answer</span></div>
-        <div className="match-v2-progress"><div className="match-v2-progress-top"><span className="match-v2-progress-label">{matchedCount} of {total} matched</span></div><div className="match-v2-progress-track"><div className="match-v2-progress-fill" style={{ width: `${total ? Math.round((matchedCount / total) * 100) : 0}%` }} /></div></div>
-      </div>
-      <p className="match-v2-hint">{selectedA !== null ? "Now tap the matching answer on the right." : "Tap a question on the left, then tap its answer."}</p>
-      <div className="match-v2-columns">
-        <section className="match-v2-col">
-          <h3 className="match-v2-col-title">Questions</h3>
-          <ul className="match-v2-list">
-            {orderA.map((ai) => {
-              const item = colA[ai] || {};
-              const matchedB = matchingMap[ai] !== undefined ? Number(matchingMap[ai]) : null;
-              return <li key={ai}><button type="button" className={`match-v2-card match-v2-card-q ${selectedA === ai ? "is-selected" : ""} ${matchedB !== null ? "is-matched" : ""}`} onClick={() => !disabled && setSelectedA(selectedA === ai ? null : ai)} disabled={disabled}><span className="match-v2-card-main">{item.image ? <img src={item.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(item.text) || `Question ${ai + 1}`}</span>{matchedB !== null ? <span className="match-v2-paired"><span className="match-v2-paired-label">Your answer:</span><strong>{trimText(colB[matchedB]?.text) || `Answer ${matchedB + 1}`}</strong></span> : null}</span></button></li>;
-            })}
-          </ul>
-        </section>
-        <section className="match-v2-col">
-          <h3 className="match-v2-col-title">Answers</h3>
-          <ul className="match-v2-list">
-            {orderB.map((bi) => {
-              if (usedB.has(bi)) return null;
-              const item = colB[bi] || {};
-              return <li key={bi}><button type="button" className={`match-v2-card match-v2-card-ans ${selectedA !== null ? "is-targetable" : ""}`} onClick={() => !disabled && selectedA !== null && assignPair(selectedA, bi)} disabled={disabled}><span className="match-v2-card-main">{item.image ? <img src={item.image} alt="" className="match-v2-img" /> : null}<span className="match-v2-text">{trimText(item.text) || `Answer ${bi + 1}`}</span></span></button></li>;
-            })}
-          </ul>
-        </section>
-      </div>
-    </div>
-  );
+  return <MatchingConnectorGame config={cfg} valueMap={map} onChange={updateMap} disabled={disabled} questionKey={q?.id || q?.prompt || "assigned-matching"} />;
 }
-
 function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
   const target = String(cfg.target ?? "");
@@ -401,6 +402,9 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   }
   function handleGridPointerMove(e) { if (!draggingRef.current || disabled) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-bword-index]"); if (target) addIndex(Number(target.dataset.bwordIndex)); }
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
-  const previewStatus = !built ? "Hold and drag across adjacent letters." : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div><div className="bword-instructions">Hold and drag across adjacent letters to find words. Find all answers before submitting.</div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{linePoints.length > 1 && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none"><polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div><div className="bword-controls"><button type="button" className="spell-ctrl clr" onClick={() => patch({ selected: [], built: "" })} disabled={disabled || !selected.length}>Clear current line</button></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found before submission</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
+  const foundLines = foundEntries
+    .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
+    .filter((points) => points.length > 1);
+  const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
+  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found:</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
 }

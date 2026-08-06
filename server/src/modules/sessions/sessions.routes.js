@@ -33,6 +33,7 @@ const CreateSchema = z.object({
   quizId: z.coerce.number().int().positive(),
   joinMode: z.enum(["SOLO", "GROUP"]).default("SOLO"),
   classId: z.coerce.number().int().positive().optional().nullable(),
+  backgroundKey: z.string().regex(/^background-(?:0[1-9]|1[0-9]|2[0-2])$/).optional().nullable(),
 });
 
 const JoinSchema = z.object({

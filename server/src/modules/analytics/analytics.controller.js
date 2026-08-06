@@ -35,7 +35,7 @@ async function requireInstitutionAnalytics(req, res) {
   const [[user]] = await pool.query(`SELECT email FROM users WHERE id=:id LIMIT 1`, { id: req.user.sub });
   if (String(user?.email || "").toLowerCase().endsWith("@thinkwave.guest")) return true;
   const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code !== "INSTITUTION") {
+  if (plan.code === "BASIC") {
     res.status(403).json({ message: "Extensive analytics and downloads are available on the Institution plan." });
     return false;
   }

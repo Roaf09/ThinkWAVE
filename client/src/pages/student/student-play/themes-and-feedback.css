@@ -388,3 +388,18 @@
 }
 
 
+
+/* Revision 9.9.5 — partial-credit feedback. */
+.sp-feedback-overlay.is-almost{background:radial-gradient(circle at center,rgba(250,204,21,.28),rgba(15,23,42,.72))}
+.sp-feedback-card.is-almost{border-color:#facc15;background:linear-gradient(180deg,#fff7cc,#fde68a);color:#78350f;box-shadow:0 26px 80px rgba(245,158,11,.38)}
+.quiz-shell-new.theme-dark .sp-feedback-card.is-almost{background:linear-gradient(180deg,#4a3005,#2b1d05);color:#fef3c7;border-color:#f59e0b}
+.sp-feedback-overlay.is-almost .sp-feedback-burst span:nth-child(odd){background:#facc15}
+.sp-feedback-overlay.is-almost .sp-feedback-burst span:nth-child(even){background:#fb923c}
+
+/* Revision 9.9.5 — live timer visibility and persistent Think and Spell paths. */
+.quiz-shell-new:not(.sp-assigned-shell) .qn-pixel-timer{background:#16a34a!important;border-color:#86efac!important;color:#fff!important;box-shadow:0 0 0 2px rgba(134,239,172,.28),0 0 18px rgba(34,197,94,.58)!important}
+.bword-path-line .is-found{filter:drop-shadow(0 0 5px rgba(34,197,94,.72))}
+.quiz-shell-new.feedback-hit-almost{animation:spShellAlmost .62s ease}
+@keyframes spShellAlmost{0%,100%{filter:none}45%{filter:drop-shadow(0 0 24px rgba(250,204,21,.62))}}
+
+.sp-feedback-card.is-almost .sp-feedback-subtitle{color:inherit!important;opacity:.92!important}

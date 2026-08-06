@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
 import ThemeIconButton from "./ThemeIconButton";
 
-export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false }) {
+export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false, hideTheme = false }) {
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
   const nav = useNavigate();
@@ -31,7 +31,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
           className="tw-public-ghost tw-super-dot"
           style={{ color:c.text, borderColor:c.border, opacity: concealSuper ? 0 : 1 }}
         ><span aria-hidden="true">S</span></Link>}
-        <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />
+        {!hideTheme && <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />}
         {setupComplete && <Link to="/login" state={{ authFrom: "left" }} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
         {setupComplete && <Link to="/register" state={{ authFrom: "right" }} className="tw-public-signup tw-header-signup">Sign Up</Link>}
       </div>

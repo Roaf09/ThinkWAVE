@@ -287,13 +287,35 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
 function AchievementCarousel({ c, dark, achievements }) {
   const [startIndex, setStartIndex] = useState(0);
   const [direction, setDirection] = useState("next");
+  const carouselRef = useRef(null);
+  const wheelLockRef = useRef(0);
+  const startIndexRef = useRef(0);
   const maxStart = Math.max(0, achievements.length - 4);
   const visible = achievements.slice(startIndex, startIndex + 4);
   function move(delta) {
     setDirection(delta < 0 ? "prev" : "next");
     setStartIndex((current) => Math.min(maxStart, Math.max(0, current + delta)));
   }
-  return <div className="tw-achievement-carousel">
+  useEffect(() => { startIndexRef.current = startIndex; }, [startIndex]);
+  useEffect(() => {
+    const node = carouselRef.current;
+    if (!node) return undefined;
+    const onWheel = (event) => {
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || Math.abs(event.deltaY) < 8) return;
+      const delta = event.deltaY > 0 ? 1 : -1;
+      const current = startIndexRef.current;
+      const next = Math.min(maxStart, Math.max(0, current + delta));
+      if (next === current) return;
+      const now = Date.now();
+      if (now - wheelLockRef.current < 240) return;
+      wheelLockRef.current = now;
+      event.preventDefault();
+      move(delta);
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, [maxStart]);
+  return <div ref={carouselRef} className="tw-achievement-carousel" title="Scroll to browse achievements">
     <button type="button" aria-label="Previous achievement" disabled={startIndex === 0} onClick={() => move(-1)} className="tw-achievement-arrow is-left" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
     <div key={`${startIndex}-${direction}`} className={`tw-achievement-page is-${direction}`}>{visible.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
     <button type="button" aria-label="Next achievement" disabled={startIndex >= maxStart} onClick={() => move(1)} className="tw-achievement-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={21} /></button>
@@ -363,7 +385,11 @@ function JoinedClassCard({ c, dark, item, live, assigned, onAnalytics }) {
 }
 
 function CompletedColumn({ c, title, items, type, onAnalytics, compact = false }) {
-  return <div style={{ display: "grid", alignContent: "start", gap: 10 }}><div style={{ color: c.text, fontWeight: 950 }}>{title}</div>{!items.length ? <div style={{ ...empty(c), padding: compact ? 14 : 22 }}>No completed {type === "LIVE" ? "live" : "assigned"} sessions yet.</div> : items.map((item) => <CompletedSessionCard key={`${type}-${item.session_id || item.quiz_id || item.id}`} c={c} item={item} type={type} onClick={() => onAnalytics({ type, id: type === "LIVE" ? item.session_id : item.quiz_id, title: item.quiz_title || item.title })} />)}</div>;
+  const shouldScroll = compact && items.length >= 5;
+  return <div style={{ display: "grid", alignContent: "start", gap: 10 }}>
+    <div style={{ color: c.text, fontWeight: 950 }}>{title}</div>
+    {!items.length ? <div style={{ ...empty(c), padding: compact ? 14 : 22 }}>No completed {type === "LIVE" ? "live" : "assigned"} sessions yet.</div> : <div className={`tw-student-class-analytics-list${shouldScroll ? " is-scrollable" : ""}`}>{items.map((item) => <CompletedSessionCard key={`${type}-${item.session_id || item.quiz_id || item.id}`} c={c} item={item} type={type} onClick={() => onAnalytics({ type, id: type === "LIVE" ? item.session_id : item.quiz_id, title: item.quiz_title || item.title })} />)}</div>}
+  </div>;
 }
 
 function CompletedSessionCard({ c, item, type, onClick }) {

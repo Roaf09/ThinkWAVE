@@ -74,6 +74,8 @@ export async function register(req, res) {
 
     if (invitation) {
       await pool.query(`UPDATE admin_invitations SET used_at=NOW() WHERE id=:id`, { id: invitation.id });
+      const [[approvedPlan]] = await pool.query(`SELECT plan_expires_at FROM institution_applications WHERE id=:id`, { id: invitation.application_id });
+      await pool.query(`UPDATE users SET plan_code='INSTITUTION', plan_expires_at=:expiresAt WHERE id=:userId`, { expiresAt: approvedPlan?.plan_expires_at || null, userId: result.insertId });
       await pool.query(`UPDATE institution_applications SET status='ACTIVATED' WHERE id=:id`, { id: invitation.application_id });
       try { await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_ACCOUNT_CREATED',:uid,:name,:email,'ADMIN',:inst,:payload)`,{uid:result.insertId,name:`${firstName.trim()} ${lastName.trim()}`.trim(),email:cleanEmail,inst:invitation.institution_name,payload:JSON.stringify({applicationId:invitation.application_id})}); } catch (_) {}
     }
@@ -241,6 +243,7 @@ export async function me(req, res) {
       ...user,
       role: user.role,
       plan_code: plan.code,
+      plan_expires_at: plan.expiresAt || null,
       plan_limits: plan.limits,
     });
   }

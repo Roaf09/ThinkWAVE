@@ -6,12 +6,52 @@
 
 import { env } from "../../env.js";
 import { pool } from "../../db.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
+import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
+
+
+function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
+function responseChoiceKeys(templateType, answer, config = {}) {
+  const tt = normalizeTemplateType(templateType);
+  if (tt === TEMPLATE_TYPES.TRUE_FALSE) {
+    const value = normalizeChoiceValue(answer?.choice);
+    return value === "true" ? ["0"] : value === "false" ? ["1"] : [];
+  }
+  if (tt !== TEMPLATE_TYPES.MCQ) return [];
+  const options = Array.isArray(config?.options) ? config.options : [];
+  const selected = Array.isArray(answer?.choices) ? answer.choices : [answer?.choice].filter((value) => value !== undefined && value !== null && value !== "");
+  const keys = [];
+  for (const choice of selected) {
+    const actual = normalizeChoiceValue(choice);
+    const index = options.findIndex((option, optionIndex) => {
+      const row = option && typeof option === "object" ? option : { text: String(option ?? ""), id: `option-${optionIndex + 1}` };
+      return [row.id, row.text, row.label].some((value) => normalizeChoiceValue(value) === actual);
+    });
+    if (index >= 0) keys.push(String(index));
+  }
+  return Array.from(new Set(keys));
+}
+function sortScoreRows(rows, templateType) {
+  const timedTemplates = new Set([TEMPLATE_TYPES.TYPE_ANSWER, TEMPLATE_TYPES.MATCHING, TEMPLATE_TYPES.GUESS_WORD_4PICS, TEMPLATE_TYPES.THINK_SPELL]);
+  return [...rows].sort((a, b) => {
+    const points = Number(b.total_points || 0) - Number(a.total_points || 0);
+    if (points) return points;
+    if (timedTemplates.has(normalizeTemplateType(templateType))) {
+      const aTime = Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER);
+      const bTime = Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER);
+      if (aTime !== bTime) return aTime - bTime;
+    }
+    return `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`);
+  });
+}
 
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
 const pausedQuestionState = new Map();
+// Temporarily disabled for gameplay testing. Tab-out events and warnings remain recorded.
+const AUTO_KICK_AFTER_TAB_OUTS = false;
 
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
@@ -113,7 +153,7 @@ export function registerSessionSockets(io) {
 
       pausedQuestionState.delete(Number(sessionId));
       await pool.query(
-        `UPDATE sessions SET current_question_index=current_question_index+1, question_started_at=NOW() WHERE id=:sid`,
+        `UPDATE sessions SET current_question_index=current_question_index+1, question_started_at=DATE_ADD(NOW(), INTERVAL 3 SECOND) WHERE id=:sid`,
         { sid: sessionId }
       );
       await pool.query(
@@ -162,9 +202,9 @@ export function registerSessionSockets(io) {
         const paused = pausedQuestionState.get(Number(sessionId));
         if (session.status === "PAUSED" && paused) {
           const elapsed = Math.max(0, Number(paused.total || 0) - Number(paused.remaining || 0));
-          questionStartedAt = new Date(Date.now() - elapsed * 1000);
+          questionStartedAt = new Date(Date.now() + 3000 - elapsed * 1000);
         } else if (session.status === "LOBBY" || !session.question_started_at) {
-          questionStartedAt = new Date();
+          questionStartedAt = new Date(Date.now() + 3000);
         }
         pausedQuestionState.delete(Number(sessionId));
       }
@@ -321,9 +361,11 @@ export function registerSessionSockets(io) {
         io.to(roomTeacher(sessionId)).emit("tab:updated", { participantId:Number(participantId), count });
         if (count === 2) {
           io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"We noticed that you tabbed out during the live session." });
-        } else if (count >= 3) {
+        } else if (count >= 3 && AUTO_KICK_AFTER_TAB_OUTS) {
           await kickParticipant(io, sessionId, participantId, "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher.");
           return;
+        } else if (count >= 3) {
+          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:3, message:"Tab-out removal is temporarily disabled for testing, but this activity is still recorded." });
         }
         await broadcastRoster(io, sessionId);
       } catch (error) {
@@ -548,8 +590,17 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   }
 
   await recalcParticipantScore(sessionId, participantId);
-  socket.emit("answer:ack", { isCorrect, points, locked: true });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points });
+  socket.emit("answer:ack", {
+    isCorrect,
+    points,
+    locked: true,
+    feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
+    correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
+    totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
+    hasWrongSelected: !!scored.hasWrongSelected,
+    templateType: tt,
+  });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, choiceKeys: responseChoiceKeys(tt, answer, config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -897,7 +948,17 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       );
       await recalcParticipantScore(sessionId, member.id);
     }
-    io.to(roomParticipant(member.id)).emit("answer:ack", { isCorrect, points, locked: true, viaGroup: true });
+    io.to(roomParticipant(member.id)).emit("answer:ack", {
+      isCorrect,
+      points,
+      locked: true,
+      viaGroup: true,
+      feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
+      correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
+      totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
+      hasWrongSelected: !!scored.hasWrongSelected,
+      templateType: normalizeTemplateType(session.template_type),
+    });
   }
 
   io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
@@ -906,7 +967,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     isCorrect,
     points,
   });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, viaGroup: true });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, answer, config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -992,39 +1053,58 @@ async function broadcastGroups(io, sessionId) {
 }
 
 async function broadcastScores(io, sessionId) {
-  const [[session]] = await pool.query(`SELECT join_mode FROM sessions WHERE id=:sid`, { sid: sessionId });
+  const [[session]] = await pool.query(`SELECT s.join_mode, q.template_type FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
   let scores;
   if (session?.join_mode === "GROUP") {
     const [rows] = await pool.query(
       `SELECT MIN(sp.id) AS participant_id, COALESCE(sg.display_name, sg.default_name) AS group_name, MAX(COALESCE(sc.total_points,0)) AS total_points,
-              MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name
+              MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name,
+              CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
+                   ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, MIN(sp.joined_at)), MAX(r.answered_at)) / 1000 END AS completion_ms
        FROM session_groups sg
+       JOIN sessions session_row ON session_row.id=sg.session_id
        LEFT JOIN session_group_members gm ON gm.group_id = sg.id
        LEFT JOIN session_participants sp ON sp.id = gm.participant_id
        LEFT JOIN scores sc ON sc.session_id = sg.session_id AND sc.participant_id = sp.id
+       LEFT JOIN responses r ON r.session_id=sg.session_id AND r.participant_id=sp.id
        WHERE sg.session_id=:sid
-       GROUP BY sg.id, sg.display_name, sg.default_name
-       ORDER BY total_points DESC, group_name ASC`,
+       GROUP BY sg.id, sg.display_name, sg.default_name, session_row.started_at`,
       { sid: sessionId }
     );
-    scores = rows;
+    scores = sortScoreRows(rows, session?.template_type);
   } else {
     const [rows] = await pool.query(
-      `SELECT s.participant_id, s.total_points, p.first_name, p.last_name, p.group_name
-       FROM scores s JOIN session_participants p ON p.id=s.participant_id
-       WHERE s.session_id=:sid ORDER BY s.total_points DESC, p.last_name ASC, p.first_name ASC`,
+      `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name,
+              CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
+                   ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, p.joined_at), MAX(r.answered_at)) / 1000 END AS completion_ms
+       FROM scores sc
+       JOIN session_participants p ON p.id=sc.participant_id
+       JOIN sessions session_row ON session_row.id=sc.session_id
+       LEFT JOIN responses r ON r.session_id=sc.session_id AND r.participant_id=sc.participant_id
+       WHERE sc.session_id=:sid
+       GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
-    scores = rows;
+    scores = sortScoreRows(rows, session?.template_type);
   }
   io.to(roomSession(sessionId)).emit("scores:update", scores);
   io.to(roomTeacher(sessionId)).emit("scores:update", scores);
 }
 
 async function broadcastState(io, sessionId) {
+  const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
+  const backgroundSelect = sessionsHaveBackground && quizzesHaveBackground
+    ? "COALESCE(s.background_key, q.background_key) AS background_key"
+    : sessionsHaveBackground
+      ? "s.background_key AS background_key"
+      : quizzesHaveBackground
+        ? "q.background_key AS background_key"
+        : "NULL AS background_key";
   const [[state]] = await pool.query(
     `SELECT s.id, s.status, s.current_question_index, s.question_started_at, s.questions_snapshot_json,
             s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
+            ${backgroundSelect},
             q.id AS quiz_id, q.title AS quiz_title, q.category AS quiz_category,
             q.template_type, q.time_limit_sec, q.shuffle_answers, q.randomize_questions,
             CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
@@ -1033,6 +1113,7 @@ async function broadcastState(io, sessionId) {
     { sid: sessionId }
   );
   if (!state) return;
+  state.background_key = normalizeSessionBackgroundKey(state.background_key || getRememberedSessionBackground(sessionId));
 
   const qs = safeJson(state.questions_snapshot_json) || [];
   const currentQ = qs[Number(state.current_question_index || 0)] || null;

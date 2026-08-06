@@ -273,16 +273,21 @@ function QuizFolderRow({ quiz, c }) {
 
 function ReportMeta({ templateType, label, countLabel, c }) {
   const tone = templateTone(templateType, c, false);
-  return <div className="tw-class-report-meta" style={{ color: c.textMuted }}><span style={{ display:"inline-flex", alignItems:"center", padding:"4px 9px", borderRadius:999, border:`1px solid ${tone.border}`, background:tone.softBg, color:tone.accent, fontWeight:900, fontSize:12 }}>{templateLabel(templateType)}</span><span>·</span><span>{label}</span><span>·</span><span>{countLabel}</span></div>;
+  const neutralCapsule = { display:"inline-flex", alignItems:"center", width:"fit-content", padding:"4px 9px", borderRadius:999, border:`1px solid ${c.border}`, background:c.cardBg2, color:c.textMuted, fontWeight:850, fontSize:12 };
+  return <div className="tw-class-report-meta" style={{ color: c.textMuted }}>
+    <span style={{ display:"inline-flex", alignItems:"center", width:"fit-content", padding:"4px 9px", borderRadius:999, border:`1px solid ${tone.border}`, background:tone.softBg, color:tone.accent, fontWeight:900, fontSize:12 }}>{templateLabel(templateType)}</span>
+    <span style={neutralCapsule}>{label}</span>
+    <span style={neutralCapsule}>{countLabel}</span>
+  </div>;
 }
 
 function AssignmentResultRow({ r, c, onAnalytics }) {
-  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(r.template_type, c, false) }}><span className="tw-class-report-copy"><b>{r.quiz_title}</b><ReportMeta templateType={r.template_type} label="Assigned session" countLabel={`${r.submitted_count || 0} submitted`} c={c}/></span><span className="tw-class-report-actions"><TeacherPressButton tone="blue" onClick={onAnalytics}>Open Analytics</TeacherPressButton></span></div>;
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(r.template_type, c, false) }}><span className="tw-class-report-copy"><b>{r.quiz_title}</b><ReportMeta templateType={r.template_type} label="Assigned session" countLabel={`${r.submitted_count || 0} submitted`} c={c}/></span><span className="tw-class-report-actions"><button type="button" className="tw-analytics-text-link" onClick={onAnalytics}>Open Analytics</button></span></div>;
 }
 
 function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
-  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(session.template_type, c, false) }}><span className="tw-class-report-copy"><b>{session.quiz_title}</b><ReportMeta templateType={session.template_type} label={assigned ? "Assigned session" : "Live session"} countLabel={`${session.participant_count || 0} ${assigned ? "submitted" : "participants"}`} c={c}/></span><span className="tw-class-report-actions"><TeacherPressButton tone="blue" onClick={assigned ? onOpenAssigned : onOpenLive}>Open Analytics</TeacherPressButton></span></div>;
+  return <div className="tw-class-report-item tw-class-report-item-v254" style={{ ...row(c), ...templateCardChrome(session.template_type, c, false) }}><span className="tw-class-report-copy"><b>{session.quiz_title}</b><ReportMeta templateType={session.template_type} label={assigned ? "Assigned session" : "Live session"} countLabel={`${session.participant_count || 0} ${assigned ? "submitted" : "participants"}`} c={c}/></span><span className="tw-class-report-actions"><button type="button" className="tw-analytics-text-link" onClick={assigned ? onOpenAssigned : onOpenLive}>Open Analytics</button></span></div>;
 }
 
 function RemoveStudentModal({ c, student, onClose, onConfirm }) {

@@ -12,6 +12,7 @@ import { TEMPLATE_PALETTES, templateCardChrome, templateLabel, templateTone } fr
 import { TwIcon } from "../../../components/TwUI";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../../templates/thinkspell/thinkSpell";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -256,7 +257,7 @@ function QuestionCard({ question: q, onRemove, c }) {
   const tone = templateTone(tt, c, false);
   const cfg = q.config_json || {};
   const correct = q.correct_json || {};
-  const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING";
+  const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING" || tt === "THINK_SPELL";
   const [expanded, setExpanded] = useState(false);
   const answers = getBankAnswers(tt, cfg, correct);
 
@@ -269,14 +270,14 @@ function QuestionCard({ question: q, onRemove, c }) {
 
         {tt === "MCQ" ? <McqBankAnswers cfg={cfg} correct={correct} c={c} />
           : tt === "TRUE_FALSE" ? <TrueFalseBankAnswers correct={correct} c={c} />
-          : <div className={`tw-bank-answer-summary${tt === "THINK_SPELL" ? " is-think-spell" : ""}${answers.length === 1 ? " is-single" : ""}${tt === "MATCHING" && expanded ? " is-hidden" : ""}`}>
+          : <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${["MATCHING", "THINK_SPELL"].includes(tt) && expanded ? " is-hidden" : ""}`}>
               {answers.length ? answers.map((answer, index) => <CorrectAnswer key={`${answer}-${index}`} value={answer} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
             </div>}
 
         {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((value) => !value)} className="tw-bank-expand-button" style={{ borderColor: tone.border, color: tone.accent, background: tone.softBg }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
 
         {collapsible && expanded && <div className="tw-bank-expanded-preview" style={{ borderColor: tone.border, background: tone.softBg }}>
-          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
+          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
         </div>}
 
         <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
@@ -361,6 +362,17 @@ function CorrectAnswer({ value }) {
 function GuessWordBankPreview({ cfg, c, tone }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
   return <div style={{ width: 'min(100%, 260px)', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', border: `1px solid ${tone.border}`, background: c.cardBg, display: 'grid', placeItems: 'center' }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>;
+}
+
+
+function ThinkSpellBankPreview({ cfg, correct, c, tone }) {
+  const words = (Array.isArray(correct?.answers) && correct.answers.length ? correct.answers : Array.isArray(cfg?.answers) ? cfg.answers : []).map((word) => String(word || "").toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
+  const gridSize = Math.min(12, Math.max(5, Number(cfg?.gridSize || Math.max(5, ...words.map((word) => word.length), 5))));
+  const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words })}-${Number(cfg?.gridSeed || 1)}`;
+  const preview = buildThinkSpellGrid({ gridSize, words, seed: buildThinkSpellSeed(signature) });
+  return <div className="tw-bank-thinkspell-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
+    {preview.grid.map((letter, index) => <span key={index} style={{ background: c.cardBg, borderColor: tone.border, color: tone.accent }}>{letter}</span>)}
+  </div>;
 }
 
 function MatchingBankPreview({ cfg, c, tone }) {

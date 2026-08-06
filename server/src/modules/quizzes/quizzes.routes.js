@@ -67,6 +67,7 @@ const AssignSchema = z.object({
   classId: z.coerce.number().int().positive(),
   availableFrom: z.string().min(1),
   availableUntil: z.string().min(1),
+  backgroundKey: z.string().regex(/^background-(?:0[1-9]|1[0-9]|2[0-2])$/).optional().nullable(),
 });
 
 quizzesRouter.get("/",    requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listQuizzes));

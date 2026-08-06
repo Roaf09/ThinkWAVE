@@ -123,7 +123,7 @@ export default function HomeTab({ setActiveTab }) {
   const latestReport = recentSessions.find((session) => session.session_type !== "ASSIGNED") || null;
   const lastBankedQuiz = banked[0] || null;
   const teacherInstitution = me?.institution_name || me?.institutionName || "";
-  const scrollStats = submissionStats.length > 4;
+  const scrollStats = submissionStats.length > 3;
 
   const performanceHighlights = useMemo(() => {
     const values = Object.values(analyticsMap).filter(Boolean);
@@ -183,7 +183,7 @@ export default function HomeTab({ setActiveTab }) {
               {submissionStats.length === 0 ? (
                 <EmptyState c={c} icon="chart" title="No assigned submissions yet" message="Submission updates from assigned quizzes will appear here." compact />
               ) : (
-                <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 238 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
+                <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 222 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
                   {submissionStats.map((row) => {
                     const rowTone = templateTone(row.template_type, c, false);
                     return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "18px 15px", minHeight: 68, display: "flex", alignItems: "center", borderRadius: 14, border: `1px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>

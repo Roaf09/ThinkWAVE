@@ -233,7 +233,7 @@ async function getAsyncExportData(classId, quizId, teacherId) {
 
 export async function exportClassAsyncXlsx(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
+  if (plan.code === "BASIC") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
   const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
   if (!data) return res.status(404).json({ message: "Async quiz not found." });
   const workbook = new ExcelJS.Workbook();
@@ -259,7 +259,7 @@ export async function exportClassAsyncXlsx(req, res) {
 
 export async function exportClassAsyncPdf(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code !== "INSTITUTION") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
+  if (plan.code === "BASIC") return res.status(403).json({ message: "Analytics downloads are available on the Institution plan." });
   const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
   if (!data) return res.status(404).json({ message: "Async quiz not found." });
   res.setHeader("Content-Type", "application/pdf");

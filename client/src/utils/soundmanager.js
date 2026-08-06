@@ -74,18 +74,24 @@ class SoundManager {
     if (this.unlocked) return true;
 
     try {
-      for (const audio of Object.values(this.sounds)) {
+      // Start every media element during the same user-activation window. Awaiting
+      // each one sequentially can exhaust the browser gesture before BGM is reached.
+      const entries = Object.values(this.sounds).map((audio) => {
         const prevMuted = audio.muted;
         audio.muted = true;
         audio.currentTime = 0;
-        await audio.play();
+        let playPromise;
+        try { playPromise = audio.play(); } catch (error) { playPromise = Promise.reject(error); }
+        return { audio, prevMuted, playPromise };
+      });
+      const results = await Promise.allSettled(entries.map((entry) => entry.playPromise));
+      entries.forEach(({ audio, prevMuted }) => {
         audio.pause();
         audio.currentTime = 0;
         audio.muted = prevMuted || this.muted;
-      }
-
-      this.unlocked = true;
-      return true;
+      });
+      this.unlocked = results.some((result) => result.status === "fulfilled");
+      return this.unlocked;
     } catch (err) {
       console.warn("Audio unlock failed:", err);
       return false;

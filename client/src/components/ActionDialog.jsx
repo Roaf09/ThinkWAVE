@@ -50,6 +50,8 @@ export default function ActionDialog({
   autoDismissMs = 2000,
   closeOnBackdrop = true,
   width = "min(100%, 540px)",
+  plainIcon = false,
+  flatSurface = false,
 }) {
   const c = useColors();
   const { dark } = useTheme();
@@ -119,8 +121,8 @@ export default function ActionDialog({
             pointerEvents: "auto",
           }}
         >
-          <div style={{ padding: "28px 30px 18px", background: dark ? `linear-gradient(180deg, ${toneConfig.darkTint}, transparent)` : `linear-gradient(180deg, ${toneConfig.lightTint}, transparent)` }}>
-            <div style={{ width: 76, height: 76, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: toneConfig.bg, color: toneConfig.fg, marginBottom: 16, border: `1px solid ${toneConfig.border}` }}>
+          <div style={{ padding: "28px 30px 18px", background: flatSurface ? "transparent" : (dark ? `linear-gradient(180deg, ${toneConfig.darkTint}, transparent)` : `linear-gradient(180deg, ${toneConfig.lightTint}, transparent)`) }}>
+            <div style={{ width: 76, height: 76, borderRadius: plainIcon ? 0 : 18, display: "flex", alignItems: "center", justifyContent: "center", background: plainIcon ? "transparent" : toneConfig.bg, color: plainIcon ? (dark ? "#fff" : "#0f172a") : toneConfig.fg, marginBottom: 16, border: plainIcon ? "none" : `1px solid ${toneConfig.border}`, boxShadow: "none" }}>
               <DialogIcon icon={icon} fallback={toneConfig.icon} />
             </div>
             {title && <h3 style={{ margin: 0, color: c.text, fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>{title}</h3>}

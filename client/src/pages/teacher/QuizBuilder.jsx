@@ -146,6 +146,7 @@ export default function QuizBuilder({ guestMode = false }) {
   async function saveSettings(patch) {
     const next = { ...settings, ...patch };
     setSettings(next);
+    setIsSaved(false);
     try {
       await api.put(`/quizzes/${id}/settings`, {
         timeLimitSec: 30,
@@ -173,6 +174,7 @@ export default function QuizBuilder({ guestMode = false }) {
     try {
       await api.put(`/quizzes/${id}/meta`, { title: clean });
       setQuiz((prev) => ({ ...prev, title: clean }));
+      setIsSaved(false);
       setTitleDraft(clean);
       setTitleEditing(false);
       setMsg("Quiz title updated.");
@@ -486,11 +488,11 @@ export default function QuizBuilder({ guestMode = false }) {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <TeacherPressButton tone="red" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": dark ? "#fff" : "#0f172a" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
-            {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": dark ? "#fff" : "#0f172a" }} onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
+            <TeacherPressButton tone="red" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
+            {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
             <TeacherPressButton tone="blue" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="check" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": dark ? "#fff" : "#0f172a" }} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="spark" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": dark ? "#fff" : "#0f172a" }} onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="check" className={`tw-builder-toolbar-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="spark" className={`tw-builder-toolbar-action${quiz.status === "PUBLISHED" ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
           </div>
         </div>
 
@@ -553,7 +555,7 @@ export default function QuizBuilder({ guestMode = false }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-small-press tw-builder-toolbar-action" style={{ "--builder-action-icon": dark ? "#fff" : "#0f172a" }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>Save to Bank</TeacherPressButton>}
+                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-small-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>Save to Bank</TeacherPressButton>}
                     <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
                   </div>
                 </div>

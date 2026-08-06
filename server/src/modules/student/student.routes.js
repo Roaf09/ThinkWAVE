@@ -8,7 +8,7 @@ import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
-import { getStudentDashboard, getStudentClasses, joinClass, acknowledgeClassRemoval, upsertProfile, deleteProfileImage, joinStudentLiveSession, getAssignedStudentAnalytics, getLiveStudentAnalytics, getStudentQuiz, submitStudentQuiz } from "./student.controller.js";
+import { getStudentDashboard, getStudentClasses, joinClass, acknowledgeClassRemoval, upsertProfile, deleteProfileImage, joinStudentLiveSession, getAssignedStudentAnalytics, getLiveStudentAnalytics, getStudentQuiz, checkStudentQuizAnswer, submitStudentQuiz } from "./student.controller.js";
 
 export const studentRouter = Router();
 
@@ -39,4 +39,5 @@ studentRouter.post("/live-sessions/:sessionId/join", asyncHandler(joinStudentLiv
 studentRouter.get("/analytics/assigned/:quizId", asyncHandler(getAssignedStudentAnalytics));
 studentRouter.get("/analytics/live/:sessionId", asyncHandler(getLiveStudentAnalytics));
 studentRouter.get("/quizzes/:quizId", asyncHandler(getStudentQuiz));
+studentRouter.post("/quizzes/:quizId/check-answer", validateBody(z.object({ questionId: z.coerce.number().int().positive(), answer: z.any() })), asyncHandler(checkStudentQuizAnswer));
 studentRouter.post("/quizzes/:quizId/submit", validateBody(z.object({ answers: z.array(z.any()).default([]) })), asyncHandler(submitStudentQuiz));

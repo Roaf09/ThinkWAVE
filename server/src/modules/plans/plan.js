@@ -13,16 +13,28 @@ export const BASIC_LIMITS = Object.freeze({
 });
 
 export async function getTeacherPlan(userId) {
-  const [[user]] = await pool.query(
-    `SELECT institution_name FROM users WHERE id=:id AND deleted_at IS NULL`,
-    { id: userId }
-  );
-  const institutionName = String(user?.institution_name || "").trim();
-  return {
-    code: institutionName ? "INSTITUTION" : "BASIC",
-    institutionName: institutionName || null,
-    limits: institutionName ? null : BASIC_LIMITS,
-  };
+  let user;
+  try {
+    [[user]] = await pool.query(
+      `SELECT institution_name, plan_code, plan_expires_at FROM users WHERE id=:id AND deleted_at IS NULL`,
+      { id: userId }
+    );
+  } catch (error) {
+    if (error?.code !== "ER_BAD_FIELD_ERROR") throw error;
+    [[user]] = await pool.query(`SELECT institution_name FROM users WHERE id=:id AND deleted_at IS NULL`, { id: userId });
+    const legacyInstitution = String(user?.institution_name || "").trim();
+    return { code: legacyInstitution ? "INSTITUTION" : "BASIC", institutionName: legacyInstitution || null, expiresAt: null, limits: legacyInstitution ? null : BASIC_LIMITS };
+  }
+  if (!user) return { code: "BASIC", institutionName: null, limits: BASIC_LIMITS };
+  const directCode = String(user.plan_code || "BASIC");
+  const directActive = directCode !== "BASIC" && user.plan_expires_at && new Date(user.plan_expires_at).getTime() > Date.now();
+  if (directActive) return { code: directCode, institutionName: user.institution_name || null, expiresAt: user.plan_expires_at, limits: null };
+  const institutionName = String(user.institution_name || "").trim();
+  if (institutionName) {
+    const [[admin]] = await pool.query(`SELECT plan_expires_at FROM users WHERE role='ADMIN' AND institution_name=:institution AND plan_code='INSTITUTION' AND plan_expires_at>NOW() AND deleted_at IS NULL AND is_active=1 ORDER BY plan_expires_at DESC LIMIT 1`, { institution: institutionName });
+    if (admin) return { code: "INSTITUTION", institutionName, expiresAt: admin.plan_expires_at, limits: null };
+  }
+  return { code: "BASIC", institutionName: institutionName || null, expiresAt: null, limits: BASIC_LIMITS };
 }
 
 export function validateBasicQuestionPayload(templateType, questions = []) {

@@ -319,7 +319,8 @@ export function validateQuestion(q, templateType) {
     const dummyB = Array.isArray(cfg.dummyB) ? cfg.dummyB : colB.slice(colA.length);
     const pairs = Array.isArray(cor.pairs) ? cor.pairs : [];
     const usedB = new Set();
-    if (colA.length === 0 || colB.length < colA.length) issues.push("matching needs a completed answer for every pair");
+    if (colA.length < 2) issues.push("matching needs at least 2 completed pairs");
+    else if (colB.length < colA.length) issues.push("matching needs a completed answer for every pair");
     if (dummyB.length > 2) issues.push("matching supports a maximum of 2 dummy answers");
     if (colA.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column A items are empty");
     if (colB.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column B items are empty");

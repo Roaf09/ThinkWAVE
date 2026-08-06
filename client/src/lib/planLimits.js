@@ -11,4 +11,4 @@ export const BASIC_LIMITS = {
   live:{allowGroupMode:false,maxStudents:45},
 };
 export function getTemplateLimit(templateType){ return BASIC_LIMITS[normalizeTemplateType(templateType)] || {maxItems:20,maxTimeSec:120,allowImages:false}; }
-export function isInstitutionPlan(user){ return user?.plan_code === "INSTITUTION" || !!String(user?.institution_name||"").trim(); }
+export function isInstitutionPlan(user){ return ["PRO","INSTITUTION"].includes(user?.plan_code); }

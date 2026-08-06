@@ -3,7 +3,7 @@
  * Purpose: Teacher/Guest session management, pre-host setup, and assignment scheduling.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { api } from "../../../lib/api";
@@ -14,14 +14,15 @@ import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { isInstitutionPlan } from "../../../lib/planLimits";
 import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import { DEFAULT_SESSION_BACKGROUND, SESSION_BACKGROUNDS } from "../../../lib/sessionBackgrounds";
 
 const TEMPLATE_IMAGES = {
-  MCQ: { landscape: "/media/templates/multiple-choice.svg", mobile: "/media/templates/multiple-choice-mobile.svg" },
-  TRUE_FALSE: { landscape: "/media/templates/true-false.svg", mobile: "/media/templates/true-false-mobile.svg" },
-  TYPE_ANSWER: { landscape: "/media/templates/identification.svg", mobile: "/media/templates/identification-mobile.svg" },
-  MATCHING: { landscape: "/media/templates/matching.svg", mobile: "/media/templates/matching-mobile.svg" },
-  GUESS_WORD_4PICS: { landscape: "/media/templates/guess-word.svg", mobile: "/media/templates/guess-word-mobile.svg" },
-  THINK_SPELL: { landscape: "/media/templates/think-and-spell.svg", mobile: "/media/templates/think-and-spell-mobile.svg" },
+  MCQ: { landscape: "/media/templates/previews/mcq-landscape.png", mobile: "/media/templates/previews/mcq-mobile.png" },
+  TRUE_FALSE: { landscape: "/media/templates/previews/tof-landscape.png", mobile: "/media/templates/previews/tof-mobile.png" },
+  TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.png", mobile: "/media/templates/previews/identification-mobile.png" },
+  MATCHING: { landscape: "/media/templates/previews/matching-landscape.png", mobile: "/media/templates/previews/matching-mobile.png" },
+  GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.png", mobile: "/media/templates/previews/guess-word-mobile.png" },
+  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.png", mobile: "/media/templates/previews/think-spell-mobile.png" },
 };
 
 
@@ -133,13 +134,21 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
       if (templateFilter && normalizeLiveTemplate(quiz.template_type) !== templateFilter) return false;
       return !q || [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
-    rows.sort((a, b) => sortBy === "title" ? String(a.title || "").localeCompare(String(b.title || "")) : Number(b.id) - Number(a.id));
+    rows.sort((a, b) => {
+      const aOpen = Number(openQuizId) === Number(a.id) ? 1 : 0;
+      const bOpen = Number(openQuizId) === Number(b.id) ? 1 : 0;
+      if (aOpen !== bOpen) return bOpen - aOpen;
+      if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""));
+      const aUpdated = new Date(a.updated_at || a.created_at || 0).getTime();
+      const bUpdated = new Date(b.updated_at || b.created_at || 0).getTime();
+      return bUpdated - aUpdated || Number(b.id) - Number(a.id);
+    });
     return rows;
-  }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId]);
+  }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId, openQuizId]);
 
-  async function createLiveSession(quiz, joinMode = "SOLO", classId = null) {
+  async function createLiveSession(quiz, joinMode = "SOLO", classId = null, backgroundKey = DEFAULT_SESSION_BACKGROUND) {
     try {
-      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode: guestMode ? "SOLO" : joinMode, classId: guestMode ? null : classId });
+      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode: guestMode ? "SOLO" : joinMode, classId: guestMode ? null : classId, backgroundKey });
       setHostSetupQuiz(null);
       await load();
       setOpenQuizId(quiz.id);
@@ -177,7 +186,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
         <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option>{Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}</select>
       </div></section>}
       {flash && <div style={{ ...card(c, { padding: "12px 16px", boxShadow: "none", background: flash.kind === "error" ? c.redBg : c.greenBg, borderColor: flash.kind === "error" ? c.redBorder : c.greenBorder }), color: flash.kind === "error" ? c.redFg : c.greenFg, fontWeight: 800, fontSize: 13 }}>{flash.text}</div>}
-      {!liveQuizzes.length ? <ThinkBotEmptyState c={c} title="You have not made any quizzes yet." actionLabel={guestMode ? "Create & Open Builder" : undefined} onAction={guestMode ? () => setActiveTab?.("create") : undefined} /> : !filteredQuizzes.length ? <div style={card(c)}>No quizzes match your current filters.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard
+      {!liveQuizzes.length ? <ThinkBotEmptyState c={c} title="You do not have any quizzes ready yet." actionLabel={guestMode ? "Create & Open Builder" : undefined} onAction={guestMode ? () => setActiveTab?.("create") : undefined} /> : !filteredQuizzes.length ? <div style={card(c)}>No quizzes match your current filters.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard
         key={quiz.id}
         quiz={quiz}
         guestMode={guestMode}
@@ -265,6 +274,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, onClose, onStart }
   const [joinMode, setJoinMode] = useState("SOLO");
   const [classId, setClassId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [backgroundKey, setBackgroundKey] = useState(null);
   const template = normalizeLiveTemplate(quiz.template_type);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
   return <div className="tw-host-launch-backdrop" onClick={onClose}>
@@ -274,13 +284,63 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, onClose, onStart }
         <div className="tw-host-preview-mobile"><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></div>
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Pick a class, choose how everyone will play, then launch the fun when your learners are ready!</p></div>
-      {institutionPlan && <div className="tw-host-mode-row"><button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} onClick={() => setJoinMode("SOLO")}><span>Solo</span></button><button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} onClick={() => setJoinMode("GROUP")}><span>Group</span></button></div>}
+      <div className="tw-host-mode-row">
+        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
+        <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan} title={institutionPlan ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => institutionPlan && setJoinMode("GROUP")}><span>Group</span></button>
+      </div>
       <div className="tw-host-launch-controls">
         <button type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
-        <TeacherPressButton tone="blue" disabled={!classId} onClick={() => onStart(quiz, joinMode, classId)}>Start</TeacherPressButton>
+        <TeacherPressButton tone="blue" disabled={!classId} onClick={() => onStart(quiz, joinMode, classId, backgroundKey)}>Start</TeacherPressButton>
       </div>
+      <BackgroundPicker selectedKey={backgroundKey} onSelect={setBackgroundKey} c={c} />
     </section>
     {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); }} />}
+  </div>;
+}
+
+function BackgroundPicker({ selectedKey, onSelect, c }) {
+  const visibleCount = 4;
+  const total = SESSION_BACKGROUNDS.length;
+  const [startIndex, setStartIndex] = useState(0);
+  const lastWheelAt = useRef(0);
+  const carouselRef = useRef(null);
+  const selectedIndex = SESSION_BACKGROUNDS.findIndex((item) => item.key === selectedKey);
+  const visible = Array.from({ length: Math.min(visibleCount, total) }, (_, offset) => SESSION_BACKGROUNDS[(startIndex + offset) % total]);
+
+  function showPrevious() {
+    if (!total) return;
+    setStartIndex((value) => (value - 1 + total) % total);
+  }
+
+  function showNext() {
+    if (!total) return;
+    setStartIndex((value) => (value + 1) % total);
+  }
+
+  useEffect(() => {
+    const node = carouselRef.current;
+    if (!node || !total) return undefined;
+    const handleWheel = (event) => {
+      if (Math.abs(event.deltaY) < 4) return;
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelAt.current < 180) return;
+      lastWheelAt.current = now;
+      setStartIndex((value) => event.deltaY > 0 ? (value + 1) % total : (value - 1 + total) % total);
+    };
+    node.addEventListener("wheel", handleWheel, { passive: false });
+    return () => node.removeEventListener("wheel", handleWheel);
+  }, [total]);
+
+  return <div className="tw-session-background-picker">
+    <div className="tw-session-background-head"><span>Choose a gameplay background</span><small style={{ color: c.textMuted }}>{selectedIndex >= 0 ? `${selectedIndex + 1} of ${total}` : "No background selected"}</small></div>
+    <div ref={carouselRef} className="tw-session-background-carousel">
+      <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={showPrevious} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
+      <div className="tw-session-background-track">
+        {visible.map((item) => <button type="button" key={`${startIndex}-${item.key}`} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => onSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
+      </div>
+      <button type="button" aria-label="Next backgrounds" className="tw-session-background-arrow" onClick={showNext} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
+    </div>
   </div>;
 }
 
@@ -328,7 +388,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
           const selected = Number(selectedId) === Number(folder.id);
           return <button type="button" key={folder.id} className={`tw-class-picker-card${selected ? " is-selected" : ""}`} onClick={() => openFolder(folder)} style={{ background: c.cardBg2, borderColor: selected ? c.accent : c.border, color: c.text }}>
             <TwIcon name="folder" size={34} />
-            <span>{folder.name}</span>
+            <span className="tw-class-picker-name" title={folder.name}>{folder.name}</span>
             {hasChildren && <small style={{ color: c.textMuted }}>{(childrenByParent.get(Number(folder.id)) || []).length} folder{(childrenByParent.get(Number(folder.id)) || []).length === 1 ? "" : "s"}</small>}
           </button>;
         })}
@@ -339,7 +399,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
 }
 
 function AssignModal({ quiz, folders, c, onClose, onSubmit }) {
-  const [form, setForm] = useState({ classId: null, availableFrom: "", availableUntil: "" });
+  const [form, setForm] = useState({ classId: null, availableFrom: "", availableUntil: "", backgroundKey: null });
   const [editing, setEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const complete = !!form.classId && !!form.availableFrom && !!form.availableUntil;
@@ -353,6 +413,7 @@ function AssignModal({ quiz, folders, c, onClose, onSubmit }) {
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}><TwIcon name="calendar" size={28} /><div><div style={{ color: c.textMuted, fontSize: 13, fontWeight: 800 }}>Schedule</div><div style={{ color: c.text, fontWeight: 900 }}>{form.availableFrom && form.availableUntil ? `${formatSchedule(form.availableFrom)} → ${formatSchedule(form.availableUntil)}` : "Set start and end date/time"}</div></div></div>
         <button type="button" onClick={() => setEditing(true)} style={btn(c)}>Edit</button>
       </div>
+      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => setForm((current) => ({ ...current, backgroundKey }))} c={c} />
       <div style={{ color: c.textMuted, fontSize: 13 }}>Students will only be able to answer within the selected schedule.</div>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
     </div>

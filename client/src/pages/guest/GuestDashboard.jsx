@@ -109,7 +109,7 @@ export default function GuestDashboard() {
     </div>;
   }
 
-  return <div className="tw-responsive-dashboard" style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s ease" }}>
+  return <div className={`tw-responsive-dashboard${activeTab === "live" ? " tw-sessions-dashboard" : ""}`} style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s ease" }}>
     <aside data-sidebar="true" className="tw-responsive-sidebar tw-guest-sidebar" style={sidebar(c)}>
       <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline" }}>
@@ -127,7 +127,7 @@ export default function GuestDashboard() {
         <button className="tw-guest-exit" onClick={() => setShowExit(true)} style={{ ...sideAction(c), flex: 1, justifyContent: "center" }}><TwIcon name="logout" size={17} /><span>Exit Guest</span></button>
       </div>
     </aside>
-    <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
+    <main className={`tw-responsive-dashboard-main${activeTab === "live" ? " tw-sessions-main" : ""}`} style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
       <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
     </main>
     {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}

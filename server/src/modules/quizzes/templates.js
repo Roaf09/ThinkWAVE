@@ -55,7 +55,16 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       const cappedBase = clamp(Number(basePoints) || 1, 1, 3);
       const pointsAwarded = (cappedBase / totalCorrect) * correctSelectedCount;
       const isCorrect = correctSelectedCount === correctChoices.length && !hasWrongSelected;
-      return { isCorrect, pointsAwarded: Number(pointsAwarded.toFixed(2)) };
+      const partial = !isCorrect && correctSelectedCount > 0;
+      return {
+        isCorrect,
+        partial,
+        feedbackType: isCorrect ? "correct" : partial ? "almost" : "wrong",
+        correctCount: correctSelectedCount,
+        totalCorrect,
+        hasWrongSelected,
+        pointsAwarded: Number(pointsAwarded.toFixed(2)),
+      };
     }
 
     case TEMPLATE_TYPES.TRUE_FALSE:
@@ -107,11 +116,14 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       const totalPairs = expectedMap.size;
       const base = clamp(Number(basePoints) || 1, 1, 3);
       const isCorrect = totalPairs > 0 && correctCount === totalPairs;
+      const partial = correctCount > 0 && correctCount < totalPairs;
       return {
         isCorrect,
+        partial,
+        feedbackType: isCorrect ? "correct" : partial ? "almost" : "wrong",
         correctCount,
         totalPairs,
-        pointsAwarded: totalPairs > 0 ? Number(((correctCount / totalPairs) * base).toFixed(2)) : 0,
+        pointsAwarded: Number((correctCount * base).toFixed(2)),
       };
     }
 
@@ -147,11 +159,17 @@ export function scoreThinkSpellBatch({
     pointsAwarded += Math.max(1, Number(basePoints) || 1);
   }
 
+  const isCorrect = expectedKeys.size > 0 && acceptedKeys.size === expectedKeys.size;
+  const partial = !isCorrect && acceptedKeys.size > 0;
   return {
-    isCorrect: expectedKeys.size > 0 && acceptedKeys.size === expectedKeys.size,
+    isCorrect,
+    partial,
+    feedbackType: isCorrect ? "correct" : partial ? "almost" : "wrong",
     pointsAwarded,
     words: accepted,
+    correctCount: acceptedKeys.size,
     totalWords: accepted.length,
+    totalItems: expectedKeys.size,
     requiredWords: expectedKeys.size,
   };
 }

@@ -59,25 +59,46 @@ export async function getNotifications(req,res){
 export async function reviewApplication(req,res){
   const id=Number(req.params.id); const decision=String(req.body?.decision||'').toUpperCase(); if(!['APPROVED','DISAPPROVED'].includes(decision))return res.status(400).json({message:'Invalid decision.'});
   const [[app]]=await pool.query(`SELECT * FROM institution_applications WHERE id=:id`,{id}); if(!app)return res.status(404).json({message:'Application not found.'});
-  if(!['PENDING','APPROVED_FOR_PAYMENT'].includes(app.status) && decision==='APPROVED') return res.status(409).json({message:'This application has already been processed.'});
-  let status='DISAPPROVED', emailSent=false;
-  if(decision==='APPROVED'){
-    const rawToken=crypto.randomBytes(32).toString('hex'); const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
+  const planType=String(app.plan_type||'INSTITUTION').toUpperCase(); let status='DISAPPROVED',emailSent=false;
+  if(decision==='APPROVED'&&planType==='PRO'){
+    if(!app.user_id) return res.status(409).json({message:'The Teacher account linked to this application is missing.'});
+    status='ACTIVATED';
+    await pool.query(`UPDATE users SET plan_code='PRO',plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:uid AND role='TEACHER' AND deleted_at IS NULL`,{uid:app.user_id});
+    await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:reviewer,reviewed_at=NOW(),payment_confirmed_by=:reviewer,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{status,reviewer:req.user.sub,id});
+    const html=thinkwaveEmailTemplate({eyebrow:'ThinkWAVE Pro approved',title:'Your Pro plan is active',intro:'Your submitted GCash transaction has been verified and your existing Teacher account now has ThinkWAVE Pro privileges.',bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Your Pro access is active for 30 days. Sign in using the same Teacher email used in the application.</p>',footer:'Renewal requires a new payment and application after the current access period ends.'});
+    const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Pro plan was approved',text:'Your ThinkWAVE Pro plan is active for 30 days.',html});emailSent=mail.sent;
+  }else if(decision==='APPROVED'){
+    const [[existingAdmin]]=await pool.query(`SELECT id FROM users WHERE role='ADMIN' AND email=:email AND deleted_at IS NULL LIMIT 1`,{email:app.work_email});
+    if(existingAdmin){
+      status='ACTIVATED';
+      await pool.query(`UPDATE users SET plan_code='INSTITUTION',plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY),institution_name=COALESCE(NULLIF(institution_name,''),:institution) WHERE id=:uid`,{institution:app.institution_name,uid:existingAdmin.id});
+      await pool.query(`UPDATE institution_applications SET status='ACTIVATED',reviewed_by=:reviewer,reviewed_at=NOW(),payment_confirmed_by=:reviewer,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{reviewer:req.user.sub,id});
+      const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan renewed',title:'Your Institution plan is active',intro:`The payment for <strong>${app.institution_name}</strong> has been verified.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">The existing Admin account and institution members now have Institution privileges for another 30 days.</p>',footer:'A new application and external payment are required for the next renewal.'});
+      const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was renewed',text:'Your ThinkWAVE Institution Plan is active for 30 days.',html});emailSent=mail.sent;
+    }else{
+      const rawToken=crypto.randomBytes(32).toString('hex'); const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex'); status='PAYMENT_CONFIRMED';
+      await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
+      await pool.query(`INSERT INTO admin_invitations(application_id,institution_name,email,token_hash,expires_at,created_by) VALUES(:id,:institution,:email,:hash,DATE_ADD(NOW(),INTERVAL 7 DAY),:uid)`,{id,institution:app.institution_name,email:app.work_email,hash:tokenHash,uid:req.user.sub});
+      await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:uid,reviewed_at=NOW(),payment_confirmed_by=:uid,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{status,uid:req.user.sub,id});
+      const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
+      const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan approved',title:'Create your ThinkWAVE Admin account',intro:`Your application for <strong>${app.institution_name}</strong> has been approved and the submitted GCash transaction has been confirmed.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Use the secure link below to create the first Admin account. The Institution plan is active for 30 days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link.'});
+      const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was approved',text:`Your application was approved. Create your Admin account: ${registrationUrl}`,html});emailSent=mail.sent;
+    }
+  }else{
+    await pool.query(`UPDATE institution_applications SET status='DISAPPROVED',reviewed_by=:uid,reviewed_at=NOW() WHERE id=:id`,{uid:req.user.sub,id});
     await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
-    await pool.query(`INSERT INTO admin_invitations(application_id,institution_name,email,token_hash,expires_at,created_by) VALUES(:id,:institution,:email,:hash,DATE_ADD(NOW(),INTERVAL 7 DAY),:uid)`,{id,institution:app.institution_name,email:app.work_email,hash:tokenHash,uid:req.user.sub});
-    status='PAYMENT_CONFIRMED';
-    await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:uid,reviewed_at=NOW(),payment_confirmed_by=:uid,payment_confirmed_at=NOW() WHERE id=:id`,{status,uid:req.user.sub,id});
-    const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
-    const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan approved',title:'Create your ThinkWAVE Admin account',intro:`Your application for <strong>${app.institution_name}</strong> has been approved and the submitted GCash transaction has been confirmed.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Use the secure link below to create the first Admin account. The link is tied to this work email, can be used once, and expires in seven days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link. If you did not submit this application, contact ThinkWAVE support.'});
-    const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was approved',text:`Your application was approved. Create your Admin account: ${registrationUrl}`,html}); emailSent=mail.sent;
-  } else {
-    await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:uid,reviewed_at=NOW() WHERE id=:id`,{status,uid:req.user.sub,id});
-    await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
-    const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan update',title:'Application not approved',intro:`Thank you for applying for the ThinkWAVE Institution Plan for <strong>${app.institution_name}</strong>.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">After reviewing the submitted details, we are unable to approve the application at this time.</p>',footer:'You may contact ThinkWAVE support if you need clarification or want to submit a new application.'});
-    const mail=await sendMail({to:app.work_email,subject:'Update on your ThinkWAVE Institution Plan application',text:'Your ThinkWAVE Institution Plan application was not approved.',html}); emailSent=mail.sent;
+    const html=thinkwaveEmailTemplate({eyebrow:`ThinkWAVE ${planType==='PRO'?'Pro':'Institution'} update`,title:'Application not approved',intro:'Thank you for submitting a ThinkWAVE plan application.',bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">The application was not approved. Because payment is handled outside ThinkWAVE, the Superadmin can mark the external refund after it has been completed.</p>'});
+    const mail=await sendMail({to:app.work_email,subject:'Update on your ThinkWAVE plan application',text:'Your ThinkWAVE plan application was not approved.',html});emailSent=mail.sent;
   }
   await pool.query(`UPDATE system_notifications SET status=:status WHERE type='PLAN_APPLICATION' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.applicationId'))=:idText`,{status,idText:String(id)});
   res.json({ok:true,status,emailSent});
+}
+
+export async function refundApplication(req,res){
+  const id=Number(req.params.id);const [[app]]=await pool.query(`SELECT * FROM institution_applications WHERE id=:id`,{id});if(!app)return res.status(404).json({message:'Application not found.'});if(app.status!=='DISAPPROVED')return res.status(409).json({message:'Only disapproved applications can be marked as refunded.'});
+  await pool.query(`UPDATE institution_applications SET status='REFUNDED',refund_status='REFUNDED',refunded_at=NOW() WHERE id=:id`,{id});
+  await pool.query(`UPDATE system_notifications SET status='REFUNDED' WHERE type='PLAN_APPLICATION' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.applicationId'))=:idText`,{idText:String(id)});
+  res.json({ok:true,status:'REFUNDED'});
 }
 
 export async function confirmApplicationPayment(req,res){
