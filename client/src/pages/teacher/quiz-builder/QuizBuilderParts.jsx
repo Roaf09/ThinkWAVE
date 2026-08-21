@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../lib/api";
 import ActionDialog, { primaryBtn } from "../../../components/ActionDialog";
 import { TwIcon } from "../../../components/TwUI";
@@ -89,10 +89,17 @@ export function BankModal({ templateType, onSelect, onClose, ui, c }) {
 export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null }) {
   const initialAnswers = Array.isArray(cor.answers) && cor.answers.length
     ? cor.answers
-    : Array.isArray(cfg.answers) ? cfg.answers : [cor.text].filter(Boolean);
-  const [rawText, setRawText] = useState(initialAnswers.join(", "));
-  const allAnswers = rawText.split(/[,;\n]+/).map((word) => trimText(word)).filter(Boolean);
-  const answers = maxWords ? allAnswers.slice(0, maxWords) : allAnswers;
+    : Array.isArray(cfg.answers) && cfg.answers.length
+      ? cfg.answers
+      : [cor.text].filter(Boolean);
+  const fieldLimit = Math.max(4, Math.min(8, Number(maxWords || 8)));
+  const [wordFields, setWordFields] = useState(() => {
+    const seeded = initialAnswers.slice(0, fieldLimit);
+    while (seeded.length < 4) seeded.push("");
+    return seeded;
+  });
+  const allAnswers = wordFields.map((word) => trimText(word)).filter(Boolean);
+  const answers = allAnswers.slice(0, fieldLimit);
   const normalized = answers.map((word) => word.toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
   const longest = normalized.length ? Math.max(...normalized.map((word) => word.length)) : 5;
   const shortest = normalized.length ? Math.min(...normalized.map((word) => word.length)) : 5;
@@ -100,7 +107,12 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
   const maxGrid = Math.min(12, Math.max(minGrid, longest + 3));
   const gridSize = Math.min(maxGrid, Math.max(minGrid, Number(cfg.gridSize || minGrid)));
   const gridSeed = Number(cfg.gridSeed || 1);
-  const canFill = normalized.length > 0 && gridSize >= longest;
+  const canFill = normalized.length >= 4 && gridSize >= longest;
+  const [isArranging, setIsArranging] = useState(false);
+  const [arrangingGrid, setArrangingGrid] = useState([]);
+  const [arrangingGridSize, setArrangingGridSize] = useState(gridSize);
+  const [arrangeDots, setArrangeDots] = useState(1);
+  const arrangeTimerRef = useRef(null);
   const savedGridKey = Array.isArray(cfg.grid) ? cfg.grid.join("") : "";
   const preview = useMemo(() => {
     if (!cfg.gridFilled || !canFill) return { grid: new Array(gridSize * gridSize).fill(""), gridSize };
@@ -110,12 +122,23 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
     const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: normalized })}-${gridSeed}`;
     return buildThinkSpellGrid({ gridSize, words: normalized, seed: buildThinkSpellSeed(signature) });
   }, [cfg.gridFilled, canFill, gridSize, gridSeed, savedGridKey, normalized.join("|")]);
+  const visiblePreview = isArranging
+    ? { grid: arrangingGrid, gridSize: arrangingGridSize }
+    : preview;
 
-  function handleAnswersChange(e) {
-    const next = e.target.value;
-    setRawText(next);
-    let parsed = next.split(/[,;\n]+/).map((word) => trimText(word)).filter(Boolean);
-    if (maxWords) parsed = parsed.slice(0, maxWords);
+  useEffect(() => () => {
+    if (arrangeTimerRef.current) window.clearInterval(arrangeTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isArranging) return undefined;
+    const timer = window.setInterval(() => setArrangeDots((value) => (value % 3) + 1), 320);
+    return () => window.clearInterval(timer);
+  }, [isArranging]);
+
+  function commitWords(nextFields) {
+    const bounded = nextFields.slice(0, fieldLimit);
+    const parsed = bounded.map((word) => trimText(word)).filter(Boolean);
     const clean = parsed.map((word) => word.toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
     const nextLongest = clean.length ? Math.max(...clean.map((word) => word.length)) : 5;
     const nextMin = Math.min(12, Math.max(5, nextLongest));
@@ -125,6 +148,25 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
       correct: { ...cor, answers: parsed, text: parsed[0] || "" },
       config: { ...cfg, answers: parsed, gridSize: nextSize, grid: [], gridFilled: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 },
     });
+  }
+
+  function updateWord(index, value) {
+    const next = wordFields.map((word, i) => (i === index ? value.slice(0, 255) : word));
+    setWordFields(next);
+    commitWords(next);
+  }
+
+  function addWordField() {
+    if (wordFields.length >= fieldLimit) return;
+    setWordFields((current) => [...current, ""]);
+  }
+
+  function removeWordField() {
+    if (wordFields.length <= 4) return;
+    const removed = wordFields[wordFields.length - 1];
+    const next = wordFields.slice(0, -1);
+    setWordFields(next);
+    if (trimText(removed)) commitWords(next);
   }
 
   function setGridSize(value) {
@@ -138,10 +180,31 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
   }
 
   function fillGrid() {
-    if (!canFill) return;
+    if (!canFill || isArranging || cfg.gridFilled) return;
     const seedValue = gridSeed || 1;
     const filled = buildSavedGrid(seedValue);
-    onChange({ config: { ...cfg, answers, gridSize: filled.gridSize, grid: filled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+    const blank = new Array(filled.grid.length).fill("");
+    setArrangingGridSize(filled.gridSize);
+    setArrangingGrid(blank);
+    setIsArranging(true);
+    setArrangeDots(1);
+    window.dispatchEvent(new CustomEvent("thinkwave:tutorial-event", { detail: { type: "crossword-arranging" } }));
+
+    let shown = 0;
+    const stepMs = Math.max(34, Math.ceil(5000 / Math.max(1, filled.grid.length)));
+    if (arrangeTimerRef.current) window.clearInterval(arrangeTimerRef.current);
+    arrangeTimerRef.current = window.setInterval(() => {
+      shown += 1;
+      setArrangingGrid(filled.grid.map((letter, index) => (index < shown ? letter : "")));
+      if (shown >= filled.grid.length) {
+        window.clearInterval(arrangeTimerRef.current);
+        arrangeTimerRef.current = null;
+        window.setTimeout(() => {
+          onChange({ config: { ...cfg, answers, gridSize: filled.gridSize, grid: filled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
+          setIsArranging(false);
+        }, 220);
+      }
+    }, stepMs);
   }
 
   function shuffleGrid() {
@@ -155,9 +218,26 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
     <div style={{ ...ui.innerCard, display: "grid", gridTemplateColumns: "minmax(260px,.85fr) minmax(300px,1.15fr)", gap: 18, alignItems: "start" }}>
       <div style={{ display: "grid", gap: 12 }}>
         <div>
-          <label style={ui.smallLabel}>Valid or correct words</label>
-          <textarea rows={5} maxLength={1000} value={rawText} placeholder="cat, dog, bird, fish" onChange={handleAnswersChange} style={{ ...ui.textarea, marginTop: 7 }} />
-          {maxWords && <div style={{ color: allAnswers.length > maxWords ? c.redFg : c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan uses the first {maxWords} valid words in this batch.</div>}
+          <div className="tw-crossword-word-head">
+            <label style={ui.smallLabel}>Valid or correct words</label>
+            <div className="tw-crossword-word-actions">
+              <button type="button" className="tw-builder-press tw-builder-press-neutral" onClick={removeWordField} disabled={wordFields.length <= 4} aria-label="Remove word field">−</button>
+              <button type="button" className="tw-builder-press tw-builder-press-blue" onClick={addWordField} disabled={wordFields.length >= fieldLimit} aria-label="Add word field">＋</button>
+            </div>
+          </div>
+          <div data-tutorial="builder-crossword-words" className="tw-crossword-word-grid">
+            {wordFields.map((word, index) => (
+              <input
+                key={index}
+                maxLength={255}
+                value={word}
+                placeholder={`Word ${index + 1}`}
+                onChange={(event) => updateWord(index, event.target.value)}
+                style={ui.input}
+              />
+            ))}
+          </div>
+          {maxWords && <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Basic plan supports up to {fieldLimit} valid words in this batch.</div>}
         </div>
         <button type="button" style={ui.toggleCard(cfg.showWordList !== false)} onClick={() => onChange({ config: { ...cfg, answers, showWordList: cfg.showWordList === false } })}>
           <div><div style={ui.toggleTitle}>Show valid words during gameplay</div><div style={ui.toggleHint}>{cfg.showWordList === false ? "Higher-order mode: learners discover which words to find." : "Lower-order mode: learners can see the word goals."}</div></div>
@@ -170,12 +250,21 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
           </select>
           <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Available size is based on the longest valid word, up to three additional rows and columns.</div>
         </div>
-        <button type="button" className="tw-builder-press tw-builder-press-blue" onClick={fillGrid} disabled={!canFill} style={{ ...ui.primaryBtn, opacity: canFill ? 1 : .5, cursor: canFill ? "pointer" : "not-allowed" }}>Fill It Up!</button>
-        <button type="button" className="tw-builder-press tw-builder-press-neutral" onClick={shuffleGrid} disabled={!canFill || !cfg.gridFilled} style={{ ...ui.secondaryBtn, opacity: canFill && cfg.gridFilled ? 1 : .5, cursor: canFill && cfg.gridFilled ? "pointer" : "not-allowed" }}>Shuffle</button>
+        <button
+          data-tutorial="builder-crossword-fill"
+          type="button"
+          className={`tw-builder-press tw-builder-press-blue${cfg.gridFilled ? " is-filled" : ""}`}
+          onClick={fillGrid}
+          disabled={!canFill || isArranging || cfg.gridFilled}
+          style={{ ...ui.primaryBtn, opacity: canFill ? 1 : .5, cursor: canFill && !isArranging && !cfg.gridFilled ? "pointer" : "not-allowed" }}
+        >
+          {isArranging ? <>Arranging<span className="tw-arranging-dots">{".".repeat(arrangeDots)}</span></> : cfg.gridFilled ? "Filled Up" : "Fill It Up!"}
+        </button>
+        <button data-tutorial="builder-crossword-shuffle" type="button" className="tw-builder-press tw-builder-press-neutral" onClick={shuffleGrid} disabled={!canFill || !cfg.gridFilled || isArranging} style={{ ...ui.secondaryBtn, opacity: canFill && cfg.gridFilled && !isArranging ? 1 : .5, cursor: canFill && cfg.gridFilled && !isArranging ? "pointer" : "not-allowed" }}>Shuffle</button>
       </div>
       <div style={{ minHeight: 330, display: "grid", placeItems: "center", padding: 14, borderRadius: 18, border: `1.5px solid ${ui.templateBorder || c.border}`, background: c.cardBg }}>
-        <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}`} style={{ width: "min(100%, 430px)", display: "grid", gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))`, gap: preview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
-          {preview.grid.map((letter, index) => <div key={index} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: preview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontWeight: 900, fontSize: preview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease", animation: letter ? `twTilePop 240ms ease ${Math.min(index * 8, 180)}ms both` : "none" }}>{letter}</div>)}
+        <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}-${isArranging}`} style={{ width: "min(100%, 430px)", display: "grid", gridTemplateColumns: `repeat(${visiblePreview.gridSize}, minmax(0,1fr))`, gap: visiblePreview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
+          {visiblePreview.grid.map((letter, index) => <div className="tw-crossword-grid-cell" key={index} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: visiblePreview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontWeight: 900, fontSize: visiblePreview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease, opacity .24s ease", animation: letter ? "twTilePop 240ms ease both" : "none" }}>{letter}</div>)}
         </div>
       </div>
     </div>
@@ -308,19 +397,37 @@ export function VoiceRecordingPanel({ question, templateType, onChange, ui, c, c
   );
 }
 
+function CorrectAnswerExplanation({ value, onChange, ui, c }) {
+  return <div className="tw-correct-answer-explanation" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `2px solid ${c.accent}55`, background: `${c.accent}0c` }}>
+    <label style={{ ...ui.smallLabel, display: "block", marginBottom: 7, color: c.text }}>Why is this the correct answer? <span style={{ color: c.redFg }}>*</span></label>
+    <textarea data-tutorial="builder-answer-explanation" required maxLength={1000} rows={3} value={value || ""} onChange={(event) => onChange(event.target.value.slice(0, 1000))} placeholder="Explain why this answer is correct." style={{ ...ui.input, minHeight: 82, resize: "vertical", lineHeight: 1.5 }} />
+  </div>;
+}
+
 export function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = false }) {
   const [showMatchingSuggest, setShowMatchingSuggest] = useState(false);
   const [matchingPairIndex, setMatchingPairIndex] = useState(0);
   const [matchingDirection, setMatchingDirection] = useState("next");
+  const [matchingImagesEnabled, setMatchingImagesEnabled] = useState(false);
+  const [identificationBlurred, setIdentificationBlurred] = useState(false);
+  const [guessAnswerBlurred, setGuessAnswerBlurred] = useState(false);
   const tt = normalizeTemplateType(templateType);
   const cfg = q.config || {};
   const cor = q.correct || {};
 
   useEffect(() => {
+    setIdentificationBlurred(Boolean(trimText(cfg.explanation)));
+    setGuessAnswerBlurred(Boolean(trimText(cfg.explanation)));
+  }, [q.order, tt]);
+
+  useEffect(() => {
     if (tt !== "MATCHING") return;
     const count = Math.max(1, Array.isArray(cfg.colA) ? cfg.colA.length : 1);
     setMatchingPairIndex((current) => Math.min(current, count - 1));
-  }, [tt, Array.isArray(cfg.colA) ? cfg.colA.length : 0]);
+    const hasExistingImages = [...(Array.isArray(cfg.colA) ? cfg.colA : []), ...(Array.isArray(cfg.colB) ? cfg.colB : [])]
+      .some((item) => trimText(item?.image));
+    setMatchingImagesEnabled(Boolean(cfg.matchingImagesEnabled || hasExistingImages));
+  }, [tt, q.order, cfg.matchingImagesEnabled, Array.isArray(cfg.colA) ? cfg.colA.length : 0, Array.isArray(cfg.colB) ? cfg.colB.length : 0]);
 
   if (tt === "MCQ") {
     const mcqMode = isBasic ? "NORMAL" : (cfg.mcqMode === "MODIFIED" ? "MODIFIED" : "NORMAL");
@@ -389,15 +496,15 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
 
     const selectedOpt = opts.find((opt) => correctChoices.some((choice) => choiceMatchesValue(opt, choice)));
     return (
-      <div style={ui.innerCard}>
+      <div data-tutorial="builder-mcq-section" style={ui.innerCard}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
           <h4 style={ui.innerTitle}>
             Multiple Choice <span style={ui.innerMeta}>({mcqMode === "MODIFIED" ? "4 image choices" : `${opts.length}, min ${MIN}/max ${MAX}`})</span>
           </h4>
-          <div className="tw-mcq-control-stack">
+          <div className="tw-mcq-control-stack" data-tutorial="builder-mcq-controls">
             <div className="tw-mcq-control-row">
               <button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "NORMAL" ? c.accent : c.border }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
-              <button type="button" className="tw-builder-press tw-builder-press-neutral" disabled={isBasic} title={isBasic ? "Institution plan feature" : ""} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border, opacity: isBasic ? .4 : 1, cursor: isBasic ? "not-allowed" : "pointer" }} onClick={() => setMcqMode("MODIFIED")}>Modified</button>
+              <button data-tutorial="builder-mcq-modified" type="button" className="tw-builder-press tw-builder-press-neutral" disabled={isBasic} title={isBasic ? "Institution plan feature" : ""} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: mcqMode === "MODIFIED" ? c.accent : c.border, opacity: isBasic ? .4 : 1, cursor: isBasic ? "not-allowed" : "pointer" }} onClick={() => { window.dispatchEvent(new CustomEvent("thinkwave:tutorial-event", { detail: { type: "mcq-modified" } })); setMcqMode("MODIFIED"); }}>Modified</button>
               <button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "ONE" ? c.accent : c.border }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
               <button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, borderColor: answerMode === "TWO" ? c.accent : c.border }} onClick={() => setAnswerMode("TWO")}>2 answers</button>
             </div>
@@ -421,7 +528,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
             : <>Drag choices to reorder. Mark {answerMode === "TWO" ? "exactly two" : "one"} correct answer{answerMode === "TWO" ? "s" : ""}.</>}
         </div>
 
-        <div className={mcqMode === "MODIFIED" ? "tw-mcq-modified-grid" : "tw-mcq-normal-list"}>
+        <div data-tutorial="builder-mcq-options" data-tutorial-correct="true" data-tutorial-modified-grid={mcqMode === "MODIFIED" ? "true" : undefined} className={mcqMode === "MODIFIED" ? "tw-mcq-modified-grid" : "tw-mcq-normal-list"}>
           {opts.map((opt, i) => {
             const hasContent = mcqMode === "MODIFIED" ? !!trimText(opt.image) : choiceHasContent(opt);
             const isCorrect = correctChoices.some((choice) => choiceMatchesValue(opt, choice)) && hasContent;
@@ -451,6 +558,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
         <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 12, background: selectedOpt ? `${c.accent}14` : c.cardBg2, border: `1px solid ${selectedOpt ? c.accent : c.border}`, fontSize: 13, color: selectedOpt ? c.accent : c.textMuted, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
           {selectedOpt ? <>✓ Correct answer{answerMode === "TWO" ? "s" : ""}: <span style={{ fontWeight: 900 }}>{correctChoices.map((choice) => choiceDisplay(opts.find((row) => choiceMatchesValue(row, choice)), "Selected choice")).join(" + ")}</span></> : <>○ No correct answer selected yet</>}
         </div>
+        {selectedOpt && <CorrectAnswerExplanation value={cfg.explanation || ""} onChange={(explanation) => onChange({ config: { ...cfg, options: opts, answerMode, mcqMode, explanation } })} ui={ui} c={c} />}
 
         {showMatchingSuggest && <ActionDialog tone="blue" icon="matching" plainIcon title="Too many choices?" message={<><p style={{ margin: "0 0 12px" }}>MCQ is capped at <strong style={{ color: c.text }}>5 choices</strong>. If you need more options, the <strong style={{ color: c.accent }}>Matching</strong> template is a better fit.</p><div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, lineHeight: 1.6 }}>Converting will <strong style={{ color: c.text }}>reset this question&apos;s choices and correct answer</strong>. Your question text will be kept.</div></>} onClose={() => setShowMatchingSuggest(false)} width="min(100%, 440px)" actions={<div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}><button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...primaryBtn({ bg: c.accent, fg: "#fff", border: c.accent }), width: "100%", padding: "13px 16px", boxShadow: `0 12px 26px ${c.accent}38` }} onClick={() => { setShowMatchingSuggest(false); onChange({ config: { colA: [{ text: "", image: "" }], colB: [{ text: "", image: "" }], dummyB: [] }, correct: { pairs: [{ aIndex: 0, bIndex: 0 }] }, _convertToMatching: true }); }}>Yes, convert to Matching</button><button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, width: "100%", padding: "13px 16px", fontSize: 14, fontWeight: 800 }} onClick={() => setShowMatchingSuggest(false)}>Keep MCQ</button></div>} />}
       </div>
@@ -462,7 +570,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
     return (
       <div style={ui.innerCard}>
         <h4 style={ui.innerTitle}>True / False</h4>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div data-tutorial="builder-tf-answers" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           {["True", "False"].map((value) => {
             const active = selected === value.toLowerCase();
             return (
@@ -502,6 +610,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
             );
           })}
         </div>
+        {selected && <CorrectAnswerExplanation value={cfg.explanation || ""} onChange={(explanation) => onChange({ config: { ...cfg, options: ["True", "False"], explanation } })} ui={ui} c={c} />}
       </div>
     );
   }
@@ -511,7 +620,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
       <div style={ui.innerCard}>
         <h4 style={ui.innerTitle}>{tt === "TYPE_ANSWER" ? "Identification" : "Answer"}</h4>
         {/* Revision 1: Typed response is displayed as Identification per panel suggestion. */}
-        <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Correct answer</label><input maxLength={255} value={cor.text ?? ""} placeholder="Enter the answer" onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, typoTolerance: 0 } })} style={{ ...ui.input, fontWeight: 850, letterSpacing: ".04em" }} />
+        <div data-tutorial="builder-identification-answer"><label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Correct answer</label><input maxLength={255} value={cor.text ?? ""} placeholder="Enter the answer" onFocus={() => { if (!trimText(cfg.explanation)) setIdentificationBlurred(false); }} onBlur={() => { if (trimText(cor.text)) setIdentificationBlurred(true); }} onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, typoTolerance: 0 } })} style={{ ...ui.input, fontWeight: 850, letterSpacing: ".04em" }} />{tt === "TYPE_ANSWER" && identificationBlurred && trimText(cor.text) && <CorrectAnswerExplanation value={cfg.explanation || ""} onChange={(explanation) => onChange({ config: { ...cfg, typoTolerance: 0, explanation } })} ui={ui} c={c} />}</div>
         {/* {templateType === "TYPE_ANSWER" && (
           <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
             <label style={ui.smallLabel}>Accepted typos</label>
@@ -551,22 +660,48 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
     return (
       <div style={ui.innerCard}>
         <h4 style={ui.innerTitle}>Guess Word</h4>
-        <div className="tw-guess-word-grid">
+        <div className="tw-guess-word-grid" data-tutorial="builder-guess-images">
           {images.slice(0, 4).map((src, index) => (
             <div key={index} className="tw-guess-word-image" draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", String(index))} onDragOver={(e) => e.preventDefault()} onDrop={(e) => reorderImage(Number(e.dataTransfer.getData("text/plain")), index)}>
               <ImageUploadTile value={src} label={`Upload image ${index + 1}`} onChange={(value) => setImage(index, value)} c={c} accent={ui.templateAccent} />
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 16, padding: 15, borderRadius: 16, border: `1px solid ${ui.templateBorder || c.border}`, background: ui.templateSoftBg || c.cardBg2, display: "grid", gridTemplateColumns: "minmax(220px, 1fr) minmax(150px, .45fr)", gap: 14, alignItems: "end" }}>
-          <div>
+
+        <div className="tw-guess-word-answer-row" style={{ marginTop: 16, padding: 15, borderRadius: 16, border: `1px solid ${ui.templateBorder || c.border}`, background: ui.templateSoftBg || c.cardBg2 }}>
+          <div data-tutorial="builder-guess-answer">
             <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Correct word</label>
-            <input maxLength={255} value={cor.text ?? ""} placeholder="Enter the answer" onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Number(cfg.dummyLetters || 6) } })} style={{ ...ui.input, fontWeight: 850, letterSpacing: ".04em" }} />
+            <input
+              maxLength={255}
+              value={cor.text ?? ""}
+              placeholder="Enter the answer"
+              onFocus={() => { if (!trimText(cfg.explanation)) setGuessAnswerBlurred(false); }}
+              onBlur={() => { if (trimText(cor.text)) setGuessAnswerBlurred(true); }}
+              onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Number(cfg.dummyLetters || 6) } })}
+              style={{ ...ui.input, fontWeight: 850, letterSpacing: ".04em" }}
+            />
           </div>
-          <div>
-            <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Extra word-forming letters</label>
-            <input type="number" min={0} max={12} value={Number(cfg.dummyLetters || 6)} onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(12, Math.max(0, Number(e.target.value) || 0)) } })} style={{ ...ui.input, fontWeight: 850 }} />
+          <div data-tutorial="builder-guess-distractors">
+            <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Distractor letters</label>
+            <input
+              type="number"
+              min={0}
+              max={12}
+              value={Number(cfg.dummyLetters || 6)}
+              onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(12, Math.max(0, Number(e.target.value) || 0)) } })}
+              style={{ ...ui.input, fontWeight: 850 }}
+            />
           </div>
+          {guessAnswerBlurred && trimText(cor.text) && (
+            <div className="tw-guess-word-explanation">
+              <CorrectAnswerExplanation
+                value={cfg.explanation || ""}
+                onChange={(explanation) => onChange({ config: { ...cfg, images, target: cor.text ?? cfg.target ?? "", dummyLetters: Number(cfg.dummyLetters || 6), explanation } })}
+                ui={ui}
+                c={c}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -581,12 +716,22 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
     const maxDummies = isBasic ? 1 : 2;
     const activeDummy = dummyB.slice(0, maxDummies);
     const activePair = Math.min(matchingPairIndex, colA.length - 1);
+    const imagesEnabled = matchingImagesEnabled || Boolean(cfg.matchingImagesEnabled) || [...colA, ...pairB].some((item) => trimText(item?.image));
 
-    function emit(aRows, bRows, dRows) {
+    function emit(aRows, bRows, dRows, extraConfig = {}) {
       const cleanedDummy = dRows.slice(0, maxDummies);
       onChange({
-        config: { ...cfg, colA: aRows, colB: [...bRows, ...cleanedDummy], dummyB: cleanedDummy },
+        config: { ...cfg, matchingImagesEnabled: imagesEnabled, ...extraConfig, colA: aRows, colB: [...bRows, ...cleanedDummy], dummyB: cleanedDummy },
         correct: { ...cor, pairs: aRows.map((_, i) => ({ aIndex: i, bIndex: i })) },
+      });
+    }
+
+    function enablePairImages() {
+      if (imagesEnabled) return;
+      setMatchingImagesEnabled(true);
+      onChange({
+        config: { ...cfg, matchingImagesEnabled: true, colA, colB: [...pairB, ...activeDummy], dummyB: activeDummy },
+        correct: { ...cor, pairs: colA.map((_, i) => ({ aIndex: i, bIndex: i })) },
       });
     }
 
@@ -614,9 +759,20 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
 
     return (
       <div style={ui.innerCard}>
+        <div data-tutorial="builder-matching-pairs">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <div><h4 style={ui.innerTitle}>Matching Pairs</h4></div>
-          <button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? .5 : 1 }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
+          <div className="tw-matching-pair-actions">
+            <button
+              type="button"
+              data-tutorial="builder-matching-add-image"
+              className="tw-builder-press tw-builder-press-blue"
+              style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: imagesEnabled ? .72 : 1 }}
+              disabled={imagesEnabled}
+              onClick={enablePairImages}
+            >{imagesEnabled ? "✓ Images Added" : "＋ Add Image"}</button>
+            <button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? .5 : 1 }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
+          </div>
         </div>
 
         <div className="tw-matching-pair-carousel">
@@ -629,21 +785,22 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
             <div className="tw-matching-pair-fields">
               <div>
                 <label style={ui.smallLabel}>Column A</label>
-                <input maxLength={255} value={colA[activePair]?.text || ""} placeholder="Concept, term, or caption (optional)" onChange={(e) => updateA(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                <ImageUploadTile compact value={colA[activePair]?.image || ""} label="Upload Column A image" onChange={(value) => updateA(activePair, { image: value })} c={c} accent={ui.templateAccent} />
+                <input maxLength={255} value={colA[activePair]?.text || ""} placeholder={imagesEnabled ? "Concept, term, or caption (optional)" : "Concept or term"} onChange={(e) => updateA(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                {imagesEnabled && <ImageUploadTile compact value={colA[activePair]?.image || ""} label="Upload Column A image" onChange={(value) => updateA(activePair, { image: value })} c={c} accent={ui.templateAccent} />}
               </div>
               <div className="tw-matching-link">⇄</div>
               <div>
                 <label style={ui.smallLabel}>Column B Correct Match</label>
-                <input maxLength={255} value={pairB[activePair]?.text || ""} placeholder="Answer or caption (optional)" onChange={(e) => updateB(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
-                <ImageUploadTile compact value={pairB[activePair]?.image || ""} label="Upload Column B image" onChange={(value) => updateB(activePair, { image: value })} c={c} accent={ui.templateAccent} />
+                <input maxLength={255} value={pairB[activePair]?.text || ""} placeholder={imagesEnabled ? "Answer or caption (optional)" : "Correct match"} onChange={(e) => updateB(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                {imagesEnabled && <ImageUploadTile compact value={pairB[activePair]?.image || ""} label="Upload Column B image" onChange={(value) => updateB(activePair, { image: value })} c={c} accent={ui.templateAccent} />}
               </div>
             </div>
           </div>
           <button type="button" className="tw-matching-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg }} disabled={activePair >= colA.length - 1} onClick={() => showPair(activePair + 1)}>→</button>
         </div>
+        </div>
 
-        <div className="tw-matching-dummy-section" style={{ borderColor: c.border, background: c.cardBg2 }}>
+        <div className="tw-matching-dummy-section" data-tutorial="builder-matching-dummy" style={{ borderColor: c.border, background: c.cardBg2 }}>
           {activeDummy.length === 0 ? (
             <div className="tw-matching-add-dummy-empty"><button type="button" className="tw-builder-press tw-builder-press-blue" onClick={addDummy}>＋ Add Dummy</button></div>
           ) : <>
@@ -669,8 +826,8 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
   }
 
   if (tt === "THINK_SPELL") {
-    // key=q.order ensures ThinkSpellEditor unmounts+remounts when the user
-    // switches to a different question, which resets its internal rawText state.
+    // key=q.order ensures ThinkSpellEditor remounts when the user switches batches,
+    // resetting its local compact word-field draft to that batch's saved words.
     return (
       <ThinkSpellEditor
         key={q.order}

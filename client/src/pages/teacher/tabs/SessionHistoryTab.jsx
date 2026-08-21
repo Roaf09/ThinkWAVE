@@ -10,6 +10,8 @@ import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
+import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -46,21 +48,29 @@ const btn = (c, primary = false) => ({
   cursor: "pointer",
 });
 
-export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
+export default function SessionHistoryTab({ setActiveTab, guestMode = false, tutorial }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [modeFilter, setModeFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("recent");
   const [exporting, setExporting] = useState("");
+  const [historyTutorialStage, setHistoryTutorialStage] = useState(null);
   const c = useColors();
   const navigate = useNavigate();
+  const tutorialSessionId = tutorial?.userId ? Number(readTutorialState(tutorial.userId)?.tutorialDemoSessionId || 0) : 0;
 
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get("/sessions/history");
-        setSessions(data || []);
+        {
+          const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          setSessions((data || []).filter((session) => {
+            const endedAt = new Date(session?.ended_at || 0).getTime();
+            return Number.isFinite(endedAt) && endedAt >= cutoff;
+          }));
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -68,6 +78,18 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (loading || guestMode || !tutorial?.userId || !sessions.length || historyTutorialStage) return;
+    if (readTutorialState(tutorial.userId).historyTutorialSeen) return;
+    setHistoryTutorialStage("intro");
+  }, [loading, guestMode, tutorial?.userId, sessions.length, historyTutorialStage]);
+
+
+  function finishHistoryTutorial() {
+    if (tutorial?.userId) writeTutorialState(tutorial.userId, { historyTutorialSeen: true });
+    setHistoryTutorialStage(null);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -161,8 +183,11 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
             <div style={{ fontWeight: 900, color: c.text, fontSize: 16 }}>{group}</div>
             {rows.map((session) => {
               const insight = buildInsight(session);
+              const displayParticipantCount = !isAssignedSession(session) && Number(session.id) === tutorialSessionId
+                ? Math.max(3, Number(session.participant_count || 0))
+                : Number(session.participant_count || 0);
               return (
-                <div key={`${session.session_type || "LIVE"}-${session.id}`} className="tw-history-session-card" style={{ ...card(c), ...templateCardChrome(session.template_type, c, false), borderWidth: 4 }}>
+                <div key={`${session.session_type || "LIVE"}-${session.id}`} data-tutorial="history-record" className="tw-history-session-card" style={{ ...card(c), ...templateCardChrome(session.template_type, c, false), borderWidth: 4 }}>
                   <div style={{ display: "grid", gap: 14 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
                       <div>
@@ -172,7 +197,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <span style={badge(c, { borderColor: templateTone(session.template_type, c, false).border, background: templateTone(session.template_type, c, false).softBg, color: templateTone(session.template_type, c, false).accent })}>{templateLabel(session.template_type)}</span>
                         <span style={badge(c)}>{isAssignedSession(session) ? "Assigned session" : "Live session"}</span>
-                        <span style={badge(c)}>{session.participant_count} {isAssignedSession(session) ? "submitted" : session.join_mode === "GROUP" ? "groups" : "participants"}</span>
+                        <span style={badge(c)}>{displayParticipantCount} {isAssignedSession(session) ? "submitted" : session.join_mode === "GROUP" ? "groups" : "participants"}</span>
                         <span style={badge(c)}>{session.avg_score ?? 0} avg</span>
                         <span style={badge(c)}>{session.top_score ?? 0} top</span>
                       </div>
@@ -182,11 +207,15 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
                       <MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} />
                       <MiniInfo label="Category" value={session.category} c={c} />
                       <MiniInfo label="Questions" value={session.question_count} c={c} />
-                      <MiniInfo label={isAssignedSession(session) ? "Submitted" : session.join_mode === "GROUP" ? "Groups" : "Participants"} value={session.participant_count} c={c} />
+                      <MiniInfo label={isAssignedSession(session) ? "Submitted" : session.join_mode === "GROUP" ? "Groups" : "Participants"} value={displayParticipantCount} c={c} />
                     </div>
 
                     <div style={{ padding: "12px 13px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted, fontSize: 13, lineHeight: 1.6 }}>
                       <strong style={{ color: c.text }}>Session insight:</strong> {insight}
+                      {session.below_50_count !== undefined && <div className="tw-history-advanced-insights">
+                        <span><b style={{ color: c.text }}>{session.below_50_count || 0}</b> participants scored below 50% in this session.</span>
+                        {session.insight_question_no && session.insight_question_accuracy !== null && session.insight_question_accuracy !== undefined && <span><b style={{ color: c.text }}>Q{session.insight_question_no}</b> - {session.insight_question_accuracy}% accuracy</span>}
+                      </div>}
                     </div>
 
                     <div className="tw-history-actions-row">
@@ -208,6 +237,8 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false }) {
           </section>
         ))
       )}
+      {historyTutorialStage === "intro" && <ThinkBotTutorial clickAnywhere onClickAnywhere={() => setHistoryTutorialStage("records")}><p>Every completed activity leaves a record here in <strong>History</strong>.</p></ThinkBotTutorial>}
+      {historyTutorialStage === "records" && <ThinkBotTutorial target='[data-tutorial="history-record"]' actionLabel="Got it" onAction={finishHistoryTutorial}><p>You can find your previous live sessions and assignments here without searching through your classes.</p></ThinkBotTutorial>}
     </div>
   );
 }

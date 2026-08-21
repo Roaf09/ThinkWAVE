@@ -10,7 +10,7 @@ import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
-import { listClasses, createClass, updateClass, softDeleteClass, restoreClass, getOrCreateClassCode, listClassStudents, removeClassStudent, listClassAsyncResults, exportClassAsyncPdf, exportClassAsyncXlsx, duplicateClass, getClassAsyncAnalytics } from "./classes.controller.js";
+import { listClasses, createClass, updateClass, softDeleteClass, restoreClass, getOrCreateClassCode, listClassStudents, removeClassStudent, listClassAsyncResults, exportClassAsyncPdf, exportClassAsyncXlsx, duplicateClass, getClassAsyncAnalytics, getClassAnalytics, getClassStudentAnalytics } from "./classes.controller.js";
 
 export const classesRouter = Router();
 
@@ -27,6 +27,8 @@ classesRouter.post("/:id/duplicate", requireAuth, requireRole("TEACHER"), asyncH
 classesRouter.post("/:id/restore", requireAuth, requireRole("TEACHER","ADMIN"), asyncHandler(restoreClass));
 classesRouter.get("/:id/code", requireAuth, requireRole("TEACHER"), asyncHandler(getOrCreateClassCode));
 classesRouter.get("/:id/students", requireAuth, requireRole("TEACHER"), asyncHandler(listClassStudents));
+classesRouter.get("/:id/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAnalytics));
+classesRouter.get("/:id/students/:enrollmentId/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassStudentAnalytics));
 classesRouter.delete("/:id/students/:enrollmentId", requireAuth, requireRole("TEACHER"), asyncHandler(removeClassStudent));
 classesRouter.get("/:id/async-results", requireAuth, requireRole("TEACHER"), asyncHandler(listClassAsyncResults));
 classesRouter.get("/:id/async-results/:quizId/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAsyncAnalytics));

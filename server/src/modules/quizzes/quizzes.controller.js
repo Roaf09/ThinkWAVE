@@ -89,14 +89,20 @@ export async function getQuiz(req, res) {
 export async function upsertQuestions(req, res) {
   const quizId = Number(req.params.id);
 
-  // ownership
+  // Validate ownership and plan limits before opening the replacement transaction.
   const [q] = await pool.query(
     `SELECT id, template_type FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
     { id: quizId, tid: req.user.sub }
   );
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
-  const items = req.body.questions;
+  // The array position is the authoritative builder order. Normalizing it here
+  // also prevents a malformed/retried client request from creating duplicate
+  // active question_order values.
+  const items = (Array.isArray(req.body.questions) ? req.body.questions : []).map((item, index) => ({
+    ...item,
+    order: index,
+  }));
   const normalizedTemplate = normalizeTemplateType(q[0].template_type);
   if (normalizedTemplate === "MATCHING") {
     const invalidMatching = items.some((item) => {
@@ -112,24 +118,52 @@ export async function upsertQuestions(req, res) {
     if (issue) return res.status(403).json({ message: issue });
   }
 
-  // simple strategy: soft-delete existing then insert fresh
-  await pool.query(`UPDATE quiz_questions SET deleted_at=NOW() WHERE quiz_id=:qid AND deleted_at IS NULL`, { qid: quizId });
-
-  for (const it of items) {
-    await pool.query(
-      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
-       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      {
-        qid: quizId,
-        ord: it.order,
-        prompt: it.prompt,
-        cfg: it.config ? JSON.stringify(it.config) : null,
-        corr: it.correct ? JSON.stringify(it.correct) : null
-      }
+  // Serialize complete-question-set replacements on the parent quiz row. The
+  // old implementation could interleave two near-simultaneous saves:
+  // both requests soft-deleted first, then both inserted, leaving duplicates.
+  // FOR UPDATE makes every save atomic and guarantees one active copy of the
+  // submitted question set even when requests are retried or arrive late.
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [lockedQuiz] = await connection.query(
+      `SELECT id FROM quizzes
+       WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL
+       FOR UPDATE`,
+      { id: quizId, tid: req.user.sub }
     );
-  }
+    if (!lockedQuiz.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Quiz not found" });
+    }
 
-  res.json({ ok: true });
+    await connection.query(
+      `UPDATE quiz_questions SET deleted_at=NOW() WHERE quiz_id=:qid AND deleted_at IS NULL`,
+      { qid: quizId }
+    );
+
+    for (const it of items) {
+      await connection.query(
+        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+         VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
+        {
+          qid: quizId,
+          ord: it.order,
+          prompt: it.prompt,
+          cfg: it.config ? JSON.stringify(it.config) : null,
+          corr: it.correct ? JSON.stringify(it.correct) : null,
+        }
+      );
+    }
+
+    await connection.commit();
+    res.json({ ok: true });
+  } catch (error) {
+    try { await connection.rollback(); } catch {}
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function publishQuiz(req, res) {

@@ -32,7 +32,12 @@ export default function SuperadminLogin({ onLoginSuccess }) {
       if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
       nav("/superadmin");
     } catch (err) {
-      setMsg(err?.response?.data?.message || "Login failed. Check your credentials.");
+      const response = err?.response?.data || {};
+      if (response.requiresVerification) {
+        nav(`/verify?mode=superadmin`, { state: { email: email.trim(), loginMode: "superadmin" } });
+        return;
+      }
+      setMsg(response.message || "Login failed. Check your credentials.");
     }
   }
 

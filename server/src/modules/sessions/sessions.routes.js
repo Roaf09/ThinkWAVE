@@ -8,7 +8,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
 import { z } from "zod";
-import { requireAuth } from "../../middleware/auth.js";
+import { optionalAuth, requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
 import {
@@ -34,6 +34,7 @@ const CreateSchema = z.object({
   joinMode: z.enum(["SOLO", "GROUP"]).default("SOLO"),
   classId: z.coerce.number().int().positive().optional().nullable(),
   backgroundKey: z.string().regex(/^background-(?:0[1-9]|1[0-9]|2[0-2])$/).optional().nullable(),
+  tutorialDemo: z.boolean().optional().default(false),
 });
 
 const JoinSchema = z.object({
@@ -42,7 +43,7 @@ const JoinSchema = z.object({
   lastName: z.string().optional(),
 });
 
-sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), validateBody(JoinSchema), asyncHandler(joinSession));
+sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), optionalAuth, validateBody(JoinSchema), asyncHandler(joinSession));
 sessionsRouter.get("/history", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getTeacherSessionHistory));
 sessionsRouter.get("/active", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listActiveSessions));
 sessionsRouter.post("/", requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(CreateSchema), asyncHandler(createSession));

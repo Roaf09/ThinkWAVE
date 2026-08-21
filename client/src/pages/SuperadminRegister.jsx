@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
+import ThemeIconButton from "../components/ThemeIconButton";
 
 function passwordChecks(p) {
   return {
@@ -68,7 +69,8 @@ export default function SuperadminRegister() {
   return (
     <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact setupComplete={false} />
+      <PublicHeader compact setupComplete={false} hideTheme />
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-superadmin-setup-theme" size={20} />
 
       <main style={s.main}>
         <div style={s.card(c)}>
@@ -147,7 +149,7 @@ export default function SuperadminRegister() {
               <div style={s.strengthBar(c)}>
                 <div style={{ ...s.strengthFill, width: `${(Object.values(checks).filter(Boolean).length / 5) * 100}%`, background: isStrong ? "#22c55e" : Object.values(checks).filter(Boolean).length >= 3 ? "#f59e0b" : "#ef4444" }} />
               </div>
-              <div style={s.strengthText(c)}>
+              <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : Object.values(checks).filter(Boolean).length >= 3 ? "#f59e0b" : "#ef4444" }}>
                 {isStrong ? "Strong ✓" : Object.values(checks).filter(Boolean).length >= 3 ? "Medium — keep going" : "Weak — add more variety"}
               </div>
             </div>

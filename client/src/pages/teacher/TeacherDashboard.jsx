@@ -11,6 +11,8 @@ import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherActionModal } from "./TeacherUI";
+import ThinkBotTutorial from "../../components/ThinkBotTutorial";
+import { readTutorialState, writeTutorialState, markMainStage } from "../../lib/tutorialState";
 
 import HomeTab           from "./tabs/HomeTab";
 import CreateTab         from "./tabs/CreateTab";
@@ -29,6 +31,8 @@ export default function TeacherDashboard() {
   const [profile, setProfile] = useState(blankProfile);
   const [profileError, setProfileError] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
+  const [tutorialUserId, setTutorialUserId] = useState(null);
+  const [tutorialState, setTutorialState] = useState({});
   const profileFileRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,10 +40,46 @@ export default function TeacherDashboard() {
   const c = useColors();
 
   useEffect(() => {
-    api.get("/auth/me").then(({ data }) => setProfile(profileFromUser(data))).catch(() => {});
+    api.get("/auth/me").then(({ data }) => {
+      setProfile(profileFromUser(data));
+      if (!data?.id) return;
+      setTutorialUserId(data.id);
+      const saved = readTutorialState(data.id);
+      let firstLoginPending = false;
+      try { firstLoginPending = sessionStorage.getItem("tw_teacher_first_login") === "1"; } catch {}
+      if (!saved.mainComplete && (firstLoginPending || saved.mainStarted)) {
+        const stage = saved.mainStage || "home_welcome";
+        const next = saved.mainStarted ? saved : writeTutorialState(data.id, { ...saved, mainStarted: true, mainStage: stage });
+        setTutorialState(next);
+      } else {
+        setTutorialState(saved);
+      }
+      try { sessionStorage.removeItem("tw_teacher_first_login"); } catch {}
+    }).catch(() => {});
   }, []);
 
   useEffect(() => { if (location.state?.tab) setActiveTab(location.state.tab); }, [location.state]);
+
+
+  function setTutorialStage(stage, extra = {}) {
+    if (!tutorialUserId) return;
+    const next = markMainStage(tutorialUserId, stage, extra);
+    setTutorialState(next);
+  }
+
+  function patchTutorial(patch) {
+    if (!tutorialUserId) return;
+    const next = writeTutorialState(tutorialUserId, patch);
+    setTutorialState(next);
+  }
+
+  const tutorial = {
+    userId: tutorialUserId,
+    state: tutorialState,
+    stage: tutorialState?.mainComplete ? "complete" : tutorialState?.mainStage,
+    setStage: setTutorialStage,
+    patch: patchTutorial,
+  };
 
   function doLogout() {
     clearToken();
@@ -87,13 +127,13 @@ export default function TeacherDashboard() {
 
   function renderTab() {
     switch (activeTab) {
-      case "home": return <HomeTab setActiveTab={setActiveTab} />;
-      case "create": return <CreateTab setActiveTab={setActiveTab} />;
-      case "bank": return <QuestionBankTab setBankLabel={setBankLabel} setActiveTab={setActiveTab} />;
-      case "live": return <LiveSessionsTab setActiveTab={setActiveTab} />;
-      case "classes": return <ClassesTab setActiveTab={setActiveTab} />;
-      case "history": return <SessionHistoryTab setActiveTab={setActiveTab} />;
-      default: return <HomeTab setActiveTab={setActiveTab} />;
+      case "home": return <HomeTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "create": return <CreateTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "bank": return <QuestionBankTab setBankLabel={setBankLabel} setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "live": return <LiveSessionsTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "classes": return <ClassesTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "history": return <SessionHistoryTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      default: return <HomeTab setActiveTab={setActiveTab} tutorial={tutorial} />;
     }
   }
 
@@ -109,7 +149,12 @@ export default function TeacherDashboard() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
           {navItems.map((item) => (
-            <button key={item.id} style={navButton(c, activeTab === item.id)} onClick={() => setActiveTab(item.id)}>
+            <button key={item.id} data-tutorial={`nav-${item.id}`} style={navButton(c, activeTab === item.id)} onClick={() => {
+              setActiveTab(item.id);
+              if (tutorial.stage === "nav_classes" && item.id === "classes") setTutorialStage("classes_intro_delay");
+              if (tutorial.stage === "nav_create" && item.id === "create") setTutorialStage("create_intro_delay");
+              if (tutorial.stage === "nav_sessions" && item.id === "live") setTutorialStage("sessions_intro");
+            }}>
               <span style={{ width: 20, display: "inline-flex", justifyContent: "center" }}><TwIcon name={item.icon} size={18} /></span>
               <span key={item.id === "bank" ? item.label : `${item.id}-${item.label}`} className={item.id === "bank" ? "sidebar-bank-label" : undefined}>{item.label}</span>
             </button>
@@ -125,6 +170,12 @@ export default function TeacherDashboard() {
       <main className={`tw-responsive-dashboard-main${activeTab === "live" ? " tw-sessions-main" : ""}`} style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
         <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
       </main>
+
+      {tutorial.stage === "home_welcome" && <ThinkBotTutorial transparent actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")}><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></ThinkBotTutorial>}
+      {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" actionLabel="Let's Go" actionDelay={2000} onAction={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
+      {tutorial.stage === "nav_classes" && <ThinkBotTutorial target='[data-tutorial="nav-classes"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>}
+      {tutorial.stage === "nav_create" && <ThinkBotTutorial target='[data-tutorial="nav-create"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Create</strong>.</p></ThinkBotTutorial>}
+      {tutorial.stage === "nav_sessions" && <ThinkBotTutorial target='[data-tutorial="nav-live"]' placement="right" dialogWidth={285} className="tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>}
 
       {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />

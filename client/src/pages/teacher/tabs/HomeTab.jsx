@@ -7,13 +7,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
-import { EmptyState, IconBubble, TwIcon } from "../../../components/TwUI";
+import { EmptyState, TwIcon } from "../../../components/TwUI";
 import { TeacherMetricCard, TeacherPressButton } from "../TeacherUI";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 
 const shellCard = (c, extra = {}) => ({
   background: c.cardBg,
-  border: `1px solid ${c.border}`,
+  border: `3px solid ${c.border}`,
   borderRadius: 18,
   padding: 18,
   boxShadow: c.pageBg === "#eef2ff" ? "0 16px 34px rgba(43,108,255,0.08)" : "0 16px 34px rgba(0,0,0,0.14)",
@@ -117,6 +117,7 @@ export default function HomeTab({ setActiveTab }) {
   const recentSessions = sessions.slice(0, 2);
   const draftQuizzes = quizzes.filter((q) => q.status !== "BANKED" && q.status !== "PUBLISHED");
   const readyToHost = quizzes.filter((q) => q.status === "PUBLISHED" || q.status === "IN_SESSION");
+  const sentAssignments = quizzes.filter((q) => q.delivery_mode === "ASYNCHRONOUS").length;
   const warningCount = quizzes.filter((q) => q.status !== "PUBLISHED" || !q.class_id).length;
   const banked = quizzes.filter((q) => q.status === "BANKED");
   const lastEditedQuiz = quizzes[0] || null;
@@ -155,7 +156,7 @@ export default function HomeTab({ setActiveTab }) {
 
         <section style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
           <div style={{ display: "grid", gap: 14 }}>
-            <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Published or active quizzes" tone="blue" />
+            <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Published or active quizzes" tone="blue" onClick={() => setActiveTab?.("live")} />
             <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
 
@@ -169,13 +170,13 @@ export default function HomeTab({ setActiveTab }) {
                   <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} style={{ border: 0, background: "transparent", color: c.accent, fontWeight: 950, cursor: "pointer", padding: 0 }}>Join.</button></div>
                 )}
               </div>
-              <IconBubble name={teacherInstitution ? "teacher" : "invitation"} c={c} size={48} iconSize={24} />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
-              <MiniInfo c={c} label="Class Handled" value={folders.length} />
-              <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} />
-              <MiniInfo c={c} label="Banked quizzes" value={banked.length} />
+              <MiniInfo c={c} label="Class Handled" value={folders.length} tone="red" />
+              <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" />
+              <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" />
+              <MiniInfo c={c} label="Banked quizzes" value={banked.length} tone="yellow" />
             </div>
 
             <div>
@@ -186,7 +187,7 @@ export default function HomeTab({ setActiveTab }) {
                 <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 222 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
                   {submissionStats.map((row) => {
                     const rowTone = templateTone(row.template_type, c, false);
-                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "18px 15px", minHeight: 68, display: "flex", alignItems: "center", borderRadius: 14, border: `1px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
+                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "18px 15px", minHeight: 68, display: "flex", alignItems: "center", borderRadius: 14, border: `3px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
                       {Number(row.submitted_count || 0)} {Number(row.submitted_count || 0) === 1 ? "student" : "students"} from {row.class_name} have submitted their answers on {row.quiz_title}
                     </div>;
                   })}
@@ -220,7 +221,7 @@ export default function HomeTab({ setActiveTab }) {
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
                 {performanceHighlights.map((item) => (
-                  <div key={item.label} style={{ padding: 12, borderRadius: 14, border: `1px solid ${c.border}`, background: c.cardBg2 }}>
+                  <div key={item.label} style={{ padding: 12, borderRadius: 14, border: `3px solid ${c.border}`, background: c.cardBg2 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: c.textSub, fontWeight: 800 }}>{item.label}</div>
                     <div style={{ fontSize: 24, fontWeight: 900, color: c.text, marginTop: 6 }}>{item.value}</div>
                     <div style={{ fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>{item.hint}</div>
@@ -241,7 +242,7 @@ function SessionCard({ session, analytics, c, navigate }) {
   const tone = templateTone(session.template_type, c, false);
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
   return (
-    <div className="tw-session-card" style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, transition: "transform 220ms ease" }) }}>
+    <div className="tw-session-card" style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease" }) }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
           <div style={{ fontWeight: 900, color: c.text }}>{session.quiz_title}</div>
@@ -264,10 +265,17 @@ function SessionCard({ session, analytics, c, navigate }) {
   );
 }
 
-function MiniInfo({ c, label, value }) {
+function MiniInfo({ c, label, value, tone = "blue" }) {
+  const tones = {
+    red: { fg: c.redFg || "#dc2626", bg: c.redBg || "rgba(239,68,68,.12)", border: c.redBorder || "rgba(239,68,68,.5)" },
+    blue: { fg: c.accent || "#2b6cff", bg: `${c.accent || "#2b6cff"}18`, border: `${c.accent || "#2b6cff"}88` },
+    green: { fg: c.greenFg || "#16a34a", bg: c.greenBg || "rgba(34,197,94,.12)", border: c.greenBorder || "rgba(34,197,94,.5)" },
+    yellow: { fg: c.yellowFg || "#ca8a04", bg: c.yellowBg || "rgba(234,179,8,.14)", border: c.yellowBorder || "rgba(234,179,8,.55)" },
+  };
+  const t = tones[tone] || tones.blue;
   return (
-    <div className="tw-mini-info-card" style={{ padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}` }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: c.textSub, fontWeight: 900 }}>{label}</div>
+    <div className={`tw-mini-info-card is-${tone}`} style={{ padding: 12, borderRadius: 14, background: t.bg, border: `3px solid ${t.border}` }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: t.fg, fontWeight: 900 }}>{label}</div>
       <div style={{ color: c.text, fontWeight: 950, fontSize: 22, marginTop: 5 }}>{value}</div>
     </div>
   );
@@ -276,7 +284,7 @@ function MiniInfo({ c, label, value }) {
 function ContinueCard({ c, title, subtitle, buttonLabel, onClick, templateType }) {
   const chrome = templateType ? templateCardChrome(templateType, c, false) : {};
   return (
-    <div className="tw-continue-card" style={{ padding: 16, borderRadius: 16, border: `1px solid ${c.border}`, background: c.cardBg2, display: "grid", gap: 12, ...chrome }}>
+    <div className="tw-continue-card" style={{ padding: 16, borderRadius: 16, border: `3px solid ${c.border}`, background: c.cardBg2, display: "grid", gap: 12, ...chrome }}>
       <div>
         <div style={{ fontWeight: 900, color: c.text, fontSize: 15 }}>{title}</div>
         <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>{subtitle}</div>

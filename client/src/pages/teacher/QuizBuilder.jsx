@@ -3,7 +3,7 @@
  * Purpose: Teacher quiz builder orchestration for all templates.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useColors, useTheme } from "../../context/ThemeContext";
@@ -13,6 +13,7 @@ import { TwIcon } from "../../components/TwUI";
 import { TeacherPressButton } from "./TeacherUI";
 import { getTemplateLimit, isInstitutionPlan } from "../../lib/planLimits";
 import { normalizeTemplateType } from "../../lib/templateTypes";
+import { templateAccent } from "../../lib/templatePalette";
 import {
   buildBlankQuestion,
   clampQuestionPoints,
@@ -24,6 +25,8 @@ import {
   validateQuestion,
 } from "./quiz-builder/quizBuilderUtils";
 import { BankModal, BuilderModal, getUi, MediaInput, TemplateEditor, VoiceRecordingPanel } from "./quiz-builder/QuizBuilderParts";
+import ThinkBotTutorial from "../../components/ThinkBotTutorial";
+import { hasSeenTemplateTutorial, markTemplateTutorialSeen, readTutorialState, writeTutorialState } from "../../lib/tutorialState";
 
 export default function QuizBuilder({ guestMode = false }) {
   const { id } = useParams();
@@ -42,6 +45,9 @@ export default function QuizBuilder({ guestMode = false }) {
   const [dupeList, setDupeList] = useState([]);
   const [invalidList, setInvalidList] = useState([]);
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const editVersionRef = useRef(0);
+  const savePromiseRef = useRef(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleSaving, setTitleSaving] = useState(false);
@@ -50,14 +56,14 @@ export default function QuizBuilder({ guestMode = false }) {
   const [publishFlow, setPublishFlow] = useState(false);
   const [institutionPlan, setInstitutionPlan] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [tutorialUserId, setTutorialUserId] = useState(null);
+  const [builderTutorialStage, setBuilderTutorialStage] = useState(null);
+  const [followupTemplateTutorial, setFollowupTemplateTutorial] = useState(false);
+  const [modifiedTutorialOpen, setModifiedTutorialOpen] = useState(false);
+  const [mcqTipVisible, setMcqTipVisible] = useState(false);
+  const [bankSavedOrders, setBankSavedOrders] = useState(() => new Set());
   const isBasic = !institutionPlan;
   const planLimit = getTemplateLimit(quiz?.template_type);
-
-  useEffect(() => {
-    if (!["saved", "published", "bankSaved"].includes(modal)) return;
-    const t = setTimeout(() => setModal(null), 2000);
-    return () => clearTimeout(t);
-  }, [modal]);
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -68,6 +74,7 @@ export default function QuizBuilder({ guestMode = false }) {
         try {
           const { data: me } = await api.get("/auth/me");
           institution = isInstitutionPlan(me);
+          setTutorialUserId(me?.id || null);
         } catch {
           institution = false;
         }
@@ -138,7 +145,202 @@ export default function QuizBuilder({ guestMode = false }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (guestMode || !tutorialUserId || !quiz?.template_type) return;
+    if (hasSeenTemplateTutorial(tutorialUserId, quiz.template_type)) return;
+    const state = readTutorialState(tutorialUserId);
+    const hasSeenAny = Object.values(state?.templateSeen || {}).some(Boolean);
+    setFollowupTemplateTutorial(hasSeenAny);
+    setBuilderTutorialStage((current) => current || (hasSeenAny ? "template_prompt" : "intro"));
+  }, [guestMode, tutorialUserId, quiz?.template_type]);
+
+  function finishFollowupTemplateTutorial() {
+    if (tutorialUserId && quiz?.template_type) markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    setBuilderTutorialStage(null);
+  }
+
+  function skipFollowupTemplateTutorial() {
+    finishFollowupTemplateTutorial();
+  }
+
+  function startFollowupTemplateTutorial() {
+    // Once the one-time prompt has been answered, do not prompt for this template
+    // again on a later builder visit even if the teacher leaves mid-walkthrough.
+    if (tutorialUserId && quiz?.template_type) markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    setBuilderTutorialStage("intro");
+  }
+
+  useEffect(() => {
+    if (!builderTutorialStage || !quiz || !questions.length) return undefined;
+    const q = questions[qIndex] || questions[0];
+    if (!q) return undefined;
+    const tt = normalizeTemplateType(quiz.template_type);
+    const cfg = q.config || {};
+    const cor = q.correct || {};
+
+    // The first ever template tutorial keeps the question prompt step visible for
+    // two seconds after text is entered, then asks the teacher to confirm they are done.
+    if (builderTutorialStage === "question" && trimText(q.prompt)) {
+      const timer = window.setTimeout(() => setBuilderTutorialStage("question_done"), 2000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "specific" && tt === "TYPE_ANSWER" && trimText(cor.text)) {
+      const timer = window.setTimeout(() => setBuilderTutorialStage("identification_done"), 2000);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (builderTutorialStage === "specific") {
+      let next = null;
+      if (tt === "MCQ") {
+        const modified = cfg.mcqMode === "MODIFIED";
+        const opts = Array.isArray(cfg.options) ? cfg.options : [];
+        const ready = modified
+          ? opts.slice(0, 4).length === 4 && opts.slice(0, 4).every((o) => trimText(o?.image))
+          : opts.length >= 3 && opts.every((o) => trimText(o?.text) || trimText(o?.image));
+        if (ready) next = "mcq_correct";
+      } else if (tt === "TRUE_FALSE") {
+        if (trimText(cor.choice)) {
+          if (followupTemplateTutorial) {
+            const timer = window.setTimeout(() => finishFollowupTemplateTutorial(), 500);
+            return () => window.clearTimeout(timer);
+          }
+          next = "answer_explanation";
+        }
+      } else if (tt === "TYPE_ANSWER") {
+        // Identification waits for typing to stop, then shows a Done? confirmation.
+      } else if (tt === "MATCHING") {
+        // Matching now waits for the teacher to press the tutorial Done button.
+        // This keeps the pair editor interactive long enough to try text, images,
+        // or a combination before moving on to distractors.
+      } else if (tt === "GUESS_WORD_4PICS") {
+        const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
+        if (images.length === 4 && images.every((x) => trimText(x))) next = "guess_answer";
+      } else if (tt === "THINK_SPELL") {
+        // Crossword waits for the teacher to press Done after entering at least four words.
+      }
+      if (next) {
+        const timer = window.setTimeout(() => setBuilderTutorialStage(next), 250);
+        return () => window.clearTimeout(timer);
+      }
+    }
+
+    if (builderTutorialStage === "mcq_correct") {
+      const choices = Array.isArray(cor.choices) ? cor.choices.filter(Boolean) : [cor.choice].filter(Boolean);
+      const needed = cfg.answerMode === "TWO" ? 2 : 1;
+      if (choices.length >= needed) {
+        const timer = window.setTimeout(() => {
+          if (followupTemplateTutorial) finishFollowupTemplateTutorial();
+          else setBuilderTutorialStage("answer_explanation");
+        }, 2000);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    if (builderTutorialStage === "guess_answer" && trimText(cor.text)) {
+      const timer = window.setTimeout(() => {
+        document.activeElement?.blur?.();
+        setBuilderTutorialStage("guess_distractor");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "answer_explanation" && trimText(cfg.explanation)) {
+      const timer = window.setTimeout(() => setBuilderTutorialStage("answer_explanation_done"), 3000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "crossword_shuffle" && cfg.gridFilled) {
+      const timer = window.setTimeout(() => {
+        if (followupTemplateTutorial) finishFollowupTemplateTutorial();
+        else setBuilderTutorialStage("add_delay");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "repeat" && validateQuestion(q, quiz.template_type).length === 0) {
+      const timer = window.setTimeout(() => setBuilderTutorialStage("repeat_done"), tt === "TYPE_ANSWER" ? 2000 : 250);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "save" && isSaved) {
+      const timer = window.setTimeout(() => setBuilderTutorialStage("publish"), 2000);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [builderTutorialStage, questions, qIndex, quiz, isSaved, followupTemplateTutorial]);
+
+  useEffect(() => {
+    if (builderTutorialStage === "matching_dummy") {
+      const timer = window.setTimeout(() => {
+        if (followupTemplateTutorial) finishFollowupTemplateTutorial();
+        else setBuilderTutorialStage("add_delay");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "add_delay") {
+      const timer = window.setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        setBuilderTutorialStage("meta");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    if (builderTutorialStage === "save_delay") {
+      const timer = window.setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        setBuilderTutorialStage("save");
+      }, 2000);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [builderTutorialStage, followupTemplateTutorial]);
+
+  const tutorialMcqAllChoicesFilled = useMemo(() => {
+    if (!quiz || normalizeTemplateType(quiz.template_type) !== "MCQ" || !questions.length) return false;
+    const cfg = (questions[qIndex] || questions[0])?.config || {};
+    const options = Array.isArray(cfg.options) ? cfg.options : [];
+    const modified = cfg.mcqMode === "MODIFIED";
+    return modified
+      ? options.slice(0, 4).length === 4 && options.slice(0, 4).every((option) => trimText(option?.image))
+      : options.length >= 3 && options.every((option) => trimText(option?.text) || trimText(option?.image));
+  }, [quiz, questions, qIndex]);
+
+  useEffect(() => {
+    setMcqTipVisible(builderTutorialStage === "mcq_correct" && tutorialMcqAllChoicesFilled);
+  }, [builderTutorialStage, tutorialMcqAllChoicesFilled]);
+
+  useEffect(() => {
+    if (!["mcq_correct", "specific"].includes(builderTutorialStage) || normalizeTemplateType(quiz?.template_type) !== "MCQ") return undefined;
+    const dots = Array.from(document.querySelectorAll('[data-tutorial="builder-mcq-options"] .tw-mcq-correct-dot'));
+    const controls = document.querySelector('[data-tutorial="builder-mcq-controls"]');
+    if (builderTutorialStage === "mcq_correct") dots.forEach((node) => node.classList.add("tw-tutorial-mini-pulse"));
+    if (builderTutorialStage === "mcq_correct" && tutorialMcqAllChoicesFilled) controls?.classList.add("tw-tutorial-mini-pulse");
+    return () => {
+      dots.forEach((node) => node.classList.remove("tw-tutorial-mini-pulse"));
+      controls?.classList.remove("tw-tutorial-mini-pulse");
+    };
+  }, [builderTutorialStage, quiz?.template_type, tutorialMcqAllChoicesFilled]);
+
+  useEffect(() => {
+    if (!["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage)) return undefined;
+    const timer = window.setTimeout(() => {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [builderTutorialStage, qIndex]);
+
+  useEffect(() => {
+    if (guestMode || !tutorialUserId) return undefined;
+    const onEvent = (event) => {
+      if (event?.detail?.type === "mcq-modified") {
+        const state = readTutorialState(tutorialUserId);
+        if (!state.modifiedMcqSeen) {
+          writeTutorialState(tutorialUserId, { modifiedMcqSeen: true });
+          setModifiedTutorialOpen(true);
+        }
+      }
+      if (event?.detail?.type === "crossword-arranging" && builderTutorialStage === "crossword_fill") setBuilderTutorialStage("crossword_shuffle");
+    };
+    window.addEventListener("thinkwave:tutorial-event", onEvent);
+    return () => window.removeEventListener("thinkwave:tutorial-event", onEvent);
+  }, [guestMode, tutorialUserId, builderTutorialStage]);
+
   function markUnsaved(updater) {
+    editVersionRef.current += 1;
     setQuestions((qs) => (typeof updater === "function" ? updater(qs) : updater));
     setIsSaved(false);
   }
@@ -146,6 +348,7 @@ export default function QuizBuilder({ guestMode = false }) {
   async function saveSettings(patch) {
     const next = { ...settings, ...patch };
     setSettings(next);
+    editVersionRef.current += 1;
     setIsSaved(false);
     try {
       await api.put(`/quizzes/${id}/settings`, {
@@ -174,6 +377,7 @@ export default function QuizBuilder({ guestMode = false }) {
     try {
       await api.put(`/quizzes/${id}/meta`, { title: clean });
       setQuiz((prev) => ({ ...prev, title: clean }));
+      editVersionRef.current += 1;
       setIsSaved(false);
       setTitleDraft(clean);
       setTitleEditing(false);
@@ -211,6 +415,7 @@ export default function QuizBuilder({ guestMode = false }) {
       setMsg(`Basic plan allows only ${planLimit.maxItems} ${["MATCHING","THINK_SPELL"].includes(quiz?.template_type) ? "batches" : "questions"} for this template.`);
       return;
     }
+    const tutorialAddRequested = builderTutorialStage === "add";
     markUnsaved((qs) => {
       const blank = buildBlankQuestion(quiz, qs.length);
       blank.config = { ...blank.config, ...inheritedGlobalConfig(qs) };
@@ -219,6 +424,7 @@ export default function QuizBuilder({ guestMode = false }) {
     setNavDir("next");
     setQIndex(questions.length);
     setNavTick((v) => v + 1);
+    if (tutorialAddRequested) setBuilderTutorialStage("repeat");
   }
 
   function deleteCurrentQuestion() {
@@ -228,6 +434,7 @@ export default function QuizBuilder({ guestMode = false }) {
 
   function performDeleteCurrentQuestion() {
     if (questions.length === 1) {
+      editVersionRef.current += 1;
       setQuestions([buildBlankQuestion(quiz, 0)]);
       setQIndex(0);
       setIsSaved(false);
@@ -308,13 +515,39 @@ export default function QuizBuilder({ guestMode = false }) {
   }
 
   async function _doSave({ showModal = true } = {}) {
+    // Never allow two question-set saves from this builder to overlap. This is
+    // paired with the server transaction so double-clicks, delayed responses,
+    // retries, and publish/save races cannot create duplicate active rows.
+    if (savePromiseRef.current) return savePromiseRef.current;
+    const saveVersion = editVersionRef.current;
+    const payload = prepareForSave();
+    setIsSaving(true);
+    const task = (async () => {
+      try {
+        await api.put(`/quizzes/${id}/questions`, { questions: payload });
+        const stillCurrent = editVersionRef.current === saveVersion;
+        setIsSaved(stillCurrent);
+        return true;
+      } catch (e) {
+        setMsg(e?.response?.data?.message || "Save failed.");
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    })();
+    savePromiseRef.current = task;
     try {
-      await api.put(`/quizzes/${id}/questions`, { questions: prepareForSave() });
-      setIsSaved(true);
-      if (showModal) setModal("saved");
-    } catch (e) {
-      setMsg(e?.response?.data?.message || "Save failed.");
+      return await task;
+    } finally {
+      if (savePromiseRef.current === task) savePromiseRef.current = null;
     }
+  }
+
+  function requestSave() {
+    setPublishFlow(false);
+    setMsg("");
+    if (builderTutorialStage === "save_review") setBuilderTutorialStage("save");
+    setModal("confirmSave");
   }
 
   async function save() {
@@ -327,7 +560,7 @@ export default function QuizBuilder({ guestMode = false }) {
       setModal("duplicates");
       return;
     }
-    await _doSave();
+    await _doSave({ showModal: builderTutorialStage !== "save" });
   }
 
   function publish() {
@@ -349,7 +582,16 @@ export default function QuizBuilder({ guestMode = false }) {
       await api.post(`/quizzes/${id}/publish`);
       setQuiz((prev) => ({ ...prev, status: "PUBLISHED" }));
       setPublishFlow(false);
-      setModal("published");
+      setModal(null);
+      if (!guestMode && tutorialUserId && builderTutorialStage) {
+        markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
+        setBuilderTutorialStage(null);
+        const state = readTutorialState(tutorialUserId);
+        if (state.mainStage === "builder_pending") {
+          writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
+          window.setTimeout(() => navigate("/teacher"), 1500);
+        }
+      }
     } catch (e) {
       setMsg(e?.response?.data?.message || "Publish failed.");
     }
@@ -358,8 +600,8 @@ export default function QuizBuilder({ guestMode = false }) {
   async function deleteQuiz() {
     try {
       await api.delete(`/quizzes/${id}`);
-      setModal("deleted");
-      setTimeout(() => navigate(guestMode ? "/guest" : "/teacher"), 1800);
+      setModal(null);
+      navigate(guestMode ? "/guest" : "/teacher");
     } catch {
       setMsg("Delete failed.");
     }
@@ -381,7 +623,14 @@ export default function QuizBuilder({ guestMode = false }) {
         correct: q.correct,
       });
       setMsg("");
-      setModal("bankSaved");
+      setBankSavedOrders((current) => {
+        const next = new Set(current);
+        next.add(Number(q?.order ?? qIndex));
+        return next;
+      });
+      if (builderTutorialStage === "bank") {
+        setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
+      }
     } catch (error) {
       setMsg(error?.response?.data?.message || "Failed to save to bank.");
     }
@@ -408,7 +657,7 @@ export default function QuizBuilder({ guestMode = false }) {
     setQIndex(questions.length);
     setNavTick((v) => v + 1);
     setBankOpen(false);
-    setMsg("Question added from bank.");
+    setMsg("");
   }
 
   if (loadError) {
@@ -430,8 +679,9 @@ export default function QuizBuilder({ guestMode = false }) {
   const totalQ = questions.length;
   const isFirst = qIndex === 0;
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
-  const publishDisabled = !isSaved || quiz.status === "PUBLISHED";
-  const isBatchTemplate = ["MATCHING", "THINK_SPELL"].includes(quiz.template_type);
+  const publishDisabled = isSaving || !isSaved || quiz.status === "PUBLISHED";
+  const isBatchTemplate = ["MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"].includes(quiz.template_type);
+  const tutorialHighlightColor = lightenTutorialColor(templateAccent(quiz.template_type), dark ? 0.24 : 0.36);
   const globalShowPromptImage = questions.length > 0 && questions.every((question) => !!question.config?.showPromptImage);
   const globalVoiceRecord = questions.length > 0 && questions.every((question) => !!question.config?.voiceRecord);
   const globalTextToSpeech = questions.length > 0 && questions.every((question) => !!question.config?.textToSpeech);
@@ -453,7 +703,7 @@ export default function QuizBuilder({ guestMode = false }) {
 
       {!guestMode && bankOpen && <div style={ui.blurOverlay} />}
 
-      <div className="tw-quiz-builder-page" style={ui.page}>
+      <div className="tw-quiz-builder-page" style={{ ...ui.page, "--tw-template-tutorial-highlight": tutorialHighlightColor }}>
         <ThemeIconButton dark={dark} onClick={toggleTheme} size={22} className="tw-builder-floating-theme" aria-label={dark ? "Use light mode" : "Use dark mode"} />
         <div style={ui.topBar}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
@@ -488,11 +738,11 @@ export default function QuizBuilder({ guestMode = false }) {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <TeacherPressButton tone="red" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
-            {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
-            <TeacherPressButton tone="blue" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="check" className={`tw-builder-toolbar-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={save} disabled={isSaved}>{isSaved ? "Saved" : "Save"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="spark" className={`tw-builder-toolbar-action${quiz.status === "PUBLISHED" ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
+            <TeacherPressButton tone="red" data-tutorial="builder-delete-quiz" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
+            {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-add-bank" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
+            <TeacherPressButton tone="blue" data-tutorial="builder-add-question" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action${quiz.status === "PUBLISHED" ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
           </div>
         </div>
 
@@ -500,22 +750,22 @@ export default function QuizBuilder({ guestMode = false }) {
           <div className="collapsible-inner">
             <div style={ui.settingsPanel}>
               <div style={ui.settingsPanelInner}>
-              <button style={ui.toggleCard(settings.randomizeQuestions)} onClick={() => saveSettings({ randomizeQuestions: !settings.randomizeQuestions })}>
+              {!guestMode && <button style={ui.toggleCard(settings.randomizeQuestions)} onClick={() => saveSettings({ randomizeQuestions: !settings.randomizeQuestions })}>
                 <div>
-                  <div style={ui.toggleTitle}>{isBatchTemplate ? "Randomize batch" : "Randomize question order"}</div>
-                  <div style={ui.toggleHint}>{isBatchTemplate ? "Mix the batch sequence when the session starts." : "Mix the question sequence each time the session starts."}</div>
+                  <div style={ui.toggleTitle}>{isBatchTemplate ? "Randomize assigned batches" : "Randomize assigned question order"}</div>
+                  <div style={ui.toggleHint}>{isBatchTemplate ? "Assigned sessions only: each student gets the batches in a shuffled order. Live hosting keeps the builder order." : "Assigned sessions only: each student gets the questions in a shuffled order. Live hosting keeps the builder order."}</div>
                 </div>
                 <span style={ui.switchTrack(settings.randomizeQuestions)}><span style={ui.switchThumb(settings.randomizeQuestions)} /></span>
-              </button>
+              </button>}
               {quiz.template_type === "MATCHING" && (
                 <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
-                  <div><div style={ui.toggleTitle}>Shuffle Column A</div><div style={ui.toggleHint}>Change the order of the prompt-side matching cards.</div></div>
+                  <div><div style={ui.toggleTitle}>Shuffle Column A</div><div style={ui.toggleHint}>Change the prompt-side card order independently for each participant.</div></div>
                   <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
               {quiz.template_type === "MCQ" && (
                 <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
-                  <div><div style={ui.toggleTitle}>Shuffle answer choices</div><div style={ui.toggleHint}>Randomize option order while keeping the answer key intact.</div></div>
+                  <div><div style={ui.toggleTitle}>Shuffle answer choices</div><div style={ui.toggleHint}>Give every student or guest their own shuffled option order while keeping the answer key intact.</div></div>
                   <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
@@ -548,19 +798,19 @@ export default function QuizBuilder({ guestMode = false }) {
           <button className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible" }} onClick={goNext}>Next ›</button>
         </div>
 
-        <div style={ui.editorArea}>
+        <div style={ui.editorArea} data-tutorial="builder-editor-shell">
           {currentQ && (
             <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
               <div style={ui.questionCard}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" className="tw-builder-small-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} disabled={validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>Save to Bank</TeacherPressButton>}
+                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
                     <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
                   </div>
                 </div>
 
-                <div style={ui.metaGrid}>
+                <div data-tutorial="builder-meta-grid" style={ui.metaGrid}>
                   <div style={ui.metaCard}>
                     <div style={ui.metaLabel}>⏱ Time limit</div>
                     <div style={ui.metaRow}>
@@ -588,7 +838,7 @@ export default function QuizBuilder({ guestMode = false }) {
                 </div>
 
                 <div className={quiz.template_type === "MCQ" && currentQ.config?.voiceRecord ? "tw-builder-question-voice-grid" : undefined}>
-                  <div>
+                  <div data-tutorial="builder-question">
                     <label style={ui.fieldLabel}>
                       Question
                       <span style={{ fontSize: 11, opacity: 0.55, marginLeft: 8 }}>{(currentQ.prompt || "").length}/255</span>
@@ -617,9 +867,127 @@ export default function QuizBuilder({ guestMode = false }) {
         </div>
       </div>
 
-      {modal === "saved" && <BuilderModal tone="green" icon="check" title="Progress Saved" message="Quiz questions saved successfully." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
-      {modal === "published" && <BuilderModal tone="green" icon="spark" title="Quiz Published!" message="Your quiz is now published and ready to host live." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
-      {modal === "deleted" && <BuilderModal tone="red" icon="trash" title="Quiz Deleted" message="Deleted. Returning to dashboard…" onClose={() => {}} ui={ui} c={c} autoDismiss />}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "template_prompt" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} actionLabel="Okay" secondaryLabel="Skip" onSecondary={skipFollowupTemplateTutorial} className="tw-tutorial-template-optin" onAction={startFollowupTemplateTutorial}>
+          <p>Would you like to see the tutorial for this template?</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "intro" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} actionLabel="Okay!" actionDelay={followupTemplateTutorial ? 0 : 2000} onAction={() => setBuilderTutorialStage("question")}>
+          <p>Every template has its own builder tools, so this walkthrough is just for <strong>{quiz ? ({ MCQ: "Multiple Choice", TRUE_FALSE: "True or False", TYPE_ANSWER: "Identification", MATCHING: "Matching", GUESS_WORD_4PICS: "Guess Word", THINK_SPELL: "Crossword" }[quiz.template_type] || quiz.template_type) : "this template"}</strong>.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && ["question", "question_done"].includes(builderTutorialStage) && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-question"]'
+          placement="right"
+          square
+          dialogWidth={350}
+          dragKey="builder-question-dialog"
+          allowTargetInteraction={true}
+          className="tw-tutorial-done-avatar-clear"
+          reserveActionSpace
+          actionLabel={builderTutorialStage === "question_done" ? "Done" : undefined}
+          onAction={() => {
+            window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+            setBuilderTutorialStage("specific");
+          }}
+        >
+          <p>Start here by entering your question.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360} dragKey="builder-mcq-dialog" highlightMode="target">
+          <p>Next, add the possible answers.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "mcq_correct" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360} dragKey="builder-mcq-dialog" highlight={false} hint={mcqTipVisible ? <span>You may also add or delete choices, or set <strong>2 answers</strong> for a question.</span> : null}>
+          <p>Next, add the possible answers.</p>
+          <p className="tw-tutorial-fade-line">Now click the small circle beside the correct answer.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "TRUE_FALSE" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-tf-answers"]' placement="screen-right" square dialogWidth={360}><p>Next, select either <strong>True</strong> or <strong>False</strong> to set it as the correct answer.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && ["specific", "identification_done"].includes(builderTutorialStage) && normalizeTemplateType(quiz?.template_type) === "TYPE_ANSWER" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-identification-answer"]' placement="screen-right" square dialogWidth={350} dragKey="builder-identification-dialog" allowTargetInteraction={true} className="tw-tutorial-done-avatar-clear" reserveActionSpace actionLabel={builderTutorialStage === "identification_done" ? "Done" : undefined} onAction={() => { document.activeElement?.blur?.(); if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}><p>Next, type in the correct answer.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (
+        <>
+          <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+            target='[data-tutorial="builder-matching-pairs"]'
+            placement="screen-right"
+            square
+            dialogWidth={370}
+            dragKey="builder-matching-dialog"
+            reserveActionSpace
+            actionLabel="Done"
+            actionDelay={2000}
+            onAction={() => setBuilderTutorialStage("matching_dummy")}
+          >
+            <p>Next, fill in both columns A and B.</p>
+            <p className="tw-tutorial-fade-line">You can also click <strong>Add Image</strong> to upload an image for a pair.</p>
+          </ThinkBotTutorial>
+          <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+            target='[data-tutorial="builder-matching-pairs"]'
+            placement="screen-left"
+            square
+            dialogWidth={330}
+            dragKey="builder-matching-tip-dialog"
+            highlight={false}
+            blockInteraction={false}
+            className="tw-tutorial-matching-tip"
+          >
+            <p><strong>TIP:</strong> text only, image only, and combined are allowed.</p>
+          </ThinkBotTutorial>
+        </>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_dummy" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-matching-dummy"]' placement="screen-right" square dialogWidth={350}><p>You may also add or delete distractors.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "GUESS_WORD_4PICS" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-images"]' placement="screen-right" square dialogWidth={350}><p>Next, you can upload images you want to use.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "guess_answer" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-answer"]' placement="screen-right" square dialogWidth={350}><p>You can set the answer here after the four images are ready.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "guess_distractor" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-distractors"]' placement="screen-right" square dialogWidth={350} highlightMode="target" actionLabel="Done" actionDelay={2000} onAction={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}><p>Now set the number of <strong>distractor letters</strong>.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "THINK_SPELL" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-words"]' placement="screen-right" square dialogWidth={350} reserveActionSpace actionLabel={(() => { const q = questions[qIndex] || questions[0]; const cfg = q?.config || {}; const cor = q?.correct || {}; const words = Array.isArray(cor.answers) && cor.answers.length ? cor.answers : (Array.isArray(cfg.answers) ? cfg.answers : []); return words.filter((word) => trimText(word)).length >= 4 ? "Done" : undefined; })()} onAction={() => setBuilderTutorialStage("crossword_fill")}><p>Next, type in the words you would like to use.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_fill" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-fill"]' placement="screen-right" square dialogWidth={350} highlightMode="target"><p>Click <strong>Fill It Up!</strong> to complete the grid.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_shuffle" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-shuffle"]' placement="screen-right" square dialogWidth={350} highlightMode="target"><p>You may also shuffle the arrangement of the letters.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && ["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-answer-explanation"]' placement="right" square dialogWidth={350} className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear" allowTargetInteraction={true} reserveActionSpace actionLabel={builderTutorialStage === "answer_explanation_done" ? "Done" : undefined} onAction={() => setBuilderTutorialStage("add_delay")}><p>Add a short explanation of why the answer is correct.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && ["add_delay", "save_delay"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} />}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "meta" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-meta-grid"]' placement="right" square dialogWidth={370} className="tw-tutorial-meta-lower tw-tutorial-meta-points-side" actionLabel="Done" onAction={() => setBuilderTutorialStage("bank")}><p>You can set the time limit and points depending on the question.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "bank" && modal !== "confirmBank" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-save-bank"]' placement="below" dialogWidth={390} highlightMode="target"><p>You can also save this specific {isBatchTemplate ? "batch" : "question"} along with its choices in case you need it in the future.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "add" && !modal && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-add-question"]' placement="below" square dialogWidth={360} highlightMode="target" className="tw-tutorial-add-question-close">
+          <p>Need another one? Use <strong>{isBatchTemplate ? "Add Batch" : "Add Question"}</strong> whenever you want to expand your activity.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && ["repeat", "repeat_done"].includes(builderTutorialStage) && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-editor-shell"]'
+          placement="screen-right"
+          square
+          dialogWidth={370}
+          dragKey="builder-repeat-dialog"
+          highlight={false}
+          allowTargetInteraction={true}
+          className="tw-tutorial-done-avatar-clear"
+          reserveActionSpace
+          actionLabel={builderTutorialStage === "repeat_done" ? "Done" : undefined}
+          onAction={() => {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            setBuilderTutorialStage("save");
+          }}
+        >
+          <p>Now let’s try doing it again for a different question!</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && ["save", "publish"].includes(builderTutorialStage) && !["duplicates", "invalid", "confirmPublish", "confirmSave"].includes(modal) && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target={builderTutorialStage === "publish" ? '[data-tutorial="builder-publish"]' : '[data-tutorial="builder-save"]'}
+          placement="below"
+          dialogWidth={390}
+          dragKey="builder-save-publish-dialog"
+          highlightMode="target"
+        >
+          <p>{builderTutorialStage === "save" ? "Save your finished work to continue." : "Your work is saved. Publish it when you are ready to use it in a session."}</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && modifiedTutorialOpen && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement="screen-right" square dialogWidth={370} actionLabel="Okay!" actionDelay={2000} onAction={() => setModifiedTutorialOpen(false)}><p>For Modified Multiple Choice, you can set images as the answer choices.</p></ThinkBotTutorial>}
+
       {modal === "confirmDelete" && (
         <BuilderModal
           tone="red"
@@ -654,6 +1022,23 @@ export default function QuizBuilder({ guestMode = false }) {
           )}
         />
       )}
+      {modal === "confirmSave" && (
+        <BuilderModal
+          tone="blue"
+          icon="check"
+          title="Save Quiz?"
+          message="Save your current quiz questions and settings? You can continue editing after saving."
+          onClose={() => setModal(null)}
+          ui={ui}
+          c={c}
+          actions={(
+            <>
+              <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
+              <TeacherPressButton tone="blue" onClick={async () => { setModal(null); await save(); }}>Yes, save</TeacherPressButton>
+            </>
+          )}
+        />
+      )}
       {modal === "confirmPublish" && (
         <BuilderModal
           tone="blue"
@@ -666,7 +1051,7 @@ export default function QuizBuilder({ guestMode = false }) {
           actions={(
             <>
               <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <TeacherPressButton tone="blue" onClick={confirmPublish}>Yes, publish</TeacherPressButton>
+              <TeacherPressButton data-tutorial="builder-confirm-publish" tone="blue" onClick={confirmPublish}>Yes, publish</TeacherPressButton>
             </>
           )}
         />
@@ -688,13 +1073,12 @@ export default function QuizBuilder({ guestMode = false }) {
           )}
         />
       )}
-      {!guestMode && modal === "bankSaved" && <BuilderModal tone="green" icon="check" title="Saved to Bank" message="The current question was added to your question bank." onClose={() => setModal(null)} ui={ui} c={c} autoDismiss />}
       {modal === "duplicates" && (
         <BuilderModal
           tone="yellow"
           icon="warning"
           title="Duplicate Questions Detected"
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); if (builderTutorialStage === "save") setBuilderTutorialStage("save_review"); }}
           ui={ui}
           c={c}
           message={(
@@ -705,12 +1089,14 @@ export default function QuizBuilder({ guestMode = false }) {
               ))}
             </div>
           )}
-          actions={(
+          actions={builderTutorialStage === "save" ? (
+            <TeacherPressButton tone="yellow" onClick={() => { setModal(null); setBuilderTutorialStage("save_review"); }}>Review questions</TeacherPressButton>
+          ) : (
             <>
               <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Review questions</button>
               <button style={primaryBtn({ bg: `${c.accent}18`, fg: c.accent, border: c.accent })} onClick={async () => {
                 setModal(null);
-                await _doSave({ showModal: !publishFlow });
+                await _doSave({ showModal: !publishFlow && builderTutorialStage !== "save" });
                 if (publishFlow) setModal("confirmPublish");
               }}>{publishFlow ? "Save & Continue" : "Save Anyway"}</button>
             </>
@@ -722,7 +1108,7 @@ export default function QuizBuilder({ guestMode = false }) {
           tone="yellow"
           icon="warning"
           title="Some questions are incomplete"
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); if (builderTutorialStage === "save") setBuilderTutorialStage("save_review"); }}
           ui={ui}
           c={c}
           message={(
@@ -733,7 +1119,7 @@ export default function QuizBuilder({ guestMode = false }) {
               ))}
             </div>
           )}
-          actions={<TeacherPressButton tone="yellow" onClick={() => setModal(null)}>Okay</TeacherPressButton>}
+          actions={<TeacherPressButton tone="yellow" onClick={() => { setModal(null); if (builderTutorialStage === "save") setBuilderTutorialStage("save_review"); }}>Okay</TeacherPressButton>}
         />
       )}
 
@@ -750,5 +1136,14 @@ export default function QuizBuilder({ guestMode = false }) {
       {!guestMode && bankOpen && <BankModal templateType={quiz.template_type} onSelect={addFromBank} onClose={() => setBankOpen(false)} ui={ui} c={c} />}
     </>
   );
+}
+function lightenTutorialColor(hex, amount = 0.32) {
+  const value = String(hex || "#2b6cff").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return hex || "#60a5fa";
+  const mix = (channel) => Math.round(channel + (255 - channel) * Math.max(0, Math.min(1, amount)));
+  const r = mix(parseInt(value.slice(0, 2), 16));
+  const g = mix(parseInt(value.slice(2, 4), 16));
+  const b = mix(parseInt(value.slice(4, 6), 16));
+  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }
 

@@ -9,13 +9,14 @@ import { IconBubble, TwIcon } from "../components/TwUI";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import ThemeIconButton from "../components/ThemeIconButton";
 
 const BOX_COUNT = 6;
 
 export default function VerifyOtp() {
   const nav = useNavigate();
   const c = useColors();
-  const { dark } = useTheme();
+  const { dark, toggleTheme } = useTheme();
   const loc = useLocation();
   const [sp] = useSearchParams();
   const mode = loc.state?.loginMode || sp.get("mode") || (loc.state?.adminPending ? "admin" : "teacher");
@@ -79,22 +80,22 @@ export default function VerifyOtp() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: c.pageBg, color: c.text, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+    <div className="tw-otp-page" style={{ minHeight: "100vh", background: c.pageBg, color: c.text, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "fixed", width: 520, height: 520, borderRadius: "50%", background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)`, top: -180, left: -110, pointerEvents: "none" }} />
       <div style={{ position: "fixed", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,.14) 0%,transparent 70%)", bottom: -120, right: -110, pointerEvents: "none" }} />
-      <PublicHeader compact hideSuper />
+      <PublicHeader compact hideSuper hideTheme />
 
-      <div style={{ display: "grid", placeItems: "center", flex: 1, padding: "34px 20px 50px", zIndex: 1 }}>
-        <div style={{ width: "min(100%,470px)", padding: "38px 34px", borderRadius: 26, textAlign: "center", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
+      <div className="tw-otp-main" style={{ display: "grid", placeItems: "center", flex: 1, padding: "34px 20px 50px", zIndex: 1 }}>
+        <div className="tw-otp-card" style={{ width: "min(100%,470px)", padding: "38px 34px", borderRadius: 26, textAlign: "center", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
           {success ? <SuccessContent mode={mode} c={c} /> : <>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><IconBubble name="invitation" c={c} size={58} iconSize={28} /></div>
+            <div className="tw-otp-icon-wrap" style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><IconBubble name="invitation" c={c} size={58} iconSize={28} /></div>
             <h2 style={{ fontSize: 27, fontWeight: 950, margin: "0 0 10px", color: c.text }}>Check your email</h2>
-            <p style={{ fontSize: 14, color: c.textMuted, lineHeight: 1.7, margin: "0 0 28px" }}>We sent a 6-digit code to <b style={{ color: c.text }}>{email || "your email"}</b>.</p>
+            <p className="tw-otp-intro" style={{ fontSize: 14, color: c.textMuted, lineHeight: 1.7, margin: "0 0 28px" }}>We sent a 6-digit code to <b style={{ color: c.text }}>{email || "your email"}</b>.</p>
 
             {!email && <label style={{ display: "grid", gap: 7, textAlign: "left", color: c.textMuted, fontSize: 12, fontWeight: 800, marginBottom: 17 }}>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" style={input(c)} /></label>}
 
             <form onSubmit={submit}>
-              <div onPaste={handlePaste} style={{ display: "flex", gap: 9, justifyContent: "center", marginBottom: 20 }}>
+              <div className="tw-otp-digits" onPaste={handlePaste} style={{ display: "flex", gap: 9, justifyContent: "center", marginBottom: 20 }}>
                 {digits.map((digit, index) => <input key={index} ref={(element) => { refs.current[index] = element; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => handleDigit(index, event.target.value)} onKeyDown={(event) => handleKeyDown(index, event)} autoFocus={index === 0} style={{ width: 50, height: 62, boxSizing: "border-box", borderRadius: 14, border: `2px solid ${digit ? c.accent : c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text, fontSize: 27, fontWeight: 950, textAlign: "center", outline: "none", caretColor: "transparent", transition: "border-color .15s,transform .15s" }} />)}
               </div>
               {msg && <div style={{ color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, fontWeight: 800, marginBottom: 16 }}>{msg}</div>}
@@ -104,6 +105,7 @@ export default function VerifyOtp() {
           </>}
         </div>
       </div>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }

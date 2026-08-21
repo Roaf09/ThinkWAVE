@@ -15,14 +15,16 @@ import { isInstitutionPlan } from "../../../lib/planLimits";
 import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 import { DEFAULT_SESSION_BACKGROUND, SESSION_BACKGROUNDS } from "../../../lib/sessionBackgrounds";
+import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
+import { finishMainTutorial, readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 
 const TEMPLATE_IMAGES = {
-  MCQ: { landscape: "/media/templates/previews/mcq-landscape.png", mobile: "/media/templates/previews/mcq-mobile.png" },
-  TRUE_FALSE: { landscape: "/media/templates/previews/tof-landscape.png", mobile: "/media/templates/previews/tof-mobile.png" },
-  TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.png", mobile: "/media/templates/previews/identification-mobile.png" },
-  MATCHING: { landscape: "/media/templates/previews/matching-landscape.png", mobile: "/media/templates/previews/matching-mobile.png" },
-  GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.png", mobile: "/media/templates/previews/guess-word-mobile.png" },
-  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.png", mobile: "/media/templates/previews/think-spell-mobile.png" },
+  MCQ: { landscape: "/media/templates/previews/mcq-landscape.webp", mobile: "/media/templates/previews/mcq-mobile.webp" },
+  TRUE_FALSE: { landscape: "/media/templates/previews/tof-landscape.webp", mobile: "/media/templates/previews/tof-mobile.webp" },
+  TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.webp", mobile: "/media/templates/previews/identification-mobile.webp" },
+  MATCHING: { landscape: "/media/templates/previews/matching-landscape.webp", mobile: "/media/templates/previews/matching-mobile.webp" },
+  GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.webp", mobile: "/media/templates/previews/guess-word-mobile.webp" },
+  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.webp", mobile: "/media/templates/previews/think-spell-mobile.webp" },
 };
 
 
@@ -69,7 +71,7 @@ function Badge({ label, c, tone = "neutral" }) {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: map.bg, color: map.fg, border: `1px solid ${map.border}` }}>{label}</span>;
 }
 
-export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
+export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutorial }) {
   const [quizzes, setQuizzes] = useState([]);
   const [folders, setFolders] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -84,7 +86,10 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
   const [sortBy, setSortBy] = useState("recent");
   const [institutionPlan, setInstitutionPlan] = useState(false);
   const [openQuizId, setOpenQuizId] = useState(null);
+  const [promotedQuizIds, setPromotedQuizIds] = useState([]);
   const [assignmentSaved, setAssignmentSaved] = useState(false);
+  const [assignmentNotice, setAssignmentNotice] = useState(null);
+  const [setupTutorialStage, setSetupTutorialStage] = useState(null);
   const c = useColors();
   const { dark } = useTheme();
   const navigate = useNavigate();
@@ -122,6 +127,41 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
 
   useEffect(() => { load(); }, [guestMode]);
 
+  function closeMainTutorialBranch() {
+    if (!tutorial?.userId || tutorial?.stage === "complete") return;
+    const next = finishMainTutorial(tutorial.userId);
+    tutorial.patch?.(next);
+  }
+
+  function openHostSetup(selectedQuiz) {
+    setHostSetupQuiz(selectedQuiz);
+    closeMainTutorialBranch();
+    if (tutorial?.userId && !readTutorialState(tutorial.userId).hostSetupSeen) setSetupTutorialStage("host_class");
+  }
+
+  function openAssignSetup(selectedQuiz) {
+    setAssignQuiz(selectedQuiz);
+    closeMainTutorialBranch();
+    if (tutorial?.userId && !readTutorialState(tutorial.userId).assignmentSetupSeen) setSetupTutorialStage("assign_schedule");
+  }
+
+  function finishSetupTutorial(key) {
+    if (tutorial?.userId) writeTutorialState(tutorial.userId, { [key]: true });
+    setSetupTutorialStage(null);
+  }
+
+  function toggleQuizCard(quizId) {
+    const numericId = Number(quizId);
+    setOpenQuizId((current) => {
+      const opening = Number(current) !== numericId;
+      if (opening) {
+        setPromotedQuizIds((rows) => [numericId, ...rows.filter((id) => Number(id) !== numericId)]);
+        return numericId;
+      }
+      return null;
+    });
+  }
+
   const liveQuizzes = useMemo(() => quizzes.filter((quiz) => quiz.status !== "BANKED" && quiz.delivery_mode !== "ASYNCHRONOUS"), [quizzes]);
   const filteredQuizzes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -135,23 +175,40 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
       return !q || [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
     rows.sort((a, b) => {
-      const aOpen = Number(openQuizId) === Number(a.id) ? 1 : 0;
-      const bOpen = Number(openQuizId) === Number(b.id) ? 1 : 0;
-      if (aOpen !== bOpen) return bOpen - aOpen;
+      const aRank = promotedQuizIds.indexOf(Number(a.id));
+      const bRank = promotedQuizIds.indexOf(Number(b.id));
+      if (aRank >= 0 || bRank >= 0) {
+        if (aRank < 0) return 1;
+        if (bRank < 0) return -1;
+        if (aRank !== bRank) return aRank - bRank;
+      }
       if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""));
       const aUpdated = new Date(a.updated_at || a.created_at || 0).getTime();
       const bUpdated = new Date(b.updated_at || b.created_at || 0).getTime();
       return bUpdated - aUpdated || Number(b.id) - Number(a.id);
     });
     return rows;
-  }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId, openQuizId]);
+  }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId, promotedQuizIds]);
+
+  useEffect(() => {
+    if (!String(tutorial?.stage || "").startsWith("sessions_")) return;
+    if (!filteredQuizzes.length) return;
+    setOpenQuizId((current) => {
+      if (current) return current;
+      const firstId = Number(filteredQuizzes[0].id);
+      setPromotedQuizIds((rows) => [firstId, ...rows.filter((id) => Number(id) !== firstId)]);
+      return firstId;
+    });
+  }, [tutorial?.stage, filteredQuizzes.length]);
 
   async function createLiveSession(quiz, joinMode = "SOLO", classId = null, backgroundKey = DEFAULT_SESSION_BACKGROUND) {
     try {
-      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode: guestMode ? "SOLO" : joinMode, classId: guestMode ? null : classId, backgroundKey });
+      const tutorialDemo = !guestMode && !!tutorial?.userId && !readTutorialState(tutorial.userId).hostPanelSeen;
+      const { data } = await api.post("/sessions", { quizId: quiz.id, joinMode: guestMode ? "SOLO" : joinMode, classId: guestMode ? null : classId, backgroundKey, tutorialDemo });
       setHostSetupQuiz(null);
       await load();
       setOpenQuizId(quiz.id);
+      setPromotedQuizIds((rows) => [Number(quiz.id), ...rows.filter((value) => Number(value) !== Number(quiz.id))]);
       showFlash(data?.existing ? "That live session is already open." : "Session created. Opening the host panel…");
       if (!guestMode && data?.id) navigate(`/teacher/sessions/${data.id}/live`);
     } catch (error) {
@@ -162,10 +219,13 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
   async function createAssignment(quiz, payload) {
     try {
       await api.post(`/quizzes/${quiz.id}/assign`, payload);
+      const selectedClass = folderOptions.find((folder) => Number(folder.id) === Number(payload?.classId));
       setAssignQuiz(null);
       await load();
       setAssignmentSaved(true);
+      setAssignmentNotice({ className: selectedClass?.name || selectedClass?.pathLabel || "your class" });
       window.setTimeout(() => setAssignmentSaved(false), 2000);
+      window.setTimeout(() => setAssignmentNotice(null), 3600);
     } catch (error) {
       showFlash(error?.response?.data?.message || "Failed to create assignment.", "error");
     }
@@ -192,8 +252,8 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
         guestMode={guestMode}
         folderLabel={folderPathMap.get(Number(quiz.class_id)) || ""}
         activeSession={activeByQuizId.get(Number(quiz.id)) || null}
-        onHost={(selectedQuiz) => guestMode ? createLiveSession(selectedQuiz, "SOLO", null) : setHostSetupQuiz(selectedQuiz)}
-        onAssign={setAssignQuiz}
+        onHost={(selectedQuiz) => guestMode ? createLiveSession(selectedQuiz, "SOLO", null) : openHostSetup(selectedQuiz)}
+        onAssign={openAssignSetup}
         onDelete={(selectedQuiz) => setConfirmState({ type: "delete", quiz: selectedQuiz })}
         onCopyToBank={(selectedQuiz) => setConfirmState({ type: "bank", quiz: selectedQuiz })}
         onDuplicate={(selectedQuiz) => setConfirmState({ type: "duplicate", quiz: selectedQuiz })}
@@ -201,15 +261,37 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false }) {
         c={c}
         institutionPlan={institutionPlan}
         expanded={Number(openQuizId) === Number(quiz.id)}
-        onToggle={() => setOpenQuizId((current) => Number(current) === Number(quiz.id) ? null : quiz.id)}
+        onToggle={() => toggleQuizCard(quiz.id)}
         dark={dark}
       />)}</div>}
       {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
       {!guestMode && assignmentSaved && <ProfileSavedOverlay />}
+      {!guestMode && assignmentNotice && <ThinkBotTutorial placement="screen-right" dialogWidth={430} blockInteraction={false} highlight={false} className="tw-assignment-live-notice"><p><strong>Your assignment is live!</strong></p><p>Students in <strong>{assignmentNotice.className}</strong> can access it according to the schedule you selected.</p></ThinkBotTutorial>}
     </div>
 
-    {!guestMode && hostSetupQuiz && <HostLaunchModal quiz={hostSetupQuiz} folders={folderOptions} institutionPlan={institutionPlan} c={c} onClose={() => setHostSetupQuiz(null)} onStart={createLiveSession} />}
-    {!guestMode && assignQuiz && <AssignModal quiz={assignQuiz} folders={folderOptions} c={c} onClose={() => setAssignQuiz(null)} onSubmit={createAssignment} />}
+    {!guestMode && hostSetupQuiz && <HostLaunchModal quiz={hostSetupQuiz} folders={folderOptions} institutionPlan={institutionPlan} c={c} dark={dark} onClose={() => { setHostSetupQuiz(null); setSetupTutorialStage(null); }} onStart={createLiveSession} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("hostSetupSeen")} />}
+    {!guestMode && assignQuiz && <AssignModal quiz={assignQuiz} folders={folderOptions} c={c} dark={dark} onClose={() => { setAssignQuiz(null); setSetupTutorialStage(null); }} onSubmit={createAssignment} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("assignmentSetupSeen")} />}
+    {!guestMode && tutorial?.stage === "sessions_intro" && (
+      <ThinkBotTutorial target='[data-tutorial="session-card"]' placement="below" dialogWidth={430} dragKey="sessions-share-dialog" clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => tutorial.setStage?.("sessions_host_info")}>
+        <p>Your activity is ready. Now you have two ways to share it with your students.</p>
+      </ThinkBotTutorial>
+    )}
+    {!guestMode && tutorial?.stage === "sessions_host_info" && (
+      <ThinkBotTutorial target='[data-tutorial="session-host-live"]' placement="below" dialogWidth={390} dragKey="sessions-share-dialog" highlightMode="target" clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => tutorial.setStage?.("sessions_assign_info")}>
+        <p><strong>Host Live</strong> is for activities you want everyone to play together. You control the session while results arrive in real time.</p>
+      </ThinkBotTutorial>
+    )}
+    {!guestMode && tutorial?.stage === "sessions_assign_info" && (
+      <ThinkBotTutorial target='[data-tutorial="session-assign"]' placement="below" dialogWidth={390} dragKey="sessions-share-dialog" highlightMode="target" clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => tutorial.setStage?.("sessions_choose")}>
+        <p><strong>Assign</strong> lets students complete the activity on their own within the schedule you choose.</p>
+      </ThinkBotTutorial>
+    )}
+    {!guestMode && tutorial?.stage === "sessions_choose" && (
+      <ThinkBotTutorial target='[data-tutorial="session-host-live"]' placement="below" dialogWidth={360} dragKey="sessions-share-dialog" highlightMode="target">
+        <p>For now, let’s choose <strong>Host Live</strong>.</p>
+      </ThinkBotTutorial>
+    )}
+
     {confirmState && <TeacherActionModal c={c} textCancel tone={confirmState.type === "delete" ? "red" : "blue"} icon={confirmState.type === "delete" ? "trash" : confirmState.type === "bank" ? "bank" : "plus"} title={confirmState.type === "delete" ? "Delete quiz?" : confirmState.type === "bank" ? "Add to Quiz Bank?" : "Duplicate quiz?"} message={`${confirmState.quiz.title} will be ${confirmState.type === "delete" ? "permanently deleted" : confirmState.type === "bank" ? "copied to the Quiz Bank" : "copied as a new editable quiz"}.`} confirmLabel={confirmState.type === "delete" ? "Delete" : confirmState.type === "bank" ? "Add to Quiz Bank" : "Duplicate"} onClose={() => setConfirmState(null)} onConfirm={() => confirmState.type === "delete" ? deleteQuiz(confirmState.quiz) : confirmState.type === "bank" ? addToQuizBank(confirmState.quiz) : duplicateQuiz(confirmState.quiz)} />}
   </>;
 }
@@ -230,7 +312,7 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
     return () => document.removeEventListener("pointerdown", closeMenu);
   }, [moreOpen, quiz.id]);
 
-  return <div className="tw-live-session-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), position: "relative", overflow: "visible", zIndex: moreOpen ? 120 : 1, background: dark ? `color-mix(in srgb, ${tone.accent} 18%, ${c.cardBg})` : `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})`, border: `3px solid ${tone.border}`, boxShadow: `0 15px 32px color-mix(in srgb, ${tone.accent} 19%, rgba(15,23,42,.15))` }}>
+  return <div className="tw-live-session-card" data-tutorial="session-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), position: "relative", overflow: "visible", zIndex: moreOpen ? 120 : 1, background: dark ? `color-mix(in srgb, ${tone.accent} 18%, ${c.cardBg})` : `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})`, border: `3px solid ${tone.border}`, boxShadow: `0 15px 32px color-mix(in srgb, ${tone.accent} 19%, rgba(15,23,42,.15))` }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div>
         <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
@@ -245,8 +327,8 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div></div>
           <div data-session-actions={quiz.id} style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 12001 : 1 }}>
-            <TeacherPressButton tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
-            {!guestMode && <TeacherPressButton tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
+            <TeacherPressButton data-tutorial="session-host-live" tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
+            {!guestMode && <TeacherPressButton data-tutorial="session-assign" tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
             <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
             {moreOpen && <div className="tw-session-quick-menu" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 12002, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}>
               <button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button>
@@ -270,31 +352,41 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
   </div>;
 }
 
-function HostLaunchModal({ quiz, folders, institutionPlan, c, onClose, onStart }) {
+function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onStart, tutorialStage, onTutorialStage, onTutorialFinish }) {
   const [joinMode, setJoinMode] = useState("SOLO");
   const [classId, setClassId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [backgroundKey, setBackgroundKey] = useState(null);
+  const [zoomedPreview, setZoomedPreview] = useState(null);
   const template = normalizeLiveTemplate(quiz.template_type);
+  const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
-  return <div className="tw-host-launch-backdrop" onClick={onClose}>
-    <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
+  return <div className="tw-host-launch-backdrop" onClick={() => { if (!tutorialStage) onClose?.(); }}>
+    <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: solidModalBg(c), borderColor: c.border, color: c.text }}>
       <div className="tw-host-preview-dual">
-        <div className="tw-host-preview-desktop"><img src={TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} desktop gameplay preview`} /></div>
-        <div className="tw-host-preview-mobile"><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></div>
+        <button type="button" className="tw-host-preview-desktop tw-host-preview-clickable" onClick={() => setZoomedPreview("desktop")}><img src={TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} desktop gameplay preview`} /></button>
+        <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
       </div>
-      <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Pick a class, choose how everyone will play, then launch the fun when your learners are ready!</p></div>
+      <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
       <div className="tw-host-mode-row">
         <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
         <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan} title={institutionPlan ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => institutionPlan && setJoinMode("GROUP")}><span>Group</span></button>
       </div>
       <div className="tw-host-launch-controls">
-        <button type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
-        <TeacherPressButton tone="blue" disabled={!classId} onClick={() => onStart(quiz, joinMode, classId, backgroundKey)}>Start</TeacherPressButton>
+        <button data-tutorial="host-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
+        <TeacherPressButton data-tutorial="host-start" tone="blue" disabled={!classId} onClick={() => { if (tutorialStage === "host_start") onTutorialFinish?.(); onStart(quiz, joinMode, classId, backgroundKey); }}>Start</TeacherPressButton>
       </div>
-      <BackgroundPicker selectedKey={backgroundKey} onSelect={setBackgroundKey} c={c} />
+      <BackgroundPicker selectedKey={backgroundKey} onSelect={(key) => { setBackgroundKey(key); if (tutorialStage === "host_background") onTutorialStage?.("host_start"); }} c={c} />
     </section>
-    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); }} />}
+    {zoomedPreview && <div className="tw-host-preview-zoom-backdrop" onClick={(event) => { event.stopPropagation(); setZoomedPreview(null); }}>
+      <div className={`tw-host-preview-zoom-card is-${zoomedPreview}`} onClick={(event) => event.stopPropagation()}>
+        <img src={zoomedPreview === "mobile" ? TEMPLATE_IMAGES[template]?.mobile : TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} ${zoomedPreview} gameplay preview enlarged`} />
+      </div>
+    </div>}
+    {tutorialStage === "host_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="host-class"]' placement="left" square highlightMode="target"><p>First, choose the class that will join this session.</p></ThinkBotTutorial>}
+    {tutorialStage === "host_background" && <ThinkBotTutorial target='[data-tutorial="session-backgrounds"]' placement="left" square><p>Browse through the available gameplay backgrounds and pick the one you want your students to see.</p></ThinkBotTutorial>}
+    {tutorialStage === "host_start" && <ThinkBotTutorial target='[data-tutorial="host-start"]' placement="above" square className="tw-tutorial-host-ready-spaced tw-tutorial-bob-down" highlightMode="target"><p>When everything looks good, you’re ready to host.</p></ThinkBotTutorial>}
+    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); if (tutorialStage === "host_class") onTutorialStage?.("host_background"); }} />}
   </div>;
 }
 
@@ -302,19 +394,16 @@ function BackgroundPicker({ selectedKey, onSelect, c }) {
   const visibleCount = 4;
   const total = SESSION_BACKGROUNDS.length;
   const [startIndex, setStartIndex] = useState(0);
+  const [slideDirection, setSlideDirection] = useState("next");
   const lastWheelAt = useRef(0);
   const carouselRef = useRef(null);
   const selectedIndex = SESSION_BACKGROUNDS.findIndex((item) => item.key === selectedKey);
   const visible = Array.from({ length: Math.min(visibleCount, total) }, (_, offset) => SESSION_BACKGROUNDS[(startIndex + offset) % total]);
 
-  function showPrevious() {
+  function move(step) {
     if (!total) return;
-    setStartIndex((value) => (value - 1 + total) % total);
-  }
-
-  function showNext() {
-    if (!total) return;
-    setStartIndex((value) => (value + 1) % total);
+    setSlideDirection(step > 0 ? "next" : "prev");
+    setStartIndex((value) => (value + step + total) % total);
   }
 
   useEffect(() => {
@@ -324,22 +413,26 @@ function BackgroundPicker({ selectedKey, onSelect, c }) {
       if (Math.abs(event.deltaY) < 4) return;
       event.preventDefault();
       const now = Date.now();
-      if (now - lastWheelAt.current < 180) return;
+      if (now - lastWheelAt.current < 220) return;
       lastWheelAt.current = now;
-      setStartIndex((value) => event.deltaY > 0 ? (value + 1) % total : (value - 1 + total) % total);
+      const step = event.deltaY > 0 ? 1 : -1;
+      setSlideDirection(step > 0 ? "next" : "prev");
+      setStartIndex((value) => (value + step + total) % total);
     };
     node.addEventListener("wheel", handleWheel, { passive: false });
     return () => node.removeEventListener("wheel", handleWheel);
   }, [total]);
 
-  return <div className="tw-session-background-picker">
+  return <div className="tw-session-background-picker" data-tutorial="session-backgrounds">
     <div className="tw-session-background-head"><span>Choose a gameplay background</span><small style={{ color: c.textMuted }}>{selectedIndex >= 0 ? `${selectedIndex + 1} of ${total}` : "No background selected"}</small></div>
     <div ref={carouselRef} className="tw-session-background-carousel">
-      <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={showPrevious} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
+      <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={() => move(-1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
       <div className="tw-session-background-track">
-        {visible.map((item) => <button type="button" key={`${startIndex}-${item.key}`} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => onSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
+        <div key={startIndex} className={`tw-session-background-track-inner is-${slideDirection}`}>
+          {visible.map((item) => <button type="button" key={item.key} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => onSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
+        </div>
       </div>
-      <button type="button" aria-label="Next backgrounds" className="tw-session-background-arrow" onClick={showNext} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
+      <button type="button" aria-label="Next backgrounds" className="tw-session-background-arrow" onClick={() => move(1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
     </div>
   </div>;
 }
@@ -373,7 +466,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
   }
 
   return <div className="tw-class-picker-backdrop" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-    <section className="tw-class-picker-modal" onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
+    <section className="tw-class-picker-modal" onClick={(event) => event.stopPropagation()} style={{ background: solidModalBg(c), borderColor: c.border, color: c.text }}>
       <div className="tw-class-picker-header">
         <div>
           <h3>Choose a class</h3>
@@ -392,42 +485,47 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
             {hasChildren && <small style={{ color: c.textMuted }}>{(childrenByParent.get(Number(folder.id)) || []).length} folder{(childrenByParent.get(Number(folder.id)) || []).length === 1 ? "" : "s"}</small>}
           </button>;
         })}
-        {!visibleFolders.length && <div className="tw-class-picker-empty tw-class-picker-thinkbot" style={{ color: c.textMuted }}><img src="/media/thinkbotbot.png" alt="ThinkBOT" /><p>You have not made any classes yet.</p></div>}
+        {!visibleFolders.length && <div className="tw-class-picker-empty tw-class-picker-thinkbot" style={{ color: c.textMuted }}><img src="/media/thinkbotbot.webp" alt="ThinkBOT" /><p>You have not made any classes yet.</p></div>}
       </div>
     </section>
   </div>;
 }
 
-function AssignModal({ quiz, folders, c, onClose, onSubmit }) {
+function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutorialStage, onTutorialStage, onTutorialFinish }) {
   const [form, setForm] = useState({ classId: null, availableFrom: "", availableUntil: "", backgroundKey: null });
   const [editing, setEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const complete = !!form.classId && !!form.availableFrom && !!form.availableUntil;
   const selected = folders.find((folder) => Number(folder.id) === Number(form.classId));
-  function submit(event) { event.preventDefault(); if (complete) onSubmit(quiz, form); }
-  return <div style={modalBackdrop} onClick={onClose}><form onSubmit={submit} onClick={(event) => event.stopPropagation()} style={{ ...card(c, { width: "min(95vw, 700px)", padding: 0, overflow: "hidden", background: c.cardBg }) }}>
-    <div style={{ padding: "22px 28px", borderBottom: `1px solid ${c.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><h2 style={{ margin: 0, color: c.text }}>Set up assignment</h2><p style={{ color: c.textMuted, marginBottom: 0 }}>Choose a class and answer schedule.</p></div><button type="button" onClick={onClose} style={{ ...btn(c), width: 42, height: 42, display: "grid", placeItems: "center", padding: 0 }}><TwIcon name="close" size={20} /></button></div>
+  const tone = templateTone(normalizeLiveTemplate(quiz.template_type), c, dark);
+  function submit(event) { event.preventDefault(); if (complete) { if (tutorialStage === "assign_create") onTutorialFinish?.(); onSubmit(quiz, form); } }
+  return <div style={modalBackdrop} onClick={onClose}><form onSubmit={submit} onClick={(event) => event.stopPropagation()} className="tw-assignment-setup-modal" style={{ ...card(c, { width: "min(95vw, 700px)", padding: 0, overflow: "hidden", background: solidModalBg(c) }) }}>
+    <div style={{ padding: "22px 28px", borderBottom: `1px solid ${c.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><h2 style={{ margin: 0, color: c.text }}>Set up assignment</h2><p style={{ color: c.textMuted, marginBottom: 0 }}>Set the schedule, choose the class, then pick the gameplay background.</p></div><button type="button" onClick={onClose} style={{ ...btn(c), width: 42, height: 42, display: "grid", placeItems: "center", padding: 0 }}><TwIcon name="close" size={20} /></button></div>
     <div style={{ padding: 28, display: "grid", gap: 14 }}>
-      <button type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
-      <div style={{ ...card(c, { boxShadow: "none", padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: c.cardBg2 }) }}>
+      <div data-tutorial="assign-schedule" role="button" tabIndex={0} onClick={() => setEditing(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setEditing(true); } }} style={{ ...card(c, { boxShadow: "none", padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: c.cardBg2 }), cursor: "pointer" }}>
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}><TwIcon name="calendar" size={28} /><div><div style={{ color: c.textMuted, fontSize: 13, fontWeight: 800 }}>Schedule</div><div style={{ color: c.text, fontWeight: 900 }}>{form.availableFrom && form.availableUntil ? `${formatSchedule(form.availableFrom)} → ${formatSchedule(form.availableUntil)}` : "Set start and end date/time"}</div></div></div>
-        <button type="button" onClick={() => setEditing(true)} style={btn(c)}>Edit</button>
+        <button type="button" onClick={(event) => { event.stopPropagation(); setEditing(true); }} style={btn(c)}>Edit</button>
       </div>
-      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => setForm((current) => ({ ...current, backgroundKey }))} c={c} />
       <div style={{ color: c.textMuted, fontSize: 13 }}>Students will only be able to answer within the selected schedule.</div>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
+      <button data-tutorial="assign-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
+      <div className="tw-assignment-primary-actions" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 4 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
+      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} />
     </div>
-    {editing && <ScheduleEditor c={c} form={form} setForm={setForm} onClose={() => setEditing(false)} />}
-    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={form.classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setForm((current) => ({ ...current, classId: id })); setPickerOpen(false); }} />}
+    {tutorialStage === "assign_schedule" && !editing && <ThinkBotTutorial target='[data-tutorial="assign-schedule"]' placement="left" square><p>Assignments are completed by students on their own time. Start by deciding when students can access this activity.</p></ThinkBotTutorial>}
+    {tutorialStage === "assign_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="assign-class"]' placement="left" square highlightMode="target"><p>Now choose which class should receive the assignment.</p></ThinkBotTutorial>}
+    {tutorialStage === "assign_background" && <ThinkBotTutorial target='[data-tutorial="session-backgrounds"]' placement="left" square><p>Browse through the available gameplay backgrounds and pick the one you want your students to see.</p></ThinkBotTutorial>}
+    {tutorialStage === "assign_create" && <ThinkBotTutorial target='[data-tutorial="assign-create"]' placement="above" square highlightMode="target"><p>Ready? Create the assignment and ThinkWAVE will take care of the rest.</p></ThinkBotTutorial>}
+    {editing && <ScheduleEditor c={c} form={form} setForm={setForm} onClose={() => setEditing(false)} onApply={() => tutorialStage === "assign_schedule" && onTutorialStage?.("assign_class")} />}
+    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={form.classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setForm((current) => ({ ...current, classId: id })); setPickerOpen(false); if (tutorialStage === "assign_class") onTutorialStage?.("assign_background"); }} />}
   </form></div>;
 }
 
-function ScheduleEditor({ c, form, setForm, onClose }) {
+function ScheduleEditor({ c, form, setForm, onClose, onApply }) {
   const startDefault = parseScheduleDate(form.availableFrom, new Date());
   const endDefault = parseScheduleDate(form.availableUntil, addDaysAtNoon(startDefault, 3));
   const [draft, setDraft] = useState({ availableFrom: toLocalDateTimeValue(startDefault), availableUntil: toLocalDateTimeValue(endDefault) });
-  const [activeField, setActiveField] = useState("availableUntil");
-  const [viewDate, setViewDate] = useState(() => new Date(parseScheduleDate(form.availableUntil, endDefault).getFullYear(), parseScheduleDate(form.availableUntil, endDefault).getMonth(), 1));
+  const [activeField, setActiveField] = useState("availableFrom");
+  const [viewDate, setViewDate] = useState(() => new Date(startDefault.getFullYear(), startDefault.getMonth(), 1));
   const activeDate = parseScheduleDate(draft[activeField], activeField === "availableFrom" ? startDefault : endDefault);
   const days = buildCalendarDays(viewDate);
   const timeOptions = buildTimeOptions();
@@ -436,11 +534,11 @@ function ScheduleEditor({ c, form, setForm, onClose }) {
 
   function setDatePart(day) { const next = new Date(activeDate); next.setFullYear(viewDate.getFullYear(), viewDate.getMonth(), day); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
   function setTimePart(value) { const [hour, minute] = value.split(":").map(Number); const next = new Date(activeDate); next.setHours(hour, minute, 0, 0); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
-  function apply() { const from = parseScheduleDate(draft.availableFrom, startDefault); let until = parseScheduleDate(draft.availableUntil, endDefault); if (until <= from) until = new Date(from.getTime() + 3600000); setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) })); onClose(); }
+  function apply() { const from = parseScheduleDate(draft.availableFrom, startDefault); let until = parseScheduleDate(draft.availableUntil, endDefault); if (until <= from) until = new Date(from.getTime() + 3600000); setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) })); onClose(); onApply?.(); }
 
   const selectedTime = minutesToTimeValue(activeDate.getHours() * 60 + activeDate.getMinutes());
-  return <div style={calendarOverlay(c)}>
-    <div style={{ width: "min(94vw, 440px)", background: c.cardBg, color: c.text, borderRadius: 12, boxShadow: "0 24px 60px rgba(0,0,0,.28)", overflow: "hidden" }}>
+  return <div style={calendarOverlay(c)} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
+    <div role="dialog" aria-modal="true" style={{ width: "min(94vw, 440px)", background: solidModalBg(c), color: c.text, borderRadius: 12, boxShadow: "0 24px 60px rgba(0,0,0,.28)", overflow: "hidden" }}>
       <div style={{ padding: "22px 20px 12px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14 }}><div style={{ fontWeight: 900, fontSize: 22 }}>{viewDate.toLocaleString([], { month: "long", year: "numeric" })}</div><div style={{ display: "flex", gap: 8 }}><button type="button" onClick={() => setViewDate((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))} style={calendarNavBtn(c)}>‹</button><button type="button" onClick={() => setViewDate((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))} style={calendarNavBtn(c)}>›</button></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}><button type="button" onClick={() => setActiveField("availableFrom")} style={segmentBtn(c, activeField === "availableFrom")}>Start<br/><small>{formatSchedule(draft.availableFrom)}</small></button><button type="button" onClick={() => setActiveField("availableUntil")} style={segmentBtn(c, activeField === "availableUntil")}>End<br/><small>{formatSchedule(draft.availableUntil)}</small></button></div>
@@ -465,6 +563,7 @@ function calendarDayBtn(c, selected, blank) { return { height: 42, borderRadius:
 function segmentBtn(c, active) { return { border: `1px solid ${active ? c.accent : c.border}`, background: active ? `${c.accent}18` : c.cardBg2, color: active ? c.accent : c.text, borderRadius: 12, padding: "10px 12px", textAlign: "left", fontWeight: 900, cursor: "pointer", lineHeight: 1.35 }; }
 function calendarOverlay(c) { return { position: "fixed", inset: 0, zIndex: 9500, display: "grid", placeItems: "center", background: "rgba(15,23,42,.38)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", padding: 20 }; }
 function formatSchedule(value) { if (!value) return "Not set"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
+function solidModalBg(c) { return String(c.text || "").toLowerCase() === "#eef4ff" ? "#07142b" : "#fffaf0"; }
 function menuBtn(c) { return { width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 700, cursor: "pointer" }; }
 function inputStyle(c) { return { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }; }
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "grid", placeItems: "center", padding: 20, zIndex: 9000, isolation: "isolate" };

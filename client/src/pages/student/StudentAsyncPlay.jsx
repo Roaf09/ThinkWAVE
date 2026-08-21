@@ -2,7 +2,7 @@
  * client/src/pages/student/StudentAsyncPlay.jsx
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
@@ -69,22 +69,26 @@ export default function StudentAsyncPlay() {
   const [submittingUi,setSubmittingUi]=useState(false);
   const [feedback,setFeedback]=useState(null);
   const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
+  const transientTimersRef=useRef(new Set());
+  const mountedRef=useRef(true);
+  const scheduleTransient=useCallback((callback,delayMs)=>{const timer=setTimeout(()=>{transientTimersRef.current.delete(timer);if(mountedRef.current)callback();},delayMs);transientTimersRef.current.add(timer);return timer;},[]);
+  useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;for(const timer of transientTimersRef.current)clearTimeout(timer);transientTimersRef.current.clear();};},[]);
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
   const cardBg = dark ? "#0e1733" : "#ffffff";
   const cardBor = dark ? "#1e2d55" : "#c7d2fe";
   const textC = dark ? "#e7e9ee" : "#0f172a";
   const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
-  const selectedBackground = getSessionBackground(quiz?.background_key);
-  const assignmentBgStyle = selectedBackground
+  const selectedBackground = useMemo(() => getSessionBackground(quiz?.background_key), [quiz?.background_key]);
+  const assignmentBgStyle = useMemo(() => selectedBackground
     ? {
         backgroundImage: `url("${selectedBackground.src}")`,
         backgroundColor: pageBg,
         backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundAttachment: "fixed",
+        backgroundAttachment: "scroll",
       }
-    : { background: pageBg };
+    : { background: pageBg }, [selectedBackground, pageBg]);
 
   useEffect(() => {
     let alive = true;
@@ -157,10 +161,11 @@ export default function StudentAsyncPlay() {
       setRemainingSec(0);
       setSubmittingUi(true);
       const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{answers:payload});
-      await new Promise(resolve=>setTimeout(resolve,2000));
+      await new Promise(resolve=>scheduleTransient(resolve,2000));
+      if(!mountedRef.current)return data;
       setResult(data);soundManager.play("correct").catch(()=>{});return data;
     }catch(err){setMsg(err?.response?.data?.message||"Submit failed.");soundManager.play("wrong").catch(()=>{});return null;}
-    finally{setSubmittingUi(false);submittingRef.current=false;}
+    finally{if(mountedRef.current)setSubmittingUi(false);submittingRef.current=false;}
   }
 
   useEffect(()=>{
@@ -184,7 +189,7 @@ export default function StudentAsyncPlay() {
       feedbackData=response.data;
       setFeedback(asyncFeedbackCopy(feedbackData));
       void soundManager.play(feedbackData?.isCorrect?"correct":"wrong");
-      setTimeout(()=>setFeedback(null),1500);
+      scheduleTransient(()=>setFeedback(null),1500);
     }catch(err){
       setMsg(err?.response?.data?.message||"Could not check this answer.");
       return;
@@ -197,7 +202,7 @@ export default function StudentAsyncPlay() {
     if(activeIsLast){
       const allReady=questions.every((item,itemIndex)=>itemIndex===idx||hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]);
       if(!allReady){setMsg("Complete every question before submitting the assignment.");return;}
-      await new Promise(resolve=>setTimeout(resolve,1500));
+      await new Promise(resolve=>scheduleTransient(resolve,1500));
       await submitAssignment({completedOverride:completed});
     }
   }
@@ -340,7 +345,7 @@ function MatchingTemplate({ q, cfg, value, onChange, disabled }) {
     const pairs = Object.entries(nextMap).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })).sort((a, b) => a.aIndex - b.aIndex);
     onChange({ ...(value || {}), pairs });
   }
-  return <MatchingConnectorGame config={cfg} valueMap={map} onChange={updateMap} disabled={disabled} questionKey={q?.id || q?.prompt || "assigned-matching"} />;
+  return <MatchingConnectorGame config={cfg} valueMap={map} onChange={updateMap} disabled={disabled} questionKey={`${q?.id || q?.prompt || "assigned-matching"}:${cfg?.shuffleSeed || "assigned"}`} />;
 }
 function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
@@ -364,6 +369,12 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   const wordBank = resolveThinkSpellWordBank({ config: cfg, correct: {} });
   const sig = buildThinkSpellSignature({ questionId, gridSize, words: wordBank });
   const draggingRef = useRef(false);
+  const gridShellRef = useRef(null);
+  const pointerIdRef = useRef(null);
+  const moveFrameRef = useRef(0);
+  const pendingPointRef = useRef(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
   useEffect(() => {
     if (value?.mode === "wordhunt-batch" && value.sig === sig && Array.isArray(value.grid) && value.grid.length) return;
     const initial = loadThinkSpellGridState({ config: cfg, correct: {}, questionId, priorPayload: null });
@@ -379,32 +390,61 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   const foundPathSet = new Set(foundEntries.flatMap((entry) => Array.isArray(entry.path) ? entry.path.map(Number) : []));
   const built = selected.map((cell) => grid[cell] || "").join("");
   const cellGap = 8;
-  function patch(next) { onChange({ ...value, ...next }); }
+  function patch(next) {
+    const merged = { ...(valueRef.current || {}), ...next };
+    valueRef.current = merged;
+    onChange(merged);
+  }
   function addIndex(cell) {
-    if (disabled || !grid[cell] || selectedSet.has(cell)) return;
-    if (!selected.length) return patch({ selected: [cell], built: String(grid[cell] || "") });
-    const last = selected[selected.length - 1];
+    if (disabled || !grid[cell]) return;
+    const currentSelected = Array.isArray(valueRef.current?.selected) ? valueRef.current.selected : [];
+    if (currentSelected.includes(cell)) return;
+    if (!currentSelected.length) return patch({ selected: [cell], built: String(grid[cell] || "") });
+    const last = currentSelected[currentSelected.length - 1];
     if (!isAdjacentSelection(last, cell, activeGridSize)) return;
-    const nextSelected = [...selected, cell];
+    const nextSelected = [...currentSelected, cell];
     if (!isStraightLinePath(nextSelected, activeGridSize)) return;
     patch({ selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") });
   }
   function finishSelection() {
+    const pointerId = pointerIdRef.current;
+    if (pointerId !== null && gridShellRef.current?.hasPointerCapture?.(pointerId)) {
+      try { gridShellRef.current.releasePointerCapture(pointerId); } catch {}
+    }
+    pointerIdRef.current = null;
     draggingRef.current = false;
-    const text = selected.map((cell) => grid[cell] || "").join("");
+    const path = Array.isArray(valueRef.current?.selected) ? [...valueRef.current.selected] : [];
+    const text = path.map((cell) => grid[cell] || "").join("");
     const matchedKey = matchThinkSpellWord(text, wordBank);
-    const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path: selected, word: text });
-    if (matchedKey && pathValid && !foundSet.has(matchedKey)) {
-      const nextFound = [...foundEntries, { text, path: selected }];
+    const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path, word: text });
+    const latestFound = Array.isArray(valueRef.current?.foundEntries) ? valueRef.current.foundEntries : [];
+    const latestFoundSet = new Set(latestFound.map((entry) => normalizeThinkWordKey(entry.text || entry.word || "")));
+    if (matchedKey && pathValid && !latestFoundSet.has(matchedKey)) {
+      const nextFound = [...latestFound, { text, path }];
       return patch({ foundEntries: nextFound, words: nextFound, selected: [], built: "" });
     }
     patch({ selected: [], built: "" });
   }
-  function handleGridPointerMove(e) { if (!draggingRef.current || disabled) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-bword-index]"); if (target) addIndex(Number(target.dataset.bwordIndex)); }
+  function handleGridPointerMove(e) {
+    if (!draggingRef.current || disabled) return;
+    pendingPointRef.current = { x: e.clientX, y: e.clientY };
+    if (moveFrameRef.current) return;
+    moveFrameRef.current = requestAnimationFrame(() => {
+      moveFrameRef.current = 0;
+      const point = pendingPointRef.current;
+      if (!point || !draggingRef.current) return;
+      const target = document.elementFromPoint(point.x, point.y)?.closest?.("[data-bword-index]");
+      if (target) addIndex(Number(target.dataset.bwordIndex));
+    });
+  }
+  useEffect(() => () => {
+    if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
+  }, []);
+
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
   const foundLines = foundEntries
     .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
     .filter((points) => points.length > 1);
   const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} onPointerUp={finishSelection} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found:</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
+  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div ref={gridShellRef} className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerUp={finishSelection} onPointerCancel={finishSelection}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); pointerIdRef.current = e.pointerId; gridShellRef.current?.setPointerCapture?.(e.pointerId); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found:</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
 }

@@ -10,6 +10,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
+import ThemeIconButton from "../components/ThemeIconButton";
 
 function passwordChecks(p) {
   return {
@@ -20,6 +21,8 @@ function passwordChecks(p) {
     special: /[^A-Za-z0-9]/.test(p),
   };
 }
+
+const onlyLetters = (value) => value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿÑñ\s]/g, "");
 
 const REQ_LABELS = {
   length: "At least 8 characters",
@@ -88,7 +91,7 @@ export default function Register() {
       const label = data.role === "ADMIN" ? "Administrator" : "Teacher";
       const mode = data.role === "ADMIN" ? "admin" : "teacher";
       const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
-      setError(`✓ Registered as ${label}. ${otpNote}`);
+      setError(data.resumedVerification ? `✓ Verification resumed for ${label}. ${otpNote}` : `✓ Registered as ${label}. ${otpNote}`);
       setTimeout(() => nav(`/verify?mode=${mode}`, { state: { email: form.email, loginMode: mode } }), data.emailSent ? 850 : 2600);
     } catch (err) {
       setError(err?.response?.data?.message || "Registration failed.");
@@ -102,16 +105,16 @@ export default function Register() {
     : { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#f87171" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" };
 
   if (isAdminReg && inviteState !== "valid") return (
-    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper/><main style={s.main}><div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
+    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper hideTheme/><main style={s.main}><div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c, dark)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main><ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} /></div>
   );
 
   return (
     <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact hideSuper />
+      <PublicHeader compact hideSuper hideTheme />
 
       <main style={s.main}>
-        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}>
+        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c, dark)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminReg ? "Create your admin account" : "Create your account"}</h1>
             <p style={s.subtitle(c)}>
@@ -124,11 +127,11 @@ export default function Register() {
               <div style={s.row}>
                 <div style={s.field}>
                   <label style={s.label(c)}>First name</label>
-                  <input style={s.input(c)} value={form.firstName} onChange={(e) => set({ firstName: e.target.value })} placeholder="Juan" required />
+                  <input style={s.input(c)} value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required />
                 </div>
                 <div style={s.field}>
                   <label style={s.label(c)}>Last name</label>
-                  <input style={s.input(c)} value={form.lastName} onChange={(e) => set({ lastName: e.target.value })} placeholder="Dela Cruz" required />
+                  <input style={s.input(c)} value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required />
                 </div>
               </div>
 
@@ -199,13 +202,14 @@ export default function Register() {
               <div style={s.strengthBar(c)}>
                 <div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} />
               </div>
-              <div style={s.strengthText(c)}>
+              <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>
                 {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
               </div>
             </div>
           </div>
         </div>
       </main>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }
@@ -221,7 +225,7 @@ const s = {
   themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
   headerBtn: (c) => ({ padding: "8px 20px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, color: c.text, fontSize: 13, fontWeight: 700, textDecoration: "none" }),
   main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "36px 20px", zIndex: 1 },
-  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "40px 44px 36px", width: "min(100%,800px)", boxShadow: "0 24px 80px rgba(0,0,0,0.32)" }),
+  card: (c, dark) => ({ background: dark ? "#17243d" : c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "40px 44px 36px", width: "min(100%,800px)", boxShadow: "0 24px 80px rgba(0,0,0,0.32)" }),
   cardTop: { marginBottom: 28, textAlign: "center" },
   title: (c) => ({ margin: "0 0 8px", fontSize: 26, fontWeight: 900, letterSpacing: "-0.5px", color: c.text }),
   subtitle: (c) => ({ margin: 0, fontSize: 14, color: c.textMuted, lineHeight: 1.6 }),

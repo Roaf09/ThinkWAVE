@@ -11,6 +11,7 @@ import { IconBubble, TwIcon } from "../../../components/TwUI";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateTone, templateCardChrome } from "../../../lib/templatePalette";
 import { TeacherPressButton } from "../TeacherUI";
+import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 
 const ALL_TEMPLATES = [
   { value: "MCQ", label: "Multiple Choice", icon: "mcq", tone: "blue" },
@@ -18,7 +19,7 @@ const ALL_TEMPLATES = [
   { value: "TYPE_ANSWER", label: "Identification", icon: "identification", tone: "purple" },
   { value: "MATCHING", label: "Matching", icon: "matching", tone: "orange" },
   { value: "GUESS_WORD_4PICS", label: "Guess Word", icon: "image", tone: "green" },
-  { value: "THINK_SPELL", label: "Think and Spell", icon: "spell", tone: "purple" },
+  { value: "THINK_SPELL", label: "Crossword", icon: "spell", tone: "purple" },
 ];
 
 
@@ -31,14 +32,30 @@ const card = (c, extra = {}) => ({
   ...extra,
 });
 
-export default function CreateTab({ setActiveTab, guestMode = false }) {
+export default function CreateTab({ setActiveTab, guestMode = false, tutorial }) {
   const navigate = useNavigate();
   const c = useColors();
   const { dark } = useTheme();
   const [recentQuizzes, setRecentQuizzes] = useState([]);
-  const [form, setForm] = useState({ title: "", category: "K12", templateType: "MCQ", classId: null });
+  const [form, setForm] = useState({ title: "", category: "", templateType: "", classId: null });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (tutorial?.stage !== "create_intro_delay") return undefined;
+    const timer = window.setTimeout(() => tutorial?.setStage?.("create_intro"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [tutorial?.stage]);
+
+  const tutorialTitleHasText = !!form.title.trim();
+
+  useEffect(() => {
+    if (tutorial?.stage !== "create_title" || !tutorialTitleHasText) return undefined;
+    // Start this timer when the teacher first begins typing. Continuing to edit the
+    // title does not restart it; the teacher chooses when to proceed with Done.
+    const timer = window.setTimeout(() => tutorial?.setStage?.("create_title_done"), 3000);
+    return () => window.clearTimeout(timer);
+  }, [tutorial?.stage, tutorialTitleHasText]);
 
   useEffect(() => {
     let ignore = false;
@@ -64,6 +81,9 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setMsg("");
+    if (!form.title.trim()) return setMsg("Add a quiz title first.");
+    if (!form.category) return setMsg("Select K-12 or College.");
+    if (!form.templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
@@ -76,6 +96,7 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
         availableFrom: null,
         availableUntil: null,
       });
+      if (!guestMode && tutorial?.stage === "create_open_builder") tutorial.setStage?.("builder_pending", { tutorialTemplateType: form.templateType });
       navigate(guestMode ? `/guest/quizzes/${data.id}/builder` : `/teacher/quizzes/${data.id}/builder`);
     } catch (err) {
       setMsg(err?.response?.data?.message || "Failed to create quiz.");
@@ -91,24 +112,24 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>
         <div>
           <label style={labelStyle(c)}>Quiz Title</label>
-          <input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required style={{ ...inputStyle(c), fontWeight: 850, letterSpacing: ".04em" }} />
+          <input data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required style={{ ...inputStyle(c), fontWeight: 850, letterSpacing: ".04em" }} />
         </div>
 
-        <div>
+        <div data-tutorial="create-category" className="tw-create-category-tutorial-target" style={{ borderRadius: 16, display: "inline-grid", width: "min(100%, 560px)" }}>
           <label style={labelStyle(c)}>Category</label>
           <div style={{ display: "flex", gap: 10, maxWidth: 560 }}>
-            {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => patch({ category: cat })} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
+            {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => { patch({ category: cat }); if (tutorial?.stage === "create_choose_category") tutorial.setStage?.("create_choose_template"); }} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
           </div>
         </div>
 
-        <div>
-          <label style={labelStyle(c)}>Question Template</label>
+        <div data-tutorial="create-template-section" className="tw-create-template-tutorial-target">
+          <label style={labelStyle(c)}>Quiz Template</label>
           <div className="tw-teacher-template-grid">
             {ALL_TEMPLATES.map((template) => {
               const active = form.templateType === template.value;
               const tone = templateTone(template.value, c, active);
               const ink = templateInk(template.value, dark);
-              return <button key={template.value} type="button" className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => patch({ templateType: template.value })} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
+              return <button key={template.value} type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
                 <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
               </button>;
             })}
@@ -116,7 +137,7 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
         </div>
 
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-        <TeacherPressButton type="submit" tone="blue" disabled={saving} className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
+        <TeacherPressButton type="submit" tone="blue" disabled={saving} data-tutorial="create-open-builder" className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
       </form>
     </section>
 
@@ -132,6 +153,14 @@ export default function CreateTab({ setActiveTab, guestMode = false }) {
         })}
       </div>
     </section>
+
+    {!guestMode && tutorial?.stage === "create_intro_delay" && <ThinkBotTutorial />}
+    {!guestMode && tutorial?.stage === "create_intro" && <ThinkBotTutorial placement="center" dialogWidth={430} dragKey="create-intro-dialog" clickAnywhere onClickAnywhere={() => tutorial?.setStage?.("create_intro_details")}><p>Now that your class is ready, let’s create something for them to play.</p></ThinkBotTutorial>}
+    {!guestMode && tutorial?.stage === "create_intro_details" && <ThinkBotTutorial placement="center" dialogWidth={430} dragKey="create-intro-dialog" actionLabel="Okay!" actionDelay={2000} onAction={() => tutorial?.setStage?.("create_title")}><p>Templates control how your activity looks and how students interact with it.</p></ThinkBotTutorial>}
+    {!guestMode && ["create_title", "create_title_done"].includes(tutorial?.stage) && <ThinkBotTutorial target='[data-tutorial="create-title"]' placement="right" dialogWidth={300} dragKey="create-title-dialog" highlightMode="target" allowTargetInteraction={true} className="tw-tutorial-done-avatar-clear" reserveActionSpace actionLabel={tutorial?.stage === "create_title_done" ? "Done" : undefined} onAction={() => tutorial?.setStage?.("create_choose_category")}><p>First, add a quiz title.</p></ThinkBotTutorial>}
+    {!guestMode && tutorial?.stage === "create_choose_category" && <ThinkBotTutorial target='[data-tutorial="create-category"]' placement="right" dialogWidth={360} highlightMode="spotlight" highlightPadding={14} className="tw-tutorial-create-focus"><p>Second, select the category of the class you are handling.</p></ThinkBotTutorial>}
+    {!guestMode && tutorial?.stage === "create_choose_template" && <ThinkBotTutorial target='[data-tutorial="create-template-section"]' placement="above" dialogWidth={440} highlightMode="spotlight" highlightPadding={14} className="tw-tutorial-create-focus"><p>Each template offers a different kind of experience. Choose whichever one fits the activity you want to make.</p></ThinkBotTutorial>}
+    {!guestMode && tutorial?.stage === "create_open_builder" && <ThinkBotTutorial target='[data-tutorial="create-open-builder"]' placement="above" className="tw-tutorial-bob-down tw-tutorial-template-selected" highlightMode="target"><p>Your template is selected. Create it and open the builder to start adding questions.</p></ThinkBotTutorial>}
   </div>;
 }
 

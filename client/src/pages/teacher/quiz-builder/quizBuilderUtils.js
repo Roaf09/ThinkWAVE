@@ -92,14 +92,15 @@ export async function compressImageFile(file) {
 export function defaultConfig(t, c) {
   switch (normalizeTemplateType(t)) {
     case "MCQ":
-      return { options: defaultMcqOptions(c), promptImage: "", showPromptImage: false, mcqMode: "NORMAL", voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
+      return { options: defaultMcqOptions(c), explanation: "", promptImage: "", showPromptImage: false, mcqMode: "NORMAL", voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "TRUE_FALSE":
-      return { options: ["True", "False"], promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
+      return { options: ["True", "False"], explanation: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "MATCHING":
       return {
         colA: [{ text: "", image: "" }],
         colB: [{ text: "", image: "" }],
         dummyB: [],
+        matchingImagesEnabled: false,
         promptImage: "",
         showPromptImage: false,
         voiceRecord: false,
@@ -108,11 +109,11 @@ export function defaultConfig(t, c) {
         voiceAnswers: [],
       };
     case "GUESS_WORD_4PICS":
-      return { images: ["", "", "", ""], dummyLetters: 6, target: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
+      return { images: ["", "", "", ""], dummyLetters: 6, target: "", explanation: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "THINK_SPELL":
       return { gridSize: 5, answers: [], gridSeed: 1, gridFilled: false, promptImage: "", showPromptImage: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0, showWordList: true, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "TYPE_ANSWER":
-      return { promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
+      return { explanation: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     default:
       return {};
   }
@@ -262,15 +263,18 @@ export function validateQuestion(q, templateType) {
     if (!correctChoices.length || correctChoices.some((choice) => !opts.some((opt) => choiceMatchesValue(opt, choice)))) issues.push("correct answer is not selected");
     if (cfg.answerMode === "TWO" && correctChoices.length !== 2) issues.push("two-answer mode needs exactly 2 correct answers");
     if (hasDuplicateRows(opts)) issues.push("choices must be unique — remove duplicate options");
+    if (correctChoices.length && !trimText(cfg.explanation)) issues.push("explanation for the correct answer is required");
   }
 
   if (tt === "TRUE_FALSE") {
     if (!trimText(cor.choice)) issues.push("correct answer is not selected");
+    if (trimText(cor.choice) && !trimText(cfg.explanation)) issues.push("explanation for the correct answer is required");
   }
 
   if (["TYPE_ANSWER", "DRAW_IT", "GRIP_GUESS"].includes(tt)) {
     if (!trimText(cor.text)) issues.push("correct answer is empty");
     if (trimText(cor.text).length > 255) issues.push("answer must be 255 characters or fewer");
+    if (tt === "TYPE_ANSWER" && trimText(cor.text) && !trimText(cfg.explanation)) issues.push("explanation for the correct answer is required");
   }
 
   if (tt === "THINK_SPELL") {
@@ -309,8 +313,9 @@ export function validateQuestion(q, templateType) {
     if (!word) issues.push("correct word is empty");
     if (word.length > 255) issues.push("correct word must be 255 characters or fewer");
     if (!/^[A-Za-z0-9\s-]+$/.test(word)) issues.push("correct word should use letters only (spaces allowed)");
+    if (word && !trimText(cfg.explanation)) issues.push("explanation for the correct answer is required");
     const dummy = Number(cfg.dummyLetters ?? 6);
-    if (!Number.isFinite(dummy) || dummy < 0 || dummy > 12) issues.push("extra letter count must be between 0 and 12");
+    if (!Number.isFinite(dummy) || dummy < 0 || dummy > 12) issues.push("distractor letter count must be between 0 and 12");
   }
 
   if (tt === "MATCHING") {

@@ -13,6 +13,8 @@ import { TwIcon } from "../../../components/TwUI";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../../templates/thinkspell/thinkSpell";
+import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
+import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -62,7 +64,7 @@ const btn = (c, primary = false) => ({
   cursor: "pointer",
 });
 
-export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
+export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }) {
   const [view, setView] = useState("quiz");
   const [quizzes, setQuizzes] = useState([]);
   const [questions, setQuestions] = useState([]);
@@ -72,6 +74,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
+  const [bankTutorialStage, setBankTutorialStage] = useState(null);
   const c = useColors();
   const { dark } = useTheme();
 
@@ -101,6 +104,24 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setBankLabel?.(view === "quiz" ? "Quiz Bank" : "Question Bank"); }, [view, setBankLabel]);
+
+  useEffect(() => {
+    if (loading || !tutorial?.userId || bankTutorialStage) return;
+    if (!(quizBankItems.length || questions.length)) return;
+    if (readTutorialState(tutorial.userId).bankTutorialSeen) return;
+    setBankTutorialStage("intro");
+  }, [loading, tutorial?.userId, quizBankItems.length, questions.length, bankTutorialStage]);
+
+
+  function finishBankTutorial() {
+    if (tutorial?.userId) writeTutorialState(tutorial.userId, { bankTutorialSeen: true });
+    setBankTutorialStage(null);
+  }
+
+  function openQuestionBank() {
+    setView("question");
+    if (bankTutorialStage === "switch") setBankTutorialStage("question");
+  }
 
   async function deleteQuiz(quiz) {
     try {
@@ -173,7 +194,7 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
         <section style={card(c, { padding: 12 })}>
           <div className="tw-teacher-bank-toggle">
             <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected is-muted-selected' : ''} disabled={view === 'quiz'} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
-            <TeacherPressButton tone="blue" className={view === 'question' ? 'is-selected is-muted-selected' : ''} disabled={view === 'question'} onClick={() => setView('question')}>Question Bank</TeacherPressButton>
+            <TeacherPressButton data-tutorial="bank-question-toggle" tone="blue" className={view === 'question' ? 'is-selected is-muted-selected' : ''} disabled={view === 'question'} onClick={openQuestionBank}>Question Bank</TeacherPressButton>
           </div>
         </section>
 
@@ -210,6 +231,11 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab }) {
       {modal?.type === 'deleteQuiz' && <TeacherActionModal c={c} tone='red' icon='trash' title='Delete quiz from Quiz Bank?' message={`${modal.quiz.title} will be permanently removed.`} confirmLabel='Delete' textCancel onClose={() => setModal(null)} onConfirm={() => deleteQuiz(modal.quiz)} />}
       {modal?.type === 'reuseQuiz' && <TeacherActionModal c={c} tone='blue' icon='history' title='Send quiz back to Live Sessions?' message={`${modal.quiz.title} will return to Live Sessions. You can choose its class when hosting or assigning it.`} confirmLabel='Reuse Quiz' textCancel onClose={() => setModal(null)} onConfirm={() => reuseQuiz(modal.quiz)} />}
       {modal?.type === 'deleteQuestion' && <TeacherActionModal c={c} tone='red' icon='trash' title='Remove question?' message='This saved question will be removed from the question bank.' confirmLabel='Remove question' textCancel onClose={() => setModal(null)} onConfirm={() => removeQuestion(modal.question.id)} />}
+      {bankTutorialStage === "intro" && <ThinkBotTutorial clickAnywhere onClickAnywhere={() => setBankTutorialStage(quizBankItems.length ? "quiz" : "switch")}><p>Looks like you’ve started building your content! Let me show you where ThinkWAVE keeps everything you save.</p></ThinkBotTutorial>}
+      {bankTutorialStage === "quiz" && <ThinkBotTutorial target='[data-tutorial="bank-quiz-card"]' actionLabel="Got it" onAction={() => setBankTutorialStage("switch")}><p>Your <strong>Quiz Bank</strong> keeps your saved quizzes ready to reuse.</p><p>Open a saved quiz to review it, reuse it, or make changes without starting from scratch.</p></ThinkBotTutorial>}
+      {bankTutorialStage === "switch" && <ThinkBotTutorial target='[data-tutorial="bank-question-toggle"]' clickAnywhere allowTargetInteraction={false} onClickAnywhere={openQuestionBank}><p>Open your <strong>Question Bank</strong> to see saved individual questions.</p></ThinkBotTutorial>}
+      {bankTutorialStage === "question" && <ThinkBotTutorial target='[data-tutorial="bank-question-toggle"]' clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => setBankTutorialStage("question_more")}><p>Your <strong>Question Bank</strong> works the same way for individual questions.</p></ThinkBotTutorial>}
+      {bankTutorialStage === "question_more" && <ThinkBotTutorial target='[data-tutorial="bank-question-toggle"]' actionLabel="Got it" onAction={finishBankTutorial}><p>Your <strong>Question Bank</strong> works the same way for individual questions.</p><p>Reusing questions can make building future activities much faster.</p></ThinkBotTutorial>}
     </>
   );
 }
@@ -227,7 +253,7 @@ function QuizBankCard({ quiz, onPreview, onDelete, onReuse, c }) {
     return () => document.removeEventListener("pointerdown", close);
   }, [moreOpen, quiz.id]);
   return (
-    <div className="tw-bank-content-card tw-bank-quiz-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})` }}>
+    <div className="tw-bank-content-card tw-bank-quiz-card" data-tutorial="bank-quiz-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})` }}>
       <div className="tw-bank-card-main">
         <div className="tw-bank-card-title" style={{ color: c.text }}>{quiz.title}</div>
         <div className="tw-bank-card-badges">

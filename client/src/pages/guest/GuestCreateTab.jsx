@@ -13,14 +13,14 @@ const TEMPLATES = [
   { value: "TYPE_ANSWER", label: "Identification", icon: "identification" },
   { value: "MATCHING", label: "Matching", icon: "matching" },
   { value: "GUESS_WORD_4PICS", label: "Guess Word", icon: "image" },
-  { value: "THINK_SPELL", label: "Think and Spell", icon: "spell" },
+  { value: "THINK_SPELL", label: "Crossword", icon: "spell" },
 ];
 
 export default function GuestCreateTab() {
   const navigate = useNavigate();
   const c = useColors();
   const { dark } = useTheme();
-  const [form, setForm] = useState({ title: "", templateType: "MCQ" });
+  const [form, setForm] = useState({ title: "", templateType: "" });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -28,6 +28,7 @@ export default function GuestCreateTab() {
     event.preventDefault();
     setMsg("");
     if (!form.title.trim()) return setMsg("Enter a quiz title.");
+    if (!form.templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
@@ -58,7 +59,7 @@ export default function GuestCreateTab() {
           <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" style={input(c)} />
         </div>
         <div>
-          <label style={label(c)}>Question Template</label>
+          <label style={label(c)}>Quiz Template</label>
           <div className="tw-teacher-template-grid">
             {TEMPLATES.map((template) => {
               const active = form.templateType === template.value;

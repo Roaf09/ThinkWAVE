@@ -26,3 +26,19 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ message: "Invalid token" });
   }
 }
+
+export async function optionalAuth(req, _res, next) {
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET);
+    const [[user]] = await pool.query(
+      `SELECT id, role, is_active, deleted_at, token_version FROM users WHERE id=:id LIMIT 1`,
+      { id: payload.sub }
+    );
+    if (user && user.is_active && !user.deleted_at && user.role === payload.role && Number(payload.ver || 0) === Number(user.token_version || 0)) {
+      req.user = payload;
+    }
+  } catch {}
+  next();
+}

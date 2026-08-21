@@ -66,7 +66,7 @@ export function validateBasicQuestionPayload(templateType, questions = []) {
     }
     if (template === "THINK_SPELL") {
       const words = Array.isArray(config.answers) ? config.answers.filter(Boolean).length : 0;
-      if (words > 4) return "Basic plan Think and Spell supports up to 4 valid words per batch.";
+      if (words > 4) return "Basic plan Crossword supports up to 4 valid words per batch.";
     }
   }
   return null;

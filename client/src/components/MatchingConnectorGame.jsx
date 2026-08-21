@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 
 function seededOrder(length, enabled, seedText) {
   const values = Array.from({ length }, (_, index) => index);
@@ -22,7 +22,7 @@ function textOf(item, fallback) {
   return value || (!item?.image ? fallback : "");
 }
 
-export default function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled = false, questionKey = "matching" }) {
+function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled = false, questionKey = "matching" }) {
   const colA = Array.isArray(config.colA) ? config.colA : [];
   const pairedB = Array.isArray(config.colB) ? config.colB : [];
   const dummyB = Array.isArray(config.dummyB) ? config.dummyB : [];
@@ -34,6 +34,9 @@ export default function MatchingConnectorGame({ config = {}, valueMap = {}, onCh
   const [active, setActive] = useState(null);
   const [cursor, setCursor] = useState(null);
   const [lineVersion, setLineVersion] = useState(0);
+  const moveFrameRef = useRef(0);
+  const pendingCursorRef = useRef(null);
+  const layoutFrameRef = useRef(0);
 
   useEffect(() => {
     setActive(null);
@@ -41,15 +44,23 @@ export default function MatchingConnectorGame({ config = {}, valueMap = {}, onCh
   }, [questionKey]);
 
   useEffect(() => {
-    const update = () => setLineVersion((value) => value + 1);
+    const update = () => {
+      if (layoutFrameRef.current) return;
+      layoutFrameRef.current = requestAnimationFrame(() => {
+        layoutFrameRef.current = 0;
+        setLineVersion((value) => value + 1);
+      });
+    };
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     if (wrapperRef.current && observer) observer.observe(wrapperRef.current);
-    window.addEventListener("resize", update);
+    window.addEventListener("resize", update, { passive: true });
     window.addEventListener("scroll", update, true);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      if (layoutFrameRef.current) cancelAnimationFrame(layoutFrameRef.current);
+      if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
     };
   }, []);
 
@@ -114,7 +125,12 @@ export default function MatchingConnectorGame({ config = {}, valueMap = {}, onCh
   function handlePointerMove(event) {
     if (!active || !wrapperRef.current) return;
     const rect = wrapperRef.current.getBoundingClientRect();
-    setCursor({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    pendingCursorRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    if (moveFrameRef.current) return;
+    moveFrameRef.current = requestAnimationFrame(() => {
+      moveFrameRef.current = 0;
+      if (pendingCursorRef.current) setCursor(pendingCursorRef.current);
+    });
   }
 
   const lines = Object.entries(valueMap || {}).map(([aIndex, bIndex]) => {
@@ -166,3 +182,6 @@ export default function MatchingConnectorGame({ config = {}, valueMap = {}, onCh
     </div>
   );
 }
+
+
+export default memo(MatchingConnectorGame);

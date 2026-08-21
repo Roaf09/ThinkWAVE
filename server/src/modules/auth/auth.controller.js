@@ -18,8 +18,8 @@ function otpClientPayload(otpResult) {
   const sent = !!otpResult?.delivery?.sent;
   const payload = { emailSent: sent };
   if (!sent) {
-    payload.deliveryWarning = otpResult?.delivery?.reason === "SMTP_NOT_CONFIGURED"
-      ? "Email delivery is not configured on the server. Configure Gmail/SMTP in server/.env to receive OTP emails."
+    payload.deliveryWarning = otpResult?.delivery?.reason === "EMAIL_NOT_CONFIGURED"
+      ? "Email delivery is not configured. Add your SMTP settings to server/.env for localhost."
       : "The OTP email could not be sent. Check the server email settings and logs.";
   }
   return payload;
@@ -34,7 +34,7 @@ function normalizeEmail(e) { return String(e || "").trim().toLowerCase(); }
 // - regular registrations default to TEACHER
 export async function register(req, res) {
   const { email, password, firstName, lastName, role: requestedRole, bootstrapSecret, adminInviteToken } = req.body;
-  const cleanEmail   = normalizeEmail(email);
+  const cleanEmail = normalizeEmail(email);
   const passwordHash = await bcrypt.hash(password, 12);
 
   try {
@@ -63,6 +63,41 @@ export async function register(req, res) {
       role = "STUDENT"; approvalStatus = "APPROVED";
     } else {
       role = "TEACHER"; approvalStatus = "APPROVED";
+    }
+
+    // A registration that crashed before OTP verification should be resumable instead
+    // of permanently reserving the email as "already used". The latest submitted
+    // profile/password becomes the pending account data; email ownership is still
+    // proven only when the OTP is completed.
+    const [[existing]] = await pool.query(
+      `SELECT id, role, is_verified, is_active, approval_status
+       FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+      { email: cleanEmail }
+    );
+    if (existing) {
+      if (!existing.is_verified && existing.role === role && !adminInviteToken) {
+        if (!existing.is_active) return res.status(403).json({ message: "Account deactivated" });
+        await pool.query(
+          `UPDATE users SET password_hash=:ph, first_name=:fn, last_name=:ln WHERE id=:id`,
+          { ph: passwordHash, fn: firstName.trim(), ln: lastName.trim(), id: existing.id }
+        );
+        const otpResult = await sendOtpForUser(existing.id, cleanEmail, { purpose: "ACCOUNT_VERIFICATION" });
+        const otpPayload = otpClientPayload(otpResult);
+        return res.status(200).json({
+          message: otpPayload.emailSent
+            ? "Your unverified account was found. A new OTP was sent."
+            : "Your unverified account was found. A new OTP was generated, but email delivery needs server setup.",
+          role: existing.role,
+          approvalStatus: existing.approval_status,
+          requiresVerification: true,
+          resumedVerification: true,
+          ...otpPayload,
+        });
+      }
+      if (!existing.is_verified) {
+        return res.status(409).json({ message: `This email already belongs to an unverified ${String(existing.role || "account").toLowerCase()} account. Continue from its login page to verify it.` });
+      }
+      return res.status(409).json({ message: "Email already in use." });
     }
 
     const [result] = await pool.query(
@@ -96,7 +131,7 @@ export async function register(req, res) {
       });
     } catch (_) {}
 
-    const otpResult = await sendOtpForUser(result.insertId, cleanEmail);
+    const otpResult = await sendOtpForUser(result.insertId, cleanEmail, { purpose: "ACCOUNT_VERIFICATION" });
     const otpPayload = otpClientPayload(otpResult);
 
     res.status(201).json({
@@ -105,6 +140,7 @@ export async function register(req, res) {
         : "Registered. OTP email was not sent because email delivery needs server setup.",
       role,
       approvalStatus,
+      requiresVerification: true,
       ...otpPayload,
     });
   } catch (e) {
@@ -115,13 +151,22 @@ export async function register(req, res) {
   }
 }
 
-
 export async function checkAdminInvitation(req, res) {
   const tokenHash = crypto.createHash("sha256").update(String(req.params.token || "").trim()).digest("hex");
-  const [[invitation]] = await pool.query(`SELECT id,email,institution_name,expires_at,used_at FROM admin_invitations WHERE token_hash=:tokenHash LIMIT 1`, { tokenHash });
+  // Evaluate expiry in MySQL so TIMESTAMP/DATETIME values are compared in the same
+  // clock/timezone that created them. Parsing a MySQL timestamp with `new Date()`
+  // can shift it by the server runtime timezone and incorrectly report a fresh
+  // invitation as expired.
+  const [[invitation]] = await pool.query(
+    `SELECT id,email,institution_name,expires_at,used_at,(expires_at > NOW()) AS is_unexpired
+     FROM admin_invitations
+     WHERE token_hash=:tokenHash
+     LIMIT 1`,
+    { tokenHash }
+  );
   if (!invitation) return res.status(404).json({ message: "This Admin invitation is invalid." });
   if (invitation.used_at) return res.status(409).json({ message: "This Admin invitation has already been used and cannot create another account." });
-  if (new Date(invitation.expires_at).getTime() <= Date.now()) return res.status(410).json({ message: "This Admin invitation has expired." });
+  if (!Number(invitation.is_unexpired)) return res.status(410).json({ message: "This Admin invitation has expired." });
   res.json({ valid: true, email: invitation.email, institutionName: invitation.institution_name, expiresAt: invitation.expires_at });
 }
 
@@ -152,10 +197,9 @@ export async function login(req, res) {
   );
   if (!rows.length) return res.status(401).json({ message: "Invalid credentials" });
   const u = rows[0];
-  if (!u.is_active)                     return res.status(403).json({ message: "Account deactivated" });
-  if (!u.is_verified)                   return res.status(403).json({ message: "Account not verified. Check your email for the OTP." });
-  if (u.approval_status === "PENDING")  return res.status(403).json({ message: "Your account is awaiting approval from a superadmin." });
-  if (u.approval_status === "REJECTED") return res.status(403).json({ message: "Your account registration was rejected." });
+  if (!u.is_active) return res.status(403).json({ message: "Account deactivated" });
+
+  // Check the password before revealing verification state or issuing another OTP.
   const ok = await bcrypt.compare(password, u.password_hash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
@@ -172,12 +216,23 @@ export async function login(req, res) {
     return res.status(403).json({ message: "Only student accounts can use the student login page." });
   }
 
+  if (!u.is_verified) {
+    const otpResult = await sendOtpForUser(u.id, cleanEmail, { purpose: "ACCOUNT_VERIFICATION" });
+    return res.status(403).json({
+      message: "Account not verified. A new verification code has been generated.",
+      role: u.role,
+      requiresVerification: true,
+      ...otpClientPayload(otpResult),
+    });
+  }
+  if (u.approval_status === "PENDING")  return res.status(403).json({ message: "Your account is awaiting approval from a superadmin." });
+  if (u.approval_status === "REJECTED") return res.status(403).json({ message: "Your account registration was rejected." });
+
   const firstLogin = !u.last_active_at;
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
   const token = jwt.sign({ sub: u.id, role: u.role, ver: Number(u.token_version || 0) }, env.JWT_SECRET, { expiresIn: "8h" });
   res.json({ token, role: u.role, firstLogin });
 }
-
 
 export async function resendOtp(req, res) {
   const cleanEmail = normalizeEmail(req.body.email);
@@ -199,7 +254,7 @@ export async function requestPasswordReset(req, res) {
     { email: cleanEmail }
   );
   if (rows.length) {
-    const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
+    const otpResult = await sendOtpForUser(rows[0].id, cleanEmail, { purpose: "PASSWORD_RESET" });
     return res.json({
       message: "If the email exists, an OTP request has been processed.",
       ...otpClientPayload(otpResult),

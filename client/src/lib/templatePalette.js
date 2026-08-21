@@ -6,7 +6,7 @@ export const TEMPLATE_PALETTES = {
   TYPE_ANSWER: { label: "Identification", icon: "identification", accent: "#a855f7" },
   MATCHING: { label: "Matching", icon: "matching", accent: "#f97316" },
   GUESS_WORD_4PICS: { label: "Guess Word", icon: "image", accent: "#22c55e" },
-  THINK_SPELL: { label: "Think and Spell", icon: "spell", accent: "#0ea5e9" },
+  THINK_SPELL: { label: "Crossword", icon: "spell", accent: "#0ea5e9" },
 };
 
 export function templatePalette(templateType) {

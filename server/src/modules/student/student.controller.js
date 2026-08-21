@@ -16,12 +16,22 @@ function safeJson(v) {
 }
 
 
-function shuffleRows(values) {
+function seededShuffleRows(values, seedText) {
   const rows = [...values];
+  if (rows.length < 2) return rows;
+  let seed = 2166136261;
+  for (const char of String(seedText || "thinkwave")) seed = Math.imul(seed ^ char.charCodeAt(0), 16777619) >>> 0;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
   for (let i = rows.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [rows[i], rows[j]] = [rows[j], rows[i]];
   }
+  // If shuffling was requested, avoid returning the unchanged order when there
+  // is more than one item. This keeps the toggle visibly effective per learner.
+  if (rows.every((row, index) => row === values[index])) rows.push(rows.shift());
   return rows;
 }
 
@@ -350,12 +360,18 @@ export async function getStudentQuiz(req, res) {
   );
   const template = normalizeTemplateType(quiz.template_type);
   let questions = questionRows.map((q) => ({ ...q, config_json: safeJson(q.config_json) || {} }));
-  if (quiz.randomize_questions) questions = shuffleRows(questions);
+  const learnerSeed = `${req.user.sub}:${quizId}`;
+  if (quiz.randomize_questions) questions = seededShuffleRows(questions, `${learnerSeed}:questions`);
   if (quiz.shuffle_answers) {
     questions = questions.map((q) => {
       const config_json = { ...(q.config_json || {}) };
-      if (template === "MCQ" && Array.isArray(config_json.options)) config_json.options = shuffleRows(config_json.options);
-      if (template === "MATCHING") config_json.shuffleColA = true;
+      if (template === "MCQ" && Array.isArray(config_json.options)) {
+        config_json.options = seededShuffleRows(config_json.options, `${learnerSeed}:question:${q.id}:choices`);
+      }
+      if (template === "MATCHING") {
+        config_json.shuffleColA = true;
+        config_json.shuffleSeed = `${learnerSeed}:question:${q.id}:matching`;
+      }
       return { ...q, config_json };
     });
   }

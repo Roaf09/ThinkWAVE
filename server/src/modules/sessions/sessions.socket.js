@@ -10,6 +10,7 @@ import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
+import { isTutorialSession, forgetTutorialSession } from "./tutorialSession.runtime.js";
 
 
 function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
@@ -495,13 +496,22 @@ export function registerSessionSockets(io) {
       }
 
       if (["TEACHER", "GUEST_HOST"].includes(role)) {
-        await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
-        await broadcastState(io, sessionId);
+        const tutorialDemoSession = isTutorialSession(sessionId);
+        if (!tutorialDemoSession) {
+          await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
+          await broadcastState(io, sessionId);
+        } else {
+          // First-time tutorial sessions intentionally keep their live timer running
+          // while the teacher briefly leaves the host panel so returning feels
+          // continuous instead of restarting the walkthrough.
+          await pool.query(`UPDATE sessions SET teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid`, { sid: sessionId });
+        }
         const timeout = setTimeout(async () => {
           await pool.query(`UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('PAUSED','LIVE')`, { sid: sessionId });
           await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED' WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
           await broadcastState(io, sessionId);
           teacherDisconnectTimers.delete(sessionId);
+          forgetTutorialSession(sessionId);
         }, 5 * 60 * 1000);
         teacherDisconnectTimers.set(sessionId, timeout);
       }

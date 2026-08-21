@@ -12,20 +12,22 @@ const METRIC_PALETTES = {
   green:  { light: { bg: "#9ee6b6", border: "#178c43" }, dark: { bg: "#16753a", border: "#0d4d27" } },
 };
 
-export function TeacherMetricCard({ icon, label, value, hint, tone = "blue" }) {
+export function TeacherMetricCard({ icon, label, value, hint, tone = "blue", onClick }) {
   const { dark } = useTheme();
   const palette = (METRIC_PALETTES[tone] || METRIC_PALETTES.blue)[dark ? "dark" : "light"];
   const ink = dark ? "#ffffff" : "#0f172a";
-  return (
-    <div className="tw-teacher-metric" style={{ "--teacher-metric-bg": palette.bg, "--teacher-metric-border": palette.border, "--teacher-metric-ink": ink }}>
-      <span className="tw-teacher-metric-icon"><TwIcon name={icon} size={23} /></span>
-      <div>
-        <strong>{Number(value || 0).toLocaleString()}</strong>
-        <b>{label}</b>
-        {hint && <small>{hint}</small>}
-      </div>
+  const content = <>
+    <span className="tw-teacher-metric-icon"><TwIcon name={icon} size={23} /></span>
+    <div>
+      <strong>{Number(value || 0).toLocaleString()}</strong>
+      <b>{label}</b>
+      {hint && <small>{hint}</small>}
     </div>
-  );
+  </>;
+  const style = { "--teacher-metric-bg": palette.bg, "--teacher-metric-border": palette.border, "--teacher-metric-ink": ink };
+  return onClick
+    ? <button type="button" className="tw-teacher-metric tw-teacher-metric-action" onClick={onClick} style={style}>{content}</button>
+    : <div className="tw-teacher-metric" style={style}>{content}</div>;
 }
 
 export function TeacherPressButton({ tone = "blue", className = "", icon, children, type = "button", ...props }) {
@@ -36,12 +38,12 @@ export function TeacherPressButton({ tone = "blue", className = "", icon, childr
   );
 }
 
-export function ThinkBotEmptyState({ title, actionLabel, onAction, compact = false, c }) {
+export function ThinkBotEmptyState({ title, actionLabel, onAction, actionProps = {}, compact = false, c }) {
   return (
     <section className={`tw-thinkbot-empty${compact ? " is-compact" : ""}`} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
-      <img src="/media/thinkbotsit.png" alt="ThinkBOT" />
+      <img src="/media/thinkbotsit.webp" alt="ThinkBOT" />
       <h3>{title}</h3>
-      {actionLabel && <TeacherPressButton tone="purple" onClick={onAction}>{actionLabel}</TeacherPressButton>}
+      {actionLabel && <TeacherPressButton tone="purple" onClick={onAction} {...actionProps}>{actionLabel}</TeacherPressButton>}
     </section>
   );
 }

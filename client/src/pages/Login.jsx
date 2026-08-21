@@ -11,6 +11,7 @@ import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { IconBubble, TwIcon } from "../components/TwUI";
+import ThemeIconButton from "../components/ThemeIconButton";
 
 export default function Login({ onLoginSuccess }) {
   const nav = useNavigate();
@@ -55,11 +56,22 @@ export default function Login({ onLoginSuccess }) {
       if (rememberMe) {
         try { localStorage.setItem("tw_remember_email", email); } catch {}
       }
+      if (data.role === "TEACHER") {
+        try {
+          sessionStorage.setItem("tw_teacher_first_login", data.firstLogin ? "1" : "0");
+        } catch {}
+      }
       if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
       if (data.role === "ADMIN") nav("/admin");
       else nav("/teacher");
     } catch (err) {
-      const msg = err?.response?.data?.message || "Login failed.";
+      const response = err?.response?.data || {};
+      if (response.requiresVerification) {
+        const mode = response.role === "ADMIN" ? "admin" : "teacher";
+        nav(`/verify?mode=${mode}`, { state: { email: email.trim(), loginMode: mode } });
+        return;
+      }
+      const msg = response.message || "Login failed.";
       if (msg.toLowerCase().includes("invalid credentials")) {
         setNotFound(true);
       }
@@ -70,10 +82,10 @@ export default function Login({ onLoginSuccess }) {
   return (
     <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact hideSuper />
+      <PublicHeader compact hideSuper hideTheme />
 
       <main style={s.main}>
-        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c)}>
+        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c, dark)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminLogin ? "Admin Login" : "Welcome back"}</h1>
             <p style={s.subtitle(c)}>
@@ -172,6 +184,7 @@ export default function Login({ onLoginSuccess }) {
           </p>
         </div>
       </main>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }
@@ -190,7 +203,7 @@ const s = {
   visualPanel: (c) => ({ display: "grid", gap: 18, background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 28, padding: 28, boxShadow: "0 24px 80px rgba(43,108,255,0.14)", backdropFilter: "blur(16px)" }),
   visualKicker: (c) => ({ color: c.accent, textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 12, fontWeight: 950, marginBottom: 8 }),
   visualTitle: (c) => ({ color: c.text, margin: 0, fontSize: 30, lineHeight: 1.12, letterSpacing: "-0.05em" }),
-  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 24, padding: "40px 44px 36px", width: "min(100%, 460px)", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", backdropFilter: "blur(16px)" }),
+  card: (c, dark) => ({ background: dark ? "#17243d" : c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 24, padding: "40px 44px 36px", width: "min(100%, 460px)", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", backdropFilter: "blur(16px)" }),
   cardTop: { marginBottom: 28, textAlign: "center" },
   title: (c) => ({ margin: "0 0 8px", fontSize: 28, fontWeight: 900, letterSpacing: "-0.5px", color: c.text }),
   subtitle: (c) => ({ margin: 0, fontSize: 13, color: c.textMuted, lineHeight: 1.6 }),

@@ -8,6 +8,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
 import { getTeacherPlan } from "../plans/plan.js";
+import { buildDetailedQuestionAnalytics, buildStudentResponseDetails } from "./analytics.helpers.js";
 
 function safeJson(v) {
   if (!v) return null;
@@ -36,7 +37,7 @@ async function requireInstitutionAnalytics(req, res) {
   if (String(user?.email || "").toLowerCase().endsWith("@thinkwave.guest")) return true;
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC") {
-    res.status(403).json({ message: "Extensive analytics and downloads are available on the Institution plan." });
+    res.status(403).json({ message: "Extensive analytics and downloads are available on ThinkWAVE Pro and Institution plans." });
     return false;
   }
   return true;
@@ -44,7 +45,7 @@ async function requireInstitutionAnalytics(req, res) {
 
 async function getSessionOwned(sessionId, teacherId) {
   const [[row]] = await pool.query(
-    `SELECT s.id, s.quiz_id, s.join_mode, s.join_code, s.started_at, s.ended_at, s.created_at,
+    `SELECT s.id, s.quiz_id, s.class_id, s.join_mode, s.join_code, s.started_at, s.ended_at, s.created_at, s.questions_snapshot_json,
             q.title AS quiz_title, q.template_type, q.category,
             c.name AS class_name
      FROM sessions s
@@ -64,6 +65,8 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
   const [[summary]] = await pool.query(
     `SELECT
        COUNT(p.id) AS participant_count,
+       SUM(CASE WHEN p.student_user_id IS NULL THEN 1 ELSE 0 END) AS guest_count,
+       SUM(CASE WHEN p.student_user_id IS NOT NULL THEN 1 ELSE 0 END) AS student_count,
        ROUND(AVG(COALESCE(sc.total_points,0)), 2) AS avg_score,
        MIN(COALESCE(sc.total_points,0)) AS min_score,
        MAX(COALESCE(sc.total_points,0)) AS max_score
@@ -73,38 +76,60 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     { sid: sessionId }
   );
 
-  const [questions] = await pool.query(
-    `SELECT
-       q.id AS question_id,
-       q.question_order,
-       q.prompt,
-       COUNT(r.id) AS total_answers,
-       SUM(CASE WHEN r.is_correct = 1 THEN 1 ELSE 0 END) AS correct_answers,
-       SUM(CASE WHEN r.id IS NOT NULL AND (r.is_correct = 0 OR r.is_correct IS NULL) THEN 1 ELSE 0 END) AS incorrect_answers,
-       ROUND(100 * SUM(CASE WHEN r.is_correct = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(r.id), 0), 2) AS pct_correct,
-       ROUND(100 * SUM(CASE WHEN r.id IS NOT NULL AND (r.is_correct = 0 OR r.is_correct IS NULL) THEN 1 ELSE 0 END) / NULLIF(COUNT(r.id), 0), 2) AS pct_incorrect
-     FROM quiz_questions q
-     LEFT JOIN responses r ON r.question_id=q.id AND r.session_id=:sid
-     WHERE q.quiz_id=:qid AND q.deleted_at IS NULL
-     GROUP BY q.id
-     ORDER BY q.question_order ASC`,
-    { sid: sessionId, qid: session.quiz_id }
+  const snapshotQuestions = safeJson(session.questions_snapshot_json);
+  let questionRows;
+  if (Array.isArray(snapshotQuestions) && snapshotQuestions.length) {
+    questionRows = snapshotQuestions.map((question, index) => ({
+      ...question,
+      question_id: Number(question.question_id ?? question.id),
+      question_order: Number(question.question_order ?? index),
+    }));
+  } else {
+    [questionRows] = await pool.query(
+      `SELECT q.id AS question_id, q.question_order, q.prompt, q.config_json, q.correct_json
+       FROM quiz_questions q
+       WHERE q.quiz_id=:qid AND q.deleted_at IS NULL
+       ORDER BY q.question_order ASC`,
+      { qid: session.quiz_id }
+    );
+  }
+
+  const [responseRows] = await pool.query(
+    `SELECT r.participant_id, r.question_id, r.answer_json, r.is_correct, r.points_awarded, r.answered_at
+     FROM responses r
+     WHERE r.session_id=:sid
+     ORDER BY r.participant_id ASC, r.answered_at ASC, r.id ASC`,
+    { sid: sessionId }
   );
+
+  const questions = buildDetailedQuestionAnalytics(session.template_type, questionRows, responseRows);
+  const responsesByParticipant = responseRows.reduce((acc, row) => {
+    const key = Number(row.participant_id);
+    (acc[key] ||= []).push(row);
+    return acc;
+  }, {});
 
   const [students] = await pool.query(
     `SELECT
        p.id AS participant_id,
+       p.student_user_id,
+       CASE WHEN p.student_user_id IS NULL THEN 'GUEST' ELSE 'STUDENT' END AS participant_type,
        p.first_name,
        p.last_name,
        p.joined_at,
        p.group_name,
        COALESCE(sg.display_name, p.group_name) AS assigned_group_name,
-       COALESCE(sc.total_points, 0) AS total_points
+       COALESCE(sc.total_points, 0) AS total_points,
+       CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
+            ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(s.started_at, p.joined_at), MAX(r.answered_at)) / 1000 END AS completion_ms
      FROM session_participants p
+     JOIN sessions s ON s.id=p.session_id
      LEFT JOIN scores sc ON sc.session_id=p.session_id AND sc.participant_id=p.id
      LEFT JOIN session_group_members gm ON gm.participant_id=p.id
      LEFT JOIN session_groups sg ON sg.id=gm.group_id
+     LEFT JOIN responses r ON r.session_id=p.session_id AND r.participant_id=p.id
      WHERE p.session_id=:sid
+     GROUP BY p.id, p.student_user_id, p.first_name, p.last_name, p.joined_at, p.group_name, sg.display_name, sc.total_points, s.started_at
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
     { sid: sessionId }
   );
@@ -125,23 +150,28 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     { sid: sessionId, sid2: sessionId }
   );
 
+  const { questions_snapshot_json: _snapshot, ...sessionPublic } = session;
   return {
     session: {
-      ...session,
-      template_label: cleanTemplateLabel(session.template_type),
+      ...sessionPublic,
+      template_label: cleanTemplateLabel(session.template_type).replace("Think Spell", "Crossword"),
       folder_name: session.class_name || "Unassigned",
       display_date: fmtDate(session.ended_at || session.started_at || session.created_at),
       question_count: questions.length,
     },
-    summary: summary || {},
-    questions: questions.map((q) => ({
-      ...q,
-      correct_answers: Number(q.correct_answers || 0),
-      incorrect_answers: Number(q.incorrect_answers || 0),
-      pct_correct: Number(q.pct_correct || 0),
-      pct_incorrect: Number(q.pct_incorrect || 0),
+    summary: {
+      ...(summary || {}),
+      participant_count: Number(summary?.participant_count || 0),
+      guest_count: Number(summary?.guest_count || 0),
+      student_count: Number(summary?.student_count || 0),
+    },
+    questions,
+    students: students.map((row) => ({
+      ...row,
+      total_points: Number(row.total_points || 0),
+      completion_ms: row.completion_ms === null ? null : Number(row.completion_ms),
+      responses: buildStudentResponseDetails(responsesByParticipant[Number(row.participant_id)] || []),
     })),
-    students,
     tabMonitoring,
   };
 }

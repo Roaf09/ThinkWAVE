@@ -111,8 +111,14 @@ export default function App() {
   async function handleLoginSuccess(token, role, loginMeta = {}) {
     setAuthToken(token);
     if (["TEACHER","SUPERADMIN","ADMIN","STUDENT"].includes(role)) {
-      try { const { data } = await api.get("/auth/me"); if (data?.first_name) setToast({ name: data.first_name, firstLogin: role === "ADMIN" && !!loginMeta.firstLogin }); }
-      catch {}
+      try {
+        const { data } = await api.get("/auth/me");
+        // Revision 10.5: the teacher's first-login greeting is handled by ThinkBot,
+        // so avoid stacking the older toast over the onboarding dialogue.
+        if (data?.first_name && !(role === "TEACHER" && loginMeta.firstLogin)) {
+          setToast({ name: data.first_name, firstLogin: role === "ADMIN" && !!loginMeta.firstLogin });
+        }
+      } catch {}
     }
   }
 

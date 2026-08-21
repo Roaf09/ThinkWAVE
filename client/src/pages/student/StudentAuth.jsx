@@ -76,7 +76,7 @@ export default function StudentAuth({ onLoginSuccess }) {
         if (!matches) return setMsg("Passwords do not match.");
         const { data } = await api.post("/auth/register", { firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password, role: "STUDENT" });
         const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
-        setMsg(`✓ Registered as Student. ${otpNote}`);
+        setMsg(data.resumedVerification ? `✓ Verification resumed for Student. ${otpNote}` : `✓ Registered as Student. ${otpNote}`);
         setTimeout(() => nav(`/verify?mode=student`, { state: { email: form.email, loginMode: "student" } }), data.emailSent ? 850 : 2600);
         return;
       }
@@ -90,7 +90,12 @@ export default function StudentAuth({ onLoginSuccess }) {
       onLoginSuccess?.(data.token, data.role, data);
       nav("/student");
     } catch (err) {
-      const text = err?.response?.data?.message || "Student access failed.";
+      const response = err?.response?.data || {};
+      if (response.requiresVerification) {
+        nav(`/verify?mode=student`, { state: { email: form.email.trim(), loginMode: "student" } });
+        return;
+      }
+      const text = response.message || "Student access failed.";
       if (text.toLowerCase().includes("invalid credentials")) setNotFound(true);
       setMsg(text);
     }
@@ -155,7 +160,7 @@ export default function StudentAuth({ onLoginSuccess }) {
                   {Object.entries(REQ_LABELS).map(([key, label]) => <div key={key} style={s.reqItem}><span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} /><span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span></div>)}
                 </div>
                 <div style={s.strengthBar(c)}><div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} /></div>
-                <div style={s.strengthText(c)}>{isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}</div>
+                <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>{isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}</div>
               </div>
             </div>
           )}

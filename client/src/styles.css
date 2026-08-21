@@ -3013,3 +3013,1265 @@ body.dark-mode .sp-anticheat-card .sp-anticheat-icon{color:#fff!important}
 body:not(.dark-mode) .tw-landing-fixed-theme{color:#0f172a!important}
 body.dark-mode .tw-landing-fixed-theme{color:#fff!important}
 .tw-landing-fixed-theme svg{display:block!important;opacity:1!important;visibility:visible!important}
+
+/* Revision 10.1 landing and verification refinements. */
+.tw-landing-carousel{
+  border-width:3px!important;
+  outline:2px solid color-mix(in srgb,currentColor 12%,transparent);
+  outline-offset:3px;
+}
+.tw-template-preview-modal h2{color:var(--tw-template-accent,#2b6cff)!important}
+.tw-template-preview-dual .tw-template-preview-landscape{
+  width:100%;
+  aspect-ratio:16/9;
+  overflow:hidden;
+  border-radius:16px;
+}
+.tw-template-preview-dual .tw-template-preview-landscape img{
+  width:100%!important;
+  height:100%!important;
+  aspect-ratio:16/9!important;
+  object-fit:contain!important;
+}
+.tw-plan-top strong{font-size:36px!important;line-height:1!important}
+@media(max-width:620px){.tw-plan-top strong{font-size:32px!important}}
+
+/* Keep the OTP verification screen inside one viewport with no page/card scrolling. */
+.tw-otp-page{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+.tw-otp-main{min-height:0!important;overflow:hidden!important;padding:20px!important}
+.tw-otp-card{max-height:calc(100dvh - 112px);overflow:hidden!important;box-sizing:border-box}
+@media(max-height:760px){
+  .tw-otp-main{padding:12px 18px!important}
+  .tw-otp-card{padding:24px 28px!important}
+  .tw-otp-card h2{font-size:24px!important}
+}
+@media(max-height:650px){
+  .tw-otp-card{padding:18px 24px!important}
+  .tw-otp-card .tw-otp-icon-wrap{margin-bottom:8px!important}
+  .tw-otp-card .tw-otp-intro{margin-bottom:16px!important;line-height:1.45!important}
+  .tw-otp-digits{margin-bottom:12px!important}
+  .tw-otp-digits input{height:52px!important;font-size:24px!important}
+}
+@media(max-width:430px){
+  .tw-otp-card{padding-left:18px!important;padding-right:18px!important}
+  .tw-otp-digits{gap:6px!important}
+  .tw-otp-digits input{width:42px!important;height:56px!important}
+}
+
+/* Revision 10.3 — advanced analytics and class/student analytics. */
+.tw-analytics-theme-button{
+  border:0!important;
+  outline:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+  border-radius:0!important;
+}
+.tw-analytics-metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tw-analytics-scoreboard{display:grid;gap:8px}
+.tw-analytics-student-row{width:100%;border:0;background:transparent;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;border-radius:12px;cursor:pointer}
+.tw-analytics-student-row:hover{background:rgba(127,127,127,.08)}
+.tw-analytics-question-list{display:grid;gap:10px}
+.tw-analytics-question-card{width:100%;border:1px solid;border-radius:15px;padding:0;text-align:left;cursor:pointer;overflow:hidden;transition:opacity .22s ease,transform .22s ease,box-shadow .22s ease}
+.tw-analytics-question-card:hover{transform:translateY(-1px)}
+.tw-analytics-question-card.is-expanded{cursor:default;animation:tw-analytics-expand .24s ease both}
+@keyframes tw-analytics-expand{from{opacity:.35;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
+.tw-analytics-question-summary{display:grid;grid-template-columns:minmax(46px,auto) minmax(0,1fr) minmax(94px,auto);gap:10px;align-items:center;padding:12px}
+.tw-analytics-question-prompt{font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw-analytics-expanded-detail{display:grid;gap:14px;padding:16px}
+.tw-analytics-expanded-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tw-analytics-close{border:0;background:transparent;padding:6px;display:grid;place-items:center;cursor:pointer;border-radius:8px}
+.tw-analytics-full-prompt{font-size:17px;font-weight:850;line-height:1.5}
+.tw-analytics-choice-grid{display:grid;gap:9px}
+.tw-analytics-choice-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid transparent}
+.tw-analytics-choice-row.is-correct{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.42)}
+.tw-analytics-choice-row.is-wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.34)}
+.tw-analytics-choice-row.is-student-choice{background:rgba(43,108,255,.14);border-color:rgba(43,108,255,.5)}
+.tw-analytics-choice-row.is-neutral{background:rgba(127,127,127,.06);border-color:rgba(127,127,127,.18)}
+.tw-analytics-choice-letter{width:30px;height:30px;display:grid;place-items:center;border-radius:999px;font-weight:950;background:rgba(127,127,127,.12)}
+.tw-analytics-choice-content{display:flex;align-items:center;gap:10px;min-width:0;line-height:1.35}
+.tw-analytics-choice-content img{width:76px;height:76px;object-fit:cover;border-radius:10px;flex:0 0 auto}
+.tw-analytics-choice-stat{border:0;background:transparent;font:inherit;font-weight:900;cursor:pointer;padding:7px 8px;border-radius:9px;white-space:nowrap}
+.tw-analytics-batch-detail{display:grid;gap:14px}
+.tw-analytics-pair-list,.tw-analytics-word-list{display:grid;gap:8px;margin-left:12px;padding-left:12px;border-left:3px solid rgba(127,127,127,.2)}
+.tw-analytics-pair-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.05em;opacity:.72;padding:0 10px}
+.tw-analytics-pair-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:10px;border-radius:12px;background:rgba(127,127,127,.06)}
+.tw-analytics-result-pair{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr);align-items:center;gap:7px;padding:10px;border-radius:12px;border:1px solid transparent}
+.tw-analytics-result-pair.is-correct{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.42)}
+.tw-analytics-result-pair.is-wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.34)}
+.tw-analytics-word-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:10px;border-radius:12px;background:rgba(127,127,127,.06)}
+.tw-analytics-word-row.is-found{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.42)}
+.tw-analytics-word-row.is-missed{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.34)}
+.tw-analytics-answer-only{display:grid;gap:4px;border:1px solid;padding:11px 12px;border-radius:12px}
+.tw-analytics-image-strip{display:flex;gap:8px;flex-wrap:wrap}
+.tw-analytics-image-strip img{width:92px;height:92px;object-fit:cover;border-radius:11px}
+.tw-analytics-media{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.tw-analytics-media img{width:54px;height:54px;object-fit:cover;border-radius:8px;flex:0 0 auto}
+.tw-analytics-arrow{width:36px;height:36px;border:1px solid;border-radius:10px;display:grid;place-items:center;cursor:pointer}
+.tw-analytics-arrow:disabled{opacity:.35;cursor:not-allowed}
+.tw-student-analytics-detail{display:grid;gap:12px;padding:0 12px 14px 50px}
+.tw-student-analytics-nav{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tw-student-answer-tag{font-size:12px;font-weight:950;padding:4px 8px;border-radius:999px;background:rgba(127,127,127,.1)}
+
+.tw-class-student-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.tw-class-student-search{display:flex;align-items:center;gap:7px;border:1px solid;border-radius:11px;padding:8px 10px;min-width:min(100%,250px)}
+.tw-class-student-search input{border:0;outline:0;background:transparent;width:100%;font:inherit;min-width:0}
+.tw-class-student-clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.tw-class-student-clickable:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.tw-class-modal-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.tw-class-analytics-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.tw-class-analytics-stats>div,.tw-student-stat-grid>div{display:grid;gap:6px;padding:13px;border-radius:13px}
+.tw-class-analytics-stats b,.tw-student-stat-grid b{font-size:22px}
+.tw-class-analytics-filter{display:flex;gap:8px;margin-bottom:16px}
+.tw-class-analytics-filter button{border:1px solid rgba(127,127,127,.25);background:transparent;border-radius:999px;padding:8px 14px;font-weight:900;cursor:pointer;color:inherit}
+.tw-class-analytics-filter button.is-active{background:#2b6cff;color:#fff;border-color:#2b6cff}
+.tw-class-trend-scroll{overflow-x:auto;overflow-y:hidden;border:1px solid;border-radius:14px;padding:14px;overscroll-behavior-inline:contain;touch-action:pan-x;scrollbar-width:thin}
+.tw-class-trend-chart{display:flex;align-items:flex-end;gap:16px;min-width:max-content;height:280px;padding-top:28px}
+.tw-class-trend-item{width:100px;height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:6px;text-align:center;align-items:end}
+.tw-class-trend-bar-zone{height:200px;display:flex;align-items:flex-end;justify-content:center;position:relative;border-bottom:1px solid rgba(127,127,127,.28)}
+.tw-class-trend-bar{width:54px;min-height:3px;border-radius:9px 9px 2px 2px;transition:height .25s ease}
+.tw-class-trend-value{position:absolute;top:-22px;font-size:12px;font-weight:950}
+.tw-class-trend-item b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.tw-class-trend-item small{font-size:10px;opacity:.72;min-height:26px}
+.tw-student-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tw-student-progress-list{display:grid;gap:14px;margin-top:18px}
+.tw-student-progress-label{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:13px}
+.tw-student-progress-track{height:10px;border-radius:999px;overflow:hidden}
+.tw-student-progress-track span{display:block;height:100%;border-radius:inherit}
+
+@media(max-width:1100px){.tw-analytics-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){
+  .tw-analytics-question-summary{grid-template-columns:auto minmax(0,1fr);}.tw-analytics-question-summary>*:last-child{grid-column:1/-1;justify-self:start}
+  .tw-analytics-choice-row{grid-template-columns:32px minmax(0,1fr)}.tw-analytics-choice-stat{grid-column:2;justify-self:start}
+  .tw-analytics-pair-head{display:none}.tw-analytics-pair-row{grid-template-columns:1fr}.tw-analytics-word-row{grid-template-columns:minmax(0,1fr) auto}.tw-analytics-word-row>*:last-child{grid-column:1/-1;justify-self:start}
+  .tw-student-analytics-detail{padding-left:12px}
+  .tw-class-analytics-stats,.tw-student-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:470px){
+  .tw-analytics-metrics-grid{grid-template-columns:1fr 1fr}
+  .tw-class-analytics-stats,.tw-student-stat-grid{grid-template-columns:1fr}
+  .tw-analytics-image-strip img{width:76px;height:76px}
+}
+.tw-history-advanced-insights{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(127,127,127,.18)}
+/* Revision 10.3 analytics detail transitions and student-result states. */
+.tw-analytics-question-card{
+  max-height:2400px;
+  margin:0;
+  transition:opacity .22s ease,transform .22s ease,box-shadow .22s ease,max-height .28s ease,padding .28s ease,margin .28s ease,border-width .28s ease;
+}
+.tw-analytics-question-card.is-hidden{
+  opacity:0;
+  transform:scale(.985);
+  max-height:0;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border-width:0!important;
+  pointer-events:none;
+}
+.tw-analytics-question-list.has-expanded{gap:0}
+.tw-student-pair.is-correct,
+.tw-analytics-word-row.is-correct{
+  background:rgba(16,185,129,.12);
+  border:1px solid rgba(16,185,129,.42);
+}
+.tw-student-pair.is-wrong,
+.tw-analytics-word-row.is-wrong{
+  background:rgba(239,68,68,.10);
+  border:1px solid rgba(239,68,68,.34);
+}
+.tw-analytics-choice-row.no-letter{grid-template-columns:minmax(0,1fr) auto}
+@media(max-width:720px){.tw-analytics-choice-row.no-letter{grid-template-columns:minmax(0,1fr)}.tw-analytics-choice-row.no-letter .tw-analytics-choice-stat{grid-column:1;justify-self:start}}
+
+/* Revision 10.4 — analytics layout, solid modal surfaces, and session setup polish. */
+.tw-analytics-advanced-layout{
+  display:grid;
+  grid-template-columns:minmax(300px,360px) minmax(0,1fr);
+  gap:18px;
+  align-items:start;
+}
+.tw-analytics-scoreboard{
+  min-width:0;
+  align-content:start;
+}
+.tw-analytics-student-card{
+  width:100%;
+  box-sizing:border-box;
+  border:3px solid;
+  border-radius:15px;
+  overflow:hidden;
+  transition:border-radius .28s ease,box-shadow .28s ease,transform .28s ease,background .28s ease;
+}
+.tw-analytics-student-card:hover{transform:translateY(-1px)}
+.tw-analytics-student-card.is-expanded{
+  border-radius:19px;
+  box-shadow:0 15px 34px rgba(15,23,42,.14);
+  transform:none;
+}
+.tw-analytics-student-button{
+  width:100%;
+  min-width:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  padding:12px 13px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  text-align:left;
+  cursor:pointer;
+  transition:padding .28s ease,background .2s ease;
+}
+.tw-analytics-student-button:disabled{cursor:default}
+.tw-analytics-student-card.is-expanded .tw-analytics-student-button{
+  padding:15px 15px 12px;
+  align-items:flex-start;
+}
+.tw-analytics-student-identity{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+.tw-analytics-student-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900}
+.tw-analytics-student-points{display:inline-flex;align-items:center;gap:6px;font-weight:950;white-space:nowrap;flex:0 0 auto}
+.tw-student-analytics-collapse{
+  display:grid;
+  grid-template-rows:0fr;
+  opacity:0;
+  transition:grid-template-rows .32s cubic-bezier(.2,.8,.2,1),opacity .24s ease;
+}
+.tw-student-analytics-collapse>div{min-height:0;overflow:hidden}
+.tw-student-analytics-collapse.is-open{grid-template-rows:1fr;opacity:1}
+.tw-student-analytics-detail{
+  display:grid;
+  gap:12px;
+  padding:4px 14px 15px!important;
+  border-top:3px solid rgba(127,127,127,.18);
+}
+.tw-student-analytics-nav{padding-top:10px}
+.tw-analytics-detail-column{min-width:0}
+.tw-analytics-card,.tw-analytics-results-card{border-width:3px!important}
+.tw-analytics-question-card{border-width:3px!important}
+.tw-analytics-choice-row{border-width:2px!important}
+.tw-analytics-tab-row{border-width:2px!important}
+.tw-analytics-question-card.is-expanded{box-shadow:0 15px 30px rgba(15,23,42,.12)}
+.tw-analytics-question-card.is-closing{pointer-events:none}
+.tw-analytics-question-card.is-closing .tw-analytics-expanded-detail{animation:twAnalyticsQuestionClose .2s ease both}
+@keyframes twAnalyticsQuestionClose{
+  from{opacity:1;transform:scale(1);max-height:1600px}
+  to{opacity:0;transform:scale(.985);max-height:70px}
+}
+.tw-analytics-close{transition:transform .18s ease,background .18s ease}
+.tw-analytics-close:hover{transform:scale(1.08);background:rgba(127,127,127,.12)}
+.tw-analytics-choice-stat,.tw-analytics-stat-toggle{transition:transform .16s ease,filter .16s ease}
+.tw-analytics-choice-stat:hover,.tw-analytics-stat-toggle:hover{transform:translateY(-1px);filter:brightness(.94)}
+body.dark-mode .tw-analytics-theme-button,
+body.dark-mode .tw-analytics-theme-button svg,
+body.dark-mode .tw-analytics-choice-stat,
+body.dark-mode .tw-analytics-result-badge,
+body.dark-mode .tw-analytics-result-badge *{color:#fff!important}
+
+.tw-class-analytics-modal,.tw-class-student-analytics-modal{
+  border-width:3px!important;
+  overscroll-behavior:contain;
+}
+.tw-class-analytics-scroll{
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  max-height:calc(92dvh - 86px);
+  scrollbar-gutter:stable;
+}
+.tw-class-analytics-stats>div,.tw-student-stat-grid>div{
+  border-width:3px!important;
+  min-height:86px;
+  align-content:center;
+  transition:transform .18s ease,box-shadow .18s ease;
+}
+.tw-class-analytics-stats>div:hover,.tw-student-stat-grid>div:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 20px rgba(15,23,42,.10);
+}
+.tw-class-student-analytics-modal .tw-student-progress-list{
+  margin-top:24px;
+  padding:20px;
+  border:3px solid rgba(127,127,127,.22);
+  border-radius:16px;
+}
+.tw-class-report-actions{
+  left:auto!important;
+  right:14px!important;
+  bottom:12px!important;
+  justify-content:flex-end!important;
+}
+
+/* Popup/window surfaces stay opaque; backdrops may remain dimmed for focus. */
+.tw-host-launch-modal,
+.tw-class-picker-modal,
+.tw-assignment-setup-modal,
+.tw-class-analytics-modal,
+.tw-class-student-analytics-modal,
+.tw-class-folder-modal,
+.tw-class-remove-modal,
+.tw-folder-action-menu,
+.tw-session-quick-menu,
+.tw-teacher-action-modal,
+.tw-admin-logout-modal,
+.tw-profile-modal-card,
+.tw-template-preview-modal,
+.tw-start-modal,
+.tw-plan-success-modal{
+  background:#fffaf0!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body.dark-mode .tw-host-launch-modal,
+body.dark-mode .tw-class-picker-modal,
+body.dark-mode .tw-assignment-setup-modal,
+body.dark-mode .tw-class-analytics-modal,
+body.dark-mode .tw-class-student-analytics-modal,
+body.dark-mode .tw-class-folder-modal,
+body.dark-mode .tw-class-remove-modal,
+body.dark-mode .tw-folder-action-menu,
+body.dark-mode .tw-session-quick-menu,
+body.dark-mode .tw-teacher-action-modal,
+body.dark-mode .tw-admin-logout-modal,
+body.dark-mode .tw-profile-modal-card,
+body.dark-mode .tw-template-preview-modal,
+body.dark-mode .tw-start-modal,
+body.dark-mode .tw-plan-success-modal{
+  background:#07142b!important;
+}
+
+.tw-host-class-field{
+  cursor:pointer;
+  transition:background .24s ease,border-color .24s ease,box-shadow .24s ease,transform .18s ease,color .24s ease;
+}
+.tw-host-class-field:hover{
+  background:var(--tw-template-soft)!important;
+  border-color:var(--tw-template-accent)!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-accent) 18%,transparent);
+}
+.tw-host-class-field:active{transform:translateY(1px)}
+
+/* Desktop preview with the mobile preview layered over its lower-right edge. */
+.tw-host-preview-dual{
+  position:relative!important;
+  display:block!important;
+  height:clamp(175px,30vh,255px)!important;
+  margin-bottom:18px!important;
+  overflow:visible!important;
+}
+.tw-host-preview-desktop{
+  position:absolute!important;
+  inset:0 9% 0 0!important;
+  width:auto!important;
+  height:100%!important;
+  max-height:none!important;
+  aspect-ratio:auto!important;
+  z-index:1;
+}
+.tw-host-preview-mobile{
+  display:block!important;
+  position:absolute!important;
+  right:0!important;
+  bottom:-4%!important;
+  top:auto!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  height:72%!important;
+  max-height:none!important;
+  aspect-ratio:9/18!important;
+  z-index:3;
+  border-width:3px!important;
+  box-shadow:0 18px 34px rgba(15,23,42,.30)!important;
+}
+.tw-host-preview-desktop img,.tw-host-preview-mobile img{object-fit:cover!important}
+
+.tw-session-background-track{
+  display:block!important;
+  min-width:0;
+  overflow:hidden!important;
+  padding:4px!important;
+}
+.tw-session-background-track-inner{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:9px;
+  min-width:0;
+  will-change:transform,opacity;
+}
+.tw-session-background-track-inner.is-next{animation:twBackgroundSlideNext .30s cubic-bezier(.2,.8,.2,1) both}
+.tw-session-background-track-inner.is-prev{animation:twBackgroundSlidePrev .30s cubic-bezier(.2,.8,.2,1) both}
+@keyframes twBackgroundSlideNext{from{opacity:.35;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+@keyframes twBackgroundSlidePrev{from{opacity:.35;transform:translateX(-24px)}to{opacity:1;transform:translateX(0)}}
+.tw-assignment-primary-actions{padding:3px 0 5px}
+
+@media(max-width:980px){
+  .tw-analytics-advanced-layout{grid-template-columns:1fr}
+  .tw-analytics-scoreboard{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .tw-analytics-student-card.is-expanded{grid-column:1/-1}
+}
+@media(max-width:720px){
+  .tw-session-background-track-inner{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tw-host-preview-dual{height:clamp(145px,25vh,205px)!important}
+  .tw-host-preview-desktop{right:13%!important}
+  .tw-host-preview-mobile{height:69%!important}
+  .tw-class-analytics-scroll{max-height:calc(94dvh - 80px)}
+}
+@media(max-width:520px){
+  .tw-analytics-scoreboard{grid-template-columns:1fr}
+  .tw-host-preview-desktop{right:17%!important}
+  .tw-host-preview-mobile{height:64%!important}
+}
+
+/* Revision 10.5 — ThinkBot guided tutorial */
+.tw-tutorial-highlight{position:fixed;z-index:30010;border:3px solid #2b6cff;border-radius:16px;pointer-events:none;box-shadow:0 0 0 5px rgba(43,108,255,.18),0 0 25px 8px rgba(43,108,255,.38);animation:twTutorialPulse 1.35s ease-in-out infinite;transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease}
+@keyframes twTutorialPulse{0%,100%{box-shadow:0 0 0 4px rgba(43,108,255,.12),0 0 20px 6px rgba(43,108,255,.26)}50%{box-shadow:0 0 0 8px rgba(43,108,255,.20),0 0 34px 12px rgba(43,108,255,.52)}}
+.tw-thinkbot-tutorial{position:fixed;z-index:30020;box-sizing:border-box;border:3px solid;border-radius:20px;padding:24px 86px 20px 22px;box-shadow:0 24px 70px rgba(2,8,23,.32);animation:twTutorialFade .34s ease both;max-height:min(72vh,520px);overflow:auto}
+.tw-thinkbot-tutorial-avatar{position:absolute;right:8px;top:-21px;width:84px;height:84px;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(0,0,0,.22));pointer-events:none}
+.tw-thinkbot-tutorial-copy{display:grid;gap:10px;font-size:15px;line-height:1.58;font-weight:620}.tw-thinkbot-tutorial-copy p{margin:0}.tw-thinkbot-tutorial-copy strong{font-weight:950}.tw-thinkbot-tutorial-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
+.tw-tutorial-press{--face:var(--tw-tutorial-face,#2b6cff);--base:var(--tw-tutorial-base,#173e9c);appearance:none;border:2px solid var(--base);background:var(--base);border-radius:12px;padding:0;box-shadow:0 5px 0 #0f2d73,0 9px 19px rgba(43,108,255,.30);cursor:pointer;animation:twTutorialFade .28s ease both}.tw-tutorial-press span{display:block;padding:10px 18px;border-radius:10px;background:var(--face);color:#fff;font-weight:950;transform:translateY(-4px);transition:transform .12s ease,filter .18s ease}.tw-tutorial-press:hover span{filter:brightness(1.08);transform:translateY(-5px)}.tw-tutorial-press:active span{transform:translateY(0)}
+.tw-tutorial-secondary{appearance:none;border:2px solid #102e7d;background:#2b6cff;color:#fff;font-weight:950;cursor:pointer;padding:9px 15px;border-radius:11px;box-shadow:0 4px 0 #0f2d73,0 8px 16px rgba(43,108,255,.24);transition:transform .12s ease,filter .18s ease}.tw-tutorial-secondary:hover{filter:brightness(1.08);transform:translateY(-1px)}.tw-tutorial-secondary:active{transform:translateY(3px);box-shadow:0 1px 0 #0f2d73}.tw-tutorial-hint{position:fixed;z-index:30022;width:min(280px,calc(100vw - 24px));box-sizing:border-box;border:2px solid;border-radius:15px;padding:14px 16px;font-size:13px;line-height:1.5;font-weight:700;box-shadow:0 16px 38px rgba(2,8,23,.24);animation:twTutorialFade .3s ease both}
+@keyframes twTutorialFade{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+.tw-crossword-filling .tw-crossword-grid-cell{animation:twTilePop .28s ease both}.tw-crossword-arranging-dots{display:inline-block;min-width:30px;text-align:left;letter-spacing:2px}
+@media(max-width:680px){.tw-thinkbot-tutorial{padding:22px 72px 18px 18px;border-radius:17px}.tw-thinkbot-tutorial-avatar{width:70px;height:70px;top:-15px}.tw-tutorial-hint{display:none}.tw-tutorial-highlight{border-radius:12px}}
+
+/* Revision 10.5 crossword arrangement feedback */
+.tw-builder-press.is-filled:disabled {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 rgba(15, 23, 42, .22) !important;
+  filter: saturate(.86);
+}
+.tw-arranging-dots {
+  display: inline-block;
+  min-width: 1.3em;
+  text-align: left;
+  letter-spacing: .08em;
+}
+
+/* Revision 10.6 — stronger guided tutorial focus and larger ThinkBot dialogue */
+.tw-tutorial-blocker{position:fixed;z-index:30000;background:rgba(1,8,22,.18);pointer-events:auto;touch-action:none}
+.tw-tutorial-blocker-full{inset:0}.tw-tutorial-blocker-full.is-clickable{cursor:pointer}
+.tw-tutorial-highlight{z-index:30010;border-width:4px;box-shadow:0 0 0 5px rgba(43,108,255,.24),0 0 34px 12px rgba(43,108,255,.62);animation:twTutorialPulseStrong .92s ease-in-out infinite}
+@keyframes twTutorialPulseStrong{0%,100%{box-shadow:0 0 0 3px rgba(43,108,255,.18),0 0 24px 7px rgba(43,108,255,.42);filter:brightness(1)}50%{box-shadow:0 0 0 9px rgba(43,108,255,.30),0 0 44px 16px rgba(43,108,255,.80);filter:brightness(1.12)}}
+.tw-tutorial-target-pulse{position:relative!important;z-index:30015!important;outline:4px solid #2b6cff!important;outline-offset:2px!important;box-shadow:0 0 0 5px rgba(43,108,255,.24),0 0 38px 13px rgba(43,108,255,.68)!important;animation:twTutorialTargetPulse .88s ease-in-out infinite!important}
+.tw-tutorial-target-pulse.tw-tutorial-target-locked{pointer-events:none!important}
+@keyframes twTutorialTargetPulse{0%,100%{outline-width:3px;box-shadow:0 0 0 3px rgba(43,108,255,.18),0 0 25px 7px rgba(43,108,255,.45)}50%{outline-width:5px;box-shadow:0 0 0 8px rgba(43,108,255,.30),0 0 45px 16px rgba(43,108,255,.82)}}
+.tw-thinkbot-tutorial{z-index:30020;border-width:4px;border-radius:24px;padding:32px 112px 82px 30px;min-height:230px;max-height:min(76vh,620px);overflow:auto;box-shadow:0 28px 78px rgba(2,8,23,.38);display:flex;flex-direction:column}
+.tw-thinkbot-tutorial.is-square{aspect-ratio:auto;min-height:320px}
+.tw-thinkbot-tutorial.is-transparent{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.tw-thinkbot-tutorial-avatar{right:18px;top:18px;width:92px;height:92px}
+.tw-thinkbot-tutorial-copy{gap:14px;font-size:18px;line-height:1.6;font-weight:650;padding-right:2px}
+.tw-thinkbot-tutorial-actions{position:absolute;right:20px;bottom:18px;justify-content:flex-end;align-items:flex-end;margin:0;min-height:48px}
+.tw-tutorial-press span{padding:12px 22px;font-size:15px}.tw-tutorial-secondary{padding:11px 18px;font-size:14px}
+.tw-tutorial-hint{z-index:30022;width:min(310px,calc(100vw - 24px));border-width:3px;padding:20px;font-size:15px;line-height:1.6;text-align:center}
+.tw-tutorial-click-anywhere{position:absolute;left:24px;right:24px;bottom:18px;text-align:center;font-size:11px;font-weight:850;letter-spacing:.04em;opacity:.62;pointer-events:none}
+.tw-thinkbot-tutorial.tw-tutorial-tip-panel{justify-content:center;padding:28px 70px 28px 22px;min-height:220px}.tw-thinkbot-tutorial.tw-tutorial-tip-panel .tw-thinkbot-tutorial-avatar{display:block;width:60px;height:60px;right:12px;top:16px}.tw-thinkbot-tutorial.tw-tutorial-tip-panel .tw-thinkbot-tutorial-copy{text-align:center;padding:0}
+@media(max-width:760px){.tw-thinkbot-tutorial{width:calc(100vw - 24px)!important;padding:26px 88px 76px 22px;min-height:220px;border-radius:20px}.tw-thinkbot-tutorial.is-square{min-height:290px}.tw-thinkbot-tutorial-avatar{width:72px;height:72px;right:13px;top:18px}.tw-thinkbot-tutorial-copy{font-size:16px}.tw-thinkbot-tutorial-actions{right:14px;bottom:14px}.tw-tutorial-click-anywhere{bottom:14px}.tw-tutorial-hint{display:none}}
+
+/* Revision 10.6 — tutorial micro-highlights and staged copy */
+.tw-tutorial-mini-pulse {
+  position: relative;
+  z-index: 30015 !important;
+  outline: 3px solid rgba(49,130,246,.96) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(49,130,246,.20), 0 0 28px rgba(49,130,246,.78) !important;
+  animation: twTutorialPulseStrong .78s ease-in-out infinite alternate !important;
+}
+.tw-tutorial-fade-line { animation: twTutorialCopyIn .34s ease both; }
+@keyframes twTutorialCopyIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Revision 10.7 — draggable ThinkBot dialogue and tighter sidebar tutorial pulse */
+.tw-thinkbot-tutorial-drag-handle{
+  position:absolute;
+  top:7px;
+  left:50%;
+  transform:translateX(-50%);
+  width:52px;
+  height:20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  border-radius:999px;
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+  z-index:2;
+  opacity:.48;
+  transition:opacity .18s ease,background .18s ease;
+}
+.tw-thinkbot-tutorial-drag-handle:hover{opacity:.82;background:rgba(43,108,255,.10)}
+.tw-thinkbot-tutorial-drag-handle span{width:4px;height:4px;border-radius:50%;background:currentColor;display:block}
+.tw-thinkbot-tutorial.is-dragging{user-select:none;-webkit-user-select:none}
+.tw-thinkbot-tutorial.is-dragging .tw-thinkbot-tutorial-drag-handle{cursor:grabbing;opacity:.9;background:rgba(43,108,255,.13)}
+.tw-tutorial-target-pulse.tw-tutorial-target-nav{
+  outline-width:3px!important;
+  outline-offset:-3px!important;
+  border-radius:10px!important;
+  box-shadow:inset 0 0 0 1px rgba(43,108,255,.32),0 0 18px 5px rgba(43,108,255,.50)!important;
+  transform-origin:center!important;
+  animation:twTutorialNavPulse .92s ease-in-out infinite!important;
+}
+@keyframes twTutorialNavPulse{
+  0%,100%{transform:scale(.985);outline-color:rgba(43,108,255,.78);box-shadow:inset 0 0 0 1px rgba(43,108,255,.28),0 0 11px 3px rgba(43,108,255,.35)}
+  50%{transform:scale(1.005);outline-color:#2b6cff;box-shadow:inset 0 0 0 2px rgba(43,108,255,.40),0 0 25px 8px rgba(43,108,255,.72)}
+}
+@media(max-width:760px){
+  .tw-thinkbot-tutorial-drag-handle{top:5px;width:46px}
+}
+
+
+/* Revision 10.8 — content-sized ThinkBot bubbles and tighter tab/folder focus */
+.tw-thinkbot-tutorial{
+  padding:30px 108px 24px 28px;
+  min-height:128px;
+  max-height:min(76vh,620px);
+  overflow:auto;
+  gap:14px;
+}
+.tw-thinkbot-tutorial.is-square{
+  aspect-ratio:auto;
+  min-height:128px;
+  width:min(390px,calc(100vw - 28px));
+}
+.tw-thinkbot-tutorial-copy{gap:10px;line-height:1.52}
+.tw-thinkbot-tutorial-actions{
+  position:static;
+  margin:2px -84px 0 0;
+  min-height:0;
+  align-self:stretch;
+  justify-content:flex-end;
+}
+.tw-tutorial-click-anywhere{
+  position:static;
+  margin:0 -84px 0 0;
+  text-align:center;
+}
+.tw-thinkbot-tutorial-avatar{right:18px;top:30px;width:86px;height:86px}
+.tw-thinkbot-tutorial.tw-tutorial-tip-panel{min-height:0;padding:26px 70px 24px 22px}
+.tw-thinkbot-tutorial.tw-tutorial-tip-panel .tw-thinkbot-tutorial-copy{gap:8px}
+.tw-tutorial-target-pulse.tw-tutorial-target-nav{
+  outline-width:3px!important;
+  outline-offset:-5px!important;
+  border-radius:9px!important;
+  animation:twTutorialNavPulse108 .86s ease-in-out infinite!important;
+}
+@keyframes twTutorialNavPulse108{
+  0%,100%{transform:scale(.965);outline-color:rgba(43,108,255,.68);box-shadow:inset 0 0 0 1px rgba(43,108,255,.24),0 0 9px 2px rgba(43,108,255,.30)}
+  50%{transform:scale(.997);outline-color:#2b6cff;box-shadow:inset 0 0 0 2px rgba(43,108,255,.46),0 0 25px 8px rgba(43,108,255,.78)}
+}
+@media(max-width:760px){
+  .tw-thinkbot-tutorial{padding:26px 82px 22px 20px;min-height:112px}
+  .tw-thinkbot-tutorial.is-square{min-height:112px}
+  .tw-thinkbot-tutorial-actions,.tw-tutorial-click-anywhere{margin-right:-62px}
+  .tw-thinkbot-tutorial-avatar{top:27px;right:12px;width:66px;height:66px}
+}
+
+/* Revision 10.9 — tutorial spacing and host-panel focus */
+.tw-thinkbot-tutorial.tw-tutorial-home-build .tw-thinkbot-tutorial-actions{
+  margin-top:18px;
+}
+.tw-tutorial-host-metrics-pulse{
+  position:relative;
+  z-index:30015!important;
+  outline:4px solid rgba(43,108,255,.98)!important;
+  outline-offset:4px!important;
+  border-radius:14px;
+  box-shadow:0 0 0 8px rgba(43,108,255,.28),0 0 38px 14px rgba(43,108,255,.92)!important;
+  animation:twTutorialHostMetricPulse .68s ease-in-out infinite!important;
+}
+@keyframes twTutorialHostMetricPulse{
+  0%,100%{transform:scale(.985);filter:brightness(1);box-shadow:0 0 0 5px rgba(43,108,255,.20),0 0 24px 8px rgba(43,108,255,.62)}
+  50%{transform:scale(1.015);filter:brightness(1.14);box-shadow:0 0 0 10px rgba(43,108,255,.34),0 0 46px 18px rgba(43,108,255,.98)}
+}
+.tw-assignment-live-notice{pointer-events:none}
+
+/* Revision 10.10 — auth/plan, previews, analytics, and guided tutorial refinements */
+.tw-plan-benefits>div>span{
+  width:24px!important;
+  height:24px!important;
+  border-radius:0!important;
+  border:0!important;
+  background:transparent!important;
+  color:#15803d!important;
+}
+body.dark-mode .tw-plan-benefits>div>span{color:#86efac!important}
+
+/* Thicker device frames in Landing > Our Templates. */
+.tw-template-preview-dual .tw-template-preview-landscape,
+.tw-template-preview-dual .tw-template-preview-mobile{
+  box-sizing:border-box!important;
+  border:4px solid rgba(43,108,255,.62)!important;
+  border-radius:17px!important;
+  overflow:hidden!important;
+}
+body.dark-mode .tw-template-preview-dual .tw-template-preview-landscape,
+body.dark-mode .tw-template-preview-dual .tw-template-preview-mobile{
+  border-color:rgba(147,197,253,.76)!important;
+}
+
+/* Host setup: enlarge the phone preview and let screenshots meet their frame. */
+.tw-host-preview-desktop,
+.tw-host-preview-mobile{padding:0!important}
+.tw-host-preview-mobile{height:82%!important}
+.tw-host-preview-desktop img,
+.tw-host-preview-mobile img{border-radius:12px!important}
+@media(max-width:720px){.tw-host-preview-mobile{height:78%!important}}
+@media(max-width:520px){.tw-host-preview-mobile{height:72%!important}}
+
+/* Keep the navigation helper slightly lower than its highlighted sidebar tab. */
+.tw-thinkbot-tutorial.tw-tutorial-nav-lower{margin-top:28px!important}
+.tw-thinkbot-tutorial.tw-tutorial-host-ready-lower{margin-top:14px!important}
+
+/* Stronger focus around live question metrics/timer during the host tutorial. */
+.tw-tutorial-host-metrics-pulse{
+  outline-width:5px!important;
+  outline-color:#2563eb!important;
+  outline-offset:5px!important;
+  box-shadow:0 0 0 10px rgba(37,99,235,.34),0 0 52px 19px rgba(37,99,235,.98)!important;
+}
+@keyframes twTutorialHostMetricPulse{
+  0%,100%{transform:scale(.98);filter:brightness(1);box-shadow:0 0 0 6px rgba(37,99,235,.24),0 0 30px 10px rgba(37,99,235,.70)}
+  50%{transform:scale(1.02);filter:brightness(1.17);box-shadow:0 0 0 12px rgba(37,99,235,.40),0 0 58px 22px rgba(37,99,235,1)}
+}
+
+.tw-host-ended-podium{width:min(760px,92vw);margin:4px auto 8px}
+.tw-host-ended-card{width:100%;box-sizing:border-box}
+
+.tw-analytics-tab-out-badge{flex:0 0 auto;min-width:72px}
+@media(max-width:680px){
+  .tw-analytics-student-button{flex-wrap:wrap}
+  .tw-analytics-student-identity{min-width:calc(100% - 108px)}
+  .tw-analytics-tab-out-badge{order:3;margin-left:37px}
+  .tw-thinkbot-tutorial.tw-tutorial-nav-lower{margin-top:18px!important}
+}
+
+@media(max-width:720px){.tw-forgot-password-grid{grid-template-columns:1fr!important}}
+
+/* Revision 10.11 — plans, role selector, teacher home, builder tutorial, and host setup refinements. */
+
+/* GCash selector: the artwork itself is the blue surface, without a white pad. */
+.tw-plan-field.wide button[aria-label="Choose GCash"]{
+  width:150px!important;
+  height:58px!important;
+  min-height:58px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:10px!important;
+  overflow:hidden!important;
+  background:#0879bd!important;
+  box-shadow:0 0 0 2px transparent;
+}
+.tw-plan-field.wide button[aria-label="Choose GCash"][aria-pressed="true"]{
+  box-shadow:0 0 0 3px #2b6cff,0 8px 20px rgba(43,108,255,.22)!important;
+}
+.tw-plan-field.wide button[aria-label="Choose GCash"] img{
+  width:100%!important;
+  height:58px!important;
+  margin:0!important;
+  padding:0!important;
+  display:block!important;
+  object-fit:cover!important;
+  border-radius:10px!important;
+}
+
+/* Pro/Institution plan copy is intentionally easier to scan. */
+.tw-plan-page-copy>p{font-size:18px!important;line-height:1.72!important}
+.tw-plan-benefits{gap:14px!important}
+.tw-plan-benefits p{font-size:17px!important;line-height:1.48!important;font-weight:780!important;margin-top:1px!important}
+@media(min-width:901px){
+  .tw-plan-page-main{height:auto!important;min-height:calc(100dvh - 78px)!important;overflow:visible!important;padding-bottom:34px!important}
+  .tw-plan-page-copy>p{font-size:18px!important}
+  .tw-plan-benefits{gap:13px!important;margin-top:20px!important}
+  .tw-plan-benefits p{font-size:16px!important}
+}
+
+/* Get Started role selector colors. */
+.tw-modal-options>button.tw-role-option{
+  border-width:3px!important;
+  color:#0f172a!important;
+  transition:transform .14s ease,box-shadow .14s ease,filter .18s ease,background .2s ease!important;
+}
+.tw-modal-options>button.tw-role-option-red{background:linear-gradient(180deg,#fecaca,#fca5a5)!important;border-color:#dc2626!important;box-shadow:0 7px 0 #991b1b,0 13px 24px rgba(127,29,29,.18)!important}
+.tw-modal-options>button.tw-role-option-blue{background:linear-gradient(180deg,#bfdbfe,#93c5fd)!important;border-color:#2563eb!important;box-shadow:0 7px 0 #1e40af,0 13px 24px rgba(30,64,175,.18)!important}
+.tw-modal-options>button.tw-role-option-green{background:linear-gradient(180deg,#bbf7d0,#86efac)!important;border-color:#16a34a!important;box-shadow:0 7px 0 #166534,0 13px 24px rgba(22,101,52,.18)!important}
+.tw-modal-options>button.tw-role-option-yellow{background:linear-gradient(180deg,#fef08a,#fde047)!important;border-color:#ca8a04!important;box-shadow:0 7px 0 #854d0e,0 13px 24px rgba(133,77,14,.18)!important}
+.tw-modal-options>button.tw-role-option:hover{filter:brightness(.98)!important;transform:translateY(-2px)!important}
+.tw-modal-options>button.tw-role-option:active{transform:translateY(6px)!important;box-shadow:0 1px 0 rgba(15,23,42,.42),0 5px 10px rgba(15,23,42,.16)!important}
+body.dark-mode .tw-modal-options>button.tw-role-option{color:#f8fafc!important}
+body.dark-mode .tw-modal-options>button.tw-role-option-red{background:linear-gradient(180deg,#9f1239,#7f1d1d)!important;border-color:#fb7185!important;box-shadow:0 7px 0 #4c0519,0 13px 24px rgba(0,0,0,.28)!important}
+body.dark-mode .tw-modal-options>button.tw-role-option-blue{background:linear-gradient(180deg,#1d4ed8,#1e3a8a)!important;border-color:#60a5fa!important;box-shadow:0 7px 0 #172554,0 13px 24px rgba(0,0,0,.28)!important}
+body.dark-mode .tw-modal-options>button.tw-role-option-green{background:linear-gradient(180deg,#15803d,#14532d)!important;border-color:#4ade80!important;box-shadow:0 7px 0 #052e16,0 13px 24px rgba(0,0,0,.28)!important}
+body.dark-mode .tw-modal-options>button.tw-role-option-yellow{background:linear-gradient(180deg,#a16207,#713f12)!important;border-color:#facc15!important;box-shadow:0 7px 0 #422006,0 13px 24px rgba(0,0,0,.28)!important}
+
+/* Ready-to-Host is an actual navigation card. */
+.tw-teacher-metric-action{
+  width:100%;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+  appearance:none;
+}
+.tw-teacher-metric-action:focus-visible{outline:4px solid rgba(43,108,255,.36);outline-offset:3px}
+
+/* Include the Category label and both category buttons in one rounded tutorial focus. */
+[data-tutorial="create-category"].tw-tutorial-target-pulse{border-radius:16px!important}
+
+/* Keep the add-question helper close to its highlighted button. */
+.tw-thinkbot-tutorial.tw-tutorial-add-question-close{margin-top:-6px!important}
+
+/* Host setup preview: slightly larger phone, smaller mode controls, equal device outlines. */
+.tw-host-preview-desktop,.tw-host-preview-mobile{
+  border-width:3px!important;
+  border-style:solid!important;
+}
+.tw-host-preview-mobile{height:86%!important}
+.tw-host-mode-row .tw-host-mode-press,
+.tw-host-mode-row .tw-host-mode-press.is-selected{
+  height:54px!important;
+  min-height:54px!important;
+  padding-bottom:6px!important;
+  border-radius:12px!important;
+}
+.tw-host-mode-row .tw-host-mode-press>span{
+  height:48px!important;
+  min-height:48px!important;
+  border-radius:12px!important;
+  font-size:13px!important;
+}
+.tw-host-mode-row .tw-host-mode-press.is-selected>span{transform:translateY(6px)!important}
+@media(max-width:720px){.tw-host-preview-mobile{height:82%!important}}
+@media(max-width:520px){.tw-host-preview-mobile{height:76%!important}}
+
+/* Revision 10.11 follow-up — plan contrast, role icons, tutorial motion, and host background stability. */
+
+/* Pro / Institution application form: keep the dark form visibly lighter than the page. */
+body.dark-mode .tw-plan-application{
+  background:#102443!important;
+  border-color:rgba(147,197,253,.34)!important;
+  box-shadow:0 28px 80px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.035)!important;
+}
+.tw-plan-application h2{font-size:30px!important;line-height:1.15!important}
+.tw-plan-form-grid label{font-size:14px!important;line-height:1.35!important}
+.tw-plan-form-grid input,.tw-plan-form-grid select,.tw-plan-phone-wrap input{font-size:15px!important}
+.tw-plan-phone-wrap>span{font-size:15px!important}
+.tw-plan-submit{font-size:15px!important}
+.tw-plan-form-status{font-size:14px!important}
+
+/* Get Started window is a lighter surface than the dark landing background. */
+body.dark-mode .tw-start-modal{
+  background:#102443!important;
+  border-color:rgba(147,197,253,.34)!important;
+  box-shadow:0 34px 100px rgba(0,0,0,.52)!important;
+}
+
+/* Match each Get Started icon to the role/action color of its button. */
+.tw-role-option-red .tw-icon-bubble{color:#dc2626!important;border-color:rgba(220,38,38,.48)!important;background:rgba(220,38,38,.10)!important}
+.tw-role-option-blue .tw-icon-bubble{color:#2563eb!important;border-color:rgba(37,99,235,.48)!important;background:rgba(37,99,235,.10)!important}
+.tw-role-option-green .tw-icon-bubble{color:#16a34a!important;border-color:rgba(22,163,74,.48)!important;background:rgba(22,163,74,.10)!important}
+.tw-role-option-yellow .tw-icon-bubble{color:#ca8a04!important;border-color:rgba(202,138,4,.52)!important;background:rgba(202,138,4,.12)!important}
+body.dark-mode .tw-role-option-red .tw-icon-bubble{color:#fb7185!important;border-color:rgba(251,113,133,.58)!important;background:rgba(251,113,133,.14)!important}
+body.dark-mode .tw-role-option-blue .tw-icon-bubble{color:#60a5fa!important;border-color:rgba(96,165,250,.58)!important;background:rgba(96,165,250,.14)!important}
+body.dark-mode .tw-role-option-green .tw-icon-bubble{color:#4ade80!important;border-color:rgba(74,222,128,.58)!important;background:rgba(74,222,128,.14)!important}
+body.dark-mode .tw-role-option-yellow .tw-icon-bubble{color:#facc15!important;border-color:rgba(250,204,21,.60)!important;background:rgba(250,204,21,.14)!important}
+
+/* Rounded focus for MCQ choices and the Normal → Add Choice control cluster. */
+[data-tutorial="builder-mcq-options"].tw-tutorial-target-pulse,
+[data-tutorial="builder-mcq-controls"].tw-tutorial-mini-pulse,
+.tw-tutorial-mini-pulse{
+  border-radius:16px!important;
+}
+
+/* Keep answer-explanation and meta helpers beside their fields, but a little lower. */
+.tw-thinkbot-tutorial.tw-tutorial-answer-explanation{margin-top:8px!important}
+.tw-thinkbot-tutorial.tw-tutorial-meta-lower{margin-top:70px!important}
+
+/* Directional bob used by button-attached tutorial helpers. */
+.tw-thinkbot-tutorial.tw-tutorial-bob-up:not(.is-dragging){animation:twTutorialBobUp .95s ease-in-out infinite!important}
+.tw-thinkbot-tutorial.tw-tutorial-bob-down:not(.is-dragging){animation:twTutorialBobDown .95s ease-in-out infinite!important}
+@keyframes twTutorialBobUp{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes twTutorialBobDown{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+.tw-thinkbot-tutorial.tw-tutorial-button-below{margin-top:2px!important}
+.tw-thinkbot-tutorial.tw-tutorial-template-selected{margin-top:-4px!important}
+.tw-thinkbot-tutorial.tw-tutorial-host-ready-spaced{margin-top:-20px!important}
+
+
+
+/* Revision 10.13 — landing plans, compact application form, and tutorial refinements. */
+
+/* Landing plan cards are a little wider so the three-column layout breathes. */
+.tw-plan-grid-three{
+  width:min(100%,1220px)!important;
+  max-width:1220px!important;
+  gap:24px!important;
+}
+
+/* Pro gets a clear blue premium outline plus the same soft gloss treatment used by Institution. */
+.tw-plan-card.pro-featured{
+  position:relative;
+  border:4px solid #2b6cff!important;
+  box-shadow:0 26px 70px rgba(43,108,255,.20),inset 0 1px 0 rgba(255,255,255,.55)!important;
+  overflow:hidden;
+}
+.tw-plan-card.pro-featured::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(125deg,rgba(255,255,255,.36),transparent 30%,rgba(96,165,250,.14) 52%,transparent 72%);
+  mix-blend-mode:screen;
+}
+.tw-plan-card.pro-featured>*{position:relative;z-index:1}
+.tw-plan-card.featured>*{position:relative;z-index:1}
+
+/* Basic CTA follows dark mode instead of staying as a bright white slab. */
+body.dark-mode .tw-plan-basic-action{
+  background:rgba(59,130,246,.13)!important;
+  color:#93c5fd!important;
+  border-color:#60a5fa!important;
+}
+body.dark-mode .tw-plan-basic-action:hover{
+  background:#2563eb!important;
+  color:#fff!important;
+  border-color:#60a5fa!important;
+  box-shadow:0 12px 28px rgba(37,99,235,.28)!important;
+}
+
+/* Remove the large top/bottom dead space around Get Started role options. */
+.tw-start-modal>.tw-modal-options{
+  margin-top:18px!important;
+  margin-bottom:0!important;
+}
+.tw-modal-options>button.tw-role-option{
+  min-height:116px!important;
+  padding:10px 20px!important;
+}
+@media(max-width:620px){
+  .tw-modal-options>button.tw-role-option{min-height:96px!important;padding:8px 16px!important}
+}
+
+/* Plan page: wider GCash tile at the same height, shorter form, and raised hover feedback. */
+.tw-plan-application{
+  min-height:0!important;
+  padding:12px 20px!important;
+}
+.tw-plan-application h2{margin:0 0 8px!important}
+.tw-plan-form-grid{gap:6px 11px!important}
+.tw-plan-form-grid label{gap:3px!important}
+.tw-plan-form-grid input,.tw-plan-form-grid select{min-height:36px!important;padding:7px 10px!important}
+.tw-plan-phone-wrap{min-height:36px!important}
+.tw-plan-phone-wrap input{min-height:34px!important}
+.tw-plan-submit{
+  margin-top:8px!important;
+  min-width:126px!important;
+  justify-content:center!important;
+  transition:transform .2s ease,box-shadow .2s ease,filter .2s ease!important;
+}
+.tw-plan-submit:hover:not(:disabled){
+  transform:translateY(-3px);
+  filter:brightness(1.06);
+  box-shadow:0 0 0 8px rgba(43,108,255,.12),0 18px 38px rgba(43,108,255,.28)!important;
+}
+.tw-plan-submit:active:not(:disabled){transform:translateY(1px)}
+.tw-plan-field.wide button[aria-label="Choose GCash"]{
+  width:225px!important;
+  min-height:58px!important;
+  height:58px!important;
+  padding:0!important;
+  transition:transform .2s ease,box-shadow .2s ease,filter .2s ease!important;
+}
+.tw-plan-field.wide button[aria-label="Choose GCash"] img{
+  width:100%!important;
+  height:58px!important;
+  object-fit:cover!important;
+}
+.tw-plan-field.wide button[aria-label="Choose GCash"]:hover{
+  transform:translateY(-3px);
+  filter:brightness(1.06);
+  box-shadow:0 0 0 7px rgba(8,121,189,.13),0 16px 32px rgba(8,121,189,.28)!important;
+}
+.tw-plan-field.wide button[aria-label="Choose GCash"]:active{transform:translateY(1px)}
+@media(min-width:901px){
+  .tw-plan-page-main{padding:6px 0 8px!important}
+}
+
+/* Category tutorial has one clean outer focus ring, without the extra inner halo. */
+[data-tutorial="create-category"].tw-tutorial-target-pulse{
+  box-shadow:0 0 38px 13px rgba(43,108,255,.62)!important;
+}
+
+/* Keep the role selector compact around its option buttons instead of reserving empty vertical padding. */
+.tw-start-modal{height:auto!important;min-height:0!important;max-height:calc(100dvh - 40px)!important}
+@media(max-width:620px){.tw-start-modal{height:auto!important;min-height:0!important}}
+
+
+/* Revision 10.13 corrected pass — tutorial motion/spacing and action/avatar clearance. */
+.tw-thinkbot-tutorial.tw-tutorial-nav-flow:not(.is-dragging){
+  animation:twTutorialNavFlow 1.15s cubic-bezier(.45,0,.55,1) infinite!important;
+}
+@keyframes twTutorialNavFlow{
+  0%,100%{transform:translateX(0)}
+  50%{transform:translateX(7px)}
+}
+
+/* Done buttons on short Create/Builder prompts get their own vertical lane so
+   ThinkBot stays visibly above the action instead of being covered by it. */
+.tw-thinkbot-tutorial.tw-tutorial-done-avatar-clear{
+  min-height:176px!important;
+}
+.tw-thinkbot-tutorial.tw-tutorial-done-avatar-clear .tw-thinkbot-tutorial-avatar{
+  top:10px!important;
+}
+.tw-thinkbot-tutorial.tw-tutorial-done-avatar-clear .tw-thinkbot-tutorial-actions{
+  margin-top:22px!important;
+}
+
+/* The Timer / Points helper remains centered beside the controls, but sits
+   slightly higher than the previous follow-up. */
+.tw-thinkbot-tutorial.tw-tutorial-meta-lower{margin-top:30px!important}
+
+@media(max-width:760px){
+  .tw-thinkbot-tutorial.tw-tutorial-done-avatar-clear{min-height:158px!important}
+  .tw-thinkbot-tutorial.tw-tutorial-done-avatar-clear .tw-thinkbot-tutorial-avatar{top:8px!important}
+}
+
+/* Revision 10.14 — analytics focus, class reports, tutorial contrast, and template-coded guidance. */
+
+/* When a teacher expands one student, temporarily hide the sibling student
+   cards while keeping the right-side analytics structure in place. */
+.tw-analytics-scoreboard.has-expanded-student{
+  width:100%!important;
+  max-width:none!important;
+}
+.tw-analytics-scoreboard.has-expanded-student .tw-analytics-student-card{
+  width:100%!important;
+}
+
+/* Class reports now share the visual language of Home > Recent Sessions. */
+.tw-class-report-list{
+  grid-auto-rows:auto!important;
+  align-content:start!important;
+  gap:10px!important;
+}
+.tw-class-home-session-card{
+  min-height:0!important;
+  height:auto!important;
+  box-sizing:border-box;
+}
+.tw-class-home-session-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 16px 34px rgba(43,108,255,.14)!important;
+}
+.tw-folder-card{
+  border-width:3px!important;
+  border-radius:12px!important;
+}
+
+/* In dark mode ThinkBot uses the same lifted dark surface treatment as the
+   refreshed authentication/application forms instead of blending into the page. */
+body.dark-mode .tw-thinkbot-tutorial{
+  background:#102443!important;
+  border-color:#60a5fa!important;
+  box-shadow:0 28px 78px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.035)!important;
+}
+body.dark-mode .tw-thinkbot-tutorial.is-transparent{
+  background:rgba(16,36,67,.92)!important;
+}
+
+/* Quiz-builder tutorial focus inherits a lighter shade of the active template
+   color. Outside the builder the fallback remains ThinkWAVE blue. */
+.tw-tutorial-highlight{
+  border-color:var(--tw-template-tutorial-highlight,#2b6cff)!important;
+  box-shadow:0 0 0 5px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 22%,transparent),0 0 34px 12px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 62%,transparent)!important;
+  animation:twTutorialColorSpotlight .92s ease-in-out infinite!important;
+}
+@keyframes twTutorialColorSpotlight{
+  0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 16%,transparent),0 0 24px 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 40%,transparent)}
+  50%{box-shadow:0 0 0 9px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 28%,transparent),0 0 44px 16px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 78%,transparent)}
+}
+.tw-tutorial-target-pulse:not(.tw-tutorial-target-nav){
+  outline-color:var(--tw-template-tutorial-highlight,#2b6cff)!important;
+  box-shadow:0 0 0 5px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 22%,transparent),0 0 38px 13px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 66%,transparent)!important;
+  animation:twTutorialColorTarget .88s ease-in-out infinite!important;
+}
+@keyframes twTutorialColorTarget{
+  0%,100%{outline-width:3px;box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 16%,transparent),0 0 25px 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 43%,transparent)}
+  50%{outline-width:5px;box-shadow:0 0 0 8px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 28%,transparent),0 0 45px 16px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 80%,transparent)}
+}
+.tw-tutorial-mini-pulse{
+  outline-color:var(--tw-template-tutorial-highlight,#2b6cff)!important;
+  box-shadow:0 0 0 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 20%,transparent),0 0 28px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 78%,transparent)!important;
+  animation:twTutorialColorMini .78s ease-in-out infinite alternate!important;
+}
+@keyframes twTutorialColorMini{
+  from{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 15%,transparent),0 0 18px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 48%,transparent)}
+  to{box-shadow:0 0 0 8px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 26%,transparent),0 0 32px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 82%,transparent)}
+}
+
+/* The optional per-template prompt uses Skip as plain text, while Okay keeps the
+   standard 3D tutorial button treatment. */
+.tw-thinkbot-tutorial.tw-tutorial-template-optin .tw-tutorial-secondary{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:inherit!important;
+  padding:9px 8px!important;
+  text-decoration:none;
+  opacity:.72;
+}
+.tw-thinkbot-tutorial.tw-tutorial-template-optin .tw-tutorial-secondary:hover{
+  transform:none!important;
+  filter:none!important;
+  opacity:1;
+  text-decoration:underline;
+}
+
+/* Create-page Category and Quiz Template now use the same roomy spotlight box
+   as builder question fields, so the focus ring does not hug text/buttons. */
+.tw-create-category-tutorial-target,
+.tw-create-template-tutorial-target{
+  margin:0!important;
+  padding:0!important;
+}
+
+
+/* Revision 10.15 — matching media opt-in, compact Guess Word images, and stable Done-button tutorial layout. */
+.tw-thinkbot-tutorial-actions.is-reserved{
+  min-height:48px;
+}
+.tw-matching-pair-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:9px;
+  flex-wrap:wrap;
+}
+.tw-guess-word-grid{
+  grid-template-columns:repeat(2,minmax(0,180px))!important;
+  justify-content:center;
+  width:min(100%,390px);
+  margin:0 auto;
+  gap:12px!important;
+}
+.tw-guess-word-image{
+  aspect-ratio:1 / 1!important;
+  width:100%;
+  min-width:0;
+}
+.tw-guess-word-image > *,
+.tw-guess-word-image .tw-builder-image-tile,
+.tw-guess-word-image .tw-builder-image-tile > label,
+.tw-guess-word-image .tw-builder-image-tile img{
+  aspect-ratio:1 / 1!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+}
+.tw-thinkbot-tutorial.tw-tutorial-matching-tip{
+  width:min(330px,calc(100vw - 28px))!important;
+}
+@media(max-width:620px){
+  .tw-matching-pair-actions{width:100%;justify-content:flex-start}
+  .tw-guess-word-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    width:min(100%,340px);
+  }
+}
+
+/* Revision 10.16 — tutorial stability, crossword fields, preview zoom, and setup polish. */
+
+/* Superadmin setup follows the public-page theme control placement. */
+.tw-superadmin-setup-theme{
+  position:fixed!important;
+  left:22px;
+  bottom:22px;
+  z-index:10020;
+  width:46px!important;
+  height:46px!important;
+  display:grid!important;
+  place-items:center;
+  border-radius:999px!important;
+  border:2px solid rgba(43,108,255,.42)!important;
+  background:rgba(255,255,255,.92)!important;
+  color:#2b6cff!important;
+  box-shadow:0 12px 30px rgba(15,23,42,.18)!important;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+body.dark-mode .tw-superadmin-setup-theme{
+  background:#102443!important;
+  color:#93c5fd!important;
+  border-color:rgba(147,197,253,.42)!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.38)!important;
+}
+
+/* Every tutorial reserves the same action lane from first paint. Delayed
+   buttons fade into this lane without resizing/reflowing the dialogue. */
+.tw-thinkbot-tutorial-actions.is-reserved{
+  min-height:52px!important;
+  flex:0 0 52px;
+}
+.tw-thinkbot-tutorial-actions.is-reserved:not(.has-action){visibility:hidden}
+.tw-thinkbot-tutorial-actions.is-reserved.has-action{visibility:visible}
+
+/* Dark-mode tutorial borders keep their template/session accent instead of
+   being forced back to ThinkWAVE blue. */
+body.dark-mode .tw-thinkbot-tutorial{
+  border-color:var(--tw-tutorial-face,#60a5fa)!important;
+}
+
+/* Keep the template opt-in controls and ThinkBot in separate visual lanes. */
+.tw-thinkbot-tutorial.tw-tutorial-template-optin{
+  min-height:205px!important;
+}
+.tw-thinkbot-tutorial.tw-tutorial-template-optin .tw-thinkbot-tutorial-avatar{
+  top:12px!important;
+  right:16px!important;
+  width:78px!important;
+  height:78px!important;
+}
+.tw-thinkbot-tutorial.tw-tutorial-template-optin .tw-thinkbot-tutorial-copy{
+  padding-right:12px!important;
+}
+
+/* Guess Word: smaller square 2×2 image set. */
+.tw-guess-word-grid{
+  grid-template-columns:repeat(2,minmax(0,145px))!important;
+  width:min(100%,306px)!important;
+  gap:10px!important;
+}
+.tw-guess-word-image{
+  width:145px!important;
+  max-width:100%;
+  aspect-ratio:1/1!important;
+}
+.tw-guess-word-answer-row{
+  display:grid!important;
+  grid-template-columns:minmax(220px,1fr) minmax(150px,.42fr)!important;
+  gap:14px!important;
+  align-items:end!important;
+}
+.tw-guess-word-explanation{
+  grid-column:1 / -1;
+  min-width:0;
+}
+.tw-guess-word-explanation .tw-correct-answer-explanation{margin-top:0!important}
+@media(max-width:620px){
+  .tw-guess-word-grid{width:min(100%,280px)!important;grid-template-columns:repeat(2,minmax(0,135px))!important}
+  .tw-guess-word-image{width:135px!important}
+  .tw-guess-word-answer-row{grid-template-columns:1fr!important}
+  .tw-guess-word-explanation{grid-column:1}
+}
+
+/* Crossword valid words use compact fixed two-column fields. */
+.tw-crossword-word-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:8px;
+}
+.tw-crossword-word-actions{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.tw-crossword-word-actions button{
+  width:38px!important;
+  height:34px!important;
+  min-width:38px!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center;
+  font-size:20px!important;
+  line-height:1!important;
+  border-radius:10px!important;
+}
+.tw-crossword-word-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+}
+@media(max-width:560px){.tw-crossword-word-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}}
+
+/* Host preview cards are interactive and can be inspected without leaving the
+   setup modal. */
+.tw-host-preview-clickable{
+  appearance:none;
+  cursor:zoom-in!important;
+  color:inherit;
+  transition:transform .22s ease,box-shadow .22s ease,filter .22s ease!important;
+}
+.tw-host-preview-clickable:hover{
+  transform:translateY(-4px) scale(1.015)!important;
+  filter:brightness(1.04);
+  box-shadow:0 22px 48px rgba(15,23,42,.25)!important;
+}
+.tw-host-preview-clickable:focus-visible{
+  outline:4px solid rgba(43,108,255,.55)!important;
+  outline-offset:4px;
+}
+.tw-host-preview-zoom-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:32000;
+  display:grid;
+  place-items:center;
+  padding:28px;
+  background:rgba(7,17,31,.48);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  cursor:zoom-out;
+}
+.tw-host-preview-zoom-card{
+  max-width:min(92vw,1120px);
+  max-height:88vh;
+  border-radius:22px;
+  padding:10px;
+  background:#fff;
+  border:4px solid rgba(255,255,255,.9);
+  box-shadow:0 34px 100px rgba(0,0,0,.48);
+  cursor:default;
+  animation:twTutorialFade .22s ease both;
+}
+.tw-host-preview-zoom-card.is-mobile{height:min(82vh,760px);width:auto}
+.tw-host-preview-zoom-card.is-desktop{width:min(90vw,1080px)}
+.tw-host-preview-zoom-card img{
+  display:block;
+  width:100%;
+  height:100%;
+  max-height:calc(88vh - 20px);
+  object-fit:contain;
+  border-radius:14px;
+}
+
+/* The metrics themselves stay still; only their tutorial focus ring pulses. */
+.tw-tutorial-host-metrics-pulse{
+  position:relative;
+  z-index:30015!important;
+  outline:4px solid var(--tw-template-tutorial-highlight,#2b6cff)!important;
+  outline-offset:5px!important;
+  border-radius:14px;
+  transform:none!important;
+  filter:none!important;
+  animation:twTutorialHostMetricOutline1016 .72s ease-in-out infinite!important;
+}
+@keyframes twTutorialHostMetricOutline1016{
+  0%,100%{outline-width:3px;box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 18%,transparent),0 0 22px 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 52%,transparent)}
+  50%{outline-width:5px;box-shadow:0 0 0 9px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 30%,transparent),0 0 42px 16px color-mix(in srgb,var(--tw-template-tutorial-highlight,#2b6cff) 88%,transparent)}
+}
+
+/* Create-tab spotlight padding is now part of the clear interaction hole, so
+   the space inside Category / Quiz Template highlights is not greyed out. */
+.tw-create-category-tutorial-target.tw-tutorial-active-target,
+.tw-create-template-tutorial-target.tw-tutorial-active-target{
+  background:#fff!important;
+  border-radius:16px!important;
+}
+body.dark-mode .tw-create-category-tutorial-target.tw-tutorial-active-target,
+body.dark-mode .tw-create-template-tutorial-target.tw-tutorial-active-target{
+  background:#fff!important;
+}
+
+/* 10.16 preview button normalization */
+.tw-host-preview-clickable { background: transparent !important; padding: 0 !important; border-style: solid; font: inherit; }
