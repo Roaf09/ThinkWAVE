@@ -189,7 +189,7 @@ export function registerSessionSockets(io) {
         const snapshot = safeJson(session.questions_snapshot_json) || [];
         const currentQuestion = snapshot[Number(session.current_question_index || 0)] || null;
         const total = Number(currentQuestion?.config_json?.timeLimitSec || 0);
-        const startedAt = session.question_started_at ? new Date(session.question_started_at).getTime() : Date.now();
+        const startedAt = session.question_started_unix != null ? Number(session.question_started_unix) * 1000 : Date.now();
         const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
         pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
         await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
@@ -1112,29 +1112,30 @@ async function broadcastState(io, sessionId) {
         ? "q.background_key AS background_key"
         : "NULL AS background_key";
   const [[state]] = await pool.query(
-    `SELECT s.id, s.status, s.current_question_index, s.question_started_at, s.questions_snapshot_json,
-            s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
-            ${backgroundSelect},
-            q.id AS quiz_id, q.title AS quiz_title, q.category AS quiz_category,
-            q.template_type, q.time_limit_sec, q.shuffle_answers, q.randomize_questions,
-            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
-     FROM sessions s JOIN quizzes q ON q.id=s.quiz_id JOIN users u ON u.id=s.teacher_id
-     WHERE s.id=:sid`,
-    { sid: sessionId }
-  );
-  if (!state) return;
-  state.background_key = normalizeSessionBackgroundKey(state.background_key || getRememberedSessionBackground(sessionId));
+  `SELECT s.id, s.status, s.current_question_index, s.question_started_at,
+          UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix, s.questions_snapshot_json,
+          s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
+          ${backgroundSelect},
+          q.id AS quiz_id, q.title AS quiz_title, q.category AS quiz_category,
+          q.template_type, q.time_limit_sec, q.shuffle_answers, q.randomize_questions,
+          CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+   FROM sessions s JOIN quizzes q ON q.id=s.quiz_id JOIN users u ON u.id=s.teacher_id
+   WHERE s.id=:sid`,
+  { sid: sessionId }
+);
+if (!state) return;
+state.background_key = normalizeSessionBackgroundKey(state.background_key || getRememberedSessionBackground(sessionId));
 
-  const qs = safeJson(state.questions_snapshot_json) || [];
-  const currentQ = qs[Number(state.current_question_index || 0)] || null;
-  const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
-  const serverNow = new Date();
-  state.server_now = serverNow.toISOString();
-  state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
-  state.question_deadline_at = state.question_started_at && qLimit > 0 ? new Date(new Date(state.question_started_at).getTime() + qLimit * 1000).toISOString() : null;
-  io.to(roomSession(sessionId)).emit("session:state", { state, questions: qs });
-  io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });
-  await broadcastScores(io, sessionId);
+const qs = safeJson(state.questions_snapshot_json) || [];
+const currentQ = qs[Number(state.current_question_index || 0)] || null;
+const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
+const serverNow = new Date();
+state.server_now = serverNow.toISOString();
+state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
+const startedUnixSec = state.question_started_unix != null ? Number(state.question_started_unix) : null;
+state.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
+state.question_deadline_at = startedUnixSec != null && qLimit > 0 ? new Date((startedUnixSec + qLimit) * 1000).toISOString() : null;
+delete state.question_started_unix;
 }
 
 function safeJson(v) {

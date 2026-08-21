@@ -230,17 +230,18 @@ export async function getSessionStateTeacher(req, res) {
         ? "q.background_key AS resolved_background_key,"
         : "NULL AS resolved_background_key,";
   const [[session]] = await pool.query(
-    `SELECT s.*, ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
-            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
-     FROM sessions s
-     JOIN quizzes q ON q.id=s.quiz_id
-     JOIN users u ON u.id=s.teacher_id
-     WHERE s.id=:sid AND s.teacher_id=:tid`,
-    { sid: sessionId, tid: req.user.sub }
+  `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
+          ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
+          CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+   FROM sessions s
+   JOIN quizzes q ON q.id=s.quiz_id
+   JOIN users u ON u.id=s.teacher_id
+   WHERE s.id=:sid AND s.teacher_id=:tid`,
+  { sid: sessionId, tid: req.user.sub }
   );
   if (!session) return res.status(404).json({ message: "Session not found" });
   session.background_key = normalizeSessionBackgroundKey(
-    session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
+  session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
   );
   delete session.resolved_background_key;
 
@@ -248,8 +249,10 @@ export async function getSessionStateTeacher(req, res) {
   const currentQ = questions[Number(session.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || session.time_limit_sec || 0);
   session.server_now = new Date().toISOString();
-  session.question_deadline_at = session.question_started_at && qLimit > 0 ? new Date(new Date(session.question_started_at).getTime() + qLimit * 1000).toISOString() : null;
-
+  const startedUnixSec = session.question_started_unix != null ? Number(session.question_started_unix) : null;
+  session.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
+  session.question_deadline_at = startedUnixSec != null && qLimit > 0 ? new Date((startedUnixSec + qLimit) * 1000).toISOString() : null;
+  delete session.question_started_unix; 
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
