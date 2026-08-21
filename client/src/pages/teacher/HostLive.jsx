@@ -439,18 +439,45 @@ export default function HostLive({ guestMode = false }) {
   }
 
   async function startWithCountdown() {
-    if (starting) return;
-    if (!canStart) { setMsg("Create groups and assign all joined students before starting."); return; }
-    setStarting(true);
+  if (starting) return;
+
+  if (!canStart) {
+    setMsg("Create groups and assign all joined students before starting.");
+    return;
+  }
+
+  const socket = socketRef.current;
+
+  if (!socket?.connected) {
+    setMsg("Connection to the live session was lost. Please refresh and try again.");
+    return;
+  }
+
+  setStarting(true);
+
+  try {
     for (let value = 3; value >= 1; value -= 1) {
       setCountdown(value);
+
       const keepGoing = await waitForCountdownTick();
       if (!keepGoing) return;
     }
+
+    if (!socket.connected) {
+      setMsg("Connection lost while starting the session.");
+      return;
+    }
+
     setCountdown(0);
-    socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "LIVE" });
+
+    socket.emit("teacher:setStatus", {
+      sessionId: Number(id),
+      status: "LIVE",
+    });
+  } finally {
     setStarting(false);
   }
+}
 
   function nextQuestion() {
     if (!isLive || isLast) return;
