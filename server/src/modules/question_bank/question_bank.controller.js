@@ -54,7 +54,7 @@ export async function saveToBank(req, res) {
   const incomingConfig = stableStringify(config || null);
   const incomingCorrect = stableStringify(correct || null);
   const duplicate = existingRows.some((row) => stableStringify(safeJson(row.config_json)) === incomingConfig && stableStringify(safeJson(row.correct_json)) === incomingCorrect);
-  if (duplicate) return res.status(409).json({ message: "This question has already been saved." });
+  if (duplicate) return res.status(409).json({ message: "This question had already been saved." });
 
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC") {

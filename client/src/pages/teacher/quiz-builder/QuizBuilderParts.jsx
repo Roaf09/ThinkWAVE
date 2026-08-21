@@ -217,7 +217,7 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
   return (
     <div style={{ ...ui.innerCard, display: "grid", gridTemplateColumns: "minmax(260px,.85fr) minmax(300px,1.15fr)", gap: 18, alignItems: "start" }}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div>
+        <div data-tutorial="builder-crossword-word-editor">
           <div className="tw-crossword-word-head">
             <label style={ui.smallLabel}>Valid or correct words</label>
             <div className="tw-crossword-word-actions">
@@ -668,7 +668,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
           ))}
         </div>
 
-        <div className="tw-guess-word-answer-row" style={{ marginTop: 16, padding: 15, borderRadius: 16, border: `1px solid ${ui.templateBorder || c.border}`, background: ui.templateSoftBg || c.cardBg2 }}>
+        <div className="tw-guess-word-answer-row" data-tutorial="builder-guess-word-fields" style={{ marginTop: 16, padding: 15, borderRadius: 16, border: `1px solid ${ui.templateBorder || c.border}`, background: ui.templateSoftBg || c.cardBg2 }}>
           <div data-tutorial="builder-guess-answer">
             <label style={{ ...ui.smallLabel, display: "block", marginBottom: 8 }}>Correct word</label>
             <input
@@ -771,13 +771,13 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
               disabled={imagesEnabled}
               onClick={enablePairImages}
             >{imagesEnabled ? "✓ Images Added" : "＋ Add Image"}</button>
-            <button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? .5 : 1 }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
+            <button type="button" data-tutorial="builder-matching-add-pair" className="tw-builder-press tw-builder-press-blue" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? .5 : 1 }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Add Pair</button>
           </div>
         </div>
 
         <div className="tw-matching-pair-carousel">
           <button type="button" className="tw-matching-arrow" style={{ color: c.text, borderColor: c.border, background: c.cardBg }} disabled={activePair === 0} onClick={() => showPair(activePair - 1)}>←</button>
-          <div key={`${activePair}-${matchingDirection}`} className={`tw-matching-pair-card is-${matchingDirection}`} style={{ borderColor: ui.templateBorder, background: c.cardBg2 }}>
+          <div key={`${activePair}-${matchingDirection}`} data-tutorial="builder-matching-active-pair" className={`tw-matching-pair-card is-${matchingDirection}`} style={{ borderColor: ui.templateBorder, background: c.cardBg2 }}>
             <div className="tw-matching-pair-head">
               <span style={{ ...ui.badge, background: ui.templateSoftBg, color: ui.templateAccent }}>Pair {activePair + 1} of {colA.length}</span>
               <button type="button" className="tw-builder-press tw-builder-press-red" disabled={colA.length <= 1} onClick={() => removeRow(activePair)}>Delete pair</button>
@@ -802,11 +802,11 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
 
         <div className="tw-matching-dummy-section" data-tutorial="builder-matching-dummy" style={{ borderColor: c.border, background: c.cardBg2 }}>
           {activeDummy.length === 0 ? (
-            <div className="tw-matching-add-dummy-empty"><button type="button" className="tw-builder-press tw-builder-press-blue" onClick={addDummy}>＋ Add Dummy</button></div>
+            <div className="tw-matching-add-dummy-empty"><button type="button" data-tutorial="builder-matching-add-dummy" className="tw-builder-press tw-builder-press-blue" onClick={addDummy}>＋ Add Dummy</button></div>
           ) : <>
             <div className="tw-matching-dummy-head">
               <div><h4 style={{ ...ui.innerTitle, margin: 0 }}>Dummy Answers</h4></div>
-              {activeDummy.length < maxDummies && <button type="button" className="tw-builder-press tw-builder-press-blue" onClick={addDummy}>＋ Add Dummy</button>}
+              {activeDummy.length < maxDummies && <button type="button" data-tutorial="builder-matching-add-dummy" className="tw-builder-press tw-builder-press-blue" onClick={addDummy}>＋ Add Dummy</button>}
             </div>
             <div className={`tw-matching-dummy-grid${activeDummy.length === 1 ? " is-single" : ""}`}>
               {activeDummy.map((row, index) => (

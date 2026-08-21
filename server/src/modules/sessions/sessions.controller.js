@@ -224,6 +224,7 @@ export async function getSessionStateTeacher(req, res) {
         : "NULL AS resolved_background_key,";
   const [[session]] = await pool.query(
     `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
+            UNIX_TIMESTAMP(NOW(3)) AS server_now_unix,
             ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
             CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
      FROM sessions s
@@ -241,13 +242,20 @@ export async function getSessionStateTeacher(req, res) {
   const questions = safeJson(session.questions_snapshot_json) || [];
   const currentQ = questions[Number(session.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || session.time_limit_sec || 0);
-  session.server_now = new Date().toISOString();
+  const serverNowUnixSec = session.server_now_unix != null ? Number(session.server_now_unix) : Date.now() / 1000;
   const startedUnixSec = session.question_started_unix != null ? Number(session.question_started_unix) : null;
-  session.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
-  session.question_deadline_at = startedUnixSec != null && qLimit > 0
-    ? new Date((startedUnixSec + qLimit) * 1000).toISOString()
+  session.server_now_ms = Math.round(serverNowUnixSec * 1000);
+  session.question_started_at_ms = startedUnixSec != null ? Math.round(startedUnixSec * 1000) : null;
+  session.question_deadline_at_ms = startedUnixSec != null && qLimit > 0
+    ? Math.round((startedUnixSec + qLimit) * 1000)
     : null;
+  // Keep the ISO fields for older clients, but derive them from the exact epoch
+  // values so browser/Node/MySQL timezone settings cannot disagree.
+  session.server_now = new Date(session.server_now_ms).toISOString();
+  session.question_started_at = session.question_started_at_ms != null ? new Date(session.question_started_at_ms).toISOString() : null;
+  session.question_deadline_at = session.question_deadline_at_ms != null ? new Date(session.question_deadline_at_ms).toISOString() : null;
   delete session.question_started_unix;
+  delete session.server_now_unix;
 
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
@@ -494,6 +502,7 @@ export async function getSessionFullAnalytics(req, res) {
     summary: data.summary,
     questions: data.questions,
     students: data.students,
+    tabMonitoring: data.tabMonitoring || [],
   });
 }
 

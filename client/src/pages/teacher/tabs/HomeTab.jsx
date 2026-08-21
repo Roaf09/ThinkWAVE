@@ -116,7 +116,16 @@ export default function HomeTab({ setActiveTab }) {
 
   const recentSessions = sessions.slice(0, 2);
   const draftQuizzes = quizzes.filter((q) => q.status !== "BANKED" && q.status !== "PUBLISHED");
-  const readyToHost = quizzes.filter((q) => q.status === "PUBLISHED" || q.status === "IN_SESSION");
+  // This mirrors the actual cards available on the Sessions tab.
+  const readyToHost = quizzes.filter((q) => q.status !== "BANKED" && q.delivery_mode !== "ASYNCHRONOUS");
+  // Count section folders only and deduplicate sections with the same class name
+  // when they appear under more than one subject folder.
+  const classesHandled = new Set(
+    folders
+      .filter((folder) => Number(folder.parent_id || 0) > 0)
+      .map((folder) => String(folder.name || "").trim().toLowerCase())
+      .filter(Boolean)
+  ).size;
   const sentAssignments = quizzes.filter((q) => q.delivery_mode === "ASYNCHRONOUS").length;
   const warningCount = quizzes.filter((q) => q.status !== "PUBLISHED" || !q.class_id).length;
   const banked = quizzes.filter((q) => q.status === "BANKED");
@@ -156,7 +165,7 @@ export default function HomeTab({ setActiveTab }) {
 
         <section style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
           <div style={{ display: "grid", gap: 14 }}>
-            <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Published or active quizzes" tone="blue" onClick={() => setActiveTab?.("live")} />
+            <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Quizzes currently available in Sessions" tone="blue" onClick={() => setActiveTab?.("live")} />
             <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
 
@@ -173,7 +182,7 @@ export default function HomeTab({ setActiveTab }) {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
-              <MiniInfo c={c} label="Class Handled" value={folders.length} tone="red" />
+              <MiniInfo c={c} label="Class Handled" value={classesHandled} tone="red" />
               <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" />
               <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" />
               <MiniInfo c={c} label="Banked quizzes" value={banked.length} tone="yellow" />

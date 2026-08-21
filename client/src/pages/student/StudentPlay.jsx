@@ -300,7 +300,8 @@ export default function StudentPlay() {
         return payload.state;
       });
       setQuestions(payload.questions || []);
-      if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
+      if (payload.state?.server_now_ms != null) setClockOffsetMs(Date.now() - Number(payload.state.server_now_ms));
+      else if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
       if (payload.state?.status === "LIVE") void soundManager.startBGM("playing");
       if (payload.state?.status === "LOBBY" || payload.state?.status === "PAUSED") void soundManager.startBGM("lobby");
       if (payload.state?.status === "ENDED") {
@@ -498,10 +499,13 @@ export default function StudentPlay() {
     const total = Number(currentQ?.config_json?.timeLimitSec || state?.time_limit_sec || 0);
     if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
     const serverNowMs = nowMs - clockOffsetMs;
-    const started = state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
+    const started = state?.question_started_at_ms != null
+      ? Number(state.question_started_at_ms)
+      : state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
     if (started && started > serverNowMs) return { remainingSec: total, progress: total > 0 ? 1 : 0, total };
-    if (state?.question_deadline_at) {
-      const remainingMs = Math.max(0, new Date(state.question_deadline_at).getTime() - serverNowMs);
+    if (state?.question_deadline_at_ms != null || state?.question_deadline_at) {
+      const deadlineMs = state?.question_deadline_at_ms != null ? Number(state.question_deadline_at_ms) : new Date(state.question_deadline_at).getTime();
+      const remainingMs = Math.max(0, deadlineMs - serverNowMs);
       const remaining = Math.ceil(remainingMs / 1000);
       return { remainingSec: remaining, progress: total > 0 ? Math.min(1, remaining / total) : 0, total };
     }

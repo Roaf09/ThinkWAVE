@@ -225,15 +225,14 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       setAssignmentSaved(true);
       setAssignmentNotice({ className: selectedClass?.name || selectedClass?.pathLabel || "your class" });
       window.setTimeout(() => setAssignmentSaved(false), 2000);
-      window.setTimeout(() => setAssignmentNotice(null), 3600);
     } catch (error) {
       showFlash(error?.response?.data?.message || "Failed to create assignment.", "error");
     }
   }
 
-  async function deleteQuiz(quiz) { try { await api.delete(`/quizzes/${quiz.id}`); setConfirmState(null); await load(); showFlash("Quiz deleted successfully."); } catch (error) { showFlash(error?.response?.data?.message || "Failed to delete quiz.", "error"); } }
-  async function addToQuizBank(quiz) { try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); await load(); showFlash("Quiz copied to Quiz Bank."); } catch (error) { showFlash(error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.", "error"); } }
-  async function duplicateQuiz(quiz) { try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); await load(); showFlash("Duplicate quiz created."); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); } catch (error) { showFlash(error?.response?.data?.message || "Failed to duplicate quiz.", "error"); } }
+  async function deleteQuiz(quiz) { try { await api.delete(`/quizzes/${quiz.id}`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to delete quiz.", "error"); } }
+  async function addToQuizBank(quiz) { try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.", "error"); } }
+  async function duplicateQuiz(quiz) { try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); await load(); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); } catch (error) { showFlash(error?.response?.data?.message || "Failed to duplicate quiz.", "error"); } }
 
   if (loading) return <div className="container"><div style={card(c)}>Loading sessions…</div></div>;
 
@@ -266,7 +265,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       />)}</div>}
       {previewQuiz && <QuizPreviewModal quiz={previewQuiz} onClose={() => setPreviewQuiz(null)} />}
       {!guestMode && assignmentSaved && <ProfileSavedOverlay />}
-      {!guestMode && assignmentNotice && <ThinkBotTutorial placement="screen-right" dialogWidth={430} blockInteraction={false} highlight={false} className="tw-assignment-live-notice"><p><strong>Your assignment is live!</strong></p><p>Students in <strong>{assignmentNotice.className}</strong> can access it according to the schedule you selected.</p></ThinkBotTutorial>}
+      {!guestMode && assignmentNotice && <ThinkBotTutorial placement="screen-right" dialogWidth={430} blockInteraction={false} highlight={false} className="tw-assignment-live-notice" reserveActionSpace actionLabel="Done" onAction={() => setAssignmentNotice(null)}><p><strong>Your assignment is live!</strong></p><p>Students in <strong>{assignmentNotice.className}</strong> can access it according to the schedule you selected.</p></ThinkBotTutorial>}
     </div>
 
     {!guestMode && hostSetupQuiz && <HostLaunchModal quiz={hostSetupQuiz} folders={folderOptions} institutionPlan={institutionPlan} c={c} dark={dark} onClose={() => { setHostSetupQuiz(null); setSetupTutorialStage(null); }} onStart={createLiveSession} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("hostSetupSeen")} />}
@@ -362,7 +361,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
   const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
   return <div className="tw-host-launch-backdrop" onClick={() => { if (!tutorialStage) onClose?.(); }}>
-    <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: solidModalBg(c), borderColor: c.border, color: c.text }}>
+    <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: dark ? "#102443" : solidModalBg(c), borderColor: c.border, color: c.text }}>
       <div className="tw-host-preview-dual">
         <button type="button" className="tw-host-preview-desktop tw-host-preview-clickable" onClick={() => setZoomedPreview("desktop")}><img src={TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} desktop gameplay preview`} /></button>
         <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
@@ -386,7 +385,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
     {tutorialStage === "host_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="host-class"]' placement="left" square highlightMode="target"><p>First, choose the class that will join this session.</p></ThinkBotTutorial>}
     {tutorialStage === "host_background" && <ThinkBotTutorial target='[data-tutorial="session-backgrounds"]' placement="left" square><p>Browse through the available gameplay backgrounds and pick the one you want your students to see.</p></ThinkBotTutorial>}
     {tutorialStage === "host_start" && <ThinkBotTutorial target='[data-tutorial="host-start"]' placement="above" square className="tw-tutorial-host-ready-spaced tw-tutorial-bob-down" highlightMode="target"><p>When everything looks good, you’re ready to host.</p></ThinkBotTutorial>}
-    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); if (tutorialStage === "host_class") onTutorialStage?.("host_background"); }} />}
+    {pickerOpen && <ClassPicker c={c} dark={dark} folders={folders} selectedId={classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setClassId(id); setPickerOpen(false); if (tutorialStage === "host_class") onTutorialStage?.("host_background"); }} />}
   </div>;
 }
 
@@ -437,7 +436,7 @@ function BackgroundPicker({ selectedKey, onSelect, c }) {
   </div>;
 }
 
-function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
+function ClassPicker({ c, dark, folders, selectedId, onClose, onSelect }) {
   const [parentId, setParentId] = useState(null);
   const { byId, childrenByParent } = useMemo(() => {
     const rowsById = new Map();
@@ -466,7 +465,7 @@ function ClassPicker({ c, folders, selectedId, onClose, onSelect }) {
   }
 
   return <div className="tw-class-picker-backdrop" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-    <section className="tw-class-picker-modal" onClick={(event) => event.stopPropagation()} style={{ background: solidModalBg(c), borderColor: c.border, color: c.text }}>
+    <section className="tw-class-picker-modal" onClick={(event) => event.stopPropagation()} style={{ background: dark ? "#102443" : solidModalBg(c), borderColor: c.border, color: c.text }}>
       <div className="tw-class-picker-header">
         <div>
           <h3>Choose a class</h3>
@@ -516,7 +515,7 @@ function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutorialStage,
     {tutorialStage === "assign_background" && <ThinkBotTutorial target='[data-tutorial="session-backgrounds"]' placement="left" square><p>Browse through the available gameplay backgrounds and pick the one you want your students to see.</p></ThinkBotTutorial>}
     {tutorialStage === "assign_create" && <ThinkBotTutorial target='[data-tutorial="assign-create"]' placement="above" square highlightMode="target"><p>Ready? Create the assignment and ThinkWAVE will take care of the rest.</p></ThinkBotTutorial>}
     {editing && <ScheduleEditor c={c} form={form} setForm={setForm} onClose={() => setEditing(false)} onApply={() => tutorialStage === "assign_schedule" && onTutorialStage?.("assign_class")} />}
-    {pickerOpen && <ClassPicker c={c} folders={folders} selectedId={form.classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setForm((current) => ({ ...current, classId: id })); setPickerOpen(false); if (tutorialStage === "assign_class") onTutorialStage?.("assign_background"); }} />}
+    {pickerOpen && <ClassPicker c={c} dark={dark} folders={folders} selectedId={form.classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setForm((current) => ({ ...current, classId: id })); setPickerOpen(false); if (tutorialStage === "assign_class") onTutorialStage?.("assign_background"); }} />}
   </form></div>;
 }
 

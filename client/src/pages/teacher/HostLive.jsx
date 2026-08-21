@@ -69,6 +69,8 @@ export default function HostLive({ guestMode = false }) {
         setGroups(data.groups || []);
         setScores(data.scores || []);
         setChoiceCounts(data.choiceCounts || {});
+        if (data.session?.server_now_ms != null) setClockOffsetMs(Date.now() - Number(data.session.server_now_ms));
+        else if (data.session?.server_now) setClockOffsetMs(Date.now() - new Date(data.session.server_now).getTime());
         currentQuestionIndexRef.current = Number(data.session?.current_question_index || 0);
         const uid = meRes?.data?.id || meRes?.data?.user?.id || null;
         setTutorialUserId(uid);
@@ -126,7 +128,8 @@ export default function HostLive({ guestMode = false }) {
       // dashboard gradient while the host panel scrolls.
       setState((current) => ({ ...(current || {}), ...(payload.state || {}) }));
       setQuestions((current) => sameQuestionSnapshot(current, payload.questions || []) ? current : (payload.questions || []));
-      if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
+      if (payload.state?.server_now_ms != null) setClockOffsetMs(Date.now() - Number(payload.state.server_now_ms));
+      else if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
       if (questionChanged) {
         setAnsweredCount(0);
         setChoiceCounts({});
@@ -230,15 +233,19 @@ export default function HostLive({ guestMode = false }) {
     }
     if (!isLive) return { remainingSec: 0, progress: 0, total };
     const serverNowMs = nowMs - clockOffsetMs;
-    const startsAt = state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
+    const startsAt = state?.question_started_at_ms != null
+      ? Number(state.question_started_at_ms)
+      : state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
     if (startsAt && startsAt > serverNowMs) {
       return { remainingSec: total, progress: total ? 1 : 0, total };
     }
-    const deadline = state?.question_deadline_at
-      ? new Date(state.question_deadline_at).getTime()
-      : startsAt
-        ? startsAt + total * 1000
-        : 0;
+    const deadline = state?.question_deadline_at_ms != null
+      ? Number(state.question_deadline_at_ms)
+      : state?.question_deadline_at
+        ? new Date(state.question_deadline_at).getTime()
+        : startsAt
+          ? startsAt + total * 1000
+          : 0;
     const remaining = Math.max(0, Math.ceil((deadline - serverNowMs) / 1000));
     return { remainingSec: remaining, progress: total ? Math.min(1, remaining / total) : 0, total };
   }, [currentQ, state, isLive, isPaused, nowMs, clockOffsetMs]);
@@ -391,7 +398,7 @@ export default function HostLive({ guestMode = false }) {
     const previous = new Map();
     nodes.forEach((node) => {
       previous.set(node, node.style.getPropertyValue("--tw-template-tutorial-highlight"));
-      node.style.setProperty("--tw-template-tutorial-highlight", accent);
+      node.style.setProperty("--tw-template-tutorial-highlight", "#ffffff");
       node.classList.add("tw-tutorial-host-metrics-pulse");
     });
     return () => nodes.forEach((node) => {

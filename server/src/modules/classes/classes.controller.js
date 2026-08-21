@@ -332,7 +332,6 @@ export async function getClassAsyncAnalytics(req, res) {
   const min = scores.length ? Math.min(...scores) : 0;
   const max = scores.length ? Math.max(...scores) : 0;
 
-  const plan = await getTeacherPlan(req.user.sub);
   const sessionPayload = {
     ...quiz,
     join_mode: "ASSIGNED",
@@ -341,31 +340,6 @@ export async function getClassAsyncAnalytics(req, res) {
     question_count: detailedQuestions.length,
   };
   const summaryPayload = { avg_score: avg, min_score: min, max_score: max, participant_count: submissions.length, student_count: submissions.length, guest_count: 0 };
-  if (plan.code === "BASIC") {
-    return res.json({
-      session: sessionPayload,
-      summary: { avg_score: avg, min_score: min, max_score: max, participant_count: submissions.length },
-      students: submissions.map((row) => ({
-        participant_id: row.student_user_id,
-        first_name: row.first_name || "Student",
-        last_name: row.last_name || row.student_id || "",
-        total_points: Number(row.total_points || 0),
-        max_score: Number(row.max_score || 0),
-        joined_at: row.submitted_at,
-      })),
-      questions: detailedQuestions.map((question) => ({
-        question_id: question.question_id,
-        question_order: question.question_order,
-        prompt: question.prompt,
-        total_answers: question.total_answers,
-        correct_answers: question.correct_answers,
-        incorrect_answers: question.incorrect_answers,
-        pct_correct: question.pct_correct,
-        pct_incorrect: question.pct_incorrect,
-      })),
-      tabMonitoring: [],
-    });
-  }
   res.json({
     session: sessionPayload,
     summary: summaryPayload,

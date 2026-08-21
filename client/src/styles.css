@@ -4275,3 +4275,134 @@ body.dark-mode .tw-create-template-tutorial-target.tw-tutorial-active-target{
 
 /* 10.16 preview button normalization */
 .tw-host-preview-clickable { background: transparent !important; padding: 0 !important; border-style: solid; font: inherit; }
+
+/* Revision 10.18 — compact continuation dialogs, white host metrics focus, and rainbow gameplay previews. */
+.tw-thinkbot-tutorial.has-click-anywhere{
+  min-height:0!important;
+}
+.tw-thinkbot-tutorial.has-click-anywhere .tw-tutorial-click-anywhere{
+  margin-top:5px!important;
+  margin-bottom:0!important;
+  align-self:stretch;
+  text-align:center!important;
+}
+.tw-assignment-live-notice{pointer-events:auto!important}
+.tw-tutorial-host-metrics-pulse{
+  outline-color:#fff!important;
+  box-shadow:0 0 0 5px rgba(255,255,255,.24),0 0 26px 8px rgba(255,255,255,.58)!important;
+  animation:twTutorialHostMetricOutline1018 .72s ease-in-out infinite!important;
+}
+@keyframes twTutorialHostMetricOutline1018{
+  0%,100%{outline-width:3px;box-shadow:0 0 0 4px rgba(255,255,255,.18),0 0 22px 7px rgba(255,255,255,.48)}
+  50%{outline-width:5px;box-shadow:0 0 0 9px rgba(255,255,255,.30),0 0 42px 16px rgba(255,255,255,.86)}
+}
+body.dark-mode .tw-host-launch-modal{background:#102443!important}
+.tw-host-preview-dual{
+  width:min(100%,760px)!important;
+  margin:0 auto 16px!important;
+}
+.tw-host-preview-desktop{left:2%!important;right:8%!important}
+.tw-host-preview-mobile{right:1%!important;height:78%!important;aspect-ratio:9/18!important}
+.tw-host-preview-desktop,
+.tw-host-preview-mobile{
+  box-sizing:border-box!important;
+  padding:0!important;
+  border:3px solid transparent!important;
+  background:linear-gradient(#fff,#fff) padding-box,conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+}
+body.dark-mode .tw-host-preview-desktop,
+body.dark-mode .tw-host-preview-mobile{
+  background:linear-gradient(#102443,#102443) padding-box,conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+}
+.tw-host-preview-zoom-card{
+  box-sizing:border-box!important;
+  padding:2px!important;
+  border:2px solid transparent!important;
+  background:linear-gradient(#fff,#fff) padding-box,conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+}
+body.dark-mode .tw-host-preview-zoom-card{
+  background:linear-gradient(#102443,#102443) padding-box,conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+}
+.tw-host-preview-zoom-card.is-mobile{height:min(82vh,720px)!important;width:auto!important;aspect-ratio:9/18!important}
+.tw-host-preview-zoom-card img{border-radius:17px!important}
+@media(max-width:720px){
+  .tw-host-preview-dual{width:min(100%,620px)!important}
+  .tw-host-preview-desktop{left:0!important;right:11%!important}
+  .tw-host-preview-mobile{right:0!important;height:72%!important}
+}
+
+/* Revision 10.19 — Question Bank template-colored answer treatments. */
+.tw-bank-template-answer{
+  min-height:58px;
+  padding:10px 14px;
+  border:2px solid;
+  border-radius:15px;
+  box-sizing:border-box;
+  font-size:14px;
+  font-weight:950;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  overflow-wrap:anywhere;
+}
+.tw-bank-crossword-expanded{
+  width:100%;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(150px,190px);
+  gap:20px;
+  align-items:center;
+}
+.tw-bank-crossword-expanded .tw-bank-thinkspell-preview{
+  width:min(100%,470px)!important;
+  margin-left:max(0px,2%)!important;
+  margin-right:0!important;
+  justify-self:start;
+}
+.tw-bank-crossword-word-list{
+  display:grid;
+  gap:8px;
+  align-content:center;
+}
+.tw-bank-crossword-word{
+  min-height:38px;
+  padding:8px 12px;
+  display:grid;
+  place-items:center;
+  border:2px solid;
+  border-radius:12px;
+  font-size:13px;
+  font-weight:950;
+  overflow-wrap:anywhere;
+}
+.tw-bank-guess-expanded{
+  width:100%;
+  display:grid;
+  justify-items:center;
+  gap:12px;
+}
+.tw-bank-guess-images{
+  width:min(100%,240px);
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+}
+.tw-bank-guess-answer{
+  width:min(100%,240px);
+  min-height:48px;
+  padding:9px 13px;
+  display:grid;
+  place-items:center;
+  border:2px solid;
+  border-radius:14px;
+  box-sizing:border-box;
+  font-size:15px;
+  font-weight:950;
+  letter-spacing:.03em;
+  overflow-wrap:anywhere;
+}
+@media(max-width:720px){
+  .tw-bank-crossword-expanded{grid-template-columns:1fr;gap:14px}
+  .tw-bank-crossword-expanded .tw-bank-thinkspell-preview{margin-inline:auto!important;justify-self:center}
+  .tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+}

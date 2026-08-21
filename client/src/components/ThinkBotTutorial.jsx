@@ -346,15 +346,15 @@ export default function ThinkBotTutorial({
       {blockers}
       {highlight && highlightMode !== "target" && rect && <div className="tw-tutorial-highlight" style={{ left: rect.left - highlightPadding, top: rect.top - highlightPadding, width: rect.width + highlightPadding * 2, height: rect.height + highlightPadding * 2, ...((targetHighlightColor || accentColor) ? { "--tw-template-tutorial-highlight": targetHighlightColor || accentColor } : {}) }} />}
       {hint && rect && <div className="tw-tutorial-hint" style={{ left: clamp(rect.right + 12, 12, Math.max(12, window.innerWidth - 334)), top: clamp(rect.top, 12, Math.max(12, window.innerHeight - 180)), background: accentColor ? tutorialSurface : (dark ? "#0b1b34" : "#fff"), borderColor: tutorialAccent, color: c.text }}>{hint}</div>}
-      {children && <section ref={bubbleRef} className={`tw-thinkbot-tutorial${square ? " is-square" : ""}${transparent ? " is-transparent" : ""}${dragging ? " is-dragging" : ""} ${className}`.trim()} style={{ ...positionedBubbleStyle, background: transparent ? (dark ? "rgba(16,36,67,.92)" : "rgba(255,255,255,.88)") : tutorialSurface, color: c.text, borderColor: tutorialAccent, "--tw-tutorial-face": tutorialAccent, "--tw-tutorial-base": tutorialBase }} onPointerDown={(event) => event.stopPropagation()} onClick={dialogClick}>
+      {children && <section ref={bubbleRef} className={`tw-thinkbot-tutorial${square ? " is-square" : ""}${transparent ? " is-transparent" : ""}${dragging ? " is-dragging" : ""}${clickAnywhere ? " has-click-anywhere" : ""} ${className}`.trim()} style={{ ...positionedBubbleStyle, background: transparent ? (dark ? "rgba(16,36,67,.92)" : "rgba(255,255,255,.88)") : tutorialSurface, color: c.text, borderColor: tutorialAccent, "--tw-tutorial-face": tutorialAccent, "--tw-tutorial-base": tutorialBase }} onPointerDown={(event) => event.stopPropagation()} onClick={dialogClick}>
         <div className="tw-thinkbot-tutorial-drag-handle" role="presentation" aria-hidden="true" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}><span/><span/><span/></div>
         <img src="/media/thinkbot.png" alt="ThinkBot" className="tw-thinkbot-tutorial-avatar" />
         <div className="tw-thinkbot-tutorial-copy">{children}</div>
         {clickAnywhere && <div className="tw-tutorial-click-anywhere">{clickAnywhereLabel}</div>}
-        <div className={`tw-thinkbot-tutorial-actions is-reserved${actionLabel || secondaryLabel ? " has-action" : ""}`}>
+        {(reserveActionSpace || actionLabel || secondaryLabel) && <div className={`tw-thinkbot-tutorial-actions is-reserved${actionLabel || secondaryLabel ? " has-action" : ""}`}>
           {secondaryLabel && <button type="button" className="tw-tutorial-secondary" onClick={onSecondary}>{secondaryLabel}</button>}
           {actionLabel && actionReady && <button type="button" className="tw-tutorial-press" onClick={onAction}><span>{actionLabel}</span></button>}
-        </div>
+        </div>}
       </section>}
     </div>,
     document.body

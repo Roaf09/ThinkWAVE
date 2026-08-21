@@ -286,6 +286,7 @@ function QuestionCard({ question: q, onRemove, c }) {
   const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING" || tt === "THINK_SPELL";
   const [expanded, setExpanded] = useState(false);
   const answers = getBankAnswers(tt, cfg, correct);
+  const hideSummaryWhenExpanded = ["GUESS_WORD_4PICS", "MATCHING", "THINK_SPELL"].includes(tt) && expanded;
 
   return (
     <div className="tw-bank-content-card tw-bank-question-card" style={{ ...card(c, { width: "100%", padding: 0, overflow: "visible" }), ...templateCardChrome(tt, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 12%, ${c.cardBg})`, textAlign: "center", position: "relative" }}>
@@ -296,14 +297,14 @@ function QuestionCard({ question: q, onRemove, c }) {
 
         {tt === "MCQ" ? <McqBankAnswers cfg={cfg} correct={correct} c={c} />
           : tt === "TRUE_FALSE" ? <TrueFalseBankAnswers correct={correct} c={c} />
-          : <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${["MATCHING", "THINK_SPELL"].includes(tt) && expanded ? " is-hidden" : ""}`}>
-              {answers.length ? answers.map((answer, index) => <CorrectAnswer key={`${answer}-${index}`} value={answer} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
+          : <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${tt === "THINK_SPELL" ? " is-think-spell" : ""}${hideSummaryWhenExpanded ? " is-hidden" : ""}`}>
+              {answers.length ? answers.map((answer, index) => <TemplateAnswer key={`${answer}-${index}`} value={answer} tone={tone} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
             </div>}
 
         {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((value) => !value)} className="tw-bank-expand-button" style={{ borderColor: tone.border, color: tone.accent, background: tone.softBg }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
 
         {collapsible && expanded && <div className="tw-bank-expanded-preview" style={{ borderColor: tone.border, background: tone.softBg }}>
-          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
+          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
         </div>}
 
         <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
@@ -381,13 +382,17 @@ function getBankAnswers(tt, cfg, correct) {
   return [correct.text, correct.choice].filter(Boolean);
 }
 
-function CorrectAnswer({ value }) {
-  return <div className="tw-bank-correct-answer"><span className="tw-bank-correct-check">✓</span><span>{value}</span></div>;
+function TemplateAnswer({ value, tone }) {
+  return <div className="tw-bank-template-answer" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}><span>{value}</span></div>;
 }
 
-function GuessWordBankPreview({ cfg, c, tone }) {
+function GuessWordBankPreview({ cfg, correct, c, tone }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
-  return <div style={{ width: 'min(100%, 260px)', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', border: `1px solid ${tone.border}`, background: c.cardBg, display: 'grid', placeItems: 'center' }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>;
+  const answer = String(correct?.text || cfg?.target || "").trim();
+  return <div className="tw-bank-guess-expanded">
+    <div className="tw-bank-guess-images">{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', border: `2px solid ${tone.border}`, background: c.cardBg, display: 'grid', placeItems: 'center' }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>
+    {answer && <div className="tw-bank-guess-answer" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}>{answer}</div>}
+  </div>;
 }
 
 
@@ -396,8 +401,13 @@ function ThinkSpellBankPreview({ cfg, correct, c, tone }) {
   const gridSize = Math.min(12, Math.max(5, Number(cfg?.gridSize || Math.max(5, ...words.map((word) => word.length), 5))));
   const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words })}-${Number(cfg?.gridSeed || 1)}`;
   const preview = buildThinkSpellGrid({ gridSize, words, seed: buildThinkSpellSeed(signature) });
-  return <div className="tw-bank-thinkspell-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
-    {preview.grid.map((letter, index) => <span key={index} style={{ background: c.cardBg, borderColor: tone.border, color: tone.accent }}>{letter}</span>)}
+  return <div className="tw-bank-crossword-expanded">
+    <div className="tw-bank-thinkspell-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
+      {preview.grid.map((letter, index) => <span key={index} style={{ background: c.cardBg, borderColor: tone.border, color: tone.accent }}>{letter}</span>)}
+    </div>
+    <div className="tw-bank-crossword-word-list">
+      {words.map((word, index) => <div key={`${word}-${index}`} className="tw-bank-crossword-word" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}>{word}</div>)}
+    </div>
   </div>;
 }
 
@@ -406,12 +416,12 @@ function MatchingBankPreview({ cfg, c, tone }) {
   const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
   return <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14, alignItems: "start", textAlign: "center" }}>
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: "#f97316", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column A</div>
-      {colA.map((item, i) => <div key={`a-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(249,115,22,.11)", border: "1.5px solid rgba(249,115,22,.62)" }}><MiniBankItem item={item} fallback={`Item ${i + 1}`} c={c} /></div>)}
+      <div style={{ color: tone.accent, fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column A</div>
+      {colA.map((item, i) => <div key={`a-${i}`} style={{ padding: 10, borderRadius: 12, background: tone.softBg, border: `2px solid ${tone.border}` }}><MiniBankItem item={item} fallback={`Item ${i + 1}`} c={c} /></div>)}
     </div>
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: "#16a34a", fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column B</div>
-      {colB.map((item, i) => <div key={`b-${i}`} style={{ padding: 10, borderRadius: 12, background: "rgba(34,197,94,.11)", border: "1.5px solid rgba(34,197,94,.62)" }}><MiniBankItem item={item} fallback={i < colA.length ? `Match ${i + 1}` : `Dummy ${i - colA.length + 1}`} c={c} />{i >= colA.length && <div style={{ marginTop: 5, color: c.textMuted, fontSize: 10, fontWeight: 850 }}>Dummy answer</div>}</div>)}
+      <div style={{ color: tone.accent, fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column B</div>
+      {colB.map((item, i) => <div key={`b-${i}`} style={{ padding: 10, borderRadius: 12, background: i < colA.length ? tone.softBg : c.cardBg, border: `2px solid ${i < colA.length ? tone.border : c.border}` }}><MiniBankItem item={item} fallback={i < colA.length ? `Match ${i + 1}` : `Dummy ${i - colA.length + 1}`} c={c} />{i >= colA.length && <div style={{ marginTop: 5, color: c.textMuted, fontSize: 10, fontWeight: 850 }}>Dummy answer</div>}</div>)}
     </div>
   </div>;
 }

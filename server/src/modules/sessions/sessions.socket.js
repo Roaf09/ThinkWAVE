@@ -168,7 +168,8 @@ export function registerSessionSockets(io) {
     onTeacher("teacher:setStatus", async ({ sessionId, status }) => {
       if (!["LOBBY", "LIVE", "PAUSED", "ENDED"].includes(status)) return;
       const [[session]] = await pool.query(
-        `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix
+        `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
+                UNIX_TIMESTAMP(NOW(3)) AS server_now_unix
          FROM sessions s WHERE s.id=:sid`,
         { sid: sessionId }
       );
@@ -192,10 +193,9 @@ export function registerSessionSockets(io) {
         const snapshot = safeJson(session.questions_snapshot_json) || [];
         const currentQuestion = snapshot[Number(session.current_question_index || 0)] || null;
         const total = Number(currentQuestion?.config_json?.timeLimitSec || 0);
-        const startedAt = session.question_started_unix != null
-          ? Number(session.question_started_unix) * 1000
-          : Date.now();
-        const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        const startedUnix = session.question_started_unix != null ? Number(session.question_started_unix) : null;
+        const serverNowUnix = session.server_now_unix != null ? Number(session.server_now_unix) : Date.now() / 1000;
+        const elapsed = startedUnix != null ? Math.max(0, Math.floor(serverNowUnix - startedUnix)) : 0;
         pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
         await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
         await broadcastState(io, sessionId);
@@ -203,14 +203,14 @@ export function registerSessionSockets(io) {
         return;
       }
 
-      let questionStartedAt = session.question_started_at || new Date();
+      let questionStartOffsetSec = null;
       if (status === "LIVE") {
         const paused = pausedQuestionState.get(Number(sessionId));
         if (session.status === "PAUSED" && paused) {
           const elapsed = Math.max(0, Number(paused.total || 0) - Number(paused.remaining || 0));
-          questionStartedAt = new Date(Date.now() + 3000 - elapsed * 1000);
-        } else if (session.status === "LOBBY" || !session.question_started_at) {
-          questionStartedAt = new Date(Date.now() + 3000);
+          questionStartOffsetSec = 3 - elapsed;
+        } else if (session.status === "LOBBY" || session.question_started_unix == null) {
+          questionStartOffsetSec = 3;
         }
         pausedQuestionState.delete(Number(sessionId));
       }
@@ -219,11 +219,16 @@ export function registerSessionSockets(io) {
         `UPDATE sessions SET status=:st,
          started_at=IF(:st='LIVE' AND started_at IS NULL, NOW(), started_at),
          ended_at=IF(:st='ENDED', NOW(), ended_at),
-         question_started_at=IF(:st='LIVE', :questionStartedAt, question_started_at),
+         question_started_at=IF(:st='LIVE' AND :hasStartOffset=1, TIMESTAMPADD(SECOND, :questionStartOffsetSec, NOW()), question_started_at),
          teacher_disconnected_deadline=IF(:st='LIVE', NULL, teacher_disconnected_deadline),
          end_reason=IF(:st='ENDED', 'NORMAL', end_reason)
          WHERE id=:sid`,
-        { sid: sessionId, st: status, questionStartedAt }
+        {
+          sid: sessionId,
+          st: status,
+          hasStartOffset: questionStartOffsetSec == null ? 0 : 1,
+          questionStartOffsetSec: questionStartOffsetSec ?? 0,
+        }
       );
       if (status === "ENDED") {
         pausedQuestionState.delete(Number(sessionId));
@@ -536,7 +541,11 @@ async function isQuestionTimeUp(session, questionId = null) {
     timeLimitSec = Number(quizMeta?.time_limit_sec || 0);
   }
   if (timeLimitSec <= 0) return false;
-  const [[t]] = await pool.query(`SELECT TIMESTAMPDIFF(SECOND, :started, NOW()) AS elapsed_sec`, { started: session.question_started_at });
+  const [[t]] = await pool.query(
+    `SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, question_started_at, NOW())) AS elapsed_sec
+     FROM sessions WHERE id=:sid LIMIT 1`,
+    { sid: session.id }
+  );
   const elapsed = Number(t?.elapsed_sec || 0);
   // Keep a small server-side grace window so network transit cannot reject an
   // answer while the student's visible timer still has time remaining.
@@ -1110,6 +1119,7 @@ async function broadcastState(io, sessionId) {
   const [[state]] = await pool.query(
     `SELECT s.id, s.status, s.current_question_index, s.question_started_at,
             UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
+            UNIX_TIMESTAMP(NOW(3)) AS server_now_unix,
             s.questions_snapshot_json,
             s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
             ${backgroundSelect},
@@ -1126,15 +1136,19 @@ async function broadcastState(io, sessionId) {
   const qs = safeJson(state.questions_snapshot_json) || [];
   const currentQ = qs[Number(state.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
-  const serverNow = new Date();
-  state.server_now = serverNow.toISOString();
   state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
+  const serverNowUnixSec = state.server_now_unix != null ? Number(state.server_now_unix) : Date.now() / 1000;
   const startedUnixSec = state.question_started_unix != null ? Number(state.question_started_unix) : null;
-  state.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
-  state.question_deadline_at = startedUnixSec != null && qLimit > 0
-    ? new Date((startedUnixSec + qLimit) * 1000).toISOString()
+  state.server_now_ms = Math.round(serverNowUnixSec * 1000);
+  state.question_started_at_ms = startedUnixSec != null ? Math.round(startedUnixSec * 1000) : null;
+  state.question_deadline_at_ms = startedUnixSec != null && qLimit > 0
+    ? Math.round((startedUnixSec + qLimit) * 1000)
     : null;
+  state.server_now = new Date(state.server_now_ms).toISOString();
+  state.question_started_at = state.question_started_at_ms != null ? new Date(state.question_started_at_ms).toISOString() : null;
+  state.question_deadline_at = state.question_deadline_at_ms != null ? new Date(state.question_deadline_at_ms).toISOString() : null;
   delete state.question_started_unix;
+  delete state.server_now_unix;
   io.to(roomSession(sessionId)).emit("session:state", { state, questions: qs });
   io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });
   await broadcastScores(io, sessionId);

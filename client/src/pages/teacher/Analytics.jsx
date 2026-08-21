@@ -66,9 +66,8 @@ export default function Analytics({ guestMode = false }) {
             }
             analyticsData = buildTutorialDemoAnalytics(analyticsData, sourceQuestions);
             tabs = buildTutorialDemoTabs();
-          } else if (hasAdvanced) {
-            const tabsResponse = await api.get(`/sessions/${sessionId}/tab-monitoring`);
-            tabs = tabsResponse.data || [];
+          } else {
+            tabs = Array.isArray(analyticsData?.tabMonitoring) ? analyticsData.tabMonitoring : [];
           }
           if (!alive) return;
           setTutorialDemoAnalytics(isTutorialDemo);
@@ -114,7 +113,7 @@ export default function Analytics({ guestMode = false }) {
 
   const session = analytics?.session || {};
   const tone = templateTone(session.template_type, colors, dark);
-  const showAdvanced = advancedPlan || tutorialDemoAnalytics;
+  const showAdvanced = true;
   const scores = useMemo(() => buildScores(analytics, showAdvanced), [analytics, showAdvanced]);
   const exportAllowed = advancedPlan || guestMode;
   const exportBase = assigned ? `/classes/${classId}/async-results/${quizId}/export` : `/analytics/sessions/${sessionId}/export`;

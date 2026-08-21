@@ -148,14 +148,21 @@ export default function QuizBuilder({ guestMode = false }) {
   useEffect(() => {
     if (guestMode || !tutorialUserId || !quiz?.template_type) return;
     if (hasSeenTemplateTutorial(tutorialUserId, quiz.template_type)) return;
+    // A persisted question set proves this template has already been successfully
+    // saved before, even if local tutorial storage was cleared or came from an
+    // older revision. Do not re-teach an already-used template.
+    if (isSaved && questions.some((question) => Number(question?.id) > 0)) {
+      markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+      setBuilderTutorialStage(null);
+      return;
+    }
     const state = readTutorialState(tutorialUserId);
     const hasSeenAny = Object.values(state?.templateSeen || {}).some(Boolean);
     setFollowupTemplateTutorial(hasSeenAny);
     setBuilderTutorialStage((current) => current || (hasSeenAny ? "template_prompt" : "intro"));
-  }, [guestMode, tutorialUserId, quiz?.template_type]);
+  }, [guestMode, tutorialUserId, quiz?.template_type, isSaved, questions]);
 
   function finishFollowupTemplateTutorial() {
-    if (tutorialUserId && quiz?.template_type) markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
     setBuilderTutorialStage(null);
   }
 
@@ -164,9 +171,9 @@ export default function QuizBuilder({ guestMode = false }) {
   }
 
   function startFollowupTemplateTutorial() {
-    // Once the one-time prompt has been answered, do not prompt for this template
-    // again on a later builder visit even if the teacher leaves mid-walkthrough.
-    if (tutorialUserId && quiz?.template_type) markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    // A template counts as "used" only after its quiz is successfully saved.
+    // Opening, skipping, or completing the walkthrough alone must not suppress
+    // the tutorial on a later unsaved visit.
     setBuilderTutorialStage("intro");
   }
 
@@ -214,7 +221,7 @@ export default function QuizBuilder({ guestMode = false }) {
         // or a combination before moving on to distractors.
       } else if (tt === "GUESS_WORD_4PICS") {
         const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
-        if (images.length === 4 && images.every((x) => trimText(x))) next = "guess_answer";
+        if (images.length === 4 && images.every((x) => trimText(x))) next = "guess_images_done";
       } else if (tt === "THINK_SPELL") {
         // Crossword waits for the teacher to press Done after entering at least four words.
       }
@@ -235,23 +242,16 @@ export default function QuizBuilder({ guestMode = false }) {
         return () => window.clearTimeout(timer);
       }
     }
-    if (builderTutorialStage === "guess_answer" && trimText(cor.text)) {
-      const timer = window.setTimeout(() => {
-        document.activeElement?.blur?.();
-        setBuilderTutorialStage("guess_distractor");
-      }, 2000);
-      return () => window.clearTimeout(timer);
-    }
     if (builderTutorialStage === "answer_explanation" && trimText(cfg.explanation)) {
       const timer = window.setTimeout(() => setBuilderTutorialStage("answer_explanation_done"), 3000);
       return () => window.clearTimeout(timer);
     }
-    if (builderTutorialStage === "crossword_shuffle" && cfg.gridFilled) {
-      const timer = window.setTimeout(() => {
-        if (followupTemplateTutorial) finishFollowupTemplateTutorial();
-        else setBuilderTutorialStage("add_delay");
-      }, 2000);
-      return () => window.clearTimeout(timer);
+    if (builderTutorialStage === "matching_add_pair" && tt === "MATCHING") {
+      const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+      if (colA.length >= 2) {
+        const timer = window.setTimeout(() => setBuilderTutorialStage("matching_new_pair"), 180);
+        return () => window.clearTimeout(timer);
+      }
     }
     if (builderTutorialStage === "repeat" && validateQuestion(q, quiz.template_type).length === 0) {
       const timer = window.setTimeout(() => setBuilderTutorialStage("repeat_done"), tt === "TYPE_ANSWER" ? 2000 : 250);
@@ -265,13 +265,6 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [builderTutorialStage, questions, qIndex, quiz, isSaved, followupTemplateTutorial]);
 
   useEffect(() => {
-    if (builderTutorialStage === "matching_dummy") {
-      const timer = window.setTimeout(() => {
-        if (followupTemplateTutorial) finishFollowupTemplateTutorial();
-        else setBuilderTutorialStage("add_delay");
-      }, 2000);
-      return () => window.clearTimeout(timer);
-    }
     if (builderTutorialStage === "add_delay") {
       const timer = window.setTimeout(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -304,10 +297,10 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [builderTutorialStage, tutorialMcqAllChoicesFilled]);
 
   useEffect(() => {
-    if (!["mcq_correct", "specific"].includes(builderTutorialStage) || normalizeTemplateType(quiz?.template_type) !== "MCQ") return undefined;
+    if (!["mcq_correct", "specific", "repeat_mcq_correct"].includes(builderTutorialStage) || normalizeTemplateType(quiz?.template_type) !== "MCQ") return undefined;
     const dots = Array.from(document.querySelectorAll('[data-tutorial="builder-mcq-options"] .tw-mcq-correct-dot'));
     const controls = document.querySelector('[data-tutorial="builder-mcq-controls"]');
-    if (builderTutorialStage === "mcq_correct") dots.forEach((node) => node.classList.add("tw-tutorial-mini-pulse"));
+    if (["mcq_correct", "repeat_mcq_correct"].includes(builderTutorialStage)) dots.forEach((node) => node.classList.add("tw-tutorial-mini-pulse"));
     if (builderTutorialStage === "mcq_correct" && tutorialMcqAllChoicesFilled) controls?.classList.add("tw-tutorial-mini-pulse");
     return () => {
       dots.forEach((node) => node.classList.remove("tw-tutorial-mini-pulse"));
@@ -316,7 +309,7 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [builderTutorialStage, quiz?.template_type, tutorialMcqAllChoicesFilled]);
 
   useEffect(() => {
-    if (!["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage)) return undefined;
+    if (!["answer_explanation", "answer_explanation_done", "repeat_explanation"].includes(builderTutorialStage)) return undefined;
     const timer = window.setTimeout(() => {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
     }, 120);
@@ -424,7 +417,11 @@ export default function QuizBuilder({ guestMode = false }) {
     setNavDir("next");
     setQIndex(questions.length);
     setNavTick((v) => v + 1);
-    if (tutorialAddRequested) setBuilderTutorialStage("repeat");
+    if (tutorialAddRequested) {
+      // Main onboarding: guide the second question one area at a time again.
+      // Follow-up/template-specific tutorials keep their shorter repeat flow.
+      setBuilderTutorialStage(!followupTemplateTutorial ? "repeat_meta" : "repeat");
+    }
   }
 
   function deleteCurrentQuestion() {
@@ -527,6 +524,9 @@ export default function QuizBuilder({ guestMode = false }) {
         await api.put(`/quizzes/${id}/questions`, { questions: payload });
         const stillCurrent = editVersionRef.current === saveVersion;
         setIsSaved(stillCurrent);
+        if (stillCurrent && !guestMode && tutorialUserId && quiz?.template_type) {
+          markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+        }
         return true;
       } catch (e) {
         setMsg(e?.response?.data?.message || "Save failed.");
@@ -939,13 +939,70 @@ export default function QuizBuilder({ guestMode = false }) {
           </ThinkBotTutorial>
         </>
       )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_dummy" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-matching-dummy"]' placement="screen-right" square dialogWidth={350}><p>You may also add or delete distractors.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "GUESS_WORD_4PICS" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-images"]' placement="screen-right" square dialogWidth={350}><p>Next, you can upload images you want to use.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "guess_answer" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-answer"]' placement="screen-right" square dialogWidth={350}><p>You can set the answer here after the four images are ready.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "guess_distractor" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-distractors"]' placement="screen-right" square dialogWidth={350} highlightMode="target" actionLabel="Done" actionDelay={2000} onAction={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}><p>Now set the number of <strong>distractor letters</strong>.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "THINK_SPELL" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-words"]' placement="screen-right" square dialogWidth={350} reserveActionSpace actionLabel={(() => { const q = questions[qIndex] || questions[0]; const cfg = q?.config || {}; const cor = q?.correct || {}; const words = Array.isArray(cor.answers) && cor.answers.length ? cor.answers : (Array.isArray(cfg.answers) ? cfg.answers : []); return words.filter((word) => trimText(word)).length >= 4 ? "Done" : undefined; })()} onAction={() => setBuilderTutorialStage("crossword_fill")}><p>Next, type in the words you would like to use.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_fill" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-fill"]' placement="screen-right" square dialogWidth={350} highlightMode="target"><p>Click <strong>Fill It Up!</strong> to complete the grid.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_shuffle" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-shuffle"]' placement="screen-right" square dialogWidth={350} highlightMode="target"><p>You may also shuffle the arrangement of the letters.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_dummy" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (() => {
+        const q = questions[qIndex] || questions[0];
+        const cfg = q?.config || {};
+        const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+        const allB = Array.isArray(cfg.colB) ? cfg.colB : [];
+        const dummies = Array.isArray(cfg.dummyB) && cfg.dummyB.length ? cfg.dummyB : allB.slice(colA.length);
+        const dummyReady = dummies.some((row) => trimText(row?.text) || trimText(row?.image));
+        return <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-matching-dummy"]' placement="screen-right" square dialogWidth={350}
+          allowTargetInteraction={true} reserveActionSpace actionLabel={dummyReady ? "Done" : undefined}
+          onAction={() => setBuilderTutorialStage("matching_add_pair")}>
+          <p>Add a distractor, then fill it in.</p>
+        </ThinkBotTutorial>;
+      })()}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_add_pair" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && <ThinkBotTutorial
+        accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+        target='[data-tutorial="builder-matching-add-pair"]' placement="above" square dialogWidth={330}
+        highlightMode="target" allowTargetInteraction={true}><p>Add another pair.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_new_pair" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (() => {
+        const q = questions[qIndex] || questions[0];
+        const cfg = q?.config || {};
+        const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
+        const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
+        const index = Math.max(0, colA.length - 1);
+        const a = colA[index] || {};
+        const b = colB[index] || {};
+        const pairReady = (trimText(a?.text) || trimText(a?.image)) && (trimText(b?.text) || trimText(b?.image));
+        return <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-matching-active-pair"]' placement="screen-right" square dialogWidth={350}
+          allowTargetInteraction={true} reserveActionSpace actionLabel={pairReady ? "Done" : undefined}
+          onAction={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("add_delay"); }}>
+          <p>Fill in the new pair, then click Done.</p>
+        </ThinkBotTutorial>;
+      })()}
+      {!guestMode && !modifiedTutorialOpen && ["specific", "guess_images_done"].includes(builderTutorialStage) && normalizeTemplateType(quiz?.template_type) === "GUESS_WORD_4PICS" && <ThinkBotTutorial
+        accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-guess-images"]' placement="screen-right" square dialogWidth={350}
+        dragKey="builder-guess-images-dialog" reserveActionSpace actionLabel={builderTutorialStage === "guess_images_done" ? "Done" : undefined}
+        onAction={() => setBuilderTutorialStage("guess_word_fields")}><p>Next, upload the four images you want to use.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "guess_word_fields" && normalizeTemplateType(quiz?.template_type) === "GUESS_WORD_4PICS" && (() => {
+        const q = questions[qIndex] || questions[0];
+        const cor = q?.correct || {};
+        return <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-guess-word-fields"]' placement="screen-right" square dialogWidth={370}
+          allowTargetInteraction={true} reserveActionSpace actionLabel={trimText(cor.text) ? "Done" : undefined}
+          onAction={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}>
+          <p>Enter the <strong>correct word</strong>.</p>
+          <p>Now set the number of <strong>distractor letters</strong>.</p>
+        </ThinkBotTutorial>;
+      })()}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "THINK_SPELL" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-words"]' placement="screen-right" square dialogWidth={350} reserveActionSpace actionLabel={(() => { const q = questions[qIndex] || questions[0]; const cfg = q?.config || {}; const cor = q?.correct || {}; const words = Array.isArray(cor.answers) && cor.answers.length ? cor.answers : (Array.isArray(cfg.answers) ? cfg.answers : []); return words.filter((word) => trimText(word)).length >= 4 ? "Done" : undefined; })()} onAction={() => setBuilderTutorialStage("crossword_word_controls")}><p>Next, type in the words you would like to use.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_word_controls" && normalizeTemplateType(quiz?.template_type) === "THINK_SPELL" && <ThinkBotTutorial
+        accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-word-editor"]' placement="screen-right" square dialogWidth={370}
+        allowTargetInteraction={true} reserveActionSpace actionLabel="Done" actionDelay={2000} onAction={() => setBuilderTutorialStage("crossword_fill")}><p>You may add or delete the number of correct words.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_fill" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-crossword-fill"]' placement="above" square dialogWidth={350} highlightMode="target" className="tw-tutorial-bob-down"><p>Click <strong>Fill It Up!</strong> to complete the grid.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "crossword_shuffle" && (() => {
+        const q = questions[qIndex] || questions[0];
+        const cfg = q?.config || {};
+        return <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-crossword-shuffle"]' placement="screen-right" square dialogWidth={350} highlightMode="target"
+          allowTargetInteraction={true} reserveActionSpace actionLabel={cfg.gridFilled ? "Done" : undefined}
+          onAction={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("add_delay"); }}>
+          <p>You may also shuffle the arrangement of the letters.</p>
+        </ThinkBotTutorial>;
+      })()}
       {!guestMode && !modifiedTutorialOpen && ["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-answer-explanation"]' placement="right" square dialogWidth={350} className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear" allowTargetInteraction={true} reserveActionSpace actionLabel={builderTutorialStage === "answer_explanation_done" ? "Done" : undefined} onAction={() => setBuilderTutorialStage("add_delay")}><p>Add a short explanation of why the answer is correct.</p></ThinkBotTutorial>}
       {!guestMode && !modifiedTutorialOpen && ["add_delay", "save_delay"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} />}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "meta" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-meta-grid"]' placement="right" square dialogWidth={370} className="tw-tutorial-meta-lower tw-tutorial-meta-points-side" actionLabel="Done" onAction={() => setBuilderTutorialStage("bank")}><p>You can set the time limit and points depending on the question.</p></ThinkBotTutorial>}
@@ -953,6 +1010,52 @@ export default function QuizBuilder({ guestMode = false }) {
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "add" && !modal && (
         <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-add-question"]' placement="below" square dialogWidth={360} highlightMode="target" className="tw-tutorial-add-question-close">
           <p>Need another one? Use <strong>{isBatchTemplate ? "Add Batch" : "Add Question"}</strong> whenever you want to expand your activity.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_meta" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-meta-grid"]' placement="right" square dialogWidth={370}
+          className="tw-tutorial-meta-lower tw-tutorial-meta-points-side" reserveActionSpace actionLabel="Done"
+          onAction={() => setBuilderTutorialStage("repeat_question")}>
+          <p>Now let’s try doing it again for a different question!</p>
+          <p>Set the time limit and points for this question.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_question" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-question"]' placement="right" square dialogWidth={350}
+          dragKey="builder-repeat-question-dialog" allowTargetInteraction={true} reserveActionSpace
+          actionLabel={trimText((questions[qIndex] || questions[0])?.prompt) ? "Done" : undefined}
+          onAction={() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); setBuilderTutorialStage(normalizeTemplateType(quiz?.template_type) === "MCQ" ? "repeat_mcq_answers" : "repeat"); }}>
+          <p>Enter your next question.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_mcq_answers" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360}
+          dragKey="builder-repeat-mcq-dialog" highlightMode="target" blockInteraction={false} reserveActionSpace
+          actionLabel={tutorialMcqAllChoicesFilled ? "Done" : undefined}
+          onAction={() => setBuilderTutorialStage("repeat_mcq_correct")}>
+          <p>Add the possible answers.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_mcq_correct" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360}
+          dragKey="builder-repeat-mcq-dialog" highlight={false} allowTargetInteraction={true} reserveActionSpace
+          actionLabel={(() => { const q = questions[qIndex] || questions[0]; const cfg = q?.config || {}; const cor = q?.correct || {}; const selected = Array.isArray(cor.choices) ? cor.choices.filter(Boolean) : [cor.choice].filter(Boolean); return selected.length >= (cfg.answerMode === "TWO" ? 2 : 1) ? "Done" : undefined; })()}
+          onAction={() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); setBuilderTutorialStage("repeat_explanation"); }}>
+          <p>Now click the small circle beside the correct answer{((questions[qIndex] || questions[0])?.config || {}).answerMode === "TWO" ? "s" : ""}.</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_explanation" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-answer-explanation"]' placement="right" square dialogWidth={350}
+          dragKey="builder-repeat-explanation-dialog" className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear"
+          allowTargetInteraction={true} reserveActionSpace
+          actionLabel={trimText(((questions[qIndex] || questions[0])?.config || {}).explanation) ? "Done" : undefined}
+          onAction={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setBuilderTutorialStage("save"); }}>
+          <p>Add the short explanation for the correct answer.</p>
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && ["repeat", "repeat_done"].includes(builderTutorialStage) && (
