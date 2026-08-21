@@ -12,7 +12,6 @@ import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
-import { markTutorialSession } from "./tutorialSession.runtime.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -107,7 +106,7 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
-  const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null, tutorialDemo = false } = req.body;
+  const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null } = req.body;
   const hasRequestedBackground = /^background-(?:0[1-9]|1[0-9]|2[0-2])$/.test(String(backgroundKey || ""));
   const safeBackgroundKey = normalizeSessionBackgroundKey(backgroundKey);
   const plan = await getTeacherPlan(req.user.sub);
@@ -133,7 +132,6 @@ export async function createSession(req, res) {
     { qid: quizId, tid: req.user.sub }
   );
   if (active) {
-    if (tutorialDemo) markTutorialSession(active.id, true);
     if (hasRequestedBackground) {
       rememberSessionBackground(active.id, safeBackgroundKey);
       if (sessionsHaveBackground) {
@@ -164,11 +162,7 @@ export async function createSession(req, res) {
     selectedClassId = Number(ownedClass.id);
   }
 
-  // Live sessions always keep the teacher's authored question order. Question
-  // randomization is assignment-only, and answer-choice shuffling is performed
-  // per participant in the student client so every learner/guest gets their own
-  // stable permutation instead of one shared shuffle for the whole room.
-  const snapshot = await buildQuestionsSnapshot(quizId, false, false);
+  const snapshot = await buildQuestionsSnapshot(quizId, quiz.randomize_questions, quiz.shuffle_answers);
   // Capacity is now automatic instead of being exposed as a teacher-facing field.
   const maxCap = plan.code === "BASIC" ? BASIC_LIMITS.live.maxStudents : null;
 
@@ -181,7 +175,6 @@ export async function createSession(req, res) {
     { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot), backgroundKey: safeBackgroundKey }
   );
   rememberSessionBackground(r.insertId, safeBackgroundKey);
-  if (tutorialDemo) markTutorialSession(r.insertId, true);
 
   await pool.query(
     quizzesHaveBackground
@@ -230,18 +223,17 @@ export async function getSessionStateTeacher(req, res) {
         ? "q.background_key AS resolved_background_key,"
         : "NULL AS resolved_background_key,";
   const [[session]] = await pool.query(
-  `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
-          ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
-          CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
-   FROM sessions s
-   JOIN quizzes q ON q.id=s.quiz_id
-   JOIN users u ON u.id=s.teacher_id
-   WHERE s.id=:sid AND s.teacher_id=:tid`,
-  { sid: sessionId, tid: req.user.sub }
+    `SELECT s.*, ${backgroundSelect} q.title AS quiz_title, q.template_type, q.time_limit_sec, q.points_per_question, q.shuffle_answers, q.randomize_questions,
+            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+     FROM sessions s
+     JOIN quizzes q ON q.id=s.quiz_id
+     JOIN users u ON u.id=s.teacher_id
+     WHERE s.id=:sid AND s.teacher_id=:tid`,
+    { sid: sessionId, tid: req.user.sub }
   );
   if (!session) return res.status(404).json({ message: "Session not found" });
   session.background_key = normalizeSessionBackgroundKey(
-  session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
+    session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
   );
   delete session.resolved_background_key;
 
@@ -249,10 +241,8 @@ export async function getSessionStateTeacher(req, res) {
   const currentQ = questions[Number(session.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || session.time_limit_sec || 0);
   session.server_now = new Date().toISOString();
-  const startedUnixSec = session.question_started_unix != null ? Number(session.question_started_unix) : null;
-  session.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
-  session.question_deadline_at = startedUnixSec != null && qLimit > 0 ? new Date((startedUnixSec + qLimit) * 1000).toISOString() : null;
-  delete session.question_started_unix; 
+  session.question_deadline_at = session.question_started_at && qLimit > 0 ? new Date(new Date(session.question_started_at).getTime() + qLimit * 1000).toISOString() : null;
+
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
@@ -451,7 +441,6 @@ export async function getTeacherSessionHistory(req, res) {
        ) sc ON sc.session_id = s.id
        WHERE s.teacher_id = :tid
          AND s.status = 'ENDED'
-         AND s.ended_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
 
        UNION ALL
 
@@ -481,155 +470,19 @@ export async function getTeacherSessionHistory(req, res) {
          AND q.deleted_at IS NULL
          AND q.available_until IS NOT NULL
          AND q.available_until <= NOW()
-         AND q.available_until >= DATE_SUB(NOW(), INTERVAL 30 DAY)
        GROUP BY q.id, q.title, q.template_type, q.category, q.class_id, c.name, q.available_from, q.available_until
      ) history_rows
      ORDER BY ended_at DESC`,
     { tid: teacherId }
   );
 
-  const plan = await getTeacherPlan(teacherId);
-  if (plan.code !== "BASIC" && rows.length) {
-    await attachAdvancedHistoryInsights(rows, teacherId);
-  }
-
   res.json(rows);
-}
-
-async function attachAdvancedHistoryInsights(rows, teacherId) {
-  const liveRows = rows.filter((row) => row.session_type === "LIVE" && Number(row.id));
-  const assignedRows = rows.filter((row) => row.session_type === "ASSIGNED" && Number(row.quiz_id));
-
-  const liveIds = liveRows.map((row) => Number(row.id));
-  if (liveIds.length) {
-    const [sessionRows] = await pool.query(
-      `SELECT id, questions_snapshot_json FROM sessions WHERE teacher_id=:tid AND id IN (:ids)`,
-      { tid: teacherId, ids: liveIds }
-    );
-    const [scoreRows] = await pool.query(
-      `SELECT sc.session_id, sc.total_points FROM scores sc JOIN sessions s ON s.id=sc.session_id WHERE s.teacher_id=:tid AND sc.session_id IN (:ids)`,
-      { tid: teacherId, ids: liveIds }
-    );
-    const [responseRows] = await pool.query(
-      `SELECT r.session_id,r.question_id,r.is_correct FROM responses r JOIN sessions s ON s.id=r.session_id WHERE s.teacher_id=:tid AND r.session_id IN (:ids)`,
-      { tid: teacherId, ids: liveIds }
-    );
-    const snapshotMap = new Map(sessionRows.map((row) => [Number(row.id), safeJson(row.questions_snapshot_json) || []]));
-    const scoreMap = groupRows(scoreRows, "session_id");
-    const responseMap = groupRows(responseRows, "session_id");
-    for (const row of liveRows) {
-      const sid = Number(row.id);
-      const questions = snapshotMap.get(sid) || [];
-      const maxScore = questions.reduce((sum, question) => sum + questionMaxPoints(question), 0);
-      row.below_50_count = maxScore > 0 ? (scoreMap.get(sid) || []).filter((score) => Number(score.total_points || 0) < maxScore * 0.5).length : 0;
-      const accuracy = lowestQuestionAccuracy(questions, responseMap.get(sid) || []);
-      row.insight_question_no = accuracy?.number || null;
-      row.insight_question_accuracy = accuracy?.pct ?? null;
-    }
-  }
-
-  const assignedIds = assignedRows.map((row) => Number(row.quiz_id));
-  if (assignedIds.length) {
-    const [questionRows] = await pool.query(
-      `SELECT id,quiz_id,question_order FROM quiz_questions WHERE quiz_id IN (:ids) ORDER BY quiz_id,question_order`,
-      { ids: assignedIds }
-    );
-    const [submissionRows] = await pool.query(
-      `SELECT quiz_id,score,max_score,answers_json FROM async_quiz_submissions WHERE teacher_id=:tid AND quiz_id IN (:ids)`,
-      { tid: teacherId, ids: assignedIds }
-    );
-    const questionMap = groupRows(questionRows, "quiz_id");
-    const submissionMap = groupRows(submissionRows, "quiz_id");
-    for (const row of assignedRows) {
-      const qid = Number(row.quiz_id);
-      const submissions = submissionMap.get(qid) || [];
-      row.below_50_count = submissions.filter((submission) => Number(submission.max_score || 0) > 0 && Number(submission.score || 0) < Number(submission.max_score) * 0.5).length;
-      const questions = questionMap.get(qid) || [];
-      const aggregates = new Map(questions.map((question, index) => [Number(question.id), { number: Number(question.question_order || index + 1), correct: 0, total: 0 }]));
-      for (const submission of submissions) {
-        const answers = safeJson(submission.answers_json);
-        for (const answer of Array.isArray(answers) ? answers : []) {
-          const bucket = aggregates.get(Number(answer?.questionId));
-          if (!bucket) continue;
-          bucket.total += 1;
-          if (answer?.isCorrect) bucket.correct += 1;
-        }
-      }
-      const accuracy = Array.from(aggregates.values()).filter((item) => item.total > 0).map((item) => ({ ...item, pct: Number(((item.correct / item.total) * 100).toFixed(1)) })).sort((a, b) => a.pct - b.pct || a.number - b.number)[0];
-      row.insight_question_no = accuracy?.number || null;
-      row.insight_question_accuracy = accuracy?.pct ?? null;
-    }
-  }
-}
-
-function groupRows(rows, key) {
-  const grouped = new Map();
-  for (const row of rows || []) {
-    const id = Number(row[key]);
-    const list = grouped.get(id) || [];
-    list.push(row);
-    grouped.set(id, list);
-  }
-  return grouped;
-}
-
-function questionMaxPoints(question) {
-  const config = safeJson(question?.config_json) || question?.config_json || {};
-  const correct = safeJson(question?.correct_json) || question?.correct_json || {};
-  const points = Math.max(1, Math.min(3, Number(config.points || 1)));
-  const pairs = Array.isArray(correct.pairs) ? correct.pairs.length : 0;
-  const words = Array.isArray(correct.answers) && correct.answers.length ? correct.answers.length : Array.isArray(config.answers) ? config.answers.length : 0;
-  if (pairs) return points * pairs;
-  if (words) return points * words;
-  return points;
-}
-
-function lowestQuestionAccuracy(questions, responses) {
-  const map = new Map((questions || []).map((question, index) => [Number(question.id), { number: Number(question.question_order || index + 1), correct: 0, total: 0 }]));
-  for (const response of responses || []) {
-    const bucket = map.get(Number(response.question_id));
-    if (!bucket) continue;
-    bucket.total += 1;
-    if (response.is_correct) bucket.correct += 1;
-  }
-  return Array.from(map.values()).filter((item) => item.total > 0).map((item) => ({ ...item, pct: Number(((item.correct / item.total) * 100).toFixed(1)) })).sort((a, b) => a.pct - b.pct || a.number - b.number)[0] || null;
 }
 
 export async function getSessionFullAnalytics(req, res) {
   const sessionId = Number(req.params.id);
   const data = await buildFullAnalyticsData(sessionId, req.user.sub);
   if (!data) return res.status(404).json({ message: "Session not found" });
-  const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code === "BASIC") {
-    return res.json({
-      session: data.session,
-      summary: {
-        participant_count: Number(data.summary?.participant_count || 0),
-        avg_score: Number(data.summary?.avg_score || 0),
-        min_score: Number(data.summary?.min_score || 0),
-        max_score: Number(data.summary?.max_score || 0),
-      },
-      questions: (data.questions || []).map((question) => ({
-        question_id: question.question_id,
-        question_order: question.question_order,
-        prompt: question.prompt,
-        total_answers: question.total_answers,
-        correct_answers: question.correct_answers,
-        incorrect_answers: question.incorrect_answers,
-        pct_correct: question.pct_correct,
-        pct_incorrect: question.pct_incorrect,
-      })),
-      students: (data.students || []).map((student) => ({
-        participant_id: student.participant_id,
-        first_name: student.first_name,
-        last_name: student.last_name,
-        joined_at: student.joined_at,
-        group_name: student.group_name,
-        assigned_group_name: student.assigned_group_name,
-        total_points: student.total_points,
-      })),
-    });
-  }
   res.json({
     session: data.session,
     summary: data.summary,
@@ -664,17 +517,15 @@ export async function joinSession(req, res) {
   const ln = (lastName || "").trim();
   if (!fn) return res.status(400).json({ message: "Please enter your first name." });
 
-  const studentUserId = req.user?.role === "STUDENT" ? Number(req.user.sub) : null;
   const [r] = await pool.query(
     `INSERT INTO session_participants
-       (session_id, first_name, last_name, reconnect_key, student_user_id, connected, join_type, group_name)
-     VALUES(:sid, :fn, :ln, :rk, :studentUserId, 1, :jt, NULL)`,
+       (session_id, first_name, last_name, reconnect_key, connected, join_type, group_name)
+     VALUES(:sid, :fn, :ln, :rk, 1, :jt, NULL)`,
     {
       sid: session.id,
       fn,
       ln,
       rk: reconnectKey,
-      studentUserId,
       jt: session.join_mode,
     }
   );
