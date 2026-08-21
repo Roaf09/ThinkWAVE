@@ -167,7 +167,11 @@ export function registerSessionSockets(io) {
 
     onTeacher("teacher:setStatus", async ({ sessionId, status }) => {
       if (!["LOBBY", "LIVE", "PAUSED", "ENDED"].includes(status)) return;
-      const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
+      const [[session]] = await pool.query(
+        `SELECT s.*, UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix
+         FROM sessions s WHERE s.id=:sid`,
+        { sid: sessionId }
+      );
       if (!session) return;
 
       if (status === "LIVE" && session.join_mode === "GROUP") {
@@ -188,7 +192,9 @@ export function registerSessionSockets(io) {
         const snapshot = safeJson(session.questions_snapshot_json) || [];
         const currentQuestion = snapshot[Number(session.current_question_index || 0)] || null;
         const total = Number(currentQuestion?.config_json?.timeLimitSec || 0);
-        const startedAt = session.question_started_at ? new Date(session.question_started_at).getTime() : Date.now();
+        const startedAt = session.question_started_unix != null
+          ? Number(session.question_started_unix) * 1000
+          : Date.now();
         const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
         pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
         await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
@@ -1102,7 +1108,9 @@ async function broadcastState(io, sessionId) {
         ? "q.background_key AS background_key"
         : "NULL AS background_key";
   const [[state]] = await pool.query(
-    `SELECT s.id, s.status, s.current_question_index, s.question_started_at, s.questions_snapshot_json,
+    `SELECT s.id, s.status, s.current_question_index, s.question_started_at,
+            UNIX_TIMESTAMP(s.question_started_at) AS question_started_unix,
+            s.questions_snapshot_json,
             s.join_code, s.join_mode, s.max_participants, s.teacher_disconnected_deadline, s.end_reason,
             ${backgroundSelect},
             q.id AS quiz_id, q.title AS quiz_title, q.category AS quiz_category,
@@ -1121,7 +1129,12 @@ async function broadcastState(io, sessionId) {
   const serverNow = new Date();
   state.server_now = serverNow.toISOString();
   state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
-  state.question_deadline_at = state.question_started_at && qLimit > 0 ? new Date(new Date(state.question_started_at).getTime() + qLimit * 1000).toISOString() : null;
+  const startedUnixSec = state.question_started_unix != null ? Number(state.question_started_unix) : null;
+  state.question_started_at = startedUnixSec != null ? new Date(startedUnixSec * 1000).toISOString() : null;
+  state.question_deadline_at = startedUnixSec != null && qLimit > 0
+    ? new Date((startedUnixSec + qLimit) * 1000).toISOString()
+    : null;
+  delete state.question_started_unix;
   io.to(roomSession(sessionId)).emit("session:state", { state, questions: qs });
   io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });
   await broadcastScores(io, sessionId);
