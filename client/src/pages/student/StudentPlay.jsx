@@ -183,41 +183,26 @@ export default function StudentPlay() {
   const feedbackHideTimer = useRef(null);
   const feedbackPulseTimer = useRef(null);
   const antiRemovalTimer = useRef(null);
-  const transientTimersRef = useRef(new Set());
   const lastTabSignal = useRef(0);
   const submittedRef = useRef(null);
   const participantId = Number(localStorage.getItem("qz_participantId") || "0");
   const reconnectKey = localStorage.getItem("qz_reconnectKey") || "";
-
-  const scheduleTransient = useCallback((callback, delayMs) => {
-    const timer = setTimeout(() => {
-      transientTimersRef.current.delete(timer);
-      callback();
-    }, delayMs);
-    transientTimersRef.current.add(timer);
-    return timer;
-  }, []);
-
-  useEffect(() => () => {
-    for (const timer of transientTimersRef.current) clearTimeout(timer);
-    transientTimersRef.current.clear();
-  }, []);
 
   const pageBg = dark ? "#0a4eb4" : "#6db9f1";
   const cardBg = dark ? "#0e1733" : "#ffffff";
   const cardBor = dark ? "#1e2d55" : "#c7d2fe";
   const textC = dark ? "#e7e9ee" : "#0f172a";
   const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
-  const selectedBackground = useMemo(() => getSessionBackground(state?.background_key), [state?.background_key]);
-  const experienceBgStyle = useMemo(() => selectedBackground
+  const selectedBackground = getSessionBackground(state?.background_key);
+  const experienceBgStyle = selectedBackground
     ? {
         backgroundImage: `url("${selectedBackground.src}")`,
         backgroundColor: pageBg,
         backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundAttachment: "scroll",
+        backgroundAttachment: "fixed",
       }
-    : { background: pageBg }, [selectedBackground, pageBg]);
+    : { background: pageBg };
   const currentSoundMode = state?.status === "LIVE"
     ? "playing"
     : (!state?.status || state?.status === "LOBBY" || state?.status === "PAUSED")
@@ -314,7 +299,7 @@ export default function StudentPlay() {
         }
         return payload.state;
       });
-      setQuestions((current) => sameQuestionSnapshot(current, payload.questions || []) ? current : (payload.questions || []));
+      setQuestions(payload.questions || []);
       if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
       if (payload.state?.status === "LIVE") void soundManager.startBGM("playing");
       if (payload.state?.status === "LOBBY" || payload.state?.status === "PAUSED") void soundManager.startBGM("lobby");
@@ -346,7 +331,7 @@ export default function StudentPlay() {
         setSubmittedQId(null);
         setSubmitLabel(rejectedThinkSpell ? "Submit Word" : "Submit");
       }
-      scheduleTransient(() => {
+      setTimeout(() => {
         setGroupProposal(null);
         setProposalStatus("");
       }, 1400);
@@ -409,7 +394,7 @@ export default function StudentPlay() {
 
         if (a.locked && !a.thinkSpell) {
           setSubmitLabel(feedbackStatus(a) === "correct" ? "Submitted ✓" : feedbackStatus(a) === "almost" ? "Partially correct" : "Submitted");
-          scheduleTransient(() => setPostAnswerPhase("wait"), 1250);
+          setTimeout(() => setPostAnswerPhase("wait"), 1250);
           return;
         }
 
@@ -442,7 +427,7 @@ export default function StudentPlay() {
 
       if (isLast) {
         setWaitingForFinalFx(true);
-        const feedbackDelay = new Promise((resolve) => scheduleTransient(resolve, 1650));
+        const feedbackDelay = new Promise((resolve) => setTimeout(resolve, 1650));
         Promise.all([Promise.resolve(effectPromise), feedbackDelay]).finally(() => {
           setWaitingForFinalFx(false);
           setPostAnswerPhase("complete");
@@ -456,14 +441,10 @@ export default function StudentPlay() {
       clearTimeout(completeTimer.current);
       clearTimeout(feedbackHideTimer.current);
       clearTimeout(feedbackPulseTimer.current);
-      clearTimeout(antiRemovalTimer.current);
-      clearTimeout(renameTimer.current);
       soundManager.stopBGM();
-      s.removeAllListeners();
       s.disconnect();
-      if (socketRef.current === s) socketRef.current = null;
     };
-  }, [sessionId, reconnectKey, participantId, scheduleTransient]);
+  }, [sessionId, reconnectKey, participantId]);
 
   useEffect(() => {
     if (!antiCheat || antiCountdown <= 0) return;
@@ -471,18 +452,9 @@ export default function StudentPlay() {
     return ()=>clearTimeout(t);
   },[antiCheat,antiCountdown]);
 
-  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 200); return () => clearInterval(t); }, []);
 
   const currentQ = useMemo(() => state ? questions[state.current_question_index || 0] || null : null, [state, questions]);
-  const displayCurrentQ = useMemo(() => {
-    if (!currentQ) return null;
-    const template = normalizeTemplateType(state?.template_type);
-    const config = { ...(currentQ.config_json || {}) };
-    if (template === "MCQ" && state?.shuffle_answers && Array.isArray(config.options)) {
-      config.options = seededShuffleChoices(config.options, `${sessionId}:${participantId}:${currentQ.id}:choices`);
-    }
-    return { ...currentQ, config_json: config };
-  }, [currentQ, participantId, sessionId, state?.shuffle_answers, state?.template_type]);
   const stateRef = useRef(null);
   const questionCountRef = useRef(0);
   useEffect(() => { currentQRef.current = currentQ; }, [currentQ]);
@@ -527,7 +499,7 @@ export default function StudentPlay() {
     if (!currentQ || state?.status !== "LIVE") return { remainingSec: 0, progress: 0, total };
     const serverNowMs = nowMs - clockOffsetMs;
     const started = state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
-    if (started && started > serverNowMs) return { remainingSec: total, progress: total > 0 ? 1 : 0, total };
+    if (started && started > serverNowMs) return { remainingSec: 0, progress: 0, total };
     if (state?.question_deadline_at) {
       const remainingMs = Math.max(0, new Date(state.question_deadline_at).getTime() - serverNowMs);
       const remaining = Math.ceil(remainingMs / 1000);
@@ -607,7 +579,7 @@ export default function StudentPlay() {
 
   function exitTo(path) {
     setExiting(true);
-    scheduleTransient(() => navigate(path), 260);
+    setTimeout(() => navigate(path), 260);
   }
 
   const waitingTitle = state?.status === "PAUSED"
@@ -831,11 +803,11 @@ export default function StudentPlay() {
           </div>
         )}
         <div className="qn-prompt-box">
-          {displayCurrentQ?.config_json?.showPromptImage !== false && displayCurrentQ?.config_json?.promptImage ? <img src={displayCurrentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
-          <span className="qn-prompt-text">{displayCurrentQ?.prompt}</span>
-          <QuestionAudioButton config={displayCurrentQ?.config_json} prompt={displayCurrentQ?.prompt} templateType={ttNormalized}/>
+          {currentQ?.config_json?.showPromptImage !== false && currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
+          <span className="qn-prompt-text">{currentQ.prompt}</span>
+          <QuestionAudioButton config={currentQ?.config_json} prompt={currentQ?.prompt} templateType={ttNormalized}/>
         </div>
-        <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={displayCurrentQ} participantSeed={`${sessionId}:${participantId}`} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} answerText={answerText} setAnswerText={setAnswerText} matchingMap={matchingMap} setMatchingMap={setMatchingMap} spell={spell} setSpell={setSpell} />
+        <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} answerText={answerText} setAnswerText={setAnswerText} matchingMap={matchingMap} setMatchingMap={setMatchingMap} spell={spell} setSpell={setSpell} />
         {thinkSpellTimeUp && (
           <div className="bword-summary">
             <div className="bword-summary-title">Time&apos;s up!</div>
@@ -883,18 +855,6 @@ export default function StudentPlay() {
   );
 }
 
-function sameQuestionSnapshot(a = [], b = []) {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let index = 0; index < a.length; index += 1) {
-    if (Number(a[index]?.id) !== Number(b[index]?.id)) return false;
-    if (a[index]?.prompt !== b[index]?.prompt) return false;
-    if (JSON.stringify(a[index]?.config_json || null) !== JSON.stringify(b[index]?.config_json || null)) return false;
-    if (JSON.stringify(a[index]?.correct_json || null) !== JSON.stringify(b[index]?.correct_json || null)) return false;
-  }
-  return true;
-}
-
 function renderAnswerPreview(answer) {
   if (!answer) return "—";
   if (typeof answer.choice === "string") return answer.choice || "—";
@@ -922,23 +882,6 @@ function choiceValue(option) {
   return option?.id || option?.text || "";
 }
 
-function seededShuffleChoices(values, seedText) {
-  const rows = [...values];
-  if (rows.length < 2) return rows;
-  let seed = 2166136261;
-  for (const char of String(seedText || "thinkwave-live")) seed = Math.imul(seed ^ char.charCodeAt(0), 16777619) >>> 0;
-  const random = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  for (let i = rows.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [rows[i], rows[j]] = [rows[j], rows[i]];
-  }
-  if (rows.every((row, index) => row === values[index])) rows.push(rows.shift());
-  return rows;
-}
-
 function choiceLabel(option, fallback) {
   return trimText(option?.text) || (trimText(option?.image) ? "Image option" : fallback);
 }
@@ -964,8 +907,8 @@ function seededOrder(length, shouldShuffle, seedInput) {
   if (arr.every((value, index) => value === index)) arr.push(arr.shift());
   return arr;
 }
-function MatchingTemplate({ disabled, q, cfg, matchingMap, setMatchingMap, participantSeed = "" }) {
-  return <MatchingConnectorGame config={cfg} valueMap={matchingMap} onChange={setMatchingMap} disabled={disabled} questionKey={`${q?.id || q?.prompt || "matching"}:${participantSeed}`} />;
+function MatchingTemplate({ disabled, q, cfg, matchingMap, setMatchingMap }) {
+  return <MatchingConnectorGame config={cfg} valueMap={matchingMap} onChange={setMatchingMap} disabled={disabled} questionKey={q?.id || q?.prompt || "matching"} />;
 }
 function GuessWord4PicsTemplate({ disabled, cfg, spell, setSpell }) {
   const images = Array.isArray(cfg.images) ? cfg.images : [];
@@ -1045,11 +988,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
   const foundPathSet = new Set(foundEntries.flatMap((entry) => Array.isArray(entry.path) ? entry.path.map(Number) : []));
   const cellGap = 8;
   const draggingRef = useRef(false);
-  const gridShellRef = useRef(null);
-  const pointerIdRef = useRef(null);
-  const moveFrameRef = useRef(0);
-  const pendingPointRef = useRef(null);
-  const selectedRef = useRef([]);
 
   useEffect(() => {
     if (spell?.mode === "wordhunt-batch" && spell.sig === sig && Array.isArray(spell.grid) && spell.grid.length) return;
@@ -1071,7 +1009,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
   const grid = Array.isArray(spell.grid) ? spell.grid : [];
   const activeGridSize = Number(spell.gridSize || gridSize);
   const selected = Array.isArray(spell.selected) ? spell.selected : [];
-  selectedRef.current = selected;
   const selectedSet = new Set(selected);
   const built = selected.map((idx) => grid[idx] || "").join("");
 
@@ -1083,52 +1020,35 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
   }, [built]);
 
   function addIndex(idx) {
-    if (disabled || !grid[idx]) return;
-    setSpell((current) => {
-      const path = Array.isArray(current.selected) ? current.selected : selectedRef.current;
-      if (path.includes(idx)) return current;
-      if (!path.length) {
-        selectedRef.current = [idx];
-        return { ...current, selected: [idx], built: String(grid[idx] || "") };
-      }
-      const lastIdx = path[path.length - 1];
-      if (!isAdjacentSelection(lastIdx, idx, activeGridSize)) return current;
-      const nextSelected = [...path, idx];
-      if (!isStraightLinePath(nextSelected, activeGridSize)) return current;
-      selectedRef.current = nextSelected;
-      return { ...current, selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") };
-    });
+    if (disabled || !grid[idx] || selectedSet.has(idx)) return;
+    if (!selected.length) {
+      setSpell((s) => ({ ...s, selected: [idx], built: String(grid[idx] || "") }));
+      return;
+    }
+    const lastIdx = selected[selected.length - 1];
+    if (!isAdjacentSelection(lastIdx, idx, activeGridSize)) return;
+    const nextSelected = [...selected, idx];
+    if (!isStraightLinePath(nextSelected, activeGridSize)) return;
+    setSpell((s) => ({ ...s, selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") }));
   }
 
   function handleGridPointerMove(e) {
     if (!draggingRef.current || disabled) return;
-    pendingPointRef.current = { x: e.clientX, y: e.clientY };
-    if (moveFrameRef.current) return;
-    moveFrameRef.current = requestAnimationFrame(() => {
-      moveFrameRef.current = 0;
-      const point = pendingPointRef.current;
-      if (!point || !draggingRef.current) return;
-      const target = document.elementFromPoint(point.x, point.y)?.closest?.("[data-bword-index]");
-      if (target) addIndex(Number(target.dataset.bwordIndex));
-    });
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-bword-index]");
+    if (!target) return;
+    addIndex(Number(target.dataset.bwordIndex));
   }
 
   function finishSelection() {
-    const pointerId = pointerIdRef.current;
-    if (pointerId !== null && gridShellRef.current?.hasPointerCapture?.(pointerId)) {
-      try { gridShellRef.current.releasePointerCapture(pointerId); } catch {}
-    }
-    pointerIdRef.current = null;
     draggingRef.current = false;
-    const path = [...selectedRef.current];
-    const text = path.map((idx) => grid[idx] || "").join("");
+    const text = selected.map((idx) => grid[idx] || "").join("");
+    const key = normalizeThinkWordKey(text);
     const matchedKey = matchThinkSpellWord(text, wordBank);
-    const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path, word: text });
-    selectedRef.current = [];
+    const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path: selected, word: text });
     if (matchedKey && pathValid && !foundSet.has(matchedKey)) {
       setSpell((s) => ({
         ...s,
-        foundEntries: [...(s.foundEntries || []), { text, path }],
+        foundEntries: [...(s.foundEntries || []), { text, path: selected }],
         selected: [],
         built: "",
       }));
@@ -1151,10 +1071,6 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
     if (!matchedKey) return "Not on the word list";
     return "Release to add this word";
   })();
-  useEffect(() => () => {
-    if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
-  }, []);
-
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
   const foundLines = foundEntries
     .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
@@ -1179,7 +1095,7 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
         </div>
       )}
 
-      <div ref={gridShellRef} className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerUp={finishSelection} onPointerCancel={finishSelection}>
+      <div className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerLeave={() => draggingRef.current && finishSelection()}>
         <div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>
           {grid.map((ch, idx) => (
             <button
@@ -1189,13 +1105,11 @@ function BookwormThinkSpellTemplate({ disabled, cfg, cor, spell, setSpell, quest
               onPointerDown={(e) => {
                 if (disabled) return;
                 e.preventDefault();
-                pointerIdRef.current = e.pointerId;
-                gridShellRef.current?.setPointerCapture?.(e.pointerId);
                 draggingRef.current = true;
-                selectedRef.current = [idx];
                 setSpell((sp) => ({ ...sp, selected: [idx], built: String(grid[idx] || "") }));
               }}
               onPointerEnter={() => draggingRef.current && addIndex(idx)}
+              onPointerUp={finishSelection}
               disabled={disabled}
               data-bword-index={idx}
             >
@@ -1243,7 +1157,6 @@ function TemplateBody({
   disabled,
   templateType,
   q,
-  participantSeed = "",
   selectedChoice,
   setSelectedChoice,
   answerText,
@@ -1317,7 +1230,7 @@ function TemplateBody({
     );
   }
 
-  if (templateType === "MATCHING") return <MatchingTemplate disabled={disabled} q={q} cfg={cfg} matchingMap={matchingMap} setMatchingMap={setMatchingMap} participantSeed={participantSeed} />;
+  if (templateType === "MATCHING") return <MatchingTemplate disabled={disabled} q={q} cfg={cfg} matchingMap={matchingMap} setMatchingMap={setMatchingMap} />;
   if (templateType === "GUESS_WORD_4PICS") return <GuessWord4PicsTemplate disabled={disabled} cfg={cfg} spell={spell} setSpell={setSpell} />;
   if (templateType === "THINK_SPELL") {
     return (
