@@ -11,13 +11,13 @@ import { TwIcon } from "../../components/TwUI";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { QuestionAudioButton } from "../../components/AudioControls";
 import MatchingConnectorGame from "../../components/MatchingConnectorGame";
+import thinkBotLogo from "../../assets/thinkbot-logo.png";
+import { templateAccent } from "../../lib/templatePalette";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 import {
   buildThinkSpellSignature,
   getPathLinePoints,
-  isAdjacentSelection,
-  isStraightLinePath,
   loadThinkSpellGridState,
   matchThinkSpellWord,
   normalizeThinkWordKey,
@@ -41,7 +41,7 @@ function asyncFeedbackCopy(payload) {
 }
 
 function ThemeTogglePill({ dark, onClick, style }) {
-  return <ThemeIconButton dark={dark} onClick={onClick} className="sp-inline-theme-toggle" style={style} size={18}/>;
+  return <ThemeIconButton dark={dark} onClick={onClick} className="sp-inline-theme-toggle" style={style} size={22}/>;
 }
 
 function SoundTogglePill({ muted, onClick, style }) {
@@ -68,6 +68,7 @@ export default function StudentAsyncPlay() {
   const [awayBlur,setAwayBlur]=useState(false);
   const [submittingUi,setSubmittingUi]=useState(false);
   const [feedback,setFeedback]=useState(null);
+  const [explanationFeedback,setExplanationFeedback]=useState(null);
   const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
   const transientTimersRef=useRef(new Set());
   const mountedRef=useRef(true);
@@ -110,6 +111,7 @@ export default function StudentAsyncPlay() {
   const q = questions[idx];
   const activeQ = questions[activeIdx];
   const tt = normalizeTemplateType(quiz?.template_type);
+  const gameplayAccent = templateAccent(tt);
   // Keep each question's answer and lock state independent, even when an older API payload omits or repeats an id.
   const currentAnswer = answers[idx] || {};
   const activeAnswer = answers[activeIdx] || {};
@@ -187,9 +189,18 @@ export default function StudentAsyncPlay() {
     try{
       const response=await api.post(`/student/quizzes/${quizId}/check-answer`,{questionId:Number(q.id),answer:currentAnswer});
       feedbackData=response.data;
-      setFeedback(asyncFeedbackCopy(feedbackData));
+      const feedbackCopy=asyncFeedbackCopy(feedbackData);
+      setFeedback(feedbackCopy);
       void soundManager.play(feedbackData?.isCorrect?"correct":"wrong");
-      scheduleTransient(()=>setFeedback(null),1500);
+      scheduleTransient(()=>{
+        setFeedback(null);
+        const explanation=String(feedbackData?.explanation||q?.config_json?.explanation||"").trim();
+        if(explanation){
+          setExplanationFeedback({status:feedbackCopy.status,heading:feedbackCopy.status==="correct"?"Correct":feedbackCopy.status==="almost"?"Almost":"Incorrect",explanation,phase:"center"});
+          scheduleTransient(()=>setExplanationFeedback(current=>current?{...current,phase:"corner"}:current),2000);
+          scheduleTransient(()=>setExplanationFeedback(null),10000);
+        }
+      },1500);
     }catch(err){
       setMsg(err?.response?.data?.message||"Could not check this answer.");
       return;
@@ -206,6 +217,16 @@ export default function StudentAsyncPlay() {
       await submitAssignment({completedOverride:completed});
     }
   }
+  useEffect(()=>{
+    const onKeyDown=(event)=>{
+      if(event.key!=="Enter"||event.repeat||event.isComposing||event.target?.tagName==="TEXTAREA")return;
+      if(done||introOpen||submittingUi||currentLocked||!currentAnswered||idx!==activeIdx)return;
+      event.preventDefault();
+      void submitCurrent();
+    };
+    window.addEventListener("keydown",onKeyDown);
+    return()=>window.removeEventListener("keydown",onKeyDown);
+  },[done,introOpen,submittingUi,currentLocked,currentAnswered,idx,activeIdx,currentAnswer,q?.id]);
   function viewQuestion(nextIndex){setIdx(Math.max(0,Math.min(questions.length-1,nextIndex)));setMsg("");}
   function goPrevious(){
     viewQuestion(idx-1);
@@ -224,19 +245,20 @@ export default function StudentAsyncPlay() {
   return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
     {feedback&&<div className={`sp-feedback-overlay is-${feedback.status}`}><div className={`sp-feedback-card is-${feedback.status}`}><div className="sp-feedback-icon"><TwIcon name={feedback.icon} size={44}/></div><div className="sp-feedback-title">{feedback.title}</div><div className="sp-feedback-subtitle">{feedback.subtitle}</div></div></div>}
+    {explanationFeedback&&<div className={`sp-explanation-feedback is-${explanationFeedback.status} is-${explanationFeedback.phase}`}><div className="sp-explanation-heading">{explanationFeedback.heading}</div><div className="sp-explanation-copy">{explanationFeedback.explanation}</div></div>}
     {introOpen&&<div className="sp-anticheat-backdrop"><div className="sp-assignment-intro" style={{background:cardBg,borderColor:cardBor,color:textC}}><div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div><h1>{quiz.title||"Assignment"}</h1><p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p><button type="button" className="tw-student-dashboard-press sp-assignment-start" onClick={()=>{setRemainingSec(null);setActiveIdx(0);setIdx(0);setIntroOpen(false)}}><span>Start</span></button><div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div></div></div>}
     {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" className="tw-dialog-press is-blue" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}><span>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</span></button></div></div>}
-    <div className={`quiz-shell-new sp-assigned-shell ${dark?"theme-dark":"theme-light"} ${selectedBackground ? "has-session-background" : ""}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column"}}>
-      <div className="qn-header"><div className="qn-title-cluster"><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">Q {idx+1}/{questions.length}</div><div className={`qn-timer qn-pixel-timer ${quiz.category==="K12"?"is-k12":""}`}><TwIcon name="clock" size={17}/> {fmtTime(done||submittingUi?0:(remainingSec??activeTimeLimit))}</div></div></div>
+    <div className={`quiz-shell-new sp-assigned-shell ${dark?"theme-dark":"theme-light"} ${selectedBackground ? "has-session-background" : ""}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column","--sp-template-accent":gameplayAccent}}>
+      <div className="qn-header"><div className="qn-title-cluster"><div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">{tt === "MATCHING" ? `Batch ${idx+1}/${questions.length}` : `${idx+1}/${questions.length}`}</div><div className={`qn-timer qn-pixel-timer ${quiz.category==="K12"?"is-k12":""}${!done && !submittingUi && (remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : !done && !submittingUi && (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><TwIcon name="clock" size={20}/> {fmtTime(done||submittingUi?0:(remainingSec??activeTimeLimit))}</div></div></div>
       <div className="qn-question-progress" aria-label={`${answeredCount} of ${questions.length} questions answered`}><div className="qn-question-progress-bar" style={{width:`${questionProgress}%`}}/></div>
-      <div className="qn-progress qn-timer-progress"><div className="qn-progress-bar" style={{width:`${Math.round(activeLocked?0:((remainingSec??activeTimeLimit)/activeTimeLimit)*100)}%`}}/></div>
-      <div className="qn-body" style={{flex:1}}>{submittingUi?<div className="sp-wait-card sp-page-enter sp-submitting-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><h2 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={cAccent(dark)}/></h2></div>:done?<div className="sp-wait-card sp-page-enter sp-submitted-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={70}/></div><h2 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h2><p className="sp-wait-subtitle sp-final-score" style={{color:mutedC}}>You scored: <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b></p><button className="tw-student-dashboard-press sp-dashboard-return" type="button" onClick={()=>nav('/student')}><span><TwIcon name="home" size={18}/> Dashboard</span></button></div>:<>
+      <div className={`qn-progress qn-timer-progress${!activeLocked && (remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : !activeLocked && (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><div className="qn-progress-bar" style={{width:`${Math.round(activeLocked?0:((remainingSec??activeTimeLimit)/activeTimeLimit)*100)}%`}}/></div>
+      <div className="qn-body" style={{flex:1}}>{submittingUi?<div className="sp-wait-card sp-page-enter sp-submitting-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><h2 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={cAccent(dark)}/></h2></div>:done?<div className="sp-wait-card sp-page-enter sp-submitted-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}><div style={{color:"#16a34a",marginBottom:12}}><TwIcon name="check" size={70}/></div><h2 className="sp-wait-title" style={{color:textC,marginBottom:8}}>Submitted!</h2><p className="sp-wait-subtitle sp-final-score" style={{color:mutedC}}>You scored: <b style={{color:"#2b6cff"}}>{result.score}/{result.maxScore}</b></p><button className="tw-student-dashboard-press sp-dashboard-return" type="button" onClick={()=>nav('/student')}><span>Dashboard</span></button></div>:<>
         <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
-        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx}/>
+        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx} timeUp={tt === TEMPLATE_TYPES.THINK_SPELL && idx === activeIdx && remainingSec === 0}/>
         {msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
         <div className="sp-assigned-navigation">
           <button type="button" className="sp-assigned-arrow is-left" aria-label="Previous question" onClick={goPrevious} disabled={!canGoPrevious}><TwIcon name="arrow" size={24}/></button>
-          <button type="button" className="tw-assignment-submit-press" onClick={submitCurrent} disabled={currentLocked||!currentAnswered||idx!==activeIdx}><span>{currentLocked?"Submitted":"Submit"}</span></button>
+          <button type="button" className="tw-assignment-submit-press" style={{"--sp-submit-accent":gameplayAccent}} onClick={submitCurrent} disabled={currentLocked||!currentAnswered||idx!==activeIdx}><span>{currentLocked?"Submitted":"Submit"}</span></button>
           <button type="button" className="sp-assigned-arrow" aria-label="Next question" onClick={goNext} disabled={!canGoNext}><TwIcon name="arrow" size={24}/></button>
         </div>
       </>}</div>
@@ -263,7 +285,7 @@ function AsyncShell({ dark, pageBg, backgroundStyle, cardBg, cardBor, textC, mut
     <div style={{ minHeight: "100vh", ...(backgroundStyle || { background: pageBg }), color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
       <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={onMute}/><ThemeTogglePill dark={dark} onClick={onTheme}/></div>
       <div className={`quiz-shell-new sp-assigned-shell ${dark ? "theme-dark" : "theme-light"} ${hasBackground ? "has-session-background" : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
-        <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10}}><div className="qn-brand"><span>Think</span><span>WAVE</span></div><div className="qn-subject">{title}</div></div><div className="qn-meta"><div className="qn-timer"><TwIcon name="clock" size={17}/> Assignment</div></div></div>
+        <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10}}><div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{title}</div></div><div className="qn-meta"><div className="qn-timer"><TwIcon name="clock" size={17}/> Assignment</div></div></div>
         <div className="qn-body" style={{ flex: 1, display: "grid", placeItems: "center" }}>{children}</div>
       </div>
     </div>
@@ -277,13 +299,13 @@ function normalizeChoiceOption(option, index = 0) {
 }
 function choiceValue(option) { return option?.id || option?.text || ""; }
 
-function TemplateBody({ templateType, q, value, onChange, disabled }) {
+function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = false }) {
   const cfg = q?.config_json || {};
   if (templateType === TEMPLATE_TYPES.MCQ) return <McqTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.TRUE_FALSE) return <TrueFalseTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.MATCHING) return <MatchingTemplate q={q} cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.GUESS_WORD_4PICS) return <GuessWord4PicsTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
-  if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <BookwormThinkSpellTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} questionId={q?.id} />;
+  if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <BookwormThinkSpellTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} />;
   return <TypeAnswerTemplate value={value} onChange={onChange} disabled={disabled} />;
 }
 
@@ -313,13 +335,13 @@ function McqTemplate({ cfg, value, onChange, disabled }) {
 
 function TrueFalseTemplate({ cfg, value, onChange, disabled }) {
   const opts = Array.isArray(cfg.options) && cfg.options.length ? cfg.options : ["True", "False"];
-  return <div className="quiz-choices">{opts.map((o, i) => <button key={i} type="button" className={`choice-btn ${value.choice === o ? "active" : ""}`} onClick={() => !disabled && onChange({ choice: o })} disabled={disabled}><span className="choice-badge">{i === 0 ? "T" : "F"}</span><span className="choice-text">{o}</span></button>)}</div>;
+  return <div className="quiz-choices true-false-choices">{opts.map((o, i) => <button key={i} type="button" className={`choice-btn ${value.choice === o ? "active" : ""}`} onClick={() => !disabled && onChange({ choice: o })} disabled={disabled}><span className="choice-badge">{i === 0 ? "T" : "F"}</span><span className="choice-text">{o}</span></button>)}</div>;
 }
 
 function TypeAnswerTemplate({ value, onChange, disabled }) {
   const text = String(value.text || "");
   const MAX = 255;
-  return <div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your identification answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={text} onChange={(e) => onChange({ text: e.target.value.slice(0, MAX) })} placeholder="Start typing..." disabled={disabled} autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && text && <button type="button" className="type-clear-btn" onClick={() => onChange({ text: "" })}>✕</button>}</div>{text.length > 0 && <div className="type-charboxes">{text.split("").map((ch, i) => <div key={i} className="type-charbox">{ch === " " ? "\u00A0" : ch}</div>)}</div>}<div className="type-count">{text.length} / {MAX}</div></div></div>;
+  return <div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your identification answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={text} onChange={(e) => onChange({ text: e.target.value.slice(0, MAX) })} placeholder="Start typing..." disabled={disabled} autoFocus autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && text && <button type="button" className="type-clear-btn" onClick={() => onChange({ text: "" })}>✕</button>}</div><div className="type-count">{text.length} / {MAX}</div></div></div>;
 }
 
 function matchingOrder(length, shouldShuffle, seedText) {
@@ -348,6 +370,7 @@ function MatchingTemplate({ q, cfg, value, onChange, disabled }) {
   return <MatchingConnectorGame config={cfg} valueMap={map} onChange={updateMap} disabled={disabled} questionKey={`${q?.id || q?.prompt || "assigned-matching"}:${cfg?.shuffleSeed || "assigned"}`} />;
 }
 function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
+  const [zoomedImage, setZoomedImage] = useState(null);
   const images = Array.isArray(cfg.images) ? cfg.images : [];
   const target = String(cfg.target ?? "");
   const answerLen = Math.max(1, countAnswerLetters(target));
@@ -360,10 +383,50 @@ function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
   const built = String(value.text || "");
   const usedIds = (() => { const ids = []; const chars = built.split(""); const avail = bank.map((b) => ({ ...b, taken: false })); for (const ch of chars) { const t = avail.find((tile) => !tile.taken && tile.ch === ch); if (t) { t.taken = true; ids.push(t.id); } } return new Set(ids); })();
   function tap(id, ch) { if (disabled || usedIds.has(id) || built.length >= answerLen) return; onChange({ ...value, text: `${built}${ch}` }); }
-  return <div className="pics4-wrap simple-mode"><div className="pics4-grid compact-grid">{[0,1,2,3].map((i) => <div key={i} className="pics4-frame compact-frame">{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} /> : <span className="pics4-placeholder">?</span>}</div>)}</div><div className="pics4-answer-shell"><p className="pics4-answer-label">Tap letters to build the word.</p><div className="spell-wrap"><div className="spell-display">{Array.from({ length: answerLen }).map((_, i) => <div key={i} className="spell-char">{built[i] || "•"}</div>)}</div><div className="spell-bank">{bank.map(({ id, ch }) => <button key={id} type="button" className={`spell-tile${usedIds.has(id) ? " used" : ""}`} onClick={() => tap(id, ch)} disabled={disabled || usedIds.has(id) || built.length >= answerLen}>{ch}</button>)}</div><div className="spell-controls"><button type="button" className="spell-ctrl back" onClick={() => onChange({ ...value, text: built.slice(0, -1) })} disabled={disabled || !built}>⌫ Back</button><button type="button" className="spell-ctrl clr" onClick={() => onChange({ ...value, text: "" })} disabled={disabled || !built}>Clear</button></div></div></div></div>;
+  const guessBankSignature = bank.map((tile) => `${tile.id}:${tile.ch}`).join("|");
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (disabled || event.ctrlKey || event.metaKey || event.altKey) return;
+      const targetEl = event.target;
+      if (targetEl instanceof HTMLElement && (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA" || targetEl.isContentEditable)) return;
+      if (event.key === "Backspace") {
+        if (built) { event.preventDefault(); onChange({ ...value, text: built.slice(0, -1) }); }
+        return;
+      }
+      if (!/^[a-zA-Z]$/.test(event.key) || built.length >= answerLen) return;
+      const pressed = event.key.toUpperCase();
+      const tile = bank.find((candidate) => !usedIds.has(candidate.id) && String(candidate.ch || "").toUpperCase() === pressed);
+      if (!tile) return;
+      event.preventDefault();
+      onChange({ ...value, text: `${built}${tile.ch}` });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled, answerLen, guessBankSignature, built]);
+  return <div className="pics4-wrap simple-mode"><div className="pics4-grid compact-grid">{[0,1,2,3].map((i) => <div key={i} className="pics4-frame compact-frame">{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} role="button" tabIndex={0} onClick={() => setZoomedImage(images[i])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setZoomedImage(images[i]); }} /> : <span className="pics4-placeholder">?</span>}</div>)}</div><div className="pics4-answer-shell"><p className="pics4-answer-label">Tap letters to build the word.</p><div className="spell-wrap"><div className="spell-display">{Array.from({ length: answerLen }).map((_, i) => <div key={i} className="spell-char">{built[i] || "•"}</div>)}</div><div className="spell-bank">{bank.map(({ id, ch }) => <button key={id} type="button" className={`spell-tile${usedIds.has(id) ? " used" : ""}`} onClick={() => tap(id, ch)} disabled={disabled || usedIds.has(id) || built.length >= answerLen}>{ch}</button>)}</div><div className="spell-controls"><button type="button" className="spell-ctrl back" onClick={() => onChange({ ...value, text: built.slice(0, -1) })} disabled={disabled || !built}>Back</button><button type="button" className="spell-ctrl clr" onClick={() => onChange({ ...value, text: "" })} disabled={disabled || !built}>Clear</button></div></div></div>{zoomedImage && <div className="sp-image-zoom-backdrop" role="dialog" aria-modal="true" onClick={() => setZoomedImage(null)}><div className="sp-image-zoom-card" onClick={(event) => event.stopPropagation()}><button type="button" className="sp-image-zoom-close" aria-label="Close image" onClick={() => setZoomedImage(null)}><TwIcon name="close" size={22}/></button><img src={zoomedImage} alt="Zoomed clue" /></div></div>}</div>;
 }
 
-function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId }) {
+function straightAsyncThinkSpellPath(startIndex, endIndex, gridSize) {
+  const size = Math.max(1, Number(gridSize || 1));
+  const start = Number(startIndex);
+  const end = Number(endIndex);
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+  const startRow = Math.floor(start / size);
+  const startCol = start % size;
+  const endRow = Math.floor(end / size);
+  const endCol = end % size;
+  const rowDelta = endRow - startRow;
+  const colDelta = endCol - startCol;
+  if (rowDelta !== 0 && colDelta !== 0 && Math.abs(rowDelta) !== Math.abs(colDelta)) return null;
+  const steps = Math.max(Math.abs(rowDelta), Math.abs(colDelta));
+  if (steps === 0) return [start];
+  const rowStep = Math.sign(rowDelta);
+  const colStep = Math.sign(colDelta);
+  return Array.from({ length: steps + 1 }, (_, step) => (startRow + rowStep * step) * size + (startCol + colStep * step));
+}
+
+function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId, timeUp = false }) {
   const gridSize = Math.min(12, Math.max(5, Number(cfg.gridSize ?? 8) || 8));
   const minWordLength = Math.min(8, Math.max(2, Number(cfg.minWordLength ?? 3) || 3));
   const wordBank = resolveThinkSpellWordBank({ config: cfg, correct: {} });
@@ -398,12 +461,9 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
   function addIndex(cell) {
     if (disabled || !grid[cell]) return;
     const currentSelected = Array.isArray(valueRef.current?.selected) ? valueRef.current.selected : [];
-    if (currentSelected.includes(cell)) return;
     if (!currentSelected.length) return patch({ selected: [cell], built: String(grid[cell] || "") });
-    const last = currentSelected[currentSelected.length - 1];
-    if (!isAdjacentSelection(last, cell, activeGridSize)) return;
-    const nextSelected = [...currentSelected, cell];
-    if (!isStraightLinePath(nextSelected, activeGridSize)) return;
+    const nextSelected = straightAsyncThinkSpellPath(currentSelected[0], cell, activeGridSize);
+    if (!nextSelected || nextSelected.some((cellIndex) => !grid[cellIndex])) return;
     patch({ selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") });
   }
   function finishSelection() {
@@ -446,5 +506,5 @@ function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId
     .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
     .filter((points) => points.length > 1);
   const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{cfg.showWordList !== false && wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div><div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div></div>}<div ref={gridShellRef} className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerUp={finishSelection} onPointerCancel={finishSelection}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); pointerIdRef.current = e.pointerId; gridShellRef.current?.setPointerCapture?.(e.pointerId); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{foundEntries.length > 0 && <div className="bword-found-panel"><div className="bword-found-title">Words found:</div><div className="bword-found-list">{foundEntries.map((entry, index) => <span key={`${entry.text}-${index}`} className="bword-found-chip">{(entry.text || "").toUpperCase()}{!disabled && <button type="button" onClick={() => { const nextFound = foundEntries.filter((_, i) => i !== index); patch({ foundEntries: nextFound, words: nextFound }); }} style={{ marginLeft: 6, border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontWeight: 900 }}>×</button>}</span>)}</div></div>}</div>;
+  return <div className="bword-wrap"><div className="bword-game-panel"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div>{cfg.showWordList !== false ? <div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div> : <div className="bword-quest-hidden">Find the hidden words in the grid.</div>}</div>}<div ref={gridShellRef} className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerUp={finishSelection} onPointerCancel={finishSelection}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); pointerIdRef.current = e.pointerId; gridShellRef.current?.setPointerCapture?.(e.pointerId); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{timeUp && <div className="bword-summary bword-summary-inside"><div className="bword-summary-title">Time&apos;s up!</div><div className="bword-summary-meta">You found <b>{foundEntries.length}</b> word{foundEntries.length === 1 ? "" : "s"}.</div><div className="bword-summary-hint">Continue when the next question unlocks.</div></div>}</div></div>;
 }

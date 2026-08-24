@@ -24,9 +24,23 @@ function textOf(item, fallback) {
 
 function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled = false, questionKey = "matching" }) {
   const colA = Array.isArray(config.colA) ? config.colA : [];
-  const pairedB = Array.isArray(config.colB) ? config.colB : [];
+  const rawB = Array.isArray(config.colB) ? config.colB : [];
   const dummyB = Array.isArray(config.dummyB) ? config.dummyB : [];
-  const colB = [...pairedB, ...dummyB];
+  // Older saved matching questions may already contain distractors in colB while
+  // also retaining dummyB. Keep only the paired portion, then append unique distractors.
+  const pairedB = dummyB.length && rawB.length > colA.length ? rawB.slice(0, colA.length) : rawB;
+  const signature = (item) => JSON.stringify({
+    text: String(item?.text ?? item?.label ?? item?.value ?? item ?? "").trim().toLowerCase(),
+    image: String(item?.image ?? "").trim(),
+  });
+  const seenB = new Set(pairedB.map(signature));
+  const uniqueDummyB = dummyB.filter((item) => {
+    const key = signature(item);
+    if (!key || seenB.has(key)) return false;
+    seenB.add(key);
+    return true;
+  });
+  const colB = [...pairedB, ...uniqueDummyB];
   const orderA = useMemo(() => seededOrder(colA.length, !!config.shuffleColA, `${questionKey}-a`), [colA.length, config.shuffleColA, questionKey]);
   const orderB = useMemo(() => seededOrder(colB.length, true, `${questionKey}-b`), [colB.length, questionKey]);
   const wrapperRef = useRef(null);
@@ -153,7 +167,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderA.map((index) => {
             const item = colA[index] || {};
             const paired = valueMap?.[index] !== undefined;
-            return <div key={`a-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`}>
+            return <div key={`a-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("A", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }}>
               <div className="match-connect-content">
                 {textOf(item, `Item ${index + 1}`) ? <span>{textOf(item, `Item ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" /> : null}
@@ -169,7 +183,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderB.map((index) => {
             const item = colB[index] || {};
             const paired = usedB.has(index);
-            return <div key={`b-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`}>
+            return <div key={`b-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("B", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }}>
               <button type="button" className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onClick={() => handleEndpoint("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} />
               <div className="match-connect-content">
                 {textOf(item, `Answer ${index + 1}`) ? <span>{textOf(item, `Answer ${index + 1}`)}</span> : null}

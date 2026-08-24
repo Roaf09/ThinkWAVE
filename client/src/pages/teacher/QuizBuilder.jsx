@@ -62,6 +62,11 @@ export default function QuizBuilder({ guestMode = false }) {
   const [modifiedTutorialOpen, setModifiedTutorialOpen] = useState(false);
   const [mcqTipVisible, setMcqTipVisible] = useState(false);
   const [bankSavedOrders, setBankSavedOrders] = useState(() => new Set());
+  const [questionStripOpen, setQuestionStripOpen] = useState(false);
+  const [questionStripClosing, setQuestionStripClosing] = useState(false);
+  const [stripDrag, setStripDrag] = useState({ from: null, to: null, mode: null });
+  const [stripSettleIndex, setStripSettleIndex] = useState(null);
+  const [questionDrag, setQuestionDrag] = useState({ active: false, settled: false, x: 0, y: 0, edge: null });
   const isBasic = !institutionPlan;
   const planLimit = getTemplateLimit(quiz?.template_type);
 
@@ -123,6 +128,15 @@ export default function QuizBuilder({ guestMode = false }) {
           points: nextCfg.points ?? data.quiz.points_per_question ?? 1,
         };
       });
+
+      if (!guestMode && loaded.length) {
+        try {
+          const { data: bankRows } = await api.get("/question-bank");
+          const normalizeSig = (prompt, config, correct) => JSON.stringify([String(prompt || "").trim(), config || {}, correct || {}]);
+          const bankSigs = new Set((bankRows || []).filter((row) => normalizeTemplateType(row.template_type) === normalizeTemplateType(data.quiz?.template_type)).map((row) => normalizeSig(row.prompt, safeJson(row.config_json) || row.config_json || {}, safeJson(row.correct_json) || row.correct_json || {})));
+          setBankSavedOrders(new Set(loaded.filter((row) => bankSigs.has(normalizeSig(row.prompt, row.config, row.correct))).map((row) => Number(row.order))));
+        } catch { setBankSavedOrders(new Set()); }
+      }
 
       if (loaded.length === 0) {
         setQuestions([buildBlankQuestion(data.quiz, 0)]);
@@ -566,7 +580,7 @@ export default function QuizBuilder({ guestMode = false }) {
   function publish() {
     setPublishFlow(true);
     setMsg("");
-    if (!isSaved || quiz?.status === "PUBLISHED") return;
+    if (!isSaved || ["PUBLISHED", "BANKED"].includes(String(quiz?.status || "").toUpperCase())) return;
     if (checkInvalid().length) return;
     const dupes = findDuplicates(questions);
     if (dupes.length) {
@@ -632,7 +646,13 @@ export default function QuizBuilder({ guestMode = false }) {
         setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
       }
     } catch (error) {
-      setMsg(error?.response?.data?.message || "Failed to save to bank.");
+      const message = error?.response?.data?.message || "";
+      if (/already.*saved|duplicate/i.test(message)) {
+        setMsg("");
+        setBankSavedOrders((current) => new Set([...current, Number(q?.order ?? qIndex)]));
+        return;
+      }
+      setMsg(message || "Failed to save to bank.");
     }
   }
 
@@ -652,12 +672,112 @@ export default function QuizBuilder({ guestMode = false }) {
       timeLimitSec: parsedConfig?.timeLimitSec ?? 30,
       points: parsedConfig?.points ?? 1,
     };
-    markUnsaved((qs) => [...qs, newQ]);
-    setNavDir("next");
-    setQIndex(questions.length);
+    const insertAt = qIndex === questions.length - 1 ? questions.length : qIndex;
+    markUnsaved((qs) => {
+      const next = [...qs];
+      next.splice(insertAt, 0, newQ);
+      return next.map((item, index) => ({ ...item, order: index }));
+    });
+    setNavDir(insertAt > qIndex ? "next" : "prev");
+    setQIndex(insertAt);
     setNavTick((v) => v + 1);
     setBankOpen(false);
     setMsg("");
+  }
+
+  function closeQuestionStrip() {
+    if (!questionStripOpen || questionStripClosing) return;
+    setQuestionStripClosing(true);
+    window.setTimeout(() => {
+      setQuestionStripOpen(false);
+      setQuestionStripClosing(false);
+      setStripDrag({ from: null, to: null, mode: null });
+    }, 260);
+  }
+
+  function toggleQuestionStrip() {
+    if (questionStripOpen) closeQuestionStrip();
+    else {
+      setSettingsOpen(false);
+      setQuestionStripClosing(false);
+      setQuestionStripOpen(true);
+    }
+  }
+
+  function moveQuestionFromStrip(from, to, mode) {
+    const inserting = mode === "insertAt";
+    if (from === null || to === null || from < 0 || to < 0 || from >= questions.length || (!inserting && to >= questions.length) || (inserting && to > questions.length)) return;
+    if (!inserting && from === to) return;
+    const rows = questions;
+    const next = [...rows];
+    let selectedIndex = qIndex;
+    if (mode === "swap") {
+      [next[from], next[to]] = [next[to], next[from]];
+      if (qIndex === from) selectedIndex = to;
+      else if (qIndex === to) selectedIndex = from;
+    } else {
+      const activeRow = rows[qIndex];
+      const [moving] = next.splice(from, 1);
+      let insertAt = to;
+      if (from < to) insertAt -= 1;
+      if (mode === "after") insertAt += 1;
+      insertAt = Math.max(0, Math.min(next.length, insertAt));
+      next.splice(insertAt, 0, moving);
+      selectedIndex = qIndex === from ? insertAt : Math.max(0, next.indexOf(activeRow));
+    }
+    markUnsaved(next.map((row, index) => ({ ...row, order: index })));
+    setQIndex(selectedIndex);
+    setStripSettleIndex(selectedIndex);
+    window.setTimeout(() => setStripSettleIndex(null), 330);
+    setNavTick((v) => v + 1);
+    setStripDrag({ from: null, to: null, mode: null });
+  }
+
+  function beginQuestionFormDrag(event) {
+    if (questions.length < 2 || event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const nearestStart = startX < window.innerWidth / 2 ? "left" : "right";
+    const startEdge = nearestStart === "left" && qIndex > 0 ? "left" : nearestStart === "right" && qIndex < questions.length - 1 ? "right" : (qIndex > 0 ? "left" : "right");
+    setQuestionDrag({ active: true, settled: false, x: 0, y: 0, edge: startEdge });
+    const settleTimer = window.setTimeout(() => setQuestionDrag((current) => current.active ? { ...current, settled: true } : current), 190);
+    const onMove = (moveEvent) => {
+      const rawX = moveEvent.clientX - startX;
+      const rawY = moveEvent.clientY - startY;
+      const edgeDistance = Math.min(moveEvent.clientX, Math.max(0, window.innerWidth - moveEvent.clientX));
+      const edgeResistance = edgeDistance < 170 ? 0.72 + (edgeDistance / 170) * 0.28 : 1;
+      const x = Math.sign(rawX) * Math.pow(Math.abs(rawX), 0.94) * edgeResistance;
+      const y = Math.sign(rawY) * Math.pow(Math.abs(rawY), 0.94);
+      const nearest = moveEvent.clientX < window.innerWidth / 2 ? "left" : "right";
+      const edge = nearest === "left" && qIndex > 0 ? "left" : nearest === "right" && qIndex < questions.length - 1 ? "right" : (qIndex > 0 ? "left" : qIndex < questions.length - 1 ? "right" : null);
+      setQuestionDrag((current) => ({ active: true, settled: current.settled, x: Math.round(x), y: Math.round(y), edge }));
+    };
+    const onUp = (upEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.clearTimeout(settleTimer);
+      const rawX = upEvent.clientX - startX;
+      const target = (upEvent.clientX < 110 && qIndex > 0) || rawX < -180
+        ? qIndex - 1
+        : (upEvent.clientX > window.innerWidth - 110 && qIndex < questions.length - 1) || rawX > 180
+          ? qIndex + 1
+          : qIndex;
+      setQuestionDrag({ active: false, settled: false, x: 0, y: 0, edge: null });
+      if (target === qIndex || target < 0 || target >= questions.length) return;
+      // Let the held form smoothly grow back before the reordered question swaps into place.
+      window.setTimeout(() => {
+        markUnsaved((rows) => {
+          const next = [...rows];
+          [next[qIndex], next[target]] = [next[target], next[qIndex]];
+          return next.map((row, index) => ({ ...row, order: index }));
+        });
+        setNavDir(target < qIndex ? "prev" : "next");
+        setQIndex(target);
+        setNavTick((v) => v + 1);
+      }, 390);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
   }
 
   if (loadError) {
@@ -679,9 +799,19 @@ export default function QuizBuilder({ guestMode = false }) {
   const totalQ = questions.length;
   const isFirst = qIndex === 0;
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
-  const publishDisabled = isSaving || !isSaved || quiz.status === "PUBLISHED";
+  const publishLatched = ["PUBLISHED", "BANKED"].includes(String(quiz.status || "").toUpperCase());
+  const publishDisabled = isSaving || !isSaved || publishLatched;
   const isBatchTemplate = ["MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"].includes(quiz.template_type);
   const tutorialHighlightColor = lightenTutorialColor(templateAccent(quiz.template_type), dark ? 0.24 : 0.36);
+  const builderTemplateAccent = templateAccent(quiz.template_type);
+  const builderTemplateDragClass = `is-template-${normalizeTemplateType(quiz.template_type).toLowerCase().replace(/_/g, "-")}`;
+  const builderActionFace = darkenHex(builderTemplateAccent, dark ? 0.42 : 0.36);
+  const builderActionBase = darkenHex(builderTemplateAccent, dark ? 0.58 : 0.52);
+  const builderActionBorder = darkenHex(builderTemplateAccent, dark ? 0.50 : 0.44);
+  const builderDialogActionStyle = { "--tw-press-face": builderTemplateAccent, "--tw-press-base": builderActionBase, "--tw-press-border": builderActionBorder, color: "#fff" };
+  const builderQuestionSolid = dark
+    ? `color-mix(in srgb, ${builderTemplateAccent} 18%, #172a46)`
+    : `color-mix(in srgb, ${builderTemplateAccent} 25%, #ffffff)`;
   const globalShowPromptImage = questions.length > 0 && questions.every((question) => !!question.config?.showPromptImage);
   const globalVoiceRecord = questions.length > 0 && questions.every((question) => !!question.config?.voiceRecord);
   const globalTextToSpeech = questions.length > 0 && questions.every((question) => !!question.config?.textToSpeech);
@@ -703,12 +833,14 @@ export default function QuizBuilder({ guestMode = false }) {
 
       {!guestMode && bankOpen && <div style={ui.blurOverlay} />}
 
-      <div className="tw-quiz-builder-page" style={{ ...ui.page, "--tw-template-tutorial-highlight": tutorialHighlightColor }}>
+      <div className={`tw-quiz-builder-page${questionDrag.active ? " is-question-dragging" : ""}${questionDrag.edge === "left" ? " is-drag-edge-left" : questionDrag.edge === "right" ? " is-drag-edge-right" : ""}`} style={{ ...ui.page, "--tw-template-tutorial-highlight": tutorialHighlightColor, "--tw-template-accent": builderTemplateAccent, "--tw-builder-action-face": builderActionFace, "--tw-builder-action-base": builderActionBase, "--tw-builder-action-border": builderActionBorder, "--tw-builder-question-solid": builderQuestionSolid }}>
         <ThemeIconButton dark={dark} onClick={toggleTheme} size={22} className="tw-builder-floating-theme" aria-label={dark ? "Use light mode" : "Use dark mode"} />
+        {questionDrag.active && qIndex > 0 && <div className={`tw-builder-edge-drag-hint is-left${questionDrag.edge === "left" ? " is-near" : ""}`}><span>Drag here to<br/>move questions</span><small>Question {qIndex}<b>{questions[qIndex-1]?.prompt||"Previous question"}</b></small></div>}
+        {questionDrag.active && qIndex < questions.length - 1 && <div className={`tw-builder-edge-drag-hint is-right${questionDrag.edge === "right" ? " is-near" : ""}`}><span>Drag here to<br/>move questions</span><small>Question {qIndex+2}<b>{questions[qIndex+1]?.prompt||"Next question"}</b></small></div>}
         <div style={ui.topBar}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button className="tw-builder-press tw-builder-press-neutral" style={ui.ghostBtn} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>← Back</button>
-            <button className={`tw-builder-settings-flat${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => setSettingsOpen((v) => !v)}><TwIcon name="gear" size={22} /></button>
+            <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.ghostBtn, borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>Back</button>
+            <button className={`tw-builder-settings-flat${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => { const opening = !settingsOpen; if (opening && questionStripOpen) closeQuestionStrip(); setSettingsOpen(opening); }}><TwIcon name="gear" size={22} /></button>
             <div style={{ minWidth: 220, flex: "0 1 540px" }}>
               {titleEditing ? (
                 <input
@@ -724,6 +856,7 @@ export default function QuizBuilder({ guestMode = false }) {
                       setTitleEditing(false);
                     }
                   }}
+                  className="tw-builder-title-input"
                   style={ui.titleInput}
                   placeholder="Quiz title"
                   aria-label="Quiz title"
@@ -739,10 +872,10 @@ export default function QuizBuilder({ guestMode = false }) {
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <TeacherPressButton tone="red" data-tutorial="builder-delete-quiz" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
-            {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-add-bank" className="tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} onClick={() => setBankOpen(true)}>Add from Bank</TeacherPressButton>}
-            <TeacherPressButton tone="blue" data-tutorial="builder-add-question" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
-            <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action${quiz.status === "PUBLISHED" ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{quiz.status === "PUBLISHED" ? "Published" : "Publish"}</TeacherPressButton>
+            {!guestMode && <TeacherPressButton tone="blue" data-tutorial="builder-add-bank" className="tw-builder-icon-press tw-builder-toolbar-action tw-builder-template-action" style={{ "--builder-action-icon": "#fff" }} title="Add from Bank" aria-label="Add from Bank" onClick={() => setBankOpen(true)}><TwIcon name="bank" size={20} /></TeacherPressButton>}
+            <TeacherPressButton tone="blue" data-tutorial="builder-add-question" className="tw-builder-template-action" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action tw-builder-template-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
+            <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action tw-builder-template-action${publishLatched ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{publishLatched ? "Published" : "Publish"}</TeacherPressButton>
           </div>
         </div>
 
@@ -755,63 +888,66 @@ export default function QuizBuilder({ guestMode = false }) {
                   <div style={ui.toggleTitle}>{isBatchTemplate ? "Randomize assigned batches" : "Randomize assigned question order"}</div>
                   <div style={ui.toggleHint}>{isBatchTemplate ? "Assigned sessions only: each student gets the batches in a shuffled order. Live hosting keeps the builder order." : "Assigned sessions only: each student gets the questions in a shuffled order. Live hosting keeps the builder order."}</div>
                 </div>
-                <span style={ui.switchTrack(settings.randomizeQuestions)}><span style={ui.switchThumb(settings.randomizeQuestions)} /></span>
+                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.randomizeQuestions)}><span style={ui.switchThumb(settings.randomizeQuestions)} /></span>
               </button>}
               {quiz.template_type === "MATCHING" && (
                 <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
                   <div><div style={ui.toggleTitle}>Shuffle Column A</div><div style={ui.toggleHint}>Change the prompt-side card order independently for each participant.</div></div>
-                  <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
+                  <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
               {quiz.template_type === "MCQ" && (
                 <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
                   <div><div style={ui.toggleTitle}>Shuffle answer choices</div><div style={ui.toggleHint}>Give every student or guest their own shuffled option order while keeping the answer key intact.</div></div>
-                  <span style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
+                  <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
                 </button>
               )}
               {!isBasic && <button style={ui.toggleCard(globalShowPromptImage)} onClick={() => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage })}>
                 <div><div style={ui.toggleTitle}>Question image</div><div style={ui.toggleHint}>Show an optional image field after every prompt in this quiz.</div></div>
-                <span style={ui.switchTrack(globalShowPromptImage)}><span style={ui.switchThumb(globalShowPromptImage)} /></span>
+                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalShowPromptImage)}><span style={ui.switchThumb(globalShowPromptImage)} /></span>
               </button>}
               <button style={ui.toggleCard(globalVoiceRecord)} onClick={() => {
                 const enabled = !globalVoiceRecord;
                 applyConfigToAllQuestions({ voiceRecord: enabled, textToSpeech: enabled ? false : globalTextToSpeech });
               }}>
                 <div><div style={ui.toggleTitle}>Voice record</div><div style={ui.toggleHint}>Enable recording for every question and answer. Voice record and text to speech cannot be active together.</div></div>
-                <span style={ui.switchTrack(globalVoiceRecord)}><span style={ui.switchThumb(globalVoiceRecord)} /></span>
+                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalVoiceRecord)}><span style={ui.switchThumb(globalVoiceRecord)} /></span>
               </button>
               <button style={ui.toggleCard(globalTextToSpeech)} onClick={() => {
                 const enabled = !globalTextToSpeech;
                 applyConfigToAllQuestions({ textToSpeech: enabled, voiceRecord: enabled ? false : globalVoiceRecord });
               }}>
                 <div><div style={ui.toggleTitle}>Text to speech</div><div style={ui.toggleHint}>Read every prompt and visible answer aloud. Enabling this turns voice record off for the whole quiz.</div></div>
-                <span style={ui.switchTrack(globalTextToSpeech)}><span style={ui.switchThumb(globalTextToSpeech)} /></span>
+                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalTextToSpeech)}><span style={ui.switchThumb(globalTextToSpeech)} /></span>
               </button>
               </div>
             </div>
           </div>
         </div>
 
+        <div className={`tw-builder-content-region${questionStripOpen ? " has-question-strip" : ""}`}>
         <div style={ui.pagerBar}>
-          <button className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible" }} onClick={goPrev}>‹ Previous</button>
-          <div style={{ textAlign: "center", color: c.text, fontSize: 15, fontWeight: 800 }}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</div>
-          <button className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible" }} onClick={goNext}>Next ›</button>
+          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible", borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goPrev}>‹ Previous</button>
+          <button type="button" className="tw-builder-question-count" onClick={toggleQuestionStrip}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</button>
+          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible", borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goNext}>Next ›</button>
         </div>
 
+        <div className={`tw-builder-workspace${questionStripOpen ? " has-question-strip" : ""}`}>
         <div style={ui.editorArea} data-tutorial="builder-editor-shell">
           {currentQ && (
             <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
-              <div style={ui.questionCard}>
+              <div style={{ ...ui.questionCard, "--tw-question-drag-x": `${questionDrag.x}px`, "--tw-question-drag-y": `${questionDrag.y}px` }} className={`tw-builder-question-form ${builderTemplateDragClass}${questionDrag.active ? " is-dragging" : ""}${questionDrag.settled ? " is-drag-settled" : ""}`}>
+                <button type="button" className="tw-builder-question-drag-handle" aria-label="Drag question" title="Hold and drag to reorder" onPointerDown={beginQuestionFormDrag}><span>•••</span></button>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
+                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action tw-builder-save-bank-fixed${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff", "--tw-press-face": builderTemplateAccent, "--tw-press-base": builderActionBase, "--tw-press-border": builderActionBorder }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
                     <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
                   </div>
                 </div>
 
                 <div data-tutorial="builder-meta-grid" style={ui.metaGrid}>
-                  <div style={ui.metaCard}>
+                  <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
                     <div style={ui.metaLabel}>⏱ Time limit</div>
                     <div style={ui.metaRow}>
                       <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={{ ...ui.metaInput, width: 125 }}>
@@ -819,7 +955,7 @@ export default function QuizBuilder({ guestMode = false }) {
                       </select>
                     </div>
                   </div>
-                  <div style={ui.metaCard}>
+                  <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
                     <div style={ui.metaLabel}>⭐ Points</div>
                     <div style={ui.metaRow}>
                       <input
@@ -865,6 +1001,74 @@ export default function QuizBuilder({ guestMode = false }) {
             </div>
           )}
         </div>
+        </div>
+        {(questionStripOpen || questionStripClosing) && <aside className={`tw-builder-question-strip${questionStripClosing ? " is-closing" : ""}`}>
+          <div className="tw-builder-question-strip-head"><button type="button" className="tw-builder-question-strip-close" aria-label="Close question sidebar" title="Close" onClick={closeQuestionStrip}>×</button></div>
+          <div className="tw-builder-question-strip-list">
+            <div className={`tw-builder-question-strip-gap${stripDrag.mode === "insertAt" && stripDrag.to === 0 ? " is-active" : ""}`} onDragOver={(event) => { event.preventDefault(); setStripDrag((current) => current.from === null ? current : { ...current, to: 0, mode: "insertAt" }); }} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData("text/plain")); moveQuestionFromStrip(Number.isFinite(from) ? from : stripDrag.from, 0, "insertAt"); }} />
+            {questions.map((row, index) => {
+              const dragMode = stripDrag.to === index ? stripDrag.mode : null;
+              const previewShift = stripDrag.from !== null && stripDrag.to !== null && stripDrag.from !== index
+                ? (stripDrag.from < stripDrag.to && index > stripDrag.from && index <= Math.min(stripDrag.to, questions.length - 1) ? " is-preview-shift-up"
+                  : stripDrag.from > stripDrag.to && index >= stripDrag.to && index < stripDrag.from ? " is-preview-shift-down" : "")
+                : "";
+              return <React.Fragment key={row.id || `question-${index}`}>
+                <button
+                  type="button"
+                  draggable
+                  className={`tw-builder-question-mini${index === qIndex ? " is-active" : ""}${stripDrag.from === index ? " is-drag-source" : ""}${dragMode && dragMode !== "insertAt" ? ` is-drop-${dragMode}` : ""}${previewShift}${stripSettleIndex === index ? " is-settling" : ""}`}
+                  onClick={() => {
+                    if (stripDrag.from !== null) return;
+                    setNavDir(index > qIndex ? "next" : "prev");
+                    setQIndex(index);
+                    setNavTick((v) => v + 1);
+                  }}
+                  onDragStart={(event) => {
+                    const source = event.currentTarget;
+                    const rect = source.getBoundingClientRect();
+                    const clone = source.cloneNode(true);
+                    clone.classList.remove("is-drag-source");
+                    clone.classList.add("tw-builder-question-mini-drag-image");
+                    clone.style.setProperty("--tw-template-accent", builderTemplateAccent);
+                    clone.style.setProperty("--tw-builder-card", c.cardBg);
+                    clone.style.position = "fixed";
+                    clone.style.left = "-10000px";
+                    clone.style.top = "-10000px";
+                    clone.style.width = `${rect.width}px`;
+                    clone.style.opacity = "1";
+                    clone.style.transform = "rotate(1.5deg) scale(1.035) translateY(-5px)";
+                    document.body.appendChild(clone);
+                    event.dataTransfer.setDragImage(clone, Math.min(rect.width - 24, rect.width * .72), Math.min(30, rect.height / 2));
+                    window.setTimeout(() => clone.remove(), 0);
+                    setStripDrag({ from: index, to: index, mode: "swap" });
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(index));
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (stripDrag.from === null || stripDrag.from === index) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const ratio = (event.clientY - rect.top) / Math.max(1, rect.height);
+                    const mode = ratio < .24 ? "before" : ratio > .76 ? "after" : "swap";
+                    setStripDrag((current) => current.to === index && current.mode === mode ? current : { ...current, to: index, mode });
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const from = Number(event.dataTransfer.getData("text/plain"));
+                    moveQuestionFromStrip(Number.isFinite(from) ? from : stripDrag.from, index, stripDrag.mode || "swap");
+                  }}
+                  onDragEnd={() => setStripDrag({ from: null, to: null, mode: null })}
+                >
+                  <strong>{index + 1}</strong>
+                  <span className="tw-mini-question-prompt">{row.prompt || "Untitled question"}</span>
+                  <small className="tw-mini-question-answer">{summarizeBuilderQuestion(row, quiz?.template_type)}</small>
+                </button>
+                <div className={`tw-builder-question-strip-gap${stripDrag.mode === "insertAt" && stripDrag.to === index + 1 ? " is-active" : ""}`} onDragOver={(event) => { event.preventDefault(); setStripDrag((current) => current.from === null ? current : { ...current, to: index + 1, mode: "insertAt" }); }} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData("text/plain")); moveQuestionFromStrip(Number.isFinite(from) ? from : stripDrag.from, index + 1, "insertAt"); }} />
+              </React.Fragment>;
+            })}
+          </div>
+        </aside>}
+      </div>
       </div>
 
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "template_prompt" && (
@@ -1137,7 +1341,7 @@ export default function QuizBuilder({ guestMode = false }) {
           actions={(
             <>
               <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <TeacherPressButton tone="blue" onClick={async () => { setModal(null); await save(); }}>Yes, save</TeacherPressButton>
+              <TeacherPressButton tone="blue" style={builderDialogActionStyle} onClick={async () => { setModal(null); await save(); }}>Yes, save</TeacherPressButton>
             </>
           )}
         />
@@ -1154,7 +1358,7 @@ export default function QuizBuilder({ guestMode = false }) {
           actions={(
             <>
               <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <TeacherPressButton data-tutorial="builder-confirm-publish" tone="blue" onClick={confirmPublish}>Yes, publish</TeacherPressButton>
+              <TeacherPressButton data-tutorial="builder-confirm-publish" tone="blue" style={builderDialogActionStyle} onClick={confirmPublish}>Yes, publish</TeacherPressButton>
             </>
           )}
         />
@@ -1171,7 +1375,7 @@ export default function QuizBuilder({ guestMode = false }) {
           actions={(
             <>
               <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <TeacherPressButton tone="blue" onClick={async () => { const issues = validateQuestion(currentQ, quiz?.template_type); if (issues.length) { setMsg(`Complete this ${quiz?.template_type === "MATCHING" ? "batch" : "question"} first: ${issues[0]}.`); setModal(null); return; } setModal(null); await doSaveToBank(currentQ); }}>Yes, save to bank</TeacherPressButton>
+              <TeacherPressButton tone="blue" style={builderDialogActionStyle} onClick={async () => { const issues = validateQuestion(currentQ, quiz?.template_type); if (issues.length) { setMsg(`Complete this ${quiz?.template_type === "MATCHING" ? "batch" : "question"} first: ${issues[0]}.`); setModal(null); return; } setModal(null); await doSaveToBank(currentQ); }}>Yes, save to bank</TeacherPressButton>
             </>
           )}
         />
@@ -1193,15 +1397,15 @@ export default function QuizBuilder({ guestMode = false }) {
             </div>
           )}
           actions={builderTutorialStage === "save" ? (
-            <TeacherPressButton tone="yellow" onClick={() => { setModal(null); setBuilderTutorialStage("save_review"); }}>Review questions</TeacherPressButton>
+            <button type="button" className="tw-teacher-text-cancel tw-builder-review-duplicates" onClick={() => { setModal(null); setBuilderTutorialStage("save_review"); }}>Review questions</button>
           ) : (
             <>
-              <button style={secondaryBtn(c, dark)} onClick={() => setModal(null)}>Review questions</button>
-              <button style={primaryBtn({ bg: `${c.accent}18`, fg: c.accent, border: c.accent })} onClick={async () => {
+              <button type="button" className="tw-teacher-text-cancel tw-builder-review-duplicates" onClick={() => setModal(null)}>Review questions</button>
+              <TeacherPressButton tone="blue" style={builderDialogActionStyle} onClick={async () => {
                 setModal(null);
-                await _doSave({ showModal: !publishFlow && builderTutorialStage !== "save" });
-                if (publishFlow) setModal("confirmPublish");
-              }}>{publishFlow ? "Save & Continue" : "Save Anyway"}</button>
+                const saved = await _doSave({ showModal: !publishFlow && builderTutorialStage !== "save" });
+                if (publishFlow && saved) await confirmPublish();
+              }}>{publishFlow ? "Publish Anyway" : "Save Anyway"}</TeacherPressButton>
             </>
           )}
         />
@@ -1240,6 +1444,14 @@ export default function QuizBuilder({ guestMode = false }) {
     </>
   );
 }
+function darkenHex(hex, amount = 0.36) {
+  const value = String(hex || "#2b6cff").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return hex || "#173f9b";
+  const factor = Math.max(0, Math.min(1, 1 - amount));
+  const channels = [0, 2, 4].map((start) => Math.round(parseInt(value.slice(start, start + 2), 16) * factor));
+  return `#${channels.map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function lightenTutorialColor(hex, amount = 0.32) {
   const value = String(hex || "#2b6cff").replace("#", "");
   if (!/^[0-9a-fA-F]{6}$/.test(value)) return hex || "#60a5fa";
@@ -1250,3 +1462,12 @@ function lightenTutorialColor(hex, amount = 0.32) {
   return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }
 
+
+function summarizeBuilderQuestion(question, templateType) {
+  const tt = normalizeTemplateType(templateType); const cfg = question?.config || {}; const cor = question?.correct || {};
+  if (tt === "MCQ") return (cfg.options || []).map((o) => typeof o === "object" ? (o.text || o.label || "Image") : o).filter(Boolean).slice(0,4).join(" · ");
+  if (tt === "MATCHING") return (cfg.colA || []).slice(0,3).map((a,i) => `${typeof a === "object" ? a.text : a} ↔ ${typeof cfg.colB?.[i] === "object" ? cfg.colB[i].text : cfg.colB?.[i] || ""}`).join(" · ");
+  if (tt === "THINK_SPELL") return (cor.answers || cfg.answers || []).slice(0,4).join(" · ");
+  if (tt === "GUESS_WORD_4PICS") return cor.text || cfg.target || "4 images";
+  return cor.text || cor.choice || (cor.answers || []).join(" · ") || "Answer";
+}

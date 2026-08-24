@@ -430,3 +430,21 @@
   .bword-grid-shell { width: min(96vw, 460px); }
   .bword-cell { min-width: 38px; min-height: 38px; font-size: clamp(15px, 5vw, 20px); }
 }
+
+/* Revision 10.20 — waiting lobby controls and ThinkBot loader. */
+.sp-experience-controls .sp-inline-theme-toggle{border-radius:12px!important;border:2px solid rgba(255,255,255,.44)!important}
+.quiz-shell-new.theme-light~.sp-experience-controls .sp-inline-theme-toggle,
+.sp-waiting-page.theme-light .sp-inline-theme-toggle{background:rgba(255,255,255,.9)!important;color:#17305f!important;border-color:rgba(43,108,255,.32)!important}
+.sp-wait-card{border-width:3px!important;box-shadow:0 24px 64px rgba(15,23,42,.20)!important}
+.sp-wait-roster-card{border-width:2px!important;box-shadow:0 8px 20px rgba(15,23,42,.10)}
+.sp-thinkbot-loading{position:relative;overflow:visible!important;border-width:2px!important}
+.sp-thinkbot-loading-logo{width:64px;height:64px;object-fit:contain;border-radius:50%;position:relative;z-index:2;display:block}
+.sp-thinkbot-loading-ring{position:absolute;inset:-7px;border-radius:50%;border:5px solid rgba(43,108,255,.18);border-top-color:#2b6cff;border-right-color:#60a5fa;z-index:1;animation:spThinkBotOrbit 2.8s linear infinite}
+.sp-waiting-page.theme-dark .sp-thinkbot-loading-ring{border-color:rgba(147,197,253,.18);border-top-color:#93c5fd;border-right-color:#60a5fa}
+@keyframes spThinkBotOrbit{0%{transform:rotate(0deg)}30%{transform:rotate(55deg)}68%{transform:rotate(305deg)}100%{transform:rotate(360deg)}}
+
+/* Keep text-entry controls and character boxes dark in dark gameplay. */
+.quiz-shell-new.theme-dark .type-input-row{background:#081a38!important;border-color:#1f4c86!important}
+.quiz-shell-new.theme-dark .type-input{color:#f8fafc!important}
+.quiz-shell-new.theme-dark .type-input::placeholder{color:#8fa7cf!important}
+.quiz-shell-new.theme-dark .type-charbox{background:#0b244a!important;border-bottom-color:#2f6db2!important;color:#fff!important}

@@ -156,6 +156,9 @@ export async function upsertQuestions(req, res) {
       );
     }
 
+    // Editing a Quiz Bank item promotes it to the top of the bank's newest-first order.
+    await connection.query(`UPDATE quizzes SET updated_at=NOW() WHERE id=:qid`, { qid: quizId });
+
     await connection.commit();
     res.json({ ok: true });
   } catch (error) {
@@ -399,7 +402,7 @@ export async function updateQuizMeta(req, res) {
   const { title } = req.body;
   await pool.query(
     `UPDATE quizzes
-     SET title = :title
+     SET title = :title, updated_at = NOW()
      WHERE id = :id AND teacher_id = :tid AND deleted_at IS NULL`,
     {
       title,
@@ -424,7 +427,8 @@ export async function updateQuizSettings(req, res) {
      SET time_limit_sec       = :tls,
          points_per_question  = :ppq,
          randomize_questions  = :rq,
-         shuffle_answers      = :sa
+         shuffle_answers      = :sa,
+         updated_at           = NOW()
      WHERE id = :id AND teacher_id = :tid AND deleted_at IS NULL`,
     {
       tls: timeLimitSec,

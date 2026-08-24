@@ -86,7 +86,12 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
         : `quiz:${String(quiz.title || "").trim().toLowerCase()}|${normalizeBankTemplate(quiz.template_type)}|${quiz.category || ""}`;
       if (!unique.has(canonical)) unique.set(canonical, quiz);
     }
-    return [...unique.values()];
+    return [...unique.values()].sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+      if (aTime !== bTime) return bTime - aTime;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
   }, [quizzes]);
 
   async function load() {
@@ -140,7 +145,6 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
       setModal(null);
       setMsg("Quiz sent back to Live Sessions.");
       await load();
-      setActiveTab?.("live");
     } catch (e) {
       setMsg(e?.response?.data?.message || "Failed to reuse quiz.");
     }
@@ -165,7 +169,12 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
       if (!q) return true;
       return [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
-    rows.sort((a, b) => sortBy === "title" ? String(a.title || "").localeCompare(String(b.title || "")) : Number(b.id) - Number(a.id));
+    rows.sort((a, b) => {
+      if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""));
+      const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+      return bTime - aTime || Number(b.id || 0) - Number(a.id || 0);
+    });
     return rows;
   }, [quizBankItems, query, sortBy]);
 
@@ -191,14 +200,14 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
           <h2 style={{ marginBottom: 4, color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
         </section>
 
-        <section style={card(c, { padding: 12 })}>
+        <section className="tw-bank-switch-shell" style={card(c, { padding: 12 })}>
           <div className="tw-teacher-bank-toggle">
             <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected is-muted-selected' : ''} disabled={view === 'quiz'} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
             <TeacherPressButton data-tutorial="bank-question-toggle" tone="blue" className={view === 'question' ? 'is-selected is-muted-selected' : ''} disabled={view === 'question'} onClick={openQuestionBank}>Question Bank</TeacherPressButton>
           </div>
         </section>
 
-        {currentHasItems && <section style={card(c)}>
+        {currentHasItems && <section className="tw-bank-search-shell" style={card(c)}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(150px, 0.7fr)', gap: 12 }}>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'quiz' ? 'Search by quiz title, template, or category' : 'Search saved questions'} style={inputStyle(c)} />
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}>
@@ -253,7 +262,7 @@ function QuizBankCard({ quiz, onPreview, onDelete, onReuse, c }) {
     return () => document.removeEventListener("pointerdown", close);
   }, [moreOpen, quiz.id]);
   return (
-    <div className="tw-bank-content-card tw-bank-quiz-card" data-tutorial="bank-quiz-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})` }}>
+    <div className="tw-bank-content-card tw-bank-quiz-card" data-tutorial="bank-quiz-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false) }}>
       <div className="tw-bank-card-main">
         <div className="tw-bank-card-title" style={{ color: c.text }}>{quiz.title}</div>
         <div className="tw-bank-card-badges">
@@ -283,13 +292,11 @@ function QuestionCard({ question: q, onRemove, c }) {
   const tone = templateTone(tt, c, false);
   const cfg = q.config_json || {};
   const correct = q.correct_json || {};
-  const collapsible = tt === "GUESS_WORD_4PICS" || tt === "MATCHING" || tt === "THINK_SPELL";
-  const [expanded, setExpanded] = useState(false);
+  const isAlwaysOpen = ["GUESS_WORD_4PICS", "MATCHING", "THINK_SPELL"].includes(tt);
   const answers = getBankAnswers(tt, cfg, correct);
-  const hideSummaryWhenExpanded = ["GUESS_WORD_4PICS", "MATCHING", "THINK_SPELL"].includes(tt) && expanded;
 
   return (
-    <div className="tw-bank-content-card tw-bank-question-card" style={{ ...card(c, { width: "100%", padding: 0, overflow: "visible" }), ...templateCardChrome(tt, c, false), border: `3px solid ${tone.border}`, background: `color-mix(in srgb, ${tone.accent} 12%, ${c.cardBg})`, textAlign: "center", position: "relative" }}>
+    <div className="tw-bank-content-card tw-bank-question-card" style={{ ...card(c, { width: "100%", padding: 0, overflow: "visible" }), ...templateCardChrome(tt, c, false), textAlign: "center", position: "relative" }}>
       <TeacherPressButton tone="red" className="tw-question-bank-delete" title="Remove question" aria-label="Remove question" onClick={onRemove}><TwIcon name="trash" size={19} /></TeacherPressButton>
       <div className="tw-bank-question-inner">
         <TemplateBadge label={templateLabel(tt)} tone={tone} />
@@ -297,13 +304,11 @@ function QuestionCard({ question: q, onRemove, c }) {
 
         {tt === "MCQ" ? <McqBankAnswers cfg={cfg} correct={correct} c={c} />
           : tt === "TRUE_FALSE" ? <TrueFalseBankAnswers correct={correct} c={c} />
-          : <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${tt === "THINK_SPELL" ? " is-think-spell" : ""}${hideSummaryWhenExpanded ? " is-hidden" : ""}`}>
-              {answers.length ? answers.map((answer, index) => <TemplateAnswer key={`${answer}-${index}`} value={answer} tone={tone} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
-            </div>}
+          : !isAlwaysOpen ? <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${tt === "THINK_SPELL" ? " is-think-spell" : ""}`}>
+              {answers.length ? answers.map((answer, index) => <TemplateAnswer key={`${answer}-${index}`} value={answer} c={c} />) : <span style={{ color: c.textMuted, fontSize: 13 }}>No answer saved.</span>}
+            </div> : null}
 
-        {collapsible && <button aria-label={expanded ? "Collapse content" : "Show content"} title={expanded ? "Collapse" : "Show content"} onClick={() => setExpanded((value) => !value)} className="tw-bank-expand-button" style={{ borderColor: tone.border, color: tone.accent, background: tone.softBg }}><TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={24} strokeWidth={3.3} /></button>}
-
-        {collapsible && expanded && <div className="tw-bank-expanded-preview" style={{ borderColor: tone.border, background: tone.softBg }}>
+        {isAlwaysOpen && <div className="tw-bank-expanded-preview is-default-open" style={{ borderColor: tone.border, background: tone.softBg }}>
           {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
         </div>}
 
@@ -382,8 +387,8 @@ function getBankAnswers(tt, cfg, correct) {
   return [correct.text, correct.choice].filter(Boolean);
 }
 
-function TemplateAnswer({ value, tone }) {
-  return <div className="tw-bank-template-answer" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}><span>{value}</span></div>;
+function TemplateAnswer({ value, c }) {
+  return <div className="tw-bank-template-answer" style={{ borderColor: c.border, background: c.cardBg2, color: c.text }}><span>{value}</span></div>;
 }
 
 function GuessWordBankPreview({ cfg, correct, c, tone }) {
@@ -391,7 +396,7 @@ function GuessWordBankPreview({ cfg, correct, c, tone }) {
   const answer = String(correct?.text || cfg?.target || "").trim();
   return <div className="tw-bank-guess-expanded">
     <div className="tw-bank-guess-images">{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', border: `2px solid ${tone.border}`, background: c.cardBg, display: 'grid', placeItems: 'center' }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>
-    {answer && <div className="tw-bank-guess-answer" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}>{answer}</div>}
+    {answer && <div className="tw-bank-guess-answer" style={{ borderColor: c.border, background: c.cardBg2, color: c.text }}>{answer}</div>}
   </div>;
 }
 
@@ -400,13 +405,16 @@ function ThinkSpellBankPreview({ cfg, correct, c, tone }) {
   const words = (Array.isArray(correct?.answers) && correct.answers.length ? correct.answers : Array.isArray(cfg?.answers) ? cfg.answers : []).map((word) => String(word || "").toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
   const gridSize = Math.min(12, Math.max(5, Number(cfg?.gridSize || Math.max(5, ...words.map((word) => word.length), 5))));
   const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words })}-${Number(cfg?.gridSeed || 1)}`;
-  const preview = buildThinkSpellGrid({ gridSize, words, seed: buildThinkSpellSeed(signature) });
+  const generated = buildThinkSpellGrid({ gridSize, words, seed: buildThinkSpellSeed(signature) });
+  const preview = Array.isArray(cfg?.grid) && cfg.grid.length === gridSize * gridSize
+    ? { gridSize, grid: cfg.grid.map((letter) => String(letter || "").toUpperCase()) }
+    : generated;
   return <div className="tw-bank-crossword-expanded">
     <div className="tw-bank-thinkspell-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
       {preview.grid.map((letter, index) => <span key={index} style={{ background: c.cardBg, borderColor: tone.border, color: tone.accent }}>{letter}</span>)}
     </div>
     <div className="tw-bank-crossword-word-list">
-      {words.map((word, index) => <div key={`${word}-${index}`} className="tw-bank-crossword-word" style={{ borderColor: tone.border, background: tone.softBg, color: tone.accent }}>{word}</div>)}
+      {words.map((word, index) => <div key={`${word}-${index}`} className="tw-bank-crossword-word" style={{ borderColor: c.border, background: c.cardBg2, color: c.text }}>{word}</div>)}
     </div>
   </div>;
 }
@@ -414,21 +422,29 @@ function ThinkSpellBankPreview({ cfg, correct, c, tone }) {
 function MatchingBankPreview({ cfg, c, tone }) {
   const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
   const colB = Array.isArray(cfg.colB) ? cfg.colB : [];
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 14, alignItems: "start", textAlign: "center" }}>
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: tone.accent, fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column A</div>
-      {colA.map((item, i) => <div key={`a-${i}`} style={{ padding: 10, borderRadius: 12, background: tone.softBg, border: `2px solid ${tone.border}` }}><MiniBankItem item={item} fallback={`Item ${i + 1}`} c={c} /></div>)}
-    </div>
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ color: tone.accent, fontWeight: 950, fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em" }}>Column B</div>
-      {colB.map((item, i) => <div key={`b-${i}`} style={{ padding: 10, borderRadius: 12, background: i < colA.length ? tone.softBg : c.cardBg, border: `2px solid ${i < colA.length ? tone.border : c.border}` }}><MiniBankItem item={item} fallback={i < colA.length ? `Match ${i + 1}` : `Dummy ${i - colA.length + 1}`} c={c} />{i >= colA.length && <div style={{ marginTop: 5, color: c.textMuted, fontSize: 10, fontWeight: 850 }}>Dummy answer</div>}</div>)}
-    </div>
+  const pairs = colA.map((item, i) => [item, colB[i]]);
+  const configuredDummies = Array.isArray(cfg.dummyB) ? cfg.dummyB : [];
+  const distractors = configuredDummies.length ? configuredDummies : colB.slice(colA.length);
+  return <div className="tw-bank-matching-preview">
+    {pairs.length > 0 && <div className="tw-bank-matching-column-labels">
+      <span>Column A</span><span aria-hidden="true"/><span>Column B</span>
+    </div>}
+    {pairs.map(([a,b], i) => <div key={`pair-${i}`} className="tw-bank-matching-row">
+      <div style={{ padding: 10, borderRadius: 12, background: c.cardBg2, border: `2px solid ${c.border}` }}><MiniBankItem item={a} fallback={`Item ${i + 1}`} c={c} /></div>
+      <div className="tw-bank-matching-arrow" style={{ color: tone.accent }}>&lt;-&gt;</div>
+      <div style={{ padding: 10, borderRadius: 12, background: c.cardBg2, border: `2px solid ${c.border}` }}><MiniBankItem item={b} fallback={`Match ${i + 1}`} c={c} /></div>
+    </div>)}
+    {distractors.length > 0 && <div style={{ display: "grid", gap: 8, marginTop: 5 }}>
+      <div style={{ color: c.textMuted, fontSize: 11, fontWeight: 950, textTransform: "uppercase" }}>Distractors</div>
+      {distractors.map((item, i) => <div key={`d-${i}`} style={{ padding: 10, borderRadius: 12, background: c.cardBg2, border: `2px dashed ${c.border}` }}><MiniBankItem item={item} fallback={`Distractor ${i + 1}`} c={c} /></div>)}
+    </div>}
   </div>;
 }
 
 function MiniBankItem({ item, fallback, c }) {
   const obj = item && typeof item === 'object' ? item : { text: String(item || '') };
-  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, minWidth: 0, textAlign: 'center' }}>{obj.image ? <img src={obj.image} alt='' style={{ width: 42, height: 42, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : null}<span style={{ color: c.text, fontWeight: 800, overflowWrap: 'anywhere' }}>{obj.text || obj.label || fallback}</span></div>;
+  const text = String(obj.text || obj.label || '').trim();
+  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, minWidth: 0, textAlign: 'center' }}>{obj.image ? <img src={obj.image} alt='' style={{ width: 42, height: 42, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : null}{(text || !obj.image) && <span style={{ color: c.text, fontWeight: 800, overflowWrap: 'anywhere' }}>{text || fallback}</span>}</div>;
 }
 
 function menuBtn(c) {

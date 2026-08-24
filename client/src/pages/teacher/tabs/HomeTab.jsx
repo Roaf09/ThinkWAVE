@@ -117,7 +117,7 @@ export default function HomeTab({ setActiveTab }) {
   const recentSessions = sessions.slice(0, 2);
   const draftQuizzes = quizzes.filter((q) => q.status !== "BANKED" && q.status !== "PUBLISHED");
   // This mirrors the actual cards available on the Sessions tab.
-  const readyToHost = quizzes.filter((q) => q.status !== "BANKED" && q.delivery_mode !== "ASYNCHRONOUS");
+  const readyToHost = quizzes.filter((q) => q.status === "PUBLISHED" && q.delivery_mode !== "ASYNCHRONOUS");
   // Count section folders only and deduplicate sections with the same class name
   // when they appear under more than one subject folder.
   const classesHandled = new Set(
@@ -153,7 +153,7 @@ export default function HomeTab({ setActiveTab }) {
   }, [analyticsMap]);
 
   if (loading) {
-    return <div className="container"><div style={shellCard(c)}>Loading your dashboard…</div></div>;
+    return <div className="container"><div className="tw-home-performance-shell" style={shellCard(c)}>Loading your dashboard…</div></div>;
   }
 
   return (
@@ -169,7 +169,7 @@ export default function HomeTab({ setActiveTab }) {
             <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
 
-          <div style={shellCard(c, { display: "grid", gap: 16 })}>
+          <div className="tw-home-overview-shell" style={shellCard(c, { display: "grid", gap: 16 })}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontWeight: 950, fontSize: 19, color: c.text }}>Teacher overview</div>

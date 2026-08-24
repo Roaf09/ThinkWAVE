@@ -42,10 +42,16 @@ export function templateTone(templateType, c, active = false) {
 
 export function templateCardChrome(templateType, c, active = false, extra = {}) {
   const tone = templateTone(templateType, c, active);
+  const faceMix = active ? 42 : 34;
+  const baseMix = active ? 64 : 54;
   return {
-    background: tone.cardBg,
-    border: `1.5px solid ${tone.border}`,
-    boxShadow: active ? tone.shadow : `0 12px 24px ${tone.accent}14`,
+    // Revision 10.21: cards use the same raised, solid template language as
+    // the Create-tab template buttons while still mixing with the current
+    // light/dark surface. The lower shadow acts as the 3D button base.
+    background: `color-mix(in srgb, ${tone.accent} ${faceMix}%, ${c.cardBg})`,
+    border: `4px solid color-mix(in srgb, ${tone.accent} 78%, ${c.border})`,
+    "--tw-template-card-shadow": `0 7px 0 color-mix(in srgb, ${tone.accent} ${baseMix}%, ${c.border}), 0 16px 30px ${tone.accent}24`,
+    boxShadow: `0 7px 0 color-mix(in srgb, ${tone.accent} ${baseMix}%, ${c.border}), 0 16px 30px ${tone.accent}24`,
     ...extra,
   };
 }

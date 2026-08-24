@@ -9,6 +9,64 @@ import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quiz
 
 const asyncAnswerChecks = new Map();
 
+async function ensureStudentGamificationTables() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS student_goal_claims (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    student_user_id BIGINT NOT NULL,
+    goal_key VARCHAR(120) NOT NULL,
+    period_key VARCHAR(40) NOT NULL,
+    xp_reward INT NOT NULL DEFAULT 0,
+    claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_student_goal_period (student_user_id, goal_key, period_key),
+    INDEX idx_student_goal_user (student_user_id)
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS student_competitive_overtakes (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    student_user_id BIGINT NOT NULL,
+    session_id BIGINT NOT NULL,
+    overtakes INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_overtake_student (student_user_id), INDEX idx_overtake_session (session_id)
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS student_favorite_achievements (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    student_user_id BIGINT NOT NULL,
+    achievement_id VARCHAR(120) NOT NULL,
+    slot_no TINYINT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_student_favorite_achievement (student_user_id, achievement_id),
+    UNIQUE KEY uq_student_favorite_slot (student_user_id, slot_no),
+    INDEX idx_student_favorite_user (student_user_id)
+  )`);
+}
+
+function gamificationBoundaries(now = new Date()) {
+  const daily = new Date(now);
+  daily.setHours(6,0,0,0);
+  if (now < daily) daily.setDate(daily.getDate() - 1);
+  const weekly = new Date(daily);
+  const day = (weekly.getDay() + 6) % 7;
+  weekly.setDate(weekly.getDate() - day);
+  const sql = (date) => {
+    const pad = (n) => String(n).padStart(2,'0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  };
+  const key = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  return { dailyAt:sql(daily), weeklyAt:sql(weekly), dailyKey:key(daily), weeklyKey:key(weekly) };
+}
+
+function levelFromXp(totalXp) {
+  let level = 1;
+  let remaining = Math.max(0, Math.floor(Number(totalXp || 0)));
+  let needed = 5000;
+  while (remaining >= needed && level < 999) {
+    remaining -= needed;
+    level += 1;
+    needed = Math.round((5000 + Math.pow(level - 1, 1.32) * 2750) / 250) * 250;
+  }
+  return { level, currentXp:remaining, xpNeeded:needed, totalXp:Math.max(0,Math.floor(Number(totalXp||0))) };
+}
+
 function safeJson(v) {
   if (!v) return null;
   if (typeof v === "object") return v;
@@ -78,6 +136,7 @@ export async function deleteProfileImage(req, res) {
 
 export async function getStudentDashboard(req, res) {
   const uid = req.user.sub;
+  await ensureStudentGamificationTables();
   const profile = await getProfile(uid);
   const [classes] = await pool.query(
     `SELECT e.id AS enrollment_id, e.class_id, e.student_id, e.first_name, e.last_name, e.middle_initial,
@@ -146,9 +205,12 @@ export async function getStudentDashboard(req, res) {
        COUNT(r.id) AS answered_total,
        SUM(CASE WHEN r.is_correct=1 THEN 1 ELSE 0 END) AS answered_correct,
        SUM(CASE WHEN r.is_correct=0 THEN 1 ELSE 0 END) AS answered_incorrect,
-       SUM(CASE WHEN r.is_correct=1 AND s.started_at IS NOT NULL AND TIMESTAMPDIFF(SECOND,s.started_at,r.answered_at) BETWEEN 0 AND 8 THEN 1 ELSE 0 END) AS quick_correct,
+       SUM(CASE WHEN r.is_correct=1 AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),999999) <= 8000 THEN 1 ELSE 0 END) AS quick_correct,
+       SUM(CASE WHEN r.is_correct=1 AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),999999) <= 5000 THEN 1 ELSE 0 END) AS fast_flawless,
+       SUM(CASE WHEN r.is_correct=1 AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),0) > 0 AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),0) >= 15000 THEN 1 ELSE 0 END) AS clutch_correct,
        COUNT(DISTINCT CASE WHEN s.status='ENDED' THEN s.id END) AS live_completed,
-       COALESCE(SUM(r.points_awarded),0) AS points_total
+       COALESCE(SUM(r.points_awarded),0) AS points_total,
+       COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.competitivePoints')) AS UNSIGNED)),0) AS competitive_points_total
      FROM session_participants p
      JOIN sessions s ON s.id=p.session_id
      LEFT JOIN responses r ON r.session_id=p.session_id AND r.participant_id=p.id
@@ -168,6 +230,72 @@ export async function getStudentDashboard(req, res) {
     assignedPoints += Number(row.score || 0);
   }
 
+  const [rankRows] = await pool.query(
+    `WITH totals AS (
+       SELECT p.session_id,p.id AS participant_id,p.student_user_id,MAX(s.ended_at) AS ended_at,
+              COALESCE(SUM(r.points_awarded),0) AS normal_points,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.competitivePoints')) AS UNSIGNED)),0) AS competitive_points,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED)),0) AS response_ms
+       FROM session_participants p JOIN sessions s ON s.id=p.session_id AND s.status='ENDED'
+       LEFT JOIN responses r ON r.session_id=p.session_id AND r.participant_id=p.id
+       WHERE p.kicked_at IS NULL GROUP BY p.session_id,p.id,p.student_user_id
+     ), ranked AS (
+       SELECT totals.*, ROW_NUMBER() OVER(PARTITION BY session_id ORDER BY competitive_points DESC,normal_points DESC,response_ms ASC,participant_id ASC) AS final_rank
+       FROM totals
+     ) SELECT * FROM ranked WHERE student_user_id=:uid`, { uid }
+  );
+  const [streakRows] = await pool.query(
+    `SELECT r.is_correct, r.answered_at,
+            COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),999999) AS response_ms
+     FROM session_participants p JOIN responses r ON r.participant_id=p.id AND r.session_id=p.session_id
+     WHERE p.student_user_id=:uid ORDER BY r.answered_at ASC,r.id ASC`, { uid }
+  );
+  let currentStreak=0,maxCorrectStreak=0,currentFastStreak=0,maxFastStreak=0;
+  for (const row of streakRows) {
+    if (Number(row.is_correct) === 1) {
+      currentStreak += 1; maxCorrectStreak=Math.max(maxCorrectStreak,currentStreak);
+      if (Number(row.response_ms) <= 8000) { currentFastStreak += 1; maxFastStreak=Math.max(maxFastStreak,currentFastStreak); } else currentFastStreak=0;
+    } else { currentStreak=0; currentFastStreak=0; }
+  }
+  const boundaries = gamificationBoundaries();
+  const [[dailyGoalStats]] = await pool.query(
+    `SELECT COUNT(DISTINCT p.session_id) AS sessions,
+            SUM(CASE WHEN r.is_correct=1 THEN 1 ELSE 0 END) AS correct,
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.competitivePoints')) AS UNSIGNED)),0) AS competitive
+     FROM session_participants p LEFT JOIN responses r ON r.participant_id=p.id AND r.session_id=p.session_id AND r.answered_at>=:since
+     WHERE p.student_user_id=:uid AND p.joined_at>=:since2`, { uid, since:boundaries.dailyAt, since2:boundaries.dailyAt }
+  );
+  const [[weeklyGoalStats]] = await pool.query(
+    `SELECT COUNT(DISTINCT p.session_id) AS sessions,
+            SUM(CASE WHEN r.is_correct=1 THEN 1 ELSE 0 END) AS correct,
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.competitivePoints')) AS UNSIGNED)),0) AS competitive
+     FROM session_participants p LEFT JOIN responses r ON r.participant_id=p.id AND r.session_id=p.session_id AND r.answered_at>=:since
+     WHERE p.student_user_id=:uid AND p.joined_at>=:since2`, { uid, since:boundaries.weeklyAt, since2:boundaries.weeklyAt }
+  );
+  const top5Count=rankRows.filter((row)=>Number(row.final_rank)<=5).length;
+  const top3Count=rankRows.filter((row)=>Number(row.final_rank)<=3).length;
+  const firstPlaceCount=rankRows.filter((row)=>Number(row.final_rank)===1).length;
+  const weeklyTop3=rankRows.filter((row)=>Number(row.final_rank)<=3 && new Date(row.ended_at||0)>=new Date(boundaries.weeklyAt)).length;
+  const dailyGoals=[
+    { key:'daily-session',title:'Join the Wave',metric:'sessions',target:1,reward:600 },
+    { key:'daily-correct',title:'Three Sharp Answers',metric:'correct',target:3,reward:750 },
+    { key:'daily-speed',title:'Fast & Focused',metric:'competitive',target:2000,reward:900 },
+    { key:'daily-push',title:'Score Surge',metric:'competitive',target:4000,reward:1200 },
+  ];
+  const weeklyGoals=[
+    { key:'weekly-sessions',title:'Weekly Regular',metric:'sessions',target:3,reward:2500 },
+    { key:'weekly-correct',title:'Twenty Correct',metric:'correct',target:20,reward:3000 },
+    { key:'weekly-top',title:'Podium Push',metric:'top3',target:1,reward:3500 },
+    { key:'weekly-points',title:'Competitive Climb',metric:'competitive',target:12000,reward:4500 },
+  ];
+  const dailyValues={ sessions:Number(dailyGoalStats?.sessions||0),correct:Number(dailyGoalStats?.correct||0),competitive:Number(dailyGoalStats?.competitive||0) };
+  const weeklyValues={ sessions:Number(weeklyGoalStats?.sessions||0),correct:Number(weeklyGoalStats?.correct||0),competitive:Number(weeklyGoalStats?.competitive||0),top3:weeklyTop3 };
+  for (const goal of dailyGoals) if (Number(dailyValues[goal.metric]||0)>=goal.target) await pool.query(`INSERT IGNORE INTO student_goal_claims(student_user_id,goal_key,period_key,xp_reward) VALUES(:uid,:goal,:period,:reward)`,{uid,goal:goal.key,period:boundaries.dailyKey,reward:goal.reward});
+  for (const goal of weeklyGoals) if (Number(weeklyValues[goal.metric]||0)>=goal.target) await pool.query(`INSERT IGNORE INTO student_goal_claims(student_user_id,goal_key,period_key,xp_reward) VALUES(:uid,:goal,:period,:reward)`,{uid,goal:goal.key,period:boundaries.weeklyKey,reward:goal.reward});
+  const [[bonusRow]] = await pool.query(`SELECT COALESCE(SUM(xp_reward),0) AS bonus_xp FROM student_goal_claims WHERE student_user_id=:uid`,{uid});
+  const [favoriteRows] = await pool.query(`SELECT achievement_id,slot_no FROM student_favorite_achievements WHERE student_user_id=:uid ORDER BY slot_no ASC`,{uid});
+  const [[overtakeRow]] = await pool.query(`SELECT COALESCE(SUM(overtakes),0) AS overtakes FROM student_competitive_overtakes WHERE student_user_id=:uid`,{uid});
+
   const [[weekStats]] = await pool.query(
     `SELECT
        (SELECT COUNT(DISTINCT q.id) FROM class_enrollments e JOIN quizzes q ON q.class_id=e.class_id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL WHERE e.student_user_id=:uid AND e.removed_at IS NULL AND YEARWEEK(COALESCE(q.available_from,q.created_at),1)=YEARWEEK(NOW(),1)) AS assigned_this_week,
@@ -185,12 +313,36 @@ export async function getStudentDashboard(req, res) {
       questionsCorrect: assignedCorrect + Number(liveAchievementStats?.answered_correct || 0),
       questionsIncorrect: assignedIncorrect + Number(liveAchievementStats?.answered_incorrect || 0),
       quickCorrect: Number(liveAchievementStats?.quick_correct || 0),
+      fastFlawless: Number(liveAchievementStats?.fast_flawless || 0),
+      clutchCorrect: Number(liveAchievementStats?.clutch_correct || 0),
+      perfectPace: Math.floor(maxFastStreak / 5),
+      correctStreak: maxCorrectStreak,
       assignedCompleted: achievementAssignedRows.length,
       liveCompleted: Number(liveAchievementStats?.live_completed || 0),
       classesJoined: classes.length,
       totalPoints: assignedPoints + Number(liveAchievementStats?.points_total || 0),
+      competitivePoints: Number(liveAchievementStats?.competitive_points_total || 0),
+      top5Count, top3Count, firstPlaceCount, overtakes:Number(overtakeRow?.overtakes||0),
+    },
+    gamification: {
+      ...levelFromXp(Number(liveAchievementStats?.competitive_points_total||0)+Number(bonusRow?.bonus_xp||0)),
+      competitiveXp:Number(liveAchievementStats?.competitive_points_total||0),
+      goalBonusXp:Number(bonusRow?.bonus_xp||0),
+      dailyResetAt:boundaries.dailyAt, weeklyResetAt:boundaries.weeklyAt,
+      dailyGoals:dailyGoals.map((goal)=>({ ...goal,value:Number(dailyValues[goal.metric]||0),completed:Number(dailyValues[goal.metric]||0)>=goal.target })),
+      weeklyGoals:weeklyGoals.map((goal)=>({ ...goal,value:Number(weeklyValues[goal.metric]||0),completed:Number(weeklyValues[goal.metric]||0)>=goal.target })),
+      favorites:favoriteRows.map((row)=>row.achievement_id),
     }
   });
+}
+
+export async function setFavoriteAchievements(req,res) {
+  const uid=req.user.sub;
+  await ensureStudentGamificationTables();
+  const ids=[...new Set((req.body?.achievementIds||[]).map((value)=>String(value||'').trim()).filter(Boolean))].slice(0,3);
+  await pool.query(`DELETE FROM student_favorite_achievements WHERE student_user_id=:uid`,{uid});
+  for (let i=0;i<ids.length;i+=1) await pool.query(`INSERT INTO student_favorite_achievements(student_user_id,achievement_id,slot_no) VALUES(:uid,:achievement,:slot)`,{uid,achievement:ids[i],slot:i+1});
+  res.json({ok:true,favorites:ids});
 }
 
 export async function acknowledgeClassRemoval(req, res) {
@@ -409,6 +561,7 @@ export async function checkStudentQuizAnswer(req, res) {
     correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
     totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
     hasWrongSelected: !!scored.hasWrongSelected,
+    explanation: String(config?.explanation || ""),
   };
   asyncAnswerChecks.set(checkKey, result);
   setTimeout(() => asyncAnswerChecks.delete(checkKey), 6 * 60 * 60 * 1000).unref?.();

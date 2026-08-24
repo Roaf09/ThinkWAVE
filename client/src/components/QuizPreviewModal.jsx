@@ -57,7 +57,7 @@ export default function QuizPreviewModal({ quiz, onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(95vw, 780px)", maxHeight: "90vh", background: c.cardBg, border: `1.5px solid ${tone.border}`, borderRadius: 22, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: `0 30px 80px ${tone.accent}28` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", background: tone.softBg, borderBottom: `1px solid ${tone.border}` }}>
           <span style={{ fontWeight: 900, fontSize: 15, color: tone.accent }}>👁 Preview</span>
-          <button onClick={onClose} style={{ padding: "9px 13px", borderRadius: 12, border: `1px solid ${c.border}`, background: c.cardBg, color: c.text, fontWeight: 800, cursor: "pointer" }}>✕ Close</button>
+          <button onClick={onClose} className="tw-preview-close-press"><span>Close</span></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
           {loading && <div style={{ textAlign: "center", padding: 40, color: c.textMuted }}>Loading questions…</div>}
@@ -122,7 +122,8 @@ function PreviewBody({ templateType, cfg, correct, c, tone, questionId }) {
     const words = resolveThinkSpellWordBank({ config: cfg, correct });
     const size = Math.min(12, Math.max(5, Number(cfg.gridSize || 8)));
     const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize: size, words })}-${Number(cfg.gridSeed || 0)}`;
-    const built = buildThinkSpellGrid({ gridSize: size, words, seed: buildThinkSpellSeed(signature) });
+    const generated = buildThinkSpellGrid({ gridSize: size, words, seed: buildThinkSpellSeed(signature) });
+    const built = Array.isArray(cfg.grid) && cfg.grid.length === size * size ? { gridSize: size, grid: cfg.grid.map((ch) => String(ch || "").toUpperCase()) } : generated;
     return <div style={{ display: "grid", placeItems: "center", gap: 14 }}><div style={{ width: "min(100%, 390px)", display: "grid", gridTemplateColumns: `repeat(${built.gridSize}, minmax(0,1fr))`, gap: 4, padding: 10, borderRadius: 16, background: tone.softBg, border: `1.5px solid ${tone.border}` }}>{built.grid.map((ch, i) => <div key={i} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: 7, background: c.cardBg, border: `1px solid ${tone.border}`, color: tone.accent, fontWeight: 900, fontSize: built.gridSize > 9 ? 11 : 14 }}>{ch}</div>)}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>{words.map((word) => <AnswerChip key={word}>{word}</AnswerChip>)}</div></div>;
   }
 

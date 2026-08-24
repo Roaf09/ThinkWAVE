@@ -9,6 +9,8 @@ import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
 import { getTeacherPlan } from "../plans/plan.js";
 import { buildDetailedQuestionAnalytics, buildStudentResponseDetails } from "./analytics.helpers.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
+import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "../sessions/sessionBackground.runtime.js";
 
 function safeJson(v) {
   if (!v) return null;
@@ -44,8 +46,18 @@ async function requireInstitutionAnalytics(req, res) {
 }
 
 async function getSessionOwned(sessionId, teacherId) {
+  const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
+  const backgroundSelect = sessionsHaveBackground && quizzesHaveBackground
+    ? "COALESCE(s.background_key, q.background_key) AS background_key,"
+    : sessionsHaveBackground
+      ? "s.background_key AS background_key,"
+      : quizzesHaveBackground
+        ? "q.background_key AS background_key,"
+        : "NULL AS background_key,";
   const [[row]] = await pool.query(
     `SELECT s.id, s.quiz_id, s.class_id, s.join_mode, s.join_code, s.started_at, s.ended_at, s.created_at, s.questions_snapshot_json,
+            ${backgroundSelect}
             q.title AS quiz_title, q.template_type, q.category,
             c.name AS class_name
      FROM sessions s
@@ -54,6 +66,7 @@ async function getSessionOwned(sessionId, teacherId) {
      WHERE s.id=:sid AND s.teacher_id=:tid`,
     { sid: sessionId, tid: teacherId }
   );
+  if (row) row.background_key = normalizeSessionBackgroundKey(row.background_key || getRememberedSessionBackground(sessionId));
   return row || null;
 }
 

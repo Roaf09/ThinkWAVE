@@ -10,6 +10,8 @@ import { pool } from "../../db.js";
 import { makeJoinCode } from "../../utils/codes.js";
 import { getTeacherPlan } from "../plans/plan.js";
 import { buildDetailedQuestionAnalytics, buildStudentResponseDetails, safeJsonValue as safeAnalyticsJson } from "../analytics/analytics.helpers.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
+import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
 
 async function getTeacherFolders(teacherId) {
   const [rows] = await pool.query(
@@ -279,8 +281,10 @@ export async function exportClassAsyncPdf(req, res) {
 export async function getClassAsyncAnalytics(req, res) {
   const classId = Number(req.params.id);
   const quizId = Number(req.params.quizId);
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
   const [[quiz]] = await pool.query(
     `SELECT q.id, q.title AS quiz_title, q.template_type, q.category, q.available_from, q.available_until,
+            ${quizzesHaveBackground ? "q.background_key AS background_key," : "NULL AS background_key,"}
             q.class_id, c.name AS class_name
      FROM quizzes q
      JOIN classes c ON c.id=q.class_id
@@ -288,6 +292,7 @@ export async function getClassAsyncAnalytics(req, res) {
        AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL`,
     { qid: quizId, cid: classId, tid: req.user.sub }
   );
+  if (quiz) quiz.background_key = normalizeQuizBackgroundKey(quiz.background_key || getRememberedQuizBackground(quizId));
   if (!quiz) return res.status(404).json({ message: "Assigned session not found." });
 
   const [questions] = await pool.query(

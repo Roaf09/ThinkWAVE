@@ -86,7 +86,9 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   const [sortBy, setSortBy] = useState("recent");
   const [institutionPlan, setInstitutionPlan] = useState(false);
   const [openQuizId, setOpenQuizId] = useState(null);
-  const [promotedQuizIds, setPromotedQuizIds] = useState([]);
+  const [promotedQuizIds, setPromotedQuizIds] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("thinkwave:promoted-live-quizzes") || "[]").map(Number).filter(Number.isFinite); } catch { return []; }
+  });
   const [assignmentSaved, setAssignmentSaved] = useState(false);
   const [assignmentNotice, setAssignmentNotice] = useState(null);
   const [setupTutorialStage, setSetupTutorialStage] = useState(null);
@@ -126,6 +128,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   }
 
   useEffect(() => { load(); }, [guestMode]);
+  useEffect(() => { try { sessionStorage.setItem("thinkwave:promoted-live-quizzes", JSON.stringify(promotedQuizIds.slice(0, 30))); } catch {} }, [promotedQuizIds]);
 
   function closeMainTutorialBranch() {
     if (!tutorial?.userId || tutorial?.stage === "complete") return;
@@ -156,6 +159,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       const opening = Number(current) !== numericId;
       if (opening) {
         setPromotedQuizIds((rows) => [numericId, ...rows.filter((id) => Number(id) !== numericId)]);
+        window.scrollTo({ top: 0, behavior: "smooth" });
         return numericId;
       }
       return null;
@@ -311,7 +315,7 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
     return () => document.removeEventListener("pointerdown", closeMenu);
   }, [moreOpen, quiz.id]);
 
-  return <div className="tw-live-session-card" data-tutorial="session-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), position: "relative", overflow: "visible", zIndex: moreOpen ? 120 : 1, background: dark ? `color-mix(in srgb, ${tone.accent} 18%, ${c.cardBg})` : `color-mix(in srgb, ${tone.accent} 13%, ${c.cardBg})`, border: `3px solid ${tone.border}`, boxShadow: `0 15px 32px color-mix(in srgb, ${tone.accent} 19%, rgba(15,23,42,.15))` }}>
+  return <div className="tw-live-session-card" data-tutorial="session-card" style={{ ...card(c), ...templateCardChrome(quiz.template_type, c, false), position: "relative", overflow: "visible", zIndex: moreOpen ? 120 : 1 }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div>
         <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{quiz.title}</div>
@@ -368,7 +372,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
       <div className="tw-host-mode-row">
-        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
+        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}${!institutionPlan ? " is-basic-locked" : ""}`} disabled={!institutionPlan} title={!institutionPlan ? "Basic plan uses Solo mode." : "Host a solo session"} onClick={() => institutionPlan && setJoinMode("SOLO")}><span>Solo</span></button>
         <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan} title={institutionPlan ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => institutionPlan && setJoinMode("GROUP")}><span>Group</span></button>
       </div>
       <div className="tw-host-launch-controls">

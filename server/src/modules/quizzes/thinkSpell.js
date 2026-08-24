@@ -304,6 +304,16 @@ export function loadThinkSpellGridState({ config, correct, questionId, priorPayl
     };
   }
 
+  if (Array.isArray(config?.grid) && config.grid.length === gridSize * gridSize) {
+    return {
+      grid: config.grid.map((ch) => normalizeThinkWord(ch) || ch),
+      gridSize,
+      wordBank,
+      refillCounter: 0,
+      streak: 0,
+    };
+  }
+
   const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words: wordBank })}-${Number(config?.gridSeed || 0)}`;
   const seed = buildThinkSpellSeed(signature);
   const built = buildThinkSpellGrid({ gridSize, words: wordBank, seed });

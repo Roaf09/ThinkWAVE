@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { IconBubble, TwIcon } from "../components/TwUI";
@@ -40,7 +40,7 @@ const templateCopy = {
 };
 
 export default function Landing(){
-  const c=useColors(); const {dark,toggleTheme}=useTheme(); const nav=useNavigate();
+  const c=useColors(); const {dark,toggleTheme}=useTheme(); const nav=useNavigate(); const [searchParams]=useSearchParams();
   const [isFirstRun,setIsFirstRun]=useState(true); const [stats,setStats]=useState({sessionsCompleted:0,institutionsEmpowered:0,classesCreated:0});
   const [modalOpen,setModalOpen]=useState(false); const [modalStep,setModalStep]=useState("root"); const [entryMode,setEntryMode]=useState(""); const [joinCode,setJoinCode]=useState(""); const [modalMsg,setModalMsg]=useState(""); const [checking,setChecking]=useState(false);
   const [slide,setSlide]=useState(0); const [starOpacity,setStarOpacity]=useState(1); const [showBackTop,setShowBackTop]=useState(false); const [templatePreview,setTemplatePreview]=useState(null); const [previewClosing,setPreviewClosing]=useState(false); const hoverTimer=useRef(null); const closeTimer=useRef(null);
@@ -53,6 +53,10 @@ export default function Landing(){
   useEffect(()=>()=>{clearTimeout(hoverTimer.current);clearTimeout(closeTimer.current)},[]);
   useEffect(()=>{const onScroll=()=>{setStarOpacity(Math.max(0,1-window.scrollY/900));const atBottom=window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-8;setShowBackTop(atBottom)};onScroll();window.addEventListener("scroll",onScroll,{passive:true});window.addEventListener("resize",onScroll);return()=>{window.removeEventListener("scroll",onScroll);window.removeEventListener("resize",onScroll)}},[]);
   useEffect(()=>{ const id=window.location.hash?.slice(1); if(id) setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:"smooth"}),50); },[]);
+  useEffect(()=>{
+    if(searchParams.get("join")!=="guest") return;
+    setModalMsg(""); setEntryMode("guest"); setJoinCode((searchParams.get("code")||"").toUpperCase()); setModalStep("joinCode"); setModalOpen(true);
+  },[searchParams]);
   const scroll=id=>document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"});
   function openModal(){setModalMsg("");setEntryMode("");setJoinCode("");setModalStep("root");setModalOpen(true)}
   async function getStarted(){setChecking(true);try{const {data}=await api.get("/auth/setup-status");if(data.isFirstRun)nav("/superadmin-register");else openModal()}catch{openModal()}finally{setChecking(false)}}

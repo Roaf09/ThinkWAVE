@@ -155,6 +155,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
       {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gap: 14 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.3fr) repeat(2, minmax(140px, 0.7fr))", gap: 12 }}>
           <input
+            className="tw-history-search-field"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by quiz title, template, or category"
@@ -248,7 +249,7 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>History</h2></section>
     {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gridTemplateColumns: "minmax(220px,1.3fr) minmax(150px,.7fr)", gap: 12 }}>
-      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+      <input className="tw-history-search-field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
       <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
     </section>}
     {!sessions.length ? <ThinkBotEmptyState c={c} title="You have not done any sessions yet." /> : sessions.map((session) => {

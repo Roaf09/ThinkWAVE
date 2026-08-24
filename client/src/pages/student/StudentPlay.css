@@ -113,3 +113,501 @@
   .sp-assigned-navigation{grid-template-columns:44px minmax(130px,1fr) 44px!important;gap:10px!important}
   .sp-assigned-arrow{width:42px;height:42px}
 }
+
+/* Revision 10.21 gameplay ------------------------------------------------ */
+.quiz-shell-new,.sp-gameplay-page,.sp-final-page{--sp-template-accent:#2b6cff}
+
+/* Theme/sound controls: visible square-soft borders that invert with theme. */
+body:not(.dark-mode) .sp-experience-controls .sp-inline-theme-toggle,
+.sp-waiting-page.theme-light .sp-inline-theme-toggle{
+  width:44px!important;height:44px!important;border-radius:12px!important;background:rgba(255,255,255,.88)!important;color:#0f172a!important;border:3px solid #fff!important;
+  box-shadow:0 8px 20px rgba(15,23,42,.16)!important
+}
+body.dark-mode .sp-experience-controls .sp-inline-theme-toggle,
+.sp-waiting-page.theme-dark .sp-inline-theme-toggle{
+  width:44px!important;height:44px!important;border-radius:12px!important;background:rgba(7,17,36,.9)!important;color:#fff!important;border:3px solid #071024!important;
+  box-shadow:0 8px 20px rgba(0,0,0,.28)!important
+}
+.sp-inline-theme-toggle svg{width:23px!important;height:23px!important}
+
+/* ThinkBOT sits immediately left of ThinkWAVE. */
+.qn-brand{display:inline-flex!important;align-items:center!important;gap:3px!important}
+.qn-brand-bot{width:31px!important;height:31px!important;object-fit:contain!important;margin-right:5px!important;filter:drop-shadow(0 3px 4px rgba(15,23,42,.18))}
+
+/* Question area: narrower, outlined by template, and glassy over backgrounds. */
+.qn-body{width:100%!important;box-sizing:border-box!important}
+.qn-prompt-box{
+  width:min(100%,720px)!important;max-width:720px!important;margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important;
+  border:4px solid color-mix(in srgb,var(--sp-template-accent) 76%,rgba(255,255,255,.62))!important;border-radius:22px!important;
+  background:rgba(255,255,255,.70)!important;backdrop-filter:blur(15px)!important;-webkit-backdrop-filter:blur(15px)!important;
+  box-shadow:0 12px 0 color-mix(in srgb,var(--sp-template-accent) 34%,rgba(15,23,42,.25)),0 20px 40px rgba(15,23,42,.15)!important
+}
+.theme-dark .qn-prompt-box{
+  background:rgba(6,18,42,.68)!important;border-color:color-mix(in srgb,var(--sp-template-accent) 76%,#e5edff)!important;
+  box-shadow:0 12px 0 color-mix(in srgb,var(--sp-template-accent) 42%,#061128),0 22px 42px rgba(0,0,0,.30)!important
+}
+
+/* Progress = template-colored pixel texture. */
+.qn-question-progress{
+  height:13px!important;border-top:3px solid color-mix(in srgb,var(--sp-template-accent) 62%,#071024)!important;
+  border-bottom:3px solid color-mix(in srgb,var(--sp-template-accent) 62%,#071024)!important;
+  background:color-mix(in srgb,var(--sp-template-accent) 28%,#071024)!important
+}
+.qn-question-progress-bar{
+  background-color:var(--sp-template-accent)!important;
+  background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.25) 0 5px,rgba(255,255,255,0) 5px 10px)!important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--sp-template-accent) 76%,transparent)!important
+}
+
+/* Timer is larger, outlined, water-textured, with a dark depleted bed. */
+.qn-pixel-timer{
+  min-height:45px!important;padding:8px 13px!important;border:4px solid color-mix(in srgb,var(--sp-template-accent) 52%,#fff)!important;
+  border-radius:10px!important;background:color-mix(in srgb,var(--sp-template-accent) 78%,#0f172a)!important;color:#fff!important;
+  font-size:19px!important;letter-spacing:.09em!important;box-shadow:0 6px 0 color-mix(in srgb,var(--sp-template-accent) 52%,#071024),0 0 22px color-mix(in srgb,var(--sp-template-accent) 42%,transparent)!important;
+  transition:background .75s ease,border-color .75s ease,box-shadow .75s ease,transform .3s ease!important
+}
+.qn-pixel-timer.is-warning{filter:saturate(1.18);transform:scale(1.02)}
+.qn-pixel-timer.is-danger{background:#ef4444!important;border-color:#fecaca!important;box-shadow:0 6px 0 #991b1b,0 0 24px rgba(239,68,68,.52)!important}
+.qn-timer-progress{
+  height:15px!important;border:3px solid color-mix(in srgb,var(--sp-template-accent) 64%,#071024)!important;border-radius:7px!important;overflow:hidden!important;
+  background:color-mix(in srgb,var(--sp-template-accent) 24%,#071024)!important;box-shadow:inset 0 2px 5px rgba(0,0,0,.32),0 0 14px color-mix(in srgb,var(--sp-template-accent) 25%,transparent)!important
+}
+.qn-timer-progress .qn-progress-bar{
+  height:100%!important;background-color:var(--sp-template-accent)!important;
+  background-image:radial-gradient(ellipse at 15% 0%,rgba(255,255,255,.42) 0 7%,transparent 8%),radial-gradient(ellipse at 52% 15%,rgba(255,255,255,.26) 0 6%,transparent 7%),linear-gradient(180deg,rgba(255,255,255,.18),transparent 58%)!important;
+  background-size:38px 22px,48px 25px,100% 100%!important;animation:spWaterFlow 2.6s linear infinite!important;
+  box-shadow:0 0 18px color-mix(in srgb,var(--sp-template-accent) 72%,transparent)!important;transition:width .2s linear,background-color .7s ease!important
+}
+.qn-timer-progress.is-danger{border-color:#991b1b!important;background:#7f1d1d!important}
+.qn-timer-progress.is-danger .qn-progress-bar{background-color:#ef4444!important;box-shadow:0 0 20px rgba(239,68,68,.62)!important}
+@keyframes spWaterFlow{from{background-position:0 0,0 0,0 0}to{background-position:76px 0,-96px 0,0 0}}
+
+/* MCQ + True/False: solid template-button 3D treatment and thick letter circles. */
+.quiz-choices .choice-btn{
+  --choice-face:#6f9bf4;--choice-base:#244caa;--choice-border:#2f6edb;--choice-ink:#173f94;
+  border:4px solid var(--choice-border)!important;border-radius:20px!important;background:var(--choice-face)!important;color:var(--choice-ink)!important;
+  box-shadow:0 8px 0 var(--choice-base),0 16px 28px rgba(15,23,42,.16)!important;transform:translateY(-3px)!important;
+  transition:transform .13s ease,filter .16s ease,box-shadow .13s ease!important
+}
+.quiz-choices .choice-btn:nth-child(1){--choice-face:#f58b8b;--choice-base:#b72f3b;--choice-border:#d74750;--choice-ink:#7f1d1d}
+.quiz-choices .choice-btn:nth-child(2){--choice-face:#7fd09a;--choice-base:#25753f;--choice-border:#35a159;--choice-ink:#14532d}
+.quiz-choices .choice-btn:nth-child(3){--choice-face:#80aaf7;--choice-base:#2854ad;--choice-border:#3e72dc;--choice-ink:#173f94}
+.quiz-choices .choice-btn:nth-child(4){--choice-face:#f4d467;--choice-base:#a87813;--choice-border:#d4a522;--choice-ink:#713f12}
+.quiz-choices .choice-btn:nth-child(5){--choice-face:#c39af5;--choice-base:#7443ae;--choice-border:#9868d1;--choice-ink:#4c1d95}
+.theme-dark .quiz-choices .choice-btn:nth-child(1){--choice-face:#7f2932;--choice-ink:#fecaca}
+.theme-dark .quiz-choices .choice-btn:nth-child(2){--choice-face:#1f6338;--choice-ink:#bbf7d0}
+.theme-dark .quiz-choices .choice-btn:nth-child(3){--choice-face:#244f9d;--choice-ink:#dbeafe}
+.theme-dark .quiz-choices .choice-btn:nth-child(4){--choice-face:#786018;--choice-ink:#fef3c7}
+.theme-dark .quiz-choices .choice-btn:nth-child(5){--choice-face:#5f368c;--choice-ink:#ede9fe}
+.quiz-choices .choice-btn:hover:not(:disabled){filter:brightness(.96)!important;transform:translateY(-5px)!important}
+.quiz-choices .choice-btn:active:not(:disabled),.quiz-choices .choice-btn.active{transform:translateY(5px)!important;box-shadow:0 1px 0 var(--choice-base),0 8px 18px rgba(15,23,42,.18)!important}
+.quiz-choices .choice-btn .choice-text{color:var(--choice-ink)!important;font-weight:900!important}
+.quiz-choices .choice-badge{
+  border:4px solid var(--choice-border)!important;background:color-mix(in srgb,var(--choice-face) 78%,#fff)!important;color:var(--choice-ink)!important;
+  box-shadow:0 3px 0 var(--choice-base)!important;font-weight:1000!important
+}
+.theme-dark .quiz-choices .choice-badge{background:color-mix(in srgb,var(--choice-face) 88%,#071024)!important}
+
+/* Identification is one stable outer answer container; the old boxed letters are gone. */
+.type-center-shell{
+  width:min(100%,720px)!important;margin:0 auto!important;padding:20px!important;border:4px solid color-mix(in srgb,var(--sp-template-accent) 74%,rgba(255,255,255,.6))!important;
+  border-radius:22px!important;background:rgba(255,255,255,.68)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;
+  box-sizing:border-box!important;box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent) 30%,rgba(15,23,42,.25))!important
+}
+.theme-dark .type-center-shell{background:rgba(6,18,42,.72)!important}
+.type-input-row{background:transparent!important;box-shadow:none!important;border:2px solid color-mix(in srgb,var(--sp-template-accent) 48%,rgba(100,116,139,.65))!important;transition:border-color .18s ease!important}
+.type-input{background:transparent!important;box-shadow:none!important;outline:none!important;appearance:none!important;-webkit-appearance:none!important}
+.type-charboxes{display:none!important}
+
+/* Matching columns/cards get sturdier outlines. */
+.match-connect-column{border:4px solid color-mix(in srgb,var(--sp-template-accent) 58%,rgba(100,116,139,.72))!important;border-radius:20px!important;padding:13px!important}
+.match-connect-card{border-width:4px!important}
+
+/* Guess Word: theme outline + click-to-zoom images. */
+.pics4-frame{border:4px solid color-mix(in srgb,var(--sp-template-accent) 78%,rgba(255,255,255,.55))!important;box-shadow:0 7px 0 color-mix(in srgb,var(--sp-template-accent) 34%,rgba(15,23,42,.35))!important}
+.pics4-frame img{cursor:zoom-in!important;transition:transform .18s ease,filter .18s ease!important}
+.pics4-frame img:hover{transform:scale(1.025);filter:brightness(.97)}
+.sp-image-zoom-backdrop{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px;background:rgba(2,8,23,.76);backdrop-filter:blur(10px);animation:spPhaseIn .2s ease both}
+.sp-image-zoom-card{position:relative;width:min(92vw,900px);height:min(84vh,760px);display:grid;place-items:center;border:4px solid var(--sp-template-accent);border-radius:24px;background:rgba(5,15,34,.94);box-shadow:0 30px 80px rgba(0,0,0,.45);padding:18px}
+.sp-image-zoom-card>img{max-width:100%;max-height:100%;object-fit:contain;border-radius:14px}
+.sp-image-zoom-close{position:absolute;right:12px;top:12px;width:42px;height:42px;border-radius:12px;border:2px solid rgba(255,255,255,.5);background:rgba(5,15,34,.82);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:2}
+
+/* Crossword: one additional themed container covers Found through Words found. */
+.bword-game-panel{
+  width:100%;box-sizing:border-box;padding:18px;border:4px solid color-mix(in srgb,var(--sp-template-accent) 74%,rgba(255,255,255,.55));border-radius:24px;
+  background:rgba(255,255,255,.62);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent) 30%,rgba(15,23,42,.3))
+}
+.theme-dark .bword-game-panel{background:rgba(6,18,42,.68)}
+.bword-found-chip button{display:none!important}
+
+/* Completion/waiting transitions use the lobby ThinkBOT loader. */
+.sp-phase-complete{animation:spGoodJob 4s ease both!important}
+.sp-phase-wait{animation:spPhaseIn .45s ease both!important}
+.sp-good-job-icons{display:flex;justify-content:center;align-items:flex-end;gap:8px;color:var(--sp-template-accent);margin-bottom:13px}
+@keyframes spGoodJob{0%{opacity:0;transform:translateY(12px) scale(.98)}12%,78%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-7px) scale(.99)}}
+@keyframes spPhaseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* Student final leaderboard: podium + adaptive 1-4 columns. */
+.sp-final-page{min-height:100vh;padding:26px 16px 48px;box-sizing:border-box;animation:spPhaseIn .5s ease both}
+.sp-final-wrap{position:relative;width:min(96vw,1420px);margin:0 auto}
+.sp-final-leaderboard-card{border:4px solid;border-radius:28px;padding:24px;box-shadow:0 10px 0 color-mix(in srgb,var(--sp-template-accent) 36%,rgba(15,23,42,.34)),0 28px 62px rgba(15,23,42,.22);backdrop-filter:blur(12px)}
+.sp-final-summary{text-align:center;margin-bottom:16px}.sp-final-summary h2{font-size:32px;margin:8px 0 6px;font-weight:1000}.sp-final-summary p{margin:0;font-weight:750}.sp-final-trophy{color:#f5b700;filter:drop-shadow(0 8px 12px rgba(15,23,42,.24))}
+.sp-final-heading{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0 20px;font-size:20px;font-weight:950}
+.sp-final-podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:12px;max-width:760px;margin:0 auto 22px}
+.sp-podium-place{text-align:center;min-width:0}.sp-podium-place.rank-1{order:2}.sp-podium-place.rank-2{order:1}.sp-podium-place.rank-3{order:3}.sp-podium-place.is-me{filter:drop-shadow(0 0 12px color-mix(in srgb,var(--sp-template-accent) 48%,transparent))}
+.sp-podium-medal{height:40px;display:grid;place-items:center;color:#c0c8d2}.sp-podium-place.rank-1 .sp-podium-medal{color:#f5b700}.sp-podium-place.rank-3 .sp-podium-medal{color:#c7793e}
+.sp-podium-name{font-weight:950;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}.sp-podium-points{font-size:13px;font-weight:900;color:var(--sp-template-accent);margin:4px 0 7px}
+.sp-podium-platform{height:76px;border:3px solid color-mix(in srgb,var(--sp-template-accent) 72%,#fff);border-radius:16px 16px 8px 8px;background:color-mix(in srgb,var(--sp-template-accent) 65%,#29415f);display:grid;place-items:center;color:#fff;box-shadow:inset 0 -8px 0 rgba(0,0,0,.13)}
+.sp-podium-place.rank-1 .sp-podium-platform{height:110px}.sp-podium-place.rank-2 .sp-podium-platform{height:88px}.sp-podium-place.rank-3 .sp-podium-platform{height:70px}
+.sp-final-rank-grid{display:grid;gap:14px;align-items:start}.sp-final-rank-column{display:grid;gap:8px;min-width:0}
+.sp-final-rank-column .tw-student-leader-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:9px;border:2px solid rgba(100,116,139,.24);border-radius:13px;padding:10px 12px;background:rgba(255,255,255,.1)}
+.sp-final-rank-column .tw-student-leader-row.is-me{border-color:var(--sp-template-accent);background:color-mix(in srgb,var(--sp-template-accent) 13%,transparent)}
+.sp-final-dashboard-row{display:flex;justify-content:center;margin-top:22px}.sp-final-dashboard-top{position:absolute!important;right:18px!important;top:18px!important;z-index:3}
+@media(max-width:950px){.sp-final-rank-grid{grid-template-columns:1fr!important}.sp-final-dashboard-top{position:static!important;margin:18px auto 0!important;display:block!important}.sp-final-podium{max-width:620px}}
+@media(max-width:560px){.sp-final-podium{gap:5px}.sp-podium-name{font-size:12px}.sp-podium-points{font-size:11px}.sp-final-leaderboard-card{padding:16px}.qn-brand-bot{width:26px!important;height:26px!important}.qn-pixel-timer{font-size:16px!important}}
+
+/* Revision 10.24 — student timer, explanation feedback, final navigation, Matching and Crossword. */
+.qn-qcount{
+  font-size:19px!important;
+  font-weight:1000!important;
+  transform:translateX(-8px)!important;
+  letter-spacing:.02em!important;
+}
+
+/* Timer is ThinkWAVE blue for every template. Only question progress keeps the template accent. */
+.quiz-shell-new .qn-pixel-timer{
+  background:#2b6cff!important;
+  border-color:#9bb9ff!important;
+  box-shadow:0 6px 0 #1749bd,0 0 24px rgba(43,108,255,.58)!important;
+  transition:background .72s ease,border-color .72s ease,box-shadow .72s ease,color .72s ease,transform .25s ease!important;
+}
+.quiz-shell-new .qn-pixel-timer.is-warning,
+.quiz-shell-new .qn-pixel-timer.is-danger{
+  background:#ef4444!important;
+  border-color:#fecaca!important;
+  box-shadow:0 6px 0 #991b1b,0 0 26px rgba(239,68,68,.64)!important;
+}
+.quiz-shell-new .qn-timer-progress{
+  border-color:#1749bd!important;
+  background:#123a8f!important;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.34),0 0 14px rgba(43,108,255,.32)!important;
+}
+.quiz-shell-new .qn-timer-progress .qn-progress-bar{
+  background-color:#2b6cff!important;
+  box-shadow:0 0 19px rgba(43,108,255,.72)!important;
+}
+.quiz-shell-new .qn-timer-progress.is-warning,
+.quiz-shell-new .qn-timer-progress.is-danger{border-color:#991b1b!important;background:#7f1d1d!important}
+.quiz-shell-new .qn-timer-progress.is-warning .qn-progress-bar,
+.quiz-shell-new .qn-timer-progress.is-danger .qn-progress-bar{background-color:#ef4444!important;box-shadow:0 0 20px rgba(239,68,68,.68)!important}
+
+/* Submit follows the active gameplay template. */
+.quiz-shell-new .submit-btn:not(:disabled){
+  background:var(--sp-submit-accent,var(--sp-template-accent,#2b6cff))!important;
+  border-color:color-mix(in srgb,var(--sp-submit-accent,var(--sp-template-accent,#2b6cff)) 72%,#fff)!important;
+  box-shadow:0 7px 0 color-mix(in srgb,var(--sp-submit-accent,var(--sp-template-accent,#2b6cff)) 62%,#0f172a),0 14px 24px rgba(15,23,42,.18)!important;
+}
+.tw-assignment-submit-press:not(:disabled){
+  background:color-mix(in srgb,var(--sp-submit-accent,var(--sp-template-accent,#2b6cff)) 62%,#0f172a)!important;
+  box-shadow:0 9px 0 color-mix(in srgb,var(--sp-submit-accent,var(--sp-template-accent,#2b6cff)) 56%,#0f172a),0 14px 26px rgba(15,23,42,.18)!important;
+}
+.tw-assignment-submit-press:not(:disabled)>span{
+  background:var(--sp-submit-accent,var(--sp-template-accent,#2b6cff))!important;
+  border-color:color-mix(in srgb,var(--sp-submit-accent,var(--sp-template-accent,#2b6cff)) 68%,#fff)!important;
+}
+
+/* Correct / incorrect / almost explanation card: center, then dock at bottom-right for up to ten seconds. */
+.sp-explanation-feedback{
+  position:fixed;left:50%;top:50%;z-index:10020;
+  width:min(560px,calc(100vw - 34px));box-sizing:border-box;
+  padding:18px 20px;border:3px solid var(--sp-template-accent,#2b6cff);border-radius:20px;
+  background:rgba(255,255,255,.95);color:#172033;
+  box-shadow:0 18px 54px rgba(15,23,42,.28),0 7px 0 color-mix(in srgb,var(--sp-template-accent,#2b6cff) 34%,#64748b);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transform:translate(-50%,-50%) scale(.98);opacity:0;
+  animation:spExplanationIn .28s ease forwards;
+  transition:left .72s cubic-bezier(.22,1,.36,1),top .72s cubic-bezier(.22,1,.36,1),transform .72s cubic-bezier(.22,1,.36,1),width .72s cubic-bezier(.22,1,.36,1),opacity .24s ease;
+  pointer-events:none;
+}
+.theme-dark .sp-explanation-feedback,
+body.dark-mode .sp-explanation-feedback{background:rgba(10,23,48,.96);color:#f8fbff}
+.sp-explanation-feedback.is-correct{border-color:#22c55e;box-shadow:0 18px 54px rgba(15,23,42,.28),0 7px 0 #15803d}
+.sp-explanation-feedback.is-incorrect{border-color:#ef4444;box-shadow:0 18px 54px rgba(15,23,42,.28),0 7px 0 #b91c1c}
+.sp-explanation-feedback.is-almost{border-color:#f59e0b;box-shadow:0 18px 54px rgba(15,23,42,.28),0 7px 0 #b45309}
+.sp-explanation-feedback.is-corner{
+  left:100%;top:100%;width:min(390px,calc(100vw - 26px));
+  transform:translate(calc(-100% - 18px),calc(-100% - 18px)) scale(.78);
+  transform-origin:right bottom;
+}
+.sp-explanation-heading{font-size:20px;font-weight:1000;margin-bottom:7px;line-height:1.1}
+.sp-explanation-feedback.is-correct .sp-explanation-heading{color:#16a34a}.sp-explanation-feedback.is-incorrect .sp-explanation-heading{color:#dc2626}.sp-explanation-feedback.is-almost .sp-explanation-heading{color:#d97706}
+.sp-explanation-copy{font-size:14px;line-height:1.55;font-weight:750;white-space:pre-wrap;overflow-wrap:anywhere}
+@keyframes spExplanationIn{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+
+/* Final leaderboard is tinted by the template/theme and uses the latest raised navigation button. */
+.sp-final-page.theme-light .sp-final-leaderboard-card,
+.sp-final-page:not(.theme-dark) .sp-final-leaderboard-card{
+  background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 9%,#fff)!important;
+}
+.sp-final-page.theme-dark .sp-final-leaderboard-card{
+  background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 14%,#07132c)!important;
+}
+.sp-final-dashboard-row{flex-direction:column!important;align-items:center!important;gap:9px!important}
+.sp-final-dashboard-top-wrap{position:absolute;right:18px;top:18px;z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px}
+.sp-final-dashboard-top-wrap .sp-final-dashboard-top{position:static!important;right:auto!important;top:auto!important;margin:0!important}
+.tw-student-dashboard-press{
+  border-radius:16px!important;
+  box-shadow:0 7px 0 #1749bd,0 14px 25px rgba(15,23,42,.20)!important;
+  transition:transform .15s ease,box-shadow .15s ease!important;
+}
+.tw-student-dashboard-press:hover{transform:translateY(-2px)!important;filter:none!important}
+.tw-student-dashboard-press:active{transform:translateY(5px)!important;box-shadow:0 2px 0 #1749bd!important}
+.sp-join-another-session{
+  border:0;background:transparent;color:var(--sp-template-accent,#2b6cff);font:inherit;font-size:12px;font-weight:900;
+  padding:3px 6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.sp-join-another-session:hover{filter:brightness(.88)}
+
+/* Matching: raised columns; connector lines sit above the column outlines. */
+.match-connect-column{
+  z-index:5!important;
+  background:color-mix(in srgb,var(--sp-template-accent,#f59e0b) 8%,rgba(255,255,255,.88))!important;
+  border-color:color-mix(in srgb,var(--sp-template-accent,#f59e0b) 70%,#64748b)!important;
+  box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent,#f59e0b) 42%,#475569),0 16px 27px rgba(15,23,42,.16)!important;
+}
+.theme-dark .match-connect-column{background:color-mix(in srgb,var(--sp-template-accent,#f59e0b) 14%,#09162e)!important}
+.match-connect-lines{z-index:8!important;overflow:visible!important}
+.match-connect-lines line{
+  stroke:var(--sp-template-accent,#f59e0b)!important;
+  filter:drop-shadow(0 3px 4px color-mix(in srgb,var(--sp-template-accent,#f59e0b) 44%,transparent))!important;
+}
+.match-connect-lines line.is-active{stroke:color-mix(in srgb,var(--sp-template-accent,#f59e0b) 74%,#fff)!important}
+.match-connect-dot{z-index:10!important;position:relative!important}
+
+/* Crossword readability and in-container time-up summary. */
+.theme-light .bword-hud-label,
+.theme-light .bword-hud-value,
+.theme-light .bword-quest-title,
+.theme-light .bword-quest-hidden{color:#111827!important}
+.theme-dark .bword-hud-label,
+.theme-dark .bword-hud-value,
+.theme-dark .bword-quest-title,
+.theme-dark .bword-quest-hidden{color:#f8fbff!important}
+.bword-summary-inside{
+  margin-top:16px!important;border:3px solid color-mix(in srgb,var(--sp-template-accent,#7c3aed) 68%,#64748b)!important;
+  border-radius:17px!important;background:color-mix(in srgb,var(--sp-template-accent,#7c3aed) 9%,rgba(255,255,255,.84))!important;
+  color:inherit!important;box-shadow:0 5px 0 color-mix(in srgb,var(--sp-template-accent,#7c3aed) 36%,#64748b)!important;
+}
+.theme-dark .bword-summary-inside{background:color-mix(in srgb,var(--sp-template-accent,#7c3aed) 13%,#0b1730)!important;color:#f8fbff!important}
+
+@media(max-width:950px){
+  .sp-final-dashboard-top-wrap{position:static!important;margin:18px auto 0!important}
+  .sp-explanation-feedback.is-corner{left:100%;top:100%;width:min(350px,calc(100vw - 24px));transform:translate(calc(-100% - 12px),calc(-100% - 12px)) scale(.78)}
+}
+@media(max-width:600px){
+  .qn-qcount{font-size:17px!important;transform:translateX(-4px)!important}
+  .sp-explanation-feedback.is-corner{transform:translate(calc(-100% - 10px),calc(-100% - 10px)) scale(.72)}
+}
+.sp-explanation-feedback.is-wrong{border-color:#ef4444;box-shadow:0 18px 54px rgba(15,23,42,.28),0 7px 0 #b91c1c}
+.sp-explanation-feedback.is-wrong .sp-explanation-heading{color:#dc2626}
+
+/* Revision 10.26 — compact live Top 5 panel. Rank slots stay fixed while participant content animates. */
+.sp-live-top5{
+  position:fixed;left:16px;top:50%;transform:translateY(-46%);z-index:72;width:238px;box-sizing:border-box;
+  padding:12px;border:2px solid color-mix(in srgb,var(--sp-template-accent,#2b6cff) 44%,rgba(255,255,255,.5));border-radius:18px;
+  background:rgba(255,255,255,.80);backdrop-filter:blur(15px) saturate(1.08);-webkit-backdrop-filter:blur(15px) saturate(1.08);
+  box-shadow:0 9px 28px rgba(15,23,42,.14);color:#0f172a;
+}
+.theme-dark .sp-live-top5{background:rgba(7,18,40,.82);color:#eef4ff;border-color:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 58%,#334155);box-shadow:0 10px 30px rgba(0,0,0,.28)}
+.sp-live-top5-title{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:1000;letter-spacing:.02em;margin:0 2px 9px}
+.sp-live-top5-list{display:grid;gap:5px}
+.sp-live-top5-row{height:36px;display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:5px;position:relative}
+.sp-live-top5-rank{width:27px;height:27px;display:grid;place-items:center;font-size:12px;font-weight:1000;opacity:.82}
+.sp-live-top5-rank.rank-1{color:#d6a400}.sp-live-top5-rank.rank-2{color:#96a0ae}.sp-live-top5-rank.rank-3{color:#b96b32}
+.sp-live-top5-person{height:32px;min-width:0;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:7px;padding:0 7px;border-radius:10px;background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 8%,transparent);will-change:transform}
+.sp-live-top5-avatar{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 15%,#fff);border:1px solid color-mix(in srgb,var(--sp-template-accent,#2b6cff) 34%,transparent)}
+.sp-live-top5-avatar img{width:100%;height:100%;object-fit:cover}
+.sp-live-top5-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:900}
+.sp-live-top5-person b{font-size:10.5px;font-weight:1000;white-space:nowrap}
+.sp-live-top5-empty{padding-left:8px;opacity:.34;font-weight:900}
+.sp-live-top5-separator{height:1px;background:currentColor;opacity:.13;margin:8px 3px 6px}
+.sp-live-top5-me{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:6px;align-items:center;padding:5px 7px;font-size:10.5px;border-radius:9px;background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 13%,transparent)}
+.sp-live-top5-me span,.sp-live-top5-me b,.sp-live-top5-me strong{font-weight:1000}.sp-live-top5-me strong{white-space:nowrap}
+@media(max-width:1180px){.sp-live-top5{width:202px;left:10px;padding:9px}.sp-live-top5-person{grid-template-columns:24px minmax(0,1fr) auto;gap:5px;padding-inline:5px}.sp-live-top5-avatar{width:22px;height:22px}.sp-live-top5-name{font-size:10px}.sp-live-top5-person b{font-size:9.5px}}
+@media(max-width:900px){.sp-live-top5{top:108px;left:8px;transform:none;width:184px;opacity:.94}.sp-live-top5-title{font-size:11px}.sp-live-top5-row{height:31px}.sp-live-top5-person{height:28px}}
+@media(max-width:640px){.sp-live-top5{width:164px;top:102px}.sp-live-top5-person{grid-template-columns:20px minmax(0,1fr) auto}.sp-live-top5-avatar{width:19px;height:19px}.sp-live-top5-person b{font-size:8.5px}.sp-live-top5-me{grid-template-columns:22px minmax(0,1fr);}.sp-live-top5-me strong{grid-column:2}}
+.sp-live-top5-row{grid-template-columns:20px 18px minmax(0,1fr)!important;gap:3px!important}
+.sp-live-top5-rank{width:20px!important;height:27px!important;color:inherit!important;opacity:.72!important}
+.sp-live-top5-trophy{width:18px;height:24px;display:grid;place-items:center}
+.sp-live-top5-trophy.rank-1{color:#d6a400}.sp-live-top5-trophy.rank-2{color:#96a0ae}.sp-live-top5-trophy.rank-3{color:#b96b32}
+
+/* Revision 10.27 --------------------------------------------------------- */
+/* Live Top 5 sits near the same top edge as the question container. */
+.sp-live-top5{
+  top:150px!important;transform:none!important;
+  transition:top .18s ease,opacity .16s ease,box-shadow .16s ease!important;
+}
+
+/* Keep the avatar visibly above the player's name while the whole identity/score block reorders. */
+.sp-live-top5-row{height:52px!important}
+.sp-live-top5-person{
+  min-height:48px!important;height:48px!important;
+  grid-template-columns:minmax(0,1fr) auto!important;gap:7px!important;padding:3px 8px!important;
+}
+.sp-live-top5-identity{min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:1px}
+.sp-live-top5-avatar{width:22px!important;height:22px!important;margin-left:2px}
+.sp-live-top5-name{width:100%;font-size:10.5px!important;line-height:1.05}
+.sp-live-top5-person>b{font-size:10.5px!important;align-self:center}
+@media(max-width:900px){.sp-live-top5{top:118px!important}.sp-live-top5-row{height:46px!important}.sp-live-top5-person{height:42px!important;min-height:42px!important}}
+@media(max-width:640px){.sp-live-top5{top:108px!important}.sp-live-top5-row{height:43px!important}.sp-live-top5-person{height:39px!important;min-height:39px!important}.sp-live-top5-avatar{width:18px!important;height:18px!important}}
+
+/* Explanation should never cover the Please wait card: first sit above it, then dock normally. */
+.sp-explanation-feedback.is-post-answer:not(.is-corner):not(.is-leaving){
+  top:18%!important;
+  transform:translate(-50%,-50%) scale(.96)!important;
+  width:min(520px,calc(100vw - 34px))!important;
+}
+.sp-explanation-feedback.is-leaving{
+  opacity:0!important;
+  transform:translate(-100%,-100%) scale(.74)!important;
+  transition:opacity .48s ease,transform .48s cubic-bezier(.22,1,.36,1)!important;
+}
+@media(max-height:720px){.sp-explanation-feedback.is-post-answer:not(.is-corner):not(.is-leaving){top:14%!important;max-height:30vh!important;overflow:auto!important}}
+
+/* Student final Top 3 now uses the exact Host Panel podium/trophy/platform system. */
+.sp-final-host-podium{max-width:760px!important;margin:0 auto 24px!important;--host-accent:var(--sp-template-accent,#2b6cff)}
+.sp-final-host-podium .tw-host-podium-place.is-me{filter:drop-shadow(0 0 12px color-mix(in srgb,var(--sp-template-accent,#2b6cff) 50%,transparent))}
+.sp-final-host-podium .tw-host-podium-platform>b{font-size:13px!important}
+.sp-final-host-podium .tw-host-podium-points{font-size:17px!important;font-weight:1000!important}
+
+/* Smooth the active Crossword connector as each straight-line segment is acquired. */
+.bword-path-line polyline.is-active{
+  stroke-dasharray:1000;
+  stroke-dashoffset:1000;
+  animation:bwordActiveLineDraw .14s cubic-bezier(.22,1,.36,1) forwards;
+  filter:drop-shadow(0 0 5px rgba(134,239,172,.55));
+}
+@keyframes bwordActiveLineDraw{to{stroke-dashoffset:0}}
+.bword-cell{transition:transform .07s ease,background .09s ease,border-color .09s ease,box-shadow .10s ease!important}
+
+/* Faster lightweight gameplay feedback/theme transitions. */
+.sp-gameplay-page,.sp-waiting-page,.sp-final-page,.quiz-shell-new{transition-duration:.22s!important}
+.sp-phase-wait{animation-duration:.28s!important}
+.sp-page-enter{animation-duration:.28s!important}
+.qn-prompt-box{animation-duration:.26s!important}
+
+/* Revision 10.28 --------------------------------------------------------- */
+/* Avatar now sits immediately before the player's name. */
+.sp-live-top5-identity{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important}
+.sp-live-top5-avatar{margin-left:0!important;flex:0 0 auto!important}
+.sp-live-top5-name{width:auto!important;flex:1 1 auto!important}
+
+/* Final result summary no longer has the standalone trophy / Good Job treatment. */
+.sp-final-summary-compact{margin-bottom:10px!important;padding-top:2px!important}
+
+/* Podium profile lives inside the platform, directly to the left of the name. */
+.sp-final-host-podium .tw-host-podium-person{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;min-width:0}
+.sp-final-host-podium .tw-host-podium-platform .tw-host-podium-avatar{
+  width:27px!important;height:27px!important;min-width:27px!important;margin:0!important;border-width:2px!important;box-shadow:0 3px 8px rgba(15,23,42,.17)!important;
+}
+.sp-final-host-podium .tw-host-podium-person>b{min-width:0;max-width:calc(100% - 34px)!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Docked explanation is a little larger and fades out in place instead of jumping away from the corner. */
+.sp-explanation-feedback.is-corner,
+.sp-explanation-feedback.is-leaving{
+  left:calc(100% - 18px)!important;
+  top:calc(100% - 18px)!important;
+  width:min(430px,calc(100vw - 36px))!important;
+  max-height:min(340px,48vh)!important;
+  overflow:auto!important;
+  transform:translate(-100%,-100%) scale(.90)!important;
+  transform-origin:right bottom!important;
+}
+.sp-explanation-feedback.is-corner{opacity:1!important}
+.sp-explanation-feedback.is-leaving{
+  opacity:0!important;
+  transition:opacity .62s ease!important;
+}
+@media(max-width:950px){
+  .sp-explanation-feedback.is-corner,.sp-explanation-feedback.is-leaving{
+    left:calc(100% - 14px)!important;top:calc(100% - 14px)!important;
+    width:min(390px,calc(100vw - 28px))!important;transform:translate(-100%,-100%) scale(.88)!important;
+  }
+}
+@media(max-width:600px){
+  .sp-explanation-feedback.is-corner,.sp-explanation-feedback.is-leaving{
+    left:calc(100% - 10px)!important;top:calc(100% - 10px)!important;
+    width:calc(100vw - 20px)!important;max-height:44vh!important;transform:translate(-100%,-100%) scale(.84)!important;
+  }
+}
+
+/* Revision 10.28.1 ------------------------------------------------------- */
+/* Fixed, compressed Live Top 5: no drag handle. It now mirrors the question-card glass/3D treatment. */
+.sp-live-top5{
+  width:216px!important;
+  padding:8px 9px 9px!important;
+  border:4px solid color-mix(in srgb,var(--sp-template-accent,#2b6cff) 76%,rgba(255,255,255,.62))!important;
+  border-radius:22px!important;
+  background:rgba(255,255,255,.70)!important;
+  backdrop-filter:blur(15px)!important;
+  -webkit-backdrop-filter:blur(15px)!important;
+  box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent,#2b6cff) 34%,rgba(15,23,42,.25)),0 15px 30px rgba(15,23,42,.15)!important;
+}
+.theme-dark .sp-live-top5{
+  background:rgba(6,18,42,.68)!important;
+  border-color:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 76%,#e5edff)!important;
+  box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent,#2b6cff) 42%,#061128),0 17px 32px rgba(0,0,0,.30)!important;
+}
+.sp-live-top5-title{font-size:11.5px!important;gap:5px!important;margin:0 2px 5px!important;line-height:1.1!important}
+.sp-live-top5-list{gap:2px!important}
+.sp-live-top5-row{height:29px!important;grid-template-columns:18px 16px minmax(0,1fr)!important;gap:2px!important}
+.sp-live-top5-rank{width:18px!important;height:22px!important;font-size:10px!important}
+.sp-live-top5-trophy{width:16px!important;height:22px!important}
+.sp-live-top5-trophy svg{width:12px!important;height:12px!important}
+.sp-live-top5-person{
+  min-height:27px!important;height:27px!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  gap:4px!important;padding:1px 5px!important;border-radius:8px!important;
+}
+.sp-live-top5-identity{gap:4px!important}
+.sp-live-top5-avatar{width:18px!important;height:18px!important;min-width:18px!important}
+.sp-live-top5-avatar svg{width:12px!important;height:12px!important}
+.sp-live-top5-name{font-size:9.5px!important;line-height:1!important}
+.sp-live-top5-person>b{font-size:9px!important;line-height:1!important}
+.sp-live-top5-separator{margin:5px 3px 4px!important}
+.sp-live-top5-me{
+  min-height:25px!important;padding:3px 5px!important;grid-template-columns:20px minmax(0,1fr) auto!important;gap:4px!important;
+  font-size:9px!important;border-radius:8px!important;
+}
+.sp-live-top5-me strong{font-size:8.8px!important}
+@media(max-width:1180px){.sp-live-top5{width:194px!important;left:10px!important}.sp-live-top5-name{font-size:9px!important}.sp-live-top5-person>b{font-size:8.6px!important}}
+@media(max-width:900px){.sp-live-top5{width:180px!important;top:118px!important;padding:7px!important}.sp-live-top5-row{height:27px!important}.sp-live-top5-person{height:25px!important;min-height:25px!important}}
+@media(max-width:640px){.sp-live-top5{width:164px!important;top:108px!important}.sp-live-top5-row{grid-template-columns:16px 14px minmax(0,1fr)!important}.sp-live-top5-rank{width:16px!important}.sp-live-top5-avatar{width:16px!important;height:16px!important;min-width:16px!important}.sp-live-top5-name{font-size:8.5px!important}.sp-live-top5-person>b{font-size:8px!important}.sp-live-top5-me{grid-template-columns:18px minmax(0,1fr) auto!important}.sp-live-top5-me strong{grid-column:auto!important}}
+
+/* Revision 10.28.1 follow-up ------------------------------------------------ */
+/* Lift Live Top 5 slightly and increase information scale without growing its shell. */
+.sp-live-top5{
+  top:138px!important;
+  background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 14%,rgba(255,255,255,.78))!important;
+  border-color:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 88%,rgba(255,255,255,.72))!important;
+  box-shadow:0 8px 0 color-mix(in srgb,var(--sp-template-accent,#2b6cff) 44%,rgba(15,23,42,.28)),0 15px 30px rgba(15,23,42,.15),0 0 18px color-mix(in srgb,var(--sp-template-accent,#2b6cff) 16%,transparent)!important;
+}
+.theme-dark .sp-live-top5{
+  background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 18%,rgba(6,18,42,.84))!important;
+  border-color:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 88%,#dce8ff)!important;
+}
+.sp-live-top5-title{font-size:12.5px!important}
+.sp-live-top5-title svg{width:17px!important;height:17px!important}
+.sp-live-top5-rank{font-size:11.5px!important;font-weight:1000!important}
+.sp-live-top5-trophy svg{width:14px!important;height:14px!important}
+.sp-live-top5-name{font-size:10.5px!important}
+.sp-live-top5-person>b{font-size:10.2px!important}
+.sp-live-top5-me{font-size:10px!important}
+.sp-live-top5-me strong{font-size:9.8px!important}
+@media(max-width:900px){.sp-live-top5{top:110px!important}.sp-live-top5-title{font-size:11.8px!important}.sp-live-top5-rank{font-size:10.5px!important}.sp-live-top5-name{font-size:9.8px!important}.sp-live-top5-person>b{font-size:9.5px!important}}
+@media(max-width:640px){.sp-live-top5{top:101px!important}.sp-live-top5-title{font-size:11px!important}.sp-live-top5-rank{font-size:10px!important}.sp-live-top5-name{font-size:9.2px!important}.sp-live-top5-person>b{font-size:8.8px!important}}
+
+/* Selected MCQ / True-False answers should read as clearly pressed/darkened. */
+.quiz-shell-new .quiz-choices .choice-btn.active{
+  filter:brightness(.76) saturate(1.06)!important;
+}

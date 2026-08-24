@@ -4406,3 +4406,1034 @@ body.dark-mode .tw-host-preview-zoom-card{
   .tw-bank-crossword-expanded .tw-bank-thinkspell-preview{margin-inline:auto!important;justify-self:center}
   .tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
 }
+
+/* Revision 10.20 — analytics, solid template cards, bank spacing, and guest join polish. */
+.tw-analytics-container-wide{max-width:1440px!important}
+.tw-analytics-back-row{display:flex;justify-content:flex-end;align-items:center;margin-bottom:4px;padding-top:2px}
+.tw-analytics-back-press>span{border-radius:10px!important;padding-inline:22px!important}
+.tw-analytics-advanced-layout{grid-template-columns:minmax(390px,470px) minmax(0,1fr)!important}
+.tw-analytics-advanced-layout.has-expanded-student{grid-template-columns:1fr!important}
+.tw-analytics-advanced-layout.has-expanded-student .tw-analytics-scoreboard{width:100%;max-width:none}
+.tw-analytics-question-card{cursor:default!important}
+.tw-analytics-question-toggle{width:100%;border:0;background:transparent;color:inherit;font:inherit;display:grid;grid-template-columns:minmax(46px,auto) minmax(0,1fr) auto 22px;gap:10px;align-items:center;padding:12px;text-align:left;cursor:pointer;transition:background .2s ease,padding .24s ease}
+.tw-analytics-question-toggle:hover{background:rgba(127,127,127,.06)}
+.tw-analytics-question-card.is-expanded .tw-analytics-question-toggle{padding:15px 14px 12px}
+.tw-analytics-summary-badges{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.tw-analytics-question-collapse{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .32s cubic-bezier(.2,.8,.2,1),opacity .24s ease}
+.tw-analytics-question-collapse>div{min-height:0;overflow:hidden}
+.tw-analytics-question-collapse.is-open{grid-template-rows:1fr;opacity:1}
+.tw-analytics-question-collapse .tw-analytics-expanded-detail,.tw-analytics-question-collapse .tw-analytics-batch-detail{padding:4px 14px 15px;border-top:3px solid rgba(127,127,127,.18)}
+.tw-analytics-batch-card{overflow:hidden}
+@media(max-width:900px){.tw-analytics-advanced-layout{grid-template-columns:1fr!important}.tw-analytics-question-toggle{grid-template-columns:auto minmax(0,1fr) 22px}.tw-analytics-summary-badges{grid-column:1/-1;justify-content:flex-start}}
+
+/* Question Bank: more compact two-column Crossword answers and centered template answers. */
+.tw-bank-answer-summary.is-think-spell{width:min(100%,650px)!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.tw-bank-answer-summary.is-think-spell .tw-bank-correct-answer{width:100%!important}
+.tw-bank-expand-button{margin-top:8px!important;margin-bottom:8px!important}
+.tw-bank-template-answer{justify-content:center!important;text-align:center!important;margin-inline:auto!important}
+.tw-bank-crossword-expanded{grid-template-columns:minmax(300px,1.12fr) minmax(260px,.88fr)!important;gap:28px!important;align-items:center!important}
+.tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-content:center!important;justify-content:center!important;gap:10px 12px!important;width:100%!important}
+.tw-bank-crossword-word{font-size:15px!important;min-height:48px!important;display:grid!important;place-items:center!important;text-align:center!important}
+.tw-bank-guess-answer{margin-inline:auto!important;text-align:center!important;justify-self:center!important;width:min(100%,340px)!important}
+@media(max-width:760px){.tw-bank-answer-summary.is-think-spell{grid-template-columns:1fr!important}.tw-bank-crossword-expanded{grid-template-columns:1fr!important}.tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+
+/* Guest join entry polish. */
+.tw-guest-join-theme{position:fixed!important;left:18px!important;bottom:18px!important;z-index:20!important;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important}
+.tw-guest-join-logo{transition:transform .18s ease,filter .18s ease}
+.tw-guest-join-logo:hover{transform:translateY(-2px);filter:brightness(.96)}
+.tw-guest-join-primary{transition:transform .16s ease,filter .18s ease,box-shadow .18s ease!important}
+.tw-guest-join-primary:hover:not(:disabled){transform:translateY(-2px);filter:brightness(.95);box-shadow:0 16px 34px rgba(43,108,255,.34)!important}
+.tw-guest-join-primary:active:not(:disabled){transform:translateY(2px);filter:brightness(.9)}
+
+/* Revision 10.20 finishing alignment tweaks. */
+.tw-analytics-back-press{border-radius:10px!important}
+.tw-bank-answer-summary.is-single .tw-bank-template-answer{
+  grid-column:1/-1!important;
+  width:min(100%,310px)!important;
+  justify-self:center!important;
+}
+.tw-bank-answer-summary.is-think-spell{padding-bottom:6px!important}
+.tw-bank-crossword-word-list{justify-self:center!important;max-width:520px!important}
+
+/* Revision 10.21 --------------------------------------------------------- */
+/* Analytics header: quiz title comes first and shares the row with Back. */
+.tw-analytics-title-row{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:8px
+}
+.tw-analytics-quiz-title{
+  margin:0!important;min-width:0;font-size:clamp(24px,3vw,34px);font-weight:950;overflow:hidden;text-overflow:ellipsis
+}
+.tw-analytics-badges-row{margin-top:1px}
+.tw-analytics-advanced-layout.has-expanded-student{grid-template-columns:minmax(390px,470px) minmax(0,1fr)!important}
+.tw-analytics-scoreboard.has-expanded-student{width:100%!important;max-width:none!important}
+.tw-analytics-theme,
+.tw-host-floating-theme{
+  width:44px!important;height:44px!important;border-radius:12px!important;display:grid!important;place-items:center!important;
+  box-shadow:0 8px 20px rgba(15,23,42,.14)!important;backdrop-filter:blur(10px)!important
+}
+body:not(.dark-mode) .tw-analytics-theme,
+body:not(.dark-mode) .tw-host-floating-theme{
+  background:rgba(255,255,255,.9)!important;color:#0f172a!important;border:3px solid #fff!important
+}
+body.dark-mode .tw-analytics-theme,
+body.dark-mode .tw-host-floating-theme{
+  background:rgba(7,17,36,.9)!important;color:#fff!important;border:3px solid #071024!important
+}
+.tw-analytics-theme svg,.tw-host-floating-theme svg{width:23px!important;height:23px!important}
+
+/* Teacher cards use the same solid raised-surface language as Create templates. */
+.tw-session-card,.tw-live-session-card,.tw-history-session-card,.tw-bank-content-card{
+  border-width:4px!important;transition:transform .18s ease,filter .18s ease,box-shadow .18s ease!important
+}
+.tw-session-card:hover,.tw-live-session-card:hover,.tw-history-session-card:hover,.tw-bank-content-card:hover{
+  transform:translateY(-2px);filter:brightness(.98)
+}
+
+/* Keep Crossword bank content long, while pulling the word side slightly toward the grid. */
+.tw-bank-answer-summary.is-think-spell{width:min(100%,720px)!important}
+.tw-bank-crossword-expanded{grid-template-columns:minmax(300px,1.05fr) minmax(300px,.95fr)!important;gap:16px!important}
+.tw-bank-crossword-word-list{width:100%!important;max-width:600px!important;transform:translateX(-12px)}
+.tw-bank-crossword-word{border-width:2px!important}
+@media(max-width:760px){.tw-bank-crossword-word-list{transform:none}.tw-analytics-title-row{align-items:flex-start}.tw-analytics-title-row .tw-analytics-back-press{margin-left:auto}}
+
+/* Guest join call-to-action now rises/presses like Get Started. */
+.tw-guest-join-primary{transition:transform .16s ease,filter .16s ease,box-shadow .16s ease!important}
+.tw-guest-join-primary:hover:not(:disabled){transform:translateY(-3px)!important;filter:brightness(.95)!important;box-shadow:0 14px 28px rgba(43,108,255,.30)!important}
+.tw-guest-join-primary:active:not(:disabled){transform:translateY(3px)!important;box-shadow:0 5px 12px rgba(43,108,255,.20)!important}
+
+/* Host template-colored question area, timer, progress, and analytics action. */
+.tw-host-pixel-timer{
+  --host-accent:#2b6cff;display:inline-flex;align-items:center;gap:8px;min-height:43px;padding:7px 12px;border-radius:10px;
+  border:3px solid color-mix(in srgb,var(--host-accent) 74%,#fff);background:color-mix(in srgb,var(--host-accent) 84%,#0f172a);
+  color:#fff;font-family:"Courier New",monospace;font-size:18px;font-weight:1000;letter-spacing:.08em;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent) 52%,#071024),0 0 22px color-mix(in srgb,var(--host-accent) 56%,transparent);
+  transition:background .6s ease,border-color .6s ease,box-shadow .6s ease
+}
+.tw-host-pixel-timer.is-warning{filter:saturate(1.18)}
+.tw-host-pixel-timer.is-danger{--host-accent:#ef4444}
+.tw-host-pixel-progress{
+  --host-accent:#2b6cff;height:13px!important;border:3px solid color-mix(in srgb,var(--host-accent) 70%,#071024)!important;border-radius:6px;overflow:hidden;
+  background:color-mix(in srgb,var(--host-accent) 35%,#071024)!important;box-shadow:inset 0 2px 5px rgba(0,0,0,.24),0 0 18px color-mix(in srgb,var(--host-accent) 30%,transparent)
+}
+.tw-host-pixel-progress>div{
+  height:100%;background-color:var(--host-accent)!important;
+  background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.24) 0 5px,transparent 5px 10px)!important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--host-accent) 70%,transparent);transition:width .2s linear,background-color .6s ease
+}
+.tw-host-pixel-progress.is-danger{--host-accent:#ef4444}
+.tw-host-open-analytics{
+  --tw-press-face:var(--host-accent,#2b6cff)!important;
+  --tw-press-base:color-mix(in srgb,var(--host-accent,#2b6cff) 68%,#071024)!important;
+  --tw-press-border:color-mix(in srgb,var(--host-accent,#2b6cff) 60%,#fff)!important
+}
+
+
+/* Revision 10.22 --------------------------------------------------------- */
+/* Dark mode hierarchy: dashboard section surfaces sit lighter than the page background. */
+body.dark-mode .tw-class-folders-shell,
+body.dark-mode .tw-class-report-panel,
+body.dark-mode .tw-teacher-create-two-col,
+body.dark-mode .tw-teacher-bank-toggle,
+body.dark-mode .tw-live-sessions-page section,
+body.dark-mode .tw-bank-page section,
+body.dark-mode .tw-home-overview-shell,
+body.dark-mode .tw-home-recent-shell,
+body.dark-mode .tw-home-performance-shell{background:#132847!important}
+body.dark-mode .tw-class-folders-shell,
+body.dark-mode .tw-class-report-panel{box-shadow:0 18px 38px rgba(0,0,0,.24)!important}
+
+/* Class report cards mirror Home Recent Sessions sizing and scrolling. */
+.tw-class-report-panel{min-height:0!important}
+.tw-class-report-list{display:grid!important;gap:12px!important;max-height:520px!important;overflow-y:auto!important;padding-right:7px!important}
+.tw-class-home-session-card{min-height:148px!important;box-sizing:border-box!important;padding:16px 18px!important;border-radius:18px!important}
+.tw-class-home-session-card:hover,.tw-teacher-shortcut-card:hover,.tw-bank-content-card:hover{transform:translateY(-3px)!important;filter:brightness(.97)!important;box-shadow:0 15px 0 -8px rgba(15,23,42,.28),0 20px 35px rgba(15,23,42,.16)!important}
+
+/* Create category selected state is intentionally heavier. */
+.tw-create-category-tutorial-target button{transition:border-width .14s ease,transform .16s ease,box-shadow .16s ease}
+.tw-create-category-tutorial-target button:hover{transform:translateY(-1px)}
+
+/* One consistent theme-aware scrollbar for the whole application. */
+*{scrollbar-width:thin;scrollbar-color:rgba(43,108,255,.62) rgba(148,163,184,.12)}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-track{background:rgba(148,163,184,.12);border-radius:999px}
+*::-webkit-scrollbar-thumb{background:rgba(43,108,255,.62);border:2px solid transparent;background-clip:padding-box;border-radius:999px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(43,108,255,.8);background-clip:padding-box}
+body.dark-mode *{scrollbar-color:rgba(147,197,253,.70) rgba(7,16,36,.55)}
+body.dark-mode *::-webkit-scrollbar-track{background:rgba(7,16,36,.55)}
+body.dark-mode *::-webkit-scrollbar-thumb{background:rgba(147,197,253,.70);border:2px solid transparent;background-clip:padding-box}
+
+/* Preview close is a blue 3D press button in every theme. */
+.tw-preview-close-press{--face:#2b6cff;--base:#173e9c;appearance:none;border:3px solid #102e7d;background:var(--base);border-radius:12px;padding:0;cursor:pointer;box-shadow:0 5px 0 #0f2d73,0 9px 18px rgba(43,108,255,.28)}
+.tw-preview-close-press span{display:block;padding:9px 17px;border-radius:9px;background:var(--face);color:#fff;font-weight:950;transform:translateY(-4px);transition:transform .12s ease,filter .16s ease}
+.tw-preview-close-press:hover span{transform:translateY(-5px);filter:brightness(1.06)}
+.tw-preview-close-press:active span{transform:translateY(0)}
+
+/* Saved bank cards for Crossword, Guess Word and Matching are permanently open. */
+.tw-bank-expanded-preview.is-default-open{display:block!important;margin-top:14px!important;padding:16px!important;border:2px solid!important;border-radius:16px!important}
+.tw-bank-guess-expanded{grid-template-columns:minmax(220px,320px) minmax(180px,1fr)!important;align-items:center!important;justify-items:stretch!important;gap:20px!important}
+.tw-bank-guess-images{width:100%!important;max-width:320px!important}
+.tw-bank-guess-images>div{border-width:3px!important}
+.tw-bank-guess-answer{width:100%!important;max-width:none!important;min-height:72px!important;font-size:18px!important}
+.tw-bank-matching-preview{display:grid!important;gap:10px!important}
+.tw-bank-matching-row{display:grid!important;grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr)!important;align-items:center!important;gap:10px!important}
+.tw-bank-matching-arrow{font-size:22px;font-weight:1000;text-align:center}
+@media(max-width:720px){.tw-bank-guess-expanded{grid-template-columns:1fr!important}.tw-bank-matching-row{grid-template-columns:1fr!important}.tw-bank-matching-arrow{transform:rotate(90deg)}}
+
+/* Quiz builder 10.22 visual system. */
+.tw-builder-title-button{font:inherit!important;font-size:clamp(20px,2.1vw,30px)!important;line-height:1.2!important;font-weight:950!important;letter-spacing:normal!important}
+.tw-builder-add-bank-icon{width:44px!important;min-width:44px!important;padding-inline:0!important;display:grid!important;place-items:center!important}
+.tw-builder-question-count{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-size:15px;font-weight:900;cursor:pointer;padding:8px 14px;border-radius:12px;transition:background .18s ease,transform .18s ease}
+.tw-builder-question-count:hover{background:rgba(43,108,255,.10);transform:translateY(-1px)}
+.tw-builder-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start;padding-inline:0;transition:grid-template-columns .28s ease}
+.tw-builder-workspace.has-question-strip{grid-template-columns:minmax(0,1fr) minmax(250px,320px)}
+.tw-builder-question-strip{position:sticky;top:116px;max-height:calc(100vh - 138px);overflow:hidden;border:4px solid rgba(43,108,255,.38);border-radius:20px;background:var(--tw-builder-strip-bg,#fff);box-shadow:0 20px 45px rgba(15,23,42,.16);display:flex;flex-direction:column;margin-right:20px}
+body.dark-mode .tw-builder-question-strip{--tw-builder-strip-bg:#132847}
+.tw-builder-question-strip-head{display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:2px solid rgba(127,127,127,.18)}
+.tw-builder-question-strip-head button{border:0;background:transparent;color:#2b6cff;font-weight:900;cursor:pointer}
+.tw-builder-question-strip-list{display:grid;gap:10px;padding:12px;overflow:auto}
+.tw-builder-question-mini{display:grid;grid-template-columns:30px minmax(0,1fr);gap:3px 8px;text-align:left;border:3px solid rgba(127,127,127,.18);border-radius:14px;padding:10px;background:rgba(127,127,127,.06);color:inherit;cursor:grab}
+.tw-builder-question-mini strong{grid-row:1/3;width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#2b6cff;color:#fff}.tw-builder-question-mini span{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tw-builder-question-mini small{opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tw-builder-question-mini.is-active{border-color:#2b6cff;box-shadow:0 0 0 3px rgba(43,108,255,.14)}
+.tw-builder-question-form{position:relative!important;padding-top:48px!important;transition:transform .2s ease,box-shadow .2s ease}
+.tw-builder-question-drag-handle{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:58px;height:27px;border:0;background:rgba(127,127,127,.10);border-radius:999px;color:inherit;cursor:grab;font-size:17px;font-weight:1000;letter-spacing:4px;display:grid;place-items:center}
+.tw-builder-question-form.is-dragging{transform:scale(.992);box-shadow:-28px 0 32px -24px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 75%,transparent),28px 0 32px -24px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 75%,transparent)!important}
+@media(max-width:920px){.tw-builder-workspace.has-question-strip{grid-template-columns:1fr}.tw-builder-question-strip{position:relative;top:auto;max-height:360px;margin:0 14px 18px}}
+
+/* Revision 10.22 builder header contrast. */
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-press-neutral,
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-settings-flat,
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-title-button{color:#fff!important}
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-title-button{background:transparent!important}
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-press-neutral{background:#fff!important;color:#1d4ed8!important;border-color:#fff!important}
+body.dark-mode .tw-bank-switch-shell,body.dark-mode .tw-bank-search-shell{background:#132847!important}
+
+
+/* Revision 10.23 --------------------------------------------------------- */
+/* Home-style hover: lift only; preserve each card's original face/base colors and shadow. */
+.tw-live-session-card:hover,
+.tw-bank-content-card:hover,
+.tw-class-home-session-card:hover,
+.tw-teacher-shortcut-card:hover{
+  transform:translateY(-3px)!important;
+  filter:none!important;
+}
+/* Preserve the exact resting 3D base while hovering. */
+.tw-live-session-card:hover,
+.tw-bank-content-card:hover,
+.tw-class-home-session-card:hover{
+  box-shadow:var(--tw-template-card-shadow)!important;
+}
+
+/* Recent template shortcut content gets more breathing room from the left edge. */
+.tw-teacher-shortcut-card{padding-left:24px!important;padding-right:20px!important}
+
+/* History search sits visibly above the dark page surface. */
+body.dark-mode .tw-history-search-field{background:#183253!important;border-color:#35557e!important}
+
+/* Host setup preview rainbow frame is thicker. Enlarged previews have no inner white rim. */
+.tw-host-preview-desktop,
+.tw-host-preview-mobile{border-width:5px!important}
+.tw-host-preview-zoom-card{
+  padding:0!important;
+  border:6px solid transparent!important;
+  background:conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+  overflow:hidden!important;
+}
+body.dark-mode .tw-host-preview-zoom-card{
+  background:conic-gradient(from 0deg,#ef4444,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444) border-box!important;
+}
+.tw-host-preview-zoom-card img{border-radius:14px!important}
+
+/* Guess Word bank answer matches the normal answer-card proportions instead of stretching. */
+.tw-bank-guess-answer{
+  min-height:58px!important;
+  width:min(100%,320px)!important;
+  max-width:320px!important;
+  justify-self:center!important;
+  padding:10px 14px!important;
+  box-sizing:border-box!important;
+}
+
+/* Quiz-builder header actions use a darker shade of the current template color. */
+.tw-builder-template-action,
+.tw-builder-template-action.tw-admin-press-blue{
+  --tw-press-face:var(--tw-builder-action-face,#173f9b)!important;
+  --tw-press-base:var(--tw-builder-action-base,#0f2d73)!important;
+  --tw-press-border:var(--tw-builder-action-border,#102e7d)!important;
+  color:#fff!important;
+}
+.tw-builder-template-action>span{color:#fff!important}
+.tw-builder-template-action svg{color:#fff!important}
+.tw-builder-template-nav{
+  border-color:var(--tw-builder-action-border,#102e7d)!important;
+  background:var(--tw-builder-action-face,#173f9b)!important;
+  color:#fff!important;
+  box-shadow:0 5px 0 var(--tw-builder-action-base,#0f2d73),0 10px 20px rgba(15,23,42,.16)!important;
+}
+.tw-builder-template-nav:hover:not(:disabled){transform:translateY(-1px)!important;filter:brightness(.97)!important}
+.tw-builder-template-nav:active:not(:disabled){transform:translateY(4px)!important;box-shadow:0 1px 0 var(--tw-builder-action-base,#0f2d73)!important}
+
+/* Settings toggles keep the current template hue even while off in dark mode. */
+body.dark-mode .tw-quiz-builder-page .tw-builder-settings-toggle-track{
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 42%,#102443)!important;
+  border-color:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 72%,#102443)!important;
+}
+
+/* Question pager + fixed sidebar smoothly give each other room. */
+.tw-builder-content-region{
+  --tw-builder-strip-space:0px;
+  transition:padding-right .34s cubic-bezier(.22,1,.36,1);
+}
+.tw-builder-content-region.has-question-strip{--tw-builder-strip-space:340px;padding-right:var(--tw-builder-strip-space)}
+.tw-builder-workspace{display:block!important;transition:none!important}
+.tw-builder-workspace.has-question-strip{grid-template-columns:none!important}
+.tw-builder-question-strip{
+  position:fixed!important;
+  right:20px!important;
+  top:94px!important;
+  width:min(310px,calc(100vw - 40px))!important;
+  max-height:calc(100dvh - 116px)!important;
+  margin:0!important;
+  z-index:1200!important;
+  border-left-width:5px!important;
+  animation:twBuilderStripIn .34s cubic-bezier(.22,1,.36,1) both!important;
+}
+@keyframes twBuilderStripIn{from{opacity:0;transform:translateX(48px)}to{opacity:1;transform:translateX(0)}}
+.tw-builder-question-strip.is-closing{animation:twBuilderStripOut .28s ease both!important}
+@keyframes twBuilderStripOut{to{opacity:0;transform:translateX(54px)}}
+.tw-builder-question-strip-head{justify-content:flex-end!important;min-height:46px!important}
+.tw-builder-question-strip-head b{display:none!important}
+.tw-builder-question-strip-close{
+  width:34px;height:34px;border:2px solid currentColor!important;border-radius:10px!important;
+  display:grid;place-items:center;padding:0!important;font-size:19px!important;line-height:1!important;
+  background:transparent!important;color:inherit!important;
+}
+.tw-builder-question-strip-close:hover{transform:none!important;background:rgba(127,127,127,.10)!important}
+.tw-builder-question-mini{
+  position:relative;display:grid!important;grid-template-columns:32px minmax(0,1fr)!important;
+  grid-template-rows:auto auto!important;gap:7px 9px!important;min-height:86px!important;
+  transition:transform .24s cubic-bezier(.22,1,.36,1),opacity .18s ease,box-shadow .2s ease,border-color .2s ease!important;
+}
+.tw-builder-question-mini:hover{transform:translateY(-2px)!important}
+.tw-builder-question-mini.is-drag-source>*{visibility:hidden!important}
+.tw-builder-question-mini.is-drag-source{opacity:.36!important;border-style:dashed!important;background:rgba(127,127,127,.08)!important}
+.tw-builder-question-mini.is-drop-before{transform:translateY(8px)!important}
+.tw-builder-question-mini.is-drop-after{transform:translateY(-8px)!important}
+.tw-builder-question-mini.is-drop-swap{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 32%,transparent)!important;border-color:var(--tw-template-accent,#2b6cff)!important}
+.tw-builder-question-mini .tw-mini-question-prompt{font-weight:900;white-space:normal;line-height:1.25;max-height:2.5em;overflow:hidden}
+.tw-builder-question-mini .tw-mini-question-answer{font-size:11px;opacity:.74;white-space:normal;line-height:1.25;max-height:2.5em;overflow:hidden}
+@media(max-width:1050px){
+  .tw-builder-content-region.has-question-strip{padding-right:0!important}
+  .tw-builder-question-strip{top:84px!important;right:12px!important;width:min(320px,calc(100vw - 24px))!important}
+}
+
+/* Question form dragging: the whole card floats/scales, while the website edges indicate reorder targets. */
+.tw-builder-question-form{will-change:transform;transform-origin:center center}
+.tw-builder-question-form.is-dragging{
+  z-index:1450!important;
+  transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.91)!important;
+  box-shadow:0 28px 70px rgba(0,0,0,.28),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 28%,transparent)!important;
+  cursor:grabbing!important;
+  pointer-events:none;
+}
+.tw-builder-question-drag-handle{transition:none!important}
+.tw-builder-question-drag-handle:hover,
+.tw-builder-question-drag-handle:focus,
+.tw-builder-question-drag-handle:active{transform:translateX(-50%)!important;filter:none!important;background:rgba(127,127,127,.10)!important;box-shadow:none!important}
+.tw-quiz-builder-page::before,
+.tw-quiz-builder-page::after{
+  content:"";position:fixed;top:0;bottom:0;width:18px;z-index:1400;pointer-events:none;opacity:0;
+  transition:opacity .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.tw-quiz-builder-page::before{left:0}.tw-quiz-builder-page::after{right:0}
+.tw-quiz-builder-page.is-drag-edge-left::before,
+.tw-quiz-builder-page.is-drag-edge-right::after{
+  opacity:1;background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 42%,transparent);
+  box-shadow:0 0 34px 16px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 58%,transparent);
+}
+
+/* More solid template-coded question form and raised timing/points cards. */
+.tw-builder-question-form{background:var(--tw-builder-question-solid)!important}
+.tw-builder-meta-card-3d{
+  border-width:3px!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 52%,rgba(15,23,42,.42)),0 12px 24px rgba(15,23,42,.14)!important;
+}
+.tw-builder-save-bank-fixed>span{min-width:126px!important;justify-content:center!important;box-sizing:border-box!important}
+
+/* MCQ mini-controls are always white; selection is shown by the template-colored outline only. */
+.tw-builder-mini-white{
+  background:#fff!important;color:#111827!important;border:3px solid #cbd5e1!important;
+  box-shadow:0 4px 0 #94a3b8,0 9px 16px rgba(15,23,42,.13)!important;
+}
+.tw-builder-mini-white.is-selected{border-color:var(--tw-template-accent,#2b6cff)!important;box-shadow:0 4px 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 60%,#64748b),0 0 0 3px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 16%,transparent)!important;transform:none!important;filter:none!important}
+.tw-builder-mini-white:hover:not(:disabled){background:#fff!important;color:#111827!important;filter:none!important;transform:translateY(-1px)!important}
+.tw-builder-mini-white:disabled{background:#fff!important;color:#64748b!important}
+
+/* MCQ correct selector now combines the letter and selection circle. */
+.tw-mcq-correct-dot.tw-mcq-letter-selector{width:34px!important;height:34px!important;font-size:14px!important;font-weight:1000!important;border-width:3px!important;flex:0 0 34px!important}
+.tw-mcq-choice-drag-handle{
+  width:34px;height:42px;flex:0 0 34px;border:0;background:transparent;color:#64748b;cursor:grab;
+  display:grid;place-items:center;font-size:21px;font-weight:1000;line-height:1;border-radius:9px;
+}
+.tw-mcq-choice-drag-handle:hover{transform:none!important;background:rgba(127,127,127,.09)!important;color:inherit!important}
+.tw-mcq-normal-choice.is-drag-source>*{visibility:hidden!important}
+.tw-mcq-normal-choice.is-drag-source{opacity:.34!important;border-style:dashed!important;background:rgba(127,127,127,.08)!important}
+.tw-mcq-normal-choice.is-drag-over{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 22%,transparent)!important;transform:translateY(-2px)!important}
+.tw-mcq-normal-choice{transition:transform .22s cubic-bezier(.22,1,.36,1),border-color .18s ease,background .18s ease,box-shadow .18s ease!important}
+
+/* True/False state icon softly appears after the selected circle fills. */
+.tw-tf-state-dot{position:relative;width:22px;height:22px;border-radius:999px;border:3px solid currentColor;display:grid;place-items:center;transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+.tw-tf-state-dot::after{content:"";font-size:15px;font-weight:1000;color:#fff;opacity:0;transform:scale(.55) rotate(-14deg);transition:opacity .18s ease .12s,transform .2s cubic-bezier(.22,1,.36,1) .12s}
+.tw-tf-state-dot.is-active{background:currentColor}
+.tw-tf-state-dot.is-true::after{content:"✓"}.tw-tf-state-dot.is-false::after{content:"×";font-size:18px}
+.tw-tf-state-dot.is-active::after{opacity:1;transform:scale(1) rotate(0)}
+
+/* Matching builder wording/control polish. */
+.tw-matching-white-action{background:#fff!important;color:#111827!important;border:3px solid #cbd5e1!important;box-shadow:0 4px 0 #94a3b8,0 9px 16px rgba(15,23,42,.13)!important}
+.tw-matching-white-action:hover:not(:disabled){background:#fff!important;color:#111827!important;filter:none!important}
+.tw-matching-arrow{border-width:4px!important}
+.tw-matching-delete-minus{min-width:40px!important;padding-inline:12px!important}
+.tw-matching-distractor-input{min-height:78px!important;resize:vertical!important;line-height:1.45!important}
+
+/* Revision 10.24 — Quiz Builder interaction + template surface refinements. */
+.tw-builder-title-input,
+.tw-builder-title-button{
+  font-family:inherit!important;
+  font-style:normal!important;
+  font-weight:950!important;
+  letter-spacing:normal!important;
+}
+
+/* Bank choices and builder dialog actions follow the active template color. */
+.tw-builder-bank-choice-press{
+  border-width:3px!important;
+  border-color:color-mix(in srgb,var(--tw-bank-accent,#2b6cff) 70%,#475569)!important;
+  background:var(--tw-bank-soft,rgba(43,108,255,.12))!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--tw-bank-accent,#2b6cff) 64%,#334155),0 11px 20px rgba(15,23,42,.14)!important;
+  transition:transform .16s ease!important;
+}
+.tw-builder-bank-choice-press:hover{transform:translateY(-2px)!important;filter:none!important}
+.tw-builder-bank-choice-press:active{transform:translateY(3px)!important;box-shadow:0 2px 0 color-mix(in srgb,var(--tw-bank-accent,#2b6cff) 64%,#334155)!important}
+.tw-builder-dialog-template-action,
+.tw-builder-duplicate-action{
+  --tw-press-face:var(--tw-template-accent,#2b6cff)!important;
+  --tw-press-base:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 66%,#0f172a)!important;
+  --tw-press-border:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 74%,#0f172a)!important;
+}
+.tw-builder-review-duplicates{font-weight:900!important;text-decoration:underline;text-underline-offset:3px}
+
+/* Sidebar is its own fixed, template-coded rail and animates independently. */
+.tw-builder-question-strip{
+  border-left:4px solid color-mix(in srgb,var(--tw-template-accent,#2b6cff) 72%,#475569)!important;
+  border-top-color:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 34%,var(--tw-builder-border,#cbd5e1))!important;
+  border-bottom-color:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 34%,var(--tw-builder-border,#cbd5e1))!important;
+  box-shadow:-12px 0 30px rgba(15,23,42,.12),-3px 0 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 16%,transparent)!important;
+}
+.tw-builder-question-strip-close{
+  border:0!important;
+  outline:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+}
+.tw-builder-question-strip-close:hover{transform:none!important;filter:none!important;background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 10%,transparent)!important}
+.tw-builder-question-mini{
+  border-color:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 50%,var(--tw-builder-border,#cbd5e1))!important;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 8%,var(--tw-builder-card,#fff))!important;
+  transition:transform .22s cubic-bezier(.22,1,.36,1),box-shadow .2s ease,border-color .2s ease,background .2s ease!important;
+}
+.tw-builder-question-mini.is-active{
+  border-color:var(--tw-template-accent,#2b6cff)!important;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 16%,var(--tw-builder-card,#fff))!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 17%,transparent),0 6px 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 44%,#475569)!important;
+}
+.tw-builder-question-mini.is-drag-source{
+  opacity:.3!important;
+  border-style:dashed!important;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 5%,transparent)!important;
+}
+.tw-builder-question-mini-drag-image{
+  opacity:1!important;
+  border:3px solid var(--tw-template-accent,#2b6cff)!important;
+  border-radius:16px!important;
+  background:var(--tw-builder-card,#fff)!important;
+  box-shadow:0 18px 42px rgba(15,23,42,.28)!important;
+}
+.tw-builder-question-strip-gap{
+  height:9px;
+  margin:0 5px;
+  border-radius:999px;
+  background:transparent;
+  transition:height .2s cubic-bezier(.22,1,.36,1),background .16s ease,box-shadow .16s ease;
+}
+.tw-builder-question-strip-gap.is-active{
+  height:28px;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 18%,transparent);
+  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 52%,transparent);
+}
+
+/* Held question form becomes a compact floating card; page edges are the targets. */
+.tw-builder-question-form.is-dragging{
+  transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.61)!important;
+  transform-origin:center top!important;
+  box-shadow:0 30px 72px rgba(0,0,0,.30),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 24%,transparent)!important;
+}
+.tw-quiz-builder-page.is-question-dragging::before,
+.tw-quiz-builder-page.is-question-dragging::after{
+  opacity:.42!important;
+  width:34px!important;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 22%,transparent)!important;
+  box-shadow:0 0 54px 24px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 30%,transparent)!important;
+}
+.tw-quiz-builder-page.is-drag-edge-left::before,
+.tw-quiz-builder-page.is-drag-edge-right::after{
+  opacity:1!important;
+  background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 48%,transparent)!important;
+  box-shadow:0 0 72px 32px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 62%,transparent)!important;
+}
+.tw-builder-edge-drag-hint{
+  position:fixed;top:50%;z-index:1460;pointer-events:none;
+  width:126px;transform:translateY(-50%);text-align:center;
+  font-weight:950;font-size:13px;line-height:1.18;letter-spacing:.01em;
+  color:var(--tw-template-accent,#2b6cff);opacity:.38;
+  text-shadow:0 0 15px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 45%,transparent);
+  transition:opacity .18s ease,transform .2s ease;
+}
+.tw-builder-edge-drag-hint.is-left{left:20px}.tw-builder-edge-drag-hint.is-right{right:20px}
+.tw-builder-edge-drag-hint.is-near{opacity:.95;transform:translateY(-50%) scale(1.05)}
+
+/* Dark-mode question form is solid, not a neon/glass panel. */
+body.dark-mode .tw-builder-question-form,
+.dark-mode .tw-builder-question-form{
+  background:var(--tw-builder-question-solid,#18283f)!important;
+  box-shadow:0 7px 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 45%,#0f172a),0 18px 34px rgba(0,0,0,.26)!important;
+}
+.tw-builder-save-bank-fixed{
+  --tw-press-face:var(--tw-template-accent,#2b6cff)!important;
+  --tw-press-base:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 66%,#0f172a)!important;
+  --tw-press-border:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 76%,#0f172a)!important;
+}
+
+/* MCQ selector shape transitions and right-handle dragging. */
+.tw-mcq-letter-selector{transition:border-radius .30s cubic-bezier(.22,1,.36,1),transform .22s ease,background .22s ease,border-color .22s ease!important}
+.tw-mcq-letter-selector.is-two-answer{border-radius:8px!important}
+.tw-mcq-choice-drag-handle{touch-action:none!important}
+.tw-mcq-choice-drag-handle:active{cursor:grabbing!important}
+
+/* True/False staged transition: fill -> colored icon -> border disappears. */
+.tw-tf-state-dot{
+  position:relative!important;
+  color:var(--tw-tf-color)!important;
+  background:transparent!important;
+  border:3px solid var(--tw-tf-idle,#64748b)!important;
+  display:grid!important;place-items:center!important;
+  transition:background .18s ease,border-color .18s ease .18s!important;
+}
+.tw-tf-state-dot::after{
+  position:absolute!important;inset:0!important;display:grid!important;place-items:center!important;
+  color:#fff!important;opacity:0!important;transform:scale(.72)!important;
+  transition:color .10s ease,opacity .16s ease .08s,transform .18s ease .08s!important;
+}
+.tw-tf-state-dot.is-active{
+  background:color-mix(in srgb,var(--tw-tf-color) 24%,transparent)!important;
+  border-color:transparent!important;
+  transition:background .16s ease,border-color .16s ease .22s!important;
+}
+.tw-tf-state-dot.is-active::after{
+  color:var(--tw-tf-color)!important;opacity:1!important;transform:scale(1)!important;
+  transition:color .12s ease .08s,opacity .17s ease .12s,transform .20s cubic-bezier(.22,1,.36,1) .12s!important;
+}
+
+/* Matching builder controls. */
+.tw-matching-arrow:not(:disabled){
+  color:#fff!important;
+  background:var(--tw-match-accent,var(--tw-template-accent,#f59e0b))!important;
+  border-color:color-mix(in srgb,var(--tw-match-accent,var(--tw-template-accent,#f59e0b)) 74%,#334155)!important;
+  box-shadow:0 4px 0 color-mix(in srgb,var(--tw-match-accent,var(--tw-template-accent,#f59e0b)) 58%,#334155)!important;
+}
+.tw-matching-arrow:disabled{filter:none!important;box-shadow:none!important;opacity:.45!important}
+.tw-matching-delete-minus{border:2px solid currentColor!important}
+.tw-matching-distractor-input{min-height:104px!important;height:104px!important;resize:vertical!important}
+.tw-matching-dummy-card .tw-builder-image-tile,
+.tw-matching-dummy-card .tw-builder-image-upload{
+  width:132px!important;min-width:132px!important;max-width:132px!important;
+  height:132px!important;min-height:132px!important;max-height:132px!important;
+  aspect-ratio:1 / 1!important;justify-self:end!important;
+}
+.tw-matching-dummy-card .tw-builder-image-tile>label,
+.tw-matching-dummy-card .tw-builder-image-tile img{
+  width:100%!important;height:100%!important;min-height:0!important;aspect-ratio:1 / 1!important;object-fit:cover!important;
+}
+@media(max-width:640px){
+  .tw-matching-dummy-card .tw-builder-image-tile,
+  .tw-matching-dummy-card .tw-builder-image-upload{justify-self:start!important}
+}
+
+/* Matching bank labels. */
+.tw-bank-matching-column-labels{
+  display:grid;grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr);gap:10px;align-items:end;
+  margin:2px 0 8px;font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--tw-text-muted,#64748b);
+}
+.tw-bank-matching-column-labels>:first-child{grid-column:1}.tw-bank-matching-column-labels>:last-child{grid-column:3}
+
+/* Host-launch mode controls use the newest raised press treatment. */
+.tw-host-mode-row .tw-host-mode-press{
+  min-height:64px!important;
+  border:3px solid #173d89!important;
+  border-radius:18px!important;
+  background:#173d89!important;
+  box-shadow:0 7px 0 #0f2c6f,0 13px 22px rgba(15,23,42,.16)!important;
+  overflow:hidden!important;
+  transition:transform .16s ease,box-shadow .16s ease!important;
+}
+.tw-host-mode-row .tw-host-mode-press>span{background:#2b6cff!important;color:#fff!important;min-height:58px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.tw-host-mode-row .tw-host-mode-press:hover:not(:disabled){transform:translateY(-2px)!important;filter:none!important}
+.tw-host-mode-row .tw-host-mode-press:active:not(:disabled),
+.tw-host-mode-row .tw-host-mode-press.is-selected,
+.tw-host-mode-row .tw-host-mode-press.is-basic-locked{
+  transform:translateY(5px)!important;box-shadow:0 2px 0 #0f2c6f!important;
+}
+.tw-host-mode-row .tw-host-mode-press.is-basic-locked{opacity:1!important;cursor:not-allowed!important}
+.tw-host-mode-row .tw-host-mode-press:disabled:not(.is-basic-locked){opacity:.48!important;cursor:not-allowed!important}
+
+/* Host-panel 3D controls, metrics, template Next action and flowing timer. */
+.tw-host-modern-press{border-radius:16px!important;transition:transform .16s ease,box-shadow .16s ease!important}
+.tw-host-modern-press:hover:not(:disabled){transform:translateY(-2px)!important;filter:none!important}
+.tw-host-next-template{
+  --tw-press-face:var(--host-accent,#2b6cff)!important;
+  --tw-press-base:color-mix(in srgb,var(--host-accent,#2b6cff) 62%,#0f172a)!important;
+  --tw-press-border:color-mix(in srgb,var(--host-accent,#2b6cff) 75%,#0f172a)!important;
+}
+.tw-host-dialog-template{
+  --tw-press-face:var(--host-dialog-accent,#2b6cff)!important;
+  --tw-press-base:color-mix(in srgb,var(--host-dialog-accent,#2b6cff) 62%,#0f172a)!important;
+  --tw-press-border:color-mix(in srgb,var(--host-dialog-accent,#2b6cff) 75%,#0f172a)!important;
+}
+.tw-host-white-metric{
+  background:#fff!important;color:#111827!important;
+  border-color:#d7e0ee!important;box-shadow:0 3px 0 #b8c4d6!important;
+}
+.tw-host-timer-fill,
+.tw-host-pixel-progress>span,
+.tw-host-pixel-progress .tw-host-timer-fill{
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--host-accent,#2b6cff) 76%,#0d47a1),var(--host-accent,#2b6cff),color-mix(in srgb,var(--host-accent,#2b6cff) 66%,#fff),var(--host-accent,#2b6cff))!important;
+  background-size:240% 100%!important;
+  animation:tw1024HostTimerFlow 2.1s linear infinite!important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--host-accent,#2b6cff) 62%,transparent),0 0 28px color-mix(in srgb,var(--host-accent,#2b6cff) 30%,transparent)!important;
+  transition:width .18s linear,background .75s ease,box-shadow .75s ease!important;
+}
+.tw-host-pixel-progress.is-warning>span,
+.tw-host-pixel-progress.is-danger>span,
+.tw-host-timer.is-warning .tw-host-timer-fill,
+.tw-host-timer.is-danger .tw-host-timer-fill{
+  background-image:linear-gradient(100deg,#ff7b7b,#ef4444,#ffb0b0,#dc2626)!important;
+  box-shadow:0 0 18px rgba(239,68,68,.72),0 0 34px rgba(239,68,68,.38)!important;
+}
+@keyframes tw1024HostTimerFlow{to{background-position:-240% 0}}
+/* Revision 10.24 host timer final selectors. */
+.tw-host-pixel-timer{
+  background-image:linear-gradient(105deg,color-mix(in srgb,var(--host-accent,#2b6cff) 74%,#0f172a),var(--host-accent,#2b6cff),color-mix(in srgb,var(--host-accent,#2b6cff) 68%,#fff),var(--host-accent,#2b6cff))!important;
+  background-size:240% 100%!important;
+  animation:tw1024HostTimerFlow 2.2s linear infinite!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent,#2b6cff) 52%,#071024),0 0 18px color-mix(in srgb,var(--host-accent,#2b6cff) 74%,transparent),0 0 34px color-mix(in srgb,var(--host-accent,#2b6cff) 36%,transparent)!important;
+  transition:background .72s ease,border-color .72s ease,box-shadow .72s ease,color .72s ease!important;
+}
+.tw-host-pixel-timer.is-warning,
+.tw-host-pixel-timer.is-danger{
+  --host-accent:#ef4444!important;
+  background-image:linear-gradient(105deg,#991b1b,#ef4444,#fecaca,#dc2626)!important;
+}
+.tw-host-pixel-progress>div{
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--host-accent,#2b6cff) 76%,#0d47a1),var(--host-accent,#2b6cff),color-mix(in srgb,var(--host-accent,#2b6cff) 66%,#fff),var(--host-accent,#2b6cff)),repeating-linear-gradient(90deg,rgba(255,255,255,.22) 0 5px,transparent 5px 10px)!important;
+  background-size:240% 100%,auto!important;
+  animation:tw1024HostTimerFlow 2.1s linear infinite!important;
+  transition:width .18s linear,background .72s ease,box-shadow .72s ease!important;
+}
+.tw-host-pixel-progress.is-warning,
+.tw-host-pixel-progress.is-danger{--host-accent:#ef4444!important;border-color:#991b1b!important;background:#7f1d1d!important}
+
+
+/* Revision 10.25 — Quiz Builder drag scale, faster T/F state motion, and Matching action parity. */
+.tw-builder-question-form{
+  transition:transform .34s cubic-bezier(.22,1,.36,1),box-shadow .24s ease!important;
+}
+.tw-builder-question-form.is-dragging{transition:none!important}
+.tw-builder-question-form.is-dragging.is-template-mcq,
+.tw-builder-question-form.is-dragging.is-template-matching,
+.tw-builder-question-form.is-dragging.is-template-think-spell{
+  transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.41)!important;
+  transform-origin:center top!important;
+}
+.tw-builder-edge-drag-hint{
+  width:190px!important;
+  font-size:19px!important;
+  line-height:1.14!important;
+  font-weight:1000!important;
+}
+.tw-builder-edge-drag-hint.is-left{left:28px!important}
+.tw-builder-edge-drag-hint.is-right{right:28px!important}
+
+/* True / False builder: quick circle → color → icon transition. */
+.tw-tf-state-dot{
+  color:var(--tw-tf-idle,currentColor)!important;
+  border-color:currentColor!important;
+  background:transparent!important;
+  transition:border-color .08s ease .04s,color .08s ease,background .08s ease!important;
+}
+.tw-tf-state-dot::after{
+  color:#fff!important;
+  transition:color .045s ease,opacity .07s ease,transform .08s cubic-bezier(.22,1,.36,1)!important;
+}
+.tw-tf-state-dot.is-active{
+  color:var(--tw-tf-color,currentColor)!important;
+  animation:twTfSelect1025 .16s ease both!important;
+}
+.tw-tf-state-dot.is-active::after{
+  color:var(--tw-tf-color,currentColor)!important;
+  opacity:1!important;
+  transform:scale(1) rotate(0)!important;
+  animation:twTfIcon1025 .16s ease both!important;
+}
+.tw-tf-state-dot.is-false.is-active::after{transform:translateY(-2px) scale(1) rotate(0)!important}
+@keyframes twTfSelect1025{
+  0%{border-color:var(--tw-tf-idle,currentColor);background:transparent}
+  34%{border-color:var(--tw-tf-color,currentColor);background:var(--tw-tf-color,currentColor)}
+  62%,100%{border-color:transparent;background:transparent}
+}
+@keyframes twTfIcon1025{
+  0%,36%{opacity:0;color:#fff;transform:scale(.72)}
+  54%{opacity:.45;color:#fff}
+  100%{opacity:1;color:var(--tw-tf-color,currentColor);transform:scale(1)}
+}
+.tw-builder-answer-choice{transition:background .12s ease,border-color .12s ease,color .12s ease,box-shadow .12s ease,outline-color .12s ease!important}
+
+/* Revision 10.25 — Student gameplay. */
+/* True is green and False is red in both live and assigned gameplay. */
+.quiz-choices.true-false-choices .choice-btn:nth-child(1){--choice-face:#7fd09a!important;--choice-base:#25753f!important;--choice-border:#35a159!important;--choice-ink:#14532d!important}
+.quiz-choices.true-false-choices .choice-btn:nth-child(2){--choice-face:#f58b8b!important;--choice-base:#b72f3b!important;--choice-border:#d74750!important;--choice-ink:#7f1d1d!important}
+.theme-dark .quiz-choices.true-false-choices .choice-btn:nth-child(1){--choice-face:#1f6338!important;--choice-base:#14532d!important;--choice-border:#22c55e!important;--choice-ink:#bbf7d0!important}
+.theme-dark .quiz-choices.true-false-choices .choice-btn:nth-child(2){--choice-face:#7f2932!important;--choice-base:#7f1d1d!important;--choice-border:#ef4444!important;--choice-ink:#fecaca!important}
+
+/* Keep the full explanation card inside the viewport when it docks. */
+.sp-explanation-feedback.is-corner{
+  left:calc(100% - 18px)!important;
+  top:calc(100% - 18px)!important;
+  width:min(390px,calc(100vw - 36px))!important;
+  max-height:min(320px,46vh)!important;
+  overflow:auto!important;
+  transform:translate(-100%,-100%) scale(.82)!important;
+  transform-origin:right bottom!important;
+}
+@media(max-width:950px){
+  .sp-explanation-feedback.is-corner{left:calc(100% - 14px)!important;top:calc(100% - 14px)!important;width:min(350px,calc(100vw - 28px))!important;transform:translate(-100%,-100%) scale(.82)!important}
+}
+@media(max-width:600px){
+  .sp-explanation-feedback.is-corner{left:calc(100% - 10px)!important;top:calc(100% - 10px)!important;width:calc(100vw - 20px)!important;max-height:42vh!important;transform:translate(-100%,-100%) scale(.78)!important}
+}
+
+/* Student final navigation uses the exact shared TeacherPressButton construction. */
+.tw-student-final-nav{min-width:220px!important;max-width:min(360px,100%)!important}
+.sp-final-dashboard-row .tw-student-final-nav{width:min(360px,100%)!important}
+
+/* Name and points live inside the podium platform. */
+.sp-podium-platform{padding:10px 8px!important;box-sizing:border-box!important}
+.sp-podium-platform-content{display:grid;place-items:center;align-content:center;gap:4px;width:100%;min-width:0;color:#fff}
+.sp-podium-platform .sp-podium-name{color:#fff!important;width:100%;font-weight:950;text-shadow:0 1px 3px rgba(0,0,0,.30)}
+.sp-podium-platform .sp-podium-points{color:#fff!important;margin:0!important;font-size:13px!important;text-shadow:0 1px 3px rgba(0,0,0,.30)}
+.sp-podium-platform-content>b{font-size:16px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.30)}
+
+/* Revision 10.25 — Host panel. */
+/* Frost only the scoreboard surface; title, trophies and podium platforms stay sharp above it. */
+.tw-host-live-v25 .tw-host-scoreboard{
+  background:rgba(255,255,255,.42)!important;
+  backdrop-filter:blur(16px) saturate(1.12)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.12)!important;
+}
+body.dark-mode .tw-host-live-v25 .tw-host-scoreboard{
+  background:rgba(8,20,43,.58)!important;
+}
+.tw-host-scoreboard .tw-host-section-title,
+.tw-host-scoreboard .tw-host-podium{position:relative;z-index:1}
+
+/* Answered badge turns green when every expected participant has answered. */
+.tw-host-white-metric.is-complete{
+  background:#22c55e!important;
+  color:#fff!important;
+  border-color:#16a34a!important;
+  box-shadow:0 3px 0 #15803d,0 0 15px rgba(34,197,94,.34)!important;
+}
+
+/* Header timer is neon green until its existing 4→3 second red warning takes over. */
+.tw-host-pixel-timer:not(.is-warning):not(.is-danger){
+  --host-accent:#22c55e!important;
+  border-color:#86efac!important;
+  background-image:linear-gradient(105deg,#0f7a38,#22c55e,#bbf7d0,#16a34a)!important;
+  box-shadow:0 5px 0 #0f6a32,0 0 20px rgba(34,197,94,.82),0 0 38px rgba(34,197,94,.46)!important;
+}
+
+/* Wait / Review are solid-blue raised buttons without a contrasting inner outline. */
+.tw-host-dialog-blue-no-outline>span{border-color:var(--tw-press-face,#2b6cff)!important}
+
+/* Guess Word host preview now includes the correct answer beneath the 2×2 clue images. */
+.tw-host-guess-preview{display:grid;gap:13px;width:min(100%,720px);margin-inline:auto}
+.tw-host-guess-answer{border:3px solid;border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent,#22c55e) 32%,#475569)}
+.tw-host-guess-answer>span{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.68}
+.tw-host-guess-answer>b{font-size:clamp(18px,2vw,25px);overflow-wrap:anywhere}
+
+/* Host actions now inherit the shared 3D press button geometry without host-only hover transforms. */
+.tw-host-actions .tw-host-action-button,
+.tw-host-question-meta .tw-host-action-button{
+  transform:none!important;
+  border-radius:10px!important;
+  transition:box-shadow .16s ease,filter .16s ease!important;
+}
+.tw-host-actions .tw-host-action-button:hover:not(:disabled),
+.tw-host-question-meta .tw-host-action-button:hover:not(:disabled){transform:none!important;filter:none!important}
+.tw-host-actions .tw-host-action-button>span,
+.tw-host-question-meta .tw-host-action-button>span{
+  border-radius:10px!important;
+  transform:translateY(-5px)!important;
+}
+.tw-host-actions .tw-host-action-button:hover:not(:disabled)>span,
+.tw-host-question-meta .tw-host-action-button:hover:not(:disabled)>span{transform:translateY(-6px)!important;filter:brightness(.9)!important}
+.tw-host-actions .tw-host-action-button:active:not(:disabled)>span,
+.tw-host-question-meta .tw-host-action-button:active:not(:disabled)>span{transform:translateY(0)!important;filter:brightness(.86)!important}
+
+/* Revision 10.26 — smooth question-form pickup and release. */
+.tw-builder-question-form.is-dragging:not(.is-drag-settled){
+  transition:transform .23s cubic-bezier(.16,1,.3,1),box-shadow .23s ease!important;
+}
+.tw-builder-question-form.is-dragging.is-drag-settled{transition:none!important}
+.tw-builder-question-form:not(.is-dragging){transition:transform .39s cubic-bezier(.16,1,.3,1),box-shadow .32s ease!important}
+
+/* Revision 10.26 — host score modes, student-style answer previews, and calmer neon timer. */
+.tw-host-score-mode-chip{
+  border:0!important;background:color-mix(in srgb,var(--host-accent,#2b6cff) 16%,transparent)!important;
+  color:var(--host-accent,#2b6cff)!important;border-radius:999px!important;padding:7px 11px!important;
+  font-weight:950!important;font-size:12px!important;cursor:pointer!important;box-shadow:none!important;
+}
+.tw-host-score-mode-chip:hover{background:color-mix(in srgb,var(--host-accent,#2b6cff) 24%,transparent)!important}
+.tw-host-score-click{font:inherit;cursor:pointer!important}
+.tw-host-podium-platform .tw-host-score-click{
+  border:0!important;padding:0!important;margin:0!important;background:transparent!important;color:#fff!important;
+  font-weight:1000!important;text-shadow:0 1px 2px rgba(0,0,0,.55)!important;box-shadow:none!important;
+}
+.tw-host-attendance-score{
+  border:0!important;background:transparent!important;color:inherit!important;padding:2px 4px!important;
+  font-weight:1000!important;border-radius:8px!important;box-shadow:none!important;
+}
+.tw-host-attendance-score:hover{background:color-mix(in srgb,var(--host-accent,#2b6cff) 12%,transparent)!important}
+
+.tw-host-pixel-timer:not(.is-warning):not(.is-danger){
+  --host-accent:#22c55e!important;
+  color:#f0fff4!important;
+  background:#168a42!important;
+  background-image:linear-gradient(110deg,#116b34,#19984a 45%,#168a42 72%,#11753a)!important;
+  background-size:180% 100%!important;
+  animation:tw1024HostTimerFlow 3.3s linear infinite!important;
+  border-color:#5ee68c!important;
+  box-shadow:0 4px 0 #0e632f,0 0 13px rgba(34,197,94,.54),0 0 23px rgba(34,197,94,.24)!important;
+  text-shadow:0 1px 2px rgba(0,0,0,.22)!important;
+}
+.tw-host-pixel-timer.is-warning,.tw-host-pixel-timer.is-danger{
+  color:#fff5f5!important;
+  background-image:linear-gradient(110deg,#8f1d1d,#dc3535 48%,#bd2727)!important;
+  background-size:180% 100%!important;
+  box-shadow:0 4px 0 #7f1d1d,0 0 14px rgba(239,68,68,.48),0 0 24px rgba(239,68,68,.22)!important;
+}
+
+.tw-host-student-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:15px!important;width:min(100%,900px)!important;margin-inline:auto}
+.tw-host-student-choice-grid .tw-host-student-choice{
+  --choice-face:#80aaf7;--choice-base:#2854ad;--choice-border:#3e72dc;--choice-ink:#173f94;
+  position:relative!important;min-height:96px!important;height:96px!important;box-sizing:border-box!important;
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:13px!important;
+  padding:12px 54px 12px 16px!important;border:4px solid var(--choice-border)!important;border-radius:20px!important;
+  background:var(--choice-face)!important;color:var(--choice-ink)!important;
+  box-shadow:0 8px 0 var(--choice-base),0 16px 28px rgba(15,23,42,.14)!important;
+}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-1{--choice-face:#f58b8b;--choice-base:#b72f3b;--choice-border:#d74750;--choice-ink:#7f1d1d}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:#7fd09a;--choice-base:#25753f;--choice-border:#35a159;--choice-ink:#14532d}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:#80aaf7;--choice-base:#2854ad;--choice-border:#3e72dc;--choice-ink:#173f94}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#f4d467;--choice-base:#a87813;--choice-border:#d4a522;--choice-ink:#713f12}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:#7fd09a;--choice-base:#25753f;--choice-border:#35a159;--choice-ink:#14532d}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:#f58b8b;--choice-base:#b72f3b;--choice-border:#d74750;--choice-ink:#7f1d1d}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-1{--choice-face:#7f2932;--choice-ink:#fecaca}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:#1f6338;--choice-ink:#bbf7d0}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:#244f9d;--choice-ink:#dbeafe}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#786018;--choice-ink:#fef3c7}
+body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:#1f6338;--choice-ink:#bbf7d0}
+body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:#7f2932;--choice-ink:#fecaca}
+.tw-host-student-choice-badge{
+  flex:0 0 42px!important;width:42px!important;height:42px!important;border-radius:50%!important;
+  display:grid!important;place-items:center!important;border:4px solid var(--choice-border)!important;
+  background:color-mix(in srgb,var(--choice-face) 78%,#fff)!important;color:var(--choice-ink)!important;
+  box-shadow:0 3px 0 var(--choice-base)!important;font-weight:1000!important;
+}
+body.dark-mode .tw-host-student-choice-badge{background:color-mix(in srgb,var(--choice-face) 88%,#071024)!important}
+.tw-host-student-choice-content{display:flex;min-width:0;flex:1;align-items:center;justify-content:center;gap:10px;color:var(--choice-ink)!important}
+.tw-host-student-choice-content b{min-width:0;max-width:100%;color:var(--choice-ink)!important;font-weight:900!important;text-align:center!important;overflow-wrap:anywhere}
+.tw-host-student-choice-content img{width:70px!important;height:54px!important;object-fit:cover!important;border-radius:9px!important}
+.tw-host-student-choice-grid .tw-host-choice-count{
+  position:absolute!important;right:15px!important;top:50%!important;transform:translateY(-50%)!important;
+  min-width:26px!important;padding:0 2px!important;color:var(--choice-ink)!important;font-weight:1000!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice{padding-right:16px!important}
+@media(max-width:760px){.tw-host-student-choice-grid{grid-template-columns:1fr!important}.tw-host-student-choice-grid .tw-host-student-choice{height:auto!important;min-height:88px!important}}
+.tw-host-options .tw-host-student-choice-content b{text-align:center!important;flex:1!important}
+
+/* Revision 10.27 --------------------------------------------------------- */
+/* Theme changes and small UI state changes should feel quicker. */
+.tw-theme-switching *, .tw-theme-switching *::before, .tw-theme-switching *::after{
+  transition-duration:105ms!important;
+}
+
+/* Quiz-builder question pickup/release: keep the scale change smooth in both directions. */
+.tw-builder-question-form.is-dragging:not(.is-drag-settled){
+  transition:transform .30s cubic-bezier(.16,1,.3,1),box-shadow .24s ease!important;
+}
+.tw-builder-question-form:not(.is-dragging){
+  transition:transform .34s cubic-bezier(.16,1,.3,1),box-shadow .26s ease!important;
+}
+
+/* Host Top Scores now shows the profile image between trophy and platform. */
+.tw-host-podium-avatar{
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;overflow:hidden;
+  margin:1px auto 4px;background:color-mix(in srgb,var(--host-accent,#2b6cff) 16%,#fff);
+  border:3px solid color-mix(in srgb,var(--host-accent,#2b6cff) 54%,#fff);
+  color:var(--host-accent,#2b6cff);box-shadow:0 5px 12px rgba(15,23,42,.18);
+  flex:0 0 auto;
+}
+.tw-host-podium-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.tw-host-podium-place.place-1 .tw-host-podium-avatar{width:44px;height:44px}
+.tw-host-podium-place.place-3 .tw-host-podium-avatar{width:34px;height:34px;margin-top:5px}
+body.dark-mode .tw-host-podium-avatar{background:#0b1830;border-color:color-mix(in srgb,var(--host-accent,#2b6cff) 68%,#cbd5e1);color:#eef4ff}
+
+/* Student-attendance points are always normal quiz points and are not interactive. */
+.tw-host-attendance-score{cursor:default!important;pointer-events:none!important}
+.tw-host-attendance-score:hover{background:transparent!important}
+
+/* Host True/False must keep the same roomy student-gameplay geometry instead of inheriting old span sizing. */
+.tw-host-student-choice-grid.is-true-false{
+  width:min(100%,760px)!important;
+  grid-template-columns:repeat(2,minmax(240px,1fr))!important;
+  gap:20px!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice{
+  width:100%!important;min-width:0!important;height:104px!important;min-height:104px!important;max-height:104px!important;
+  padding:14px 22px!important;gap:16px!important;
+}
+.tw-host-student-choice-grid .tw-host-student-choice-content{
+  width:auto!important;height:auto!important;min-height:0!important;border-radius:0!important;
+  background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;
+  display:flex!important;place-items:initial!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice-content b{
+  white-space:nowrap!important;overflow:visible!important;display:block!important;-webkit-line-clamp:unset!important;
+  font-size:clamp(20px,2.2vw,27px)!important;line-height:1.1!important;text-align:center!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice-badge{
+  width:48px!important;height:48px!important;flex:0 0 48px!important;font-size:20px!important;
+}
+@media(max-width:760px){
+  .tw-host-student-choice-grid.is-true-false{grid-template-columns:1fr!important;width:min(100%,520px)!important}
+}
+
+/* Revision 10.28 --------------------------------------------------------- */
+/* Host Top Scores: profile icon belongs inside the platform to the left of the name. */
+.tw-host-podium-person{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+.tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-1 .tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-2 .tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-3 .tw-host-podium-platform .tw-host-podium-avatar{
+  width:29px!important;height:29px!important;min-width:29px!important;margin:0!important;border-width:2px!important;transform:none!important;
+  box-shadow:0 3px 8px rgba(15,23,42,.18)!important;
+}
+.tw-host-podium-person>b{min-width:0;max-width:calc(100% - 37px)!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Revision 10.28.1 follow-up ------------------------------------------------ */
+/* Student Home surfaces sit visibly above the dark page background. */
+body.dark-mode .tw-student-home-surface{
+  background:rgba(17,39,76,.94)!important;
+  border-color:rgba(132,167,255,.34)!important;
+  box-shadow:0 18px 38px rgba(0,0,0,.26)!important;
+}
+
+/* Revision 10.29 — tactile paper-like question organization. */
+.tw-builder-question-mini{
+  will-change:transform,box-shadow;
+  transform-origin:center center;
+  transition:transform .30s cubic-bezier(.2,.85,.2,1),box-shadow .24s ease,border-color .22s ease,background .22s ease!important;
+}
+.tw-builder-question-mini.is-drag-source{
+  transform:scale(.965)!important;
+  opacity:.25!important;
+  border-style:dashed!important;
+  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 22%,transparent)!important;
+}
+.tw-builder-question-mini.is-preview-shift-up{transform:translateY(-16px)!important}
+.tw-builder-question-mini.is-preview-shift-down{transform:translateY(16px)!important}
+.tw-builder-question-mini.is-drop-swap{transform:translateY(-5px) scale(1.015)!important;box-shadow:0 13px 24px rgba(15,23,42,.18),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 28%,transparent)!important}
+.tw-builder-question-mini.is-settling{animation:twQuestionPaperSettle .32s cubic-bezier(.16,1,.3,1)}
+.tw-builder-question-mini-drag-image{
+  transform:rotate(1.5deg) scale(1.035) translateY(-5px)!important;
+  box-shadow:0 26px 48px rgba(15,23,42,.32),0 8px 0 color-mix(in srgb,var(--tw-template-accent,#2b6cff) 42%,#334155)!important;
+  cursor:grabbing!important;
+}
+.tw-builder-question-strip-gap.is-active{height:42px!important;transition:height .28s cubic-bezier(.2,.85,.2,1),background .18s ease,box-shadow .18s ease!important}
+@keyframes twQuestionPaperSettle{
+  0%{transform:translateY(-6px) scale(1.025);filter:brightness(1.04)}
+  48%{transform:translateY(2px) scale(.986)}
+  100%{transform:translateY(0) scale(1);filter:none}
+}
+
+/* Page-turn edge targets: neighboring page peeks in as the held question reaches an edge. */
+.tw-quiz-builder-page.is-question-dragging::before,
+.tw-quiz-builder-page.is-question-dragging::after{
+  content:"";position:fixed;top:102px;bottom:28px;width:54px;z-index:1450;pointer-events:none;
+  border-radius:24px;opacity:.48;transition:width .18s ease,opacity .18s ease,box-shadow .18s ease,transform .22s cubic-bezier(.16,1,.3,1);
+}
+.tw-quiz-builder-page.is-question-dragging::before{left:0;transform:translateX(-25px);border-right:3px solid color-mix(in srgb,var(--tw-template-accent,#2b6cff) 62%,transparent)}
+.tw-quiz-builder-page.is-question-dragging::after{right:0;transform:translateX(25px);border-left:3px solid color-mix(in srgb,var(--tw-template-accent,#2b6cff) 62%,transparent)}
+.tw-quiz-builder-page.is-drag-edge-left::before{width:118px!important;transform:translateX(-7px)!important;opacity:1!important;box-shadow:20px 0 70px 22px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 35%,transparent)!important}
+.tw-quiz-builder-page.is-drag-edge-right::after{width:118px!important;transform:translateX(7px)!important;opacity:1!important;box-shadow:-20px 0 70px 22px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 35%,transparent)!important}
+.tw-builder-edge-drag-hint{font-size:16px!important;width:150px!important;line-height:1.08!important;font-weight:1000!important}
+.tw-builder-edge-drag-hint.is-near{transform:translateY(-50%) scale(1.11)!important;text-shadow:0 0 22px color-mix(in srgb,var(--tw-template-accent,#2b6cff) 70%,transparent)!important}
+
+/* Revision 10.29 — student progression, goals, achievements and richer classes. */
+.tw-student-progression-shell{display:grid;gap:14px}
+.tw-student-level-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tw-student-progress-actions{display:flex;gap:9px;align-items:center}
+.tw-level-row{display:flex;align-items:center;gap:0;max-width:760px}
+.tw-level-orb{width:72px;height:72px;border-radius:999px;border:4px solid;display:grid;place-items:center;text-align:center;line-height:1;font-size:11px;font-weight:900;z-index:2;background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 9%,transparent);box-shadow:0 7px 0 rgba(15,23,42,.16)}
+.tw-level-orb strong{font-size:25px}
+.tw-level-track{height:36px;flex:1;margin-left:-8px;border:3px solid;border-radius:0 999px 999px 0;position:relative;overflow:hidden;box-shadow:inset 0 3px 6px rgba(15,23,42,.16)}
+.tw-level-track>span{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#2b6cff,#22c55e);border-radius:inherit;transition:width .48s cubic-bezier(.16,1,.3,1)}
+.tw-level-track>b{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55);z-index:1}
+.tw-favorite-achievements{display:flex;gap:8px;flex-wrap:wrap}
+.tw-favorite-achievements span{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(245,158,11,.12);border:2px solid rgba(245,158,11,.42);font-size:11px;font-weight:900}
+.tw-goal-reset{font-size:11px;font-weight:900;opacity:.65;text-transform:uppercase;letter-spacing:.08em}
+.tw-goal-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tw-student-goal-card{border:3px solid;border-radius:16px;padding:13px;display:grid;gap:8px;box-shadow:0 5px 0 rgba(15,23,42,.13);transition:transform .2s ease,box-shadow .2s ease}
+.tw-student-goal-card.is-complete{animation:twGoalCompletePulse .6s cubic-bezier(.16,1,.3,1)}
+.tw-goal-reward{font-size:11px;font-weight:950;color:#f59e0b;white-space:nowrap}
+@keyframes twGoalCompletePulse{0%{transform:scale(.97)}45%{transform:scale(1.025);box-shadow:0 0 0 5px rgba(34,197,94,.15),0 7px 0 rgba(15,23,42,.13)}100%{transform:scale(1)}}
+.tw-achievement-state{font-size:9px;text-transform:uppercase;letter-spacing:.09em;font-weight:1000;opacity:.68;margin-bottom:5px}
+.tw-achievement-card.is-in-progress .tw-achievement-track span{animation:twAchievementProgressGlow 1.1s ease-out}
+@keyframes twAchievementProgressGlow{0%{filter:brightness(1.8);box-shadow:0 0 18px rgba(43,108,255,.75)}100%{filter:none;box-shadow:none}}
+.tw-achievement-picker{display:grid;gap:7px}
+.tw-achievement-favorite{border:2px solid rgba(127,127,127,.28);border-radius:10px;padding:7px 10px;background:transparent;color:inherit;font:inherit;font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.tw-achievement-favorite.is-selected{background:rgba(245,158,11,.15);border-color:#f59e0b;color:#f59e0b}
+.tw-achievement-favorite:disabled{opacity:.35;cursor:not-allowed}
+.tw-achievement-unlock-toast{position:fixed;right:24px;top:24px;z-index:5000;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:16px;background:#111c33;color:#fff;border:3px solid #fbbf24;box-shadow:0 8px 0 #7c4a03,0 20px 44px rgba(0,0,0,.25);animation:twAchievementToast 3.6s cubic-bezier(.16,1,.3,1) forwards}
+.tw-achievement-unlock-toast small,.tw-achievement-unlock-toast strong{display:block}.tw-achievement-unlock-toast small{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fcd34d}.tw-achievement-unlock-toast strong{margin-top:3px}
+@keyframes twAchievementToast{0%{opacity:0;transform:translateX(35px) scale(.96)}10%,78%{opacity:1;transform:translateX(0) scale(1)}85%{filter:brightness(1.35)}100%{opacity:0;transform:translate(-180px,115px) scale(.28);filter:none}}
+.tw-student-class-surface{transition:background .18s ease!important}
+.tw-student-class-card-head{width:100%;border:0;background:transparent;padding:16px;cursor:pointer;font-family:inherit;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto 28px;gap:14px;align-items:center}
+.tw-class-card-summary{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tw-class-card-summary span{padding:5px 8px;border-radius:999px;background:rgba(127,127,127,.10);border:1px solid rgba(127,127,127,.24);font-size:10px;font-weight:900;white-space:nowrap}
+.tw-student-class-detail{padding:16px}
+.tw-student-class-header-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.tw-student-class-header-grid>div{padding:11px;border-radius:13px;background:rgba(127,127,127,.08);border:2px solid rgba(127,127,127,.18);display:grid;gap:4px}.tw-student-class-header-grid small{font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.62;font-weight:900}.tw-student-class-header-grid strong{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.tw-student-class-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:15px}
+@media(max-width:900px){.tw-goal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tw-student-class-header-grid,.tw-student-class-progress{grid-template-columns:1fr 1fr}.tw-student-class-card-head{grid-template-columns:1fr 24px}.tw-class-card-summary{grid-column:1/-1;justify-content:flex-start}}
+@media(max-width:600px){.tw-goal-grid,.tw-student-class-header-grid,.tw-student-class-progress{grid-template-columns:1fr}.tw-level-orb{width:62px;height:62px}.tw-level-track{height:32px}}
+.tw-builder-edge-drag-hint small{display:grid;gap:4px;margin-top:12px;padding:10px;border-radius:14px;background:color-mix(in srgb,var(--tw-template-accent,#2b6cff) 10%,rgba(255,255,255,.82));border:2px solid color-mix(in srgb,var(--tw-template-accent,#2b6cff) 52%,transparent);font-size:9px;letter-spacing:.04em;opacity:.5;transform:scale(.9);transition:opacity .18s ease,transform .22s cubic-bezier(.16,1,.3,1)}
+.tw-builder-edge-drag-hint small b{font-size:10px;line-height:1.2;max-height:2.4em;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0}
+.tw-builder-edge-drag-hint.is-near small{opacity:.95;transform:scale(1)}

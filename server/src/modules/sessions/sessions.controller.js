@@ -11,6 +11,7 @@ import { normalizeTemplateType } from "../quizzes/templates.js";
 import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
+import { attachCompetitiveTotals, sortCompetitiveRows } from "./leaderboard.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
@@ -277,7 +278,7 @@ export async function getSessionStateTeacher(req, res) {
   let scores;
   if (session.join_mode === "GROUP") {
     const [rows] = await pool.query(
-      `SELECT MIN(sp.id) AS participant_id, COALESCE(sg.display_name, sg.default_name) AS group_name, MAX(COALESCE(sc.total_points,0)) AS total_points,
+      `SELECT MIN(sp.id) AS participant_id, sg.id AS group_id, COALESCE(sg.display_name, sg.default_name) AS group_name, GROUP_CONCAT(sp.id ORDER BY sp.id) AS member_ids, MAX(COALESCE(sc.total_points,0)) AS total_points,
               MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name,
               CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
                    ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, MIN(sp.joined_at)), MAX(r.answered_at)) / 1000 END AS completion_ms
@@ -291,21 +292,23 @@ export async function getSessionStateTeacher(req, res) {
        GROUP BY sg.id, sg.display_name, sg.default_name, session_row.started_at`,
       { sid: sessionId }
     );
-    scores = sortScoreRows(rows, session.template_type);
+    scores = sortCompetitiveRows(await attachCompetitiveTotals(pool, sessionId, rows, { groupMode: true }));
   } else {
     const [rows] = await pool.query(
-      `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name,
+      `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
               CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
                    ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, p.joined_at), MAX(r.answered_at)) / 1000 END AS completion_ms
        FROM scores sc
        JOIN session_participants p ON p.id=sc.participant_id
        JOIN sessions session_row ON session_row.id=sc.session_id
+       LEFT JOIN users u ON u.id=p.student_user_id
+       LEFT JOIN student_profiles stp ON stp.user_id=p.student_user_id
        LEFT JOIN responses r ON r.session_id=sc.session_id AND r.participant_id=sc.participant_id
        WHERE sc.session_id=:sid
-       GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, session_row.started_at, p.joined_at`,
+       GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, stp.profile_image, u.profile_image, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
-    scores = sortScoreRows(rows, session.template_type);
+    scores = sortCompetitiveRows(await attachCompetitiveTotals(pool, sessionId, rows));
   }
 
   const [groups] = await pool.query(
@@ -515,8 +518,8 @@ export async function joinSession(req, res) {
     { code: code.toUpperCase() }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
-  if (session.status !== 'LOBBY') {
-    const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session has already started.';
+  if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
+    const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
     return res.status(400).json({ message });
   }
 

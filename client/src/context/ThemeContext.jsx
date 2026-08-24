@@ -24,14 +24,14 @@ export function ThemeProvider({ children }) {
     if (!firstThemeRun.current) {
       document.documentElement.classList.add("tw-theme-switching");
       window.clearTimeout(window.__twThemeTimer);
-      window.__twThemeTimer = window.setTimeout(() => document.documentElement.classList.remove("tw-theme-switching"), 210);
+      window.__twThemeTimer = window.setTimeout(() => document.documentElement.classList.remove("tw-theme-switching"), 135);
     }
     firstThemeRun.current = false;
     try { localStorage.setItem("tw_theme", dark ? "dark" : "light"); } catch {}
     document.body.classList.toggle("light-mode", !dark);
     document.body.classList.toggle("dark-mode", dark);
     document.body.dataset.theme = dark ? "dark" : "light";
-    document.body.style.transition = "background 145ms ease, color 145ms ease";
+    document.body.style.transition = "background 95ms ease, color 95ms ease";
     // Keep the browser canvas flat. Individual pages own their visual backgrounds,
     // so a short page can never reveal the old purple system gradient underneath.
     document.body.style.background = dark ? "#07142b" : "#fbf1dd";

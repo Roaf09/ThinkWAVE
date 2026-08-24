@@ -498,3 +498,36 @@ CREATE TABLE system_notifications (
   INDEX idx_system_notification_user (user_id)
 );
 
+
+-- Revision 10.29 student progression / achievement persistence
+CREATE TABLE IF NOT EXISTS student_goal_claims (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  student_user_id BIGINT NOT NULL,
+  goal_key VARCHAR(120) NOT NULL,
+  period_key VARCHAR(40) NOT NULL,
+  xp_reward INT NOT NULL DEFAULT 0,
+  claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_student_goal_period (student_user_id, goal_key, period_key),
+  INDEX idx_student_goal_user (student_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS student_favorite_achievements (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  student_user_id BIGINT NOT NULL,
+  achievement_id VARCHAR(120) NOT NULL,
+  slot_no TINYINT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_student_favorite_achievement (student_user_id, achievement_id),
+  UNIQUE KEY uq_student_favorite_slot (student_user_id, slot_no),
+  INDEX idx_student_favorite_user (student_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS student_competitive_overtakes (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  student_user_id BIGINT NOT NULL,
+  session_id BIGINT NOT NULL,
+  overtakes INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_overtake_student (student_user_id),
+  INDEX idx_overtake_session (session_id)
+);

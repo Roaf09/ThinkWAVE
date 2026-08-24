@@ -343,7 +343,7 @@ export default function ClassesTab({ setActiveTab, tutorial }) {
 
       {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
 
-      <section style={card(c)}>
+      <section className="tw-class-folders-shell" style={card(c)}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ color: c.text, fontWeight: 900, fontSize: 17 }}>My Folders</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -387,13 +387,13 @@ export default function ClassesTab({ setActiveTab, tutorial }) {
       </section>
 
       {isSectionFolder && <section className="tw-class-report-columns">
-        <div className="tw-class-report-panel" style={card(c)}>
+        <div className="tw-class-report-panel tw-class-live-report-shell" style={card(c)}>
           <h3 style={{ marginTop: 0 }}>Live Session Reports</h3>
           <div className="tw-class-report-list">
             {liveReports.length === 0 ? <div style={{ color: c.textMuted }}>No live session reports for this class yet.</div> : liveReports.map((session) => <ClassReportCard key={`LIVE-${session.id}`} session={session} c={c} onOpenLive={() => window.location.assign(`/teacher/analytics/${session.id}`)} onOpenAssigned={() => {}} />)}
           </div>
         </div>
-        <div className="tw-class-report-panel" style={card(c)}>
+        <div className="tw-class-report-panel tw-class-assignment-report-shell" style={card(c)}>
           <h3 style={{ marginTop: 0 }}>Assignment Reports</h3>
           <div className="tw-class-report-list">
             {asyncResults.length === 0 ? <div style={{ color: c.textMuted }}>No assignment reports for this class yet.</div> : asyncResults.map((r) => <AssignmentResultRow key={r.quiz_id} r={r} c={c} onAnalytics={() => window.location.assign(`/teacher/async-analytics/${selectedFolderId}/${r.quiz_id}`)} />)}
@@ -522,7 +522,7 @@ function RemoveStudentModal({ c, student, onClose, onConfirm }) {
 
 function FolderCard({ folder, c, menuFor, setMenuFor, onOpen, onRename, onDelete, onDuplicate }) {
   const open = Number(menuFor) === Number(folder.id);
-  return <div className="tw-folder-card" data-folder-id={folder.id} style={{ ...card(c, { padding: 0, overflow: "visible", boxShadow: "none", border: `3px solid ${c.border}`, borderRadius: 12 }), position: "relative" }}>
+  return <div className="tw-folder-card" data-folder-id={folder.id} style={{ ...card(c, { padding: 0, overflow: "visible", boxShadow: "none", border: `4px solid ${c.border}`, borderRadius: 12 }), position: "relative" }}>
     <button onClick={onOpen} style={{ width: "100%", padding: "14px 16px", border: "none", background: "transparent", color: c.text, display: "flex", gap: 12, alignItems: "center", textAlign: "left" }}>
       <span style={{ color: c.accent, display: "inline-flex" }}><TwIcon name="folder" size={24} /></span>
       <span title={folder.name} style={{ fontWeight: 900, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 34 }}>{folder.name}</span>
@@ -556,6 +556,6 @@ function btn(c, primary = false) { return { padding: "9px 13px", borderRadius: 1
 function iconBtn(c) { return { width: 34, height: 34, borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 900, cursor: "pointer" }; }
 function menuBtn(c) { return { width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "none", background: "transparent", color: c.text, fontWeight: 800, cursor: "pointer" }; }
 function input(c) { return { width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }; }
-function row(c) { return { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: 12, borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, marginBottom: 8, flexWrap: "wrap" }; }
-function crumbBtn(c, active) { return { ...btn(c, active), borderRadius: 999 }; }
+function row(c) { return { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: 12, borderRadius: 14, background: c.cardBg2, border: `3px solid ${c.border}`, marginBottom: 8, flexWrap: "wrap" }; }
+function crumbBtn(c, active) { return { ...btn(c, active), borderRadius: 999, borderWidth: 3 }; }
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "grid", placeItems: "center", padding: 20, zIndex: 2000 };

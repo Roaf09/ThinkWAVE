@@ -10,6 +10,7 @@ import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
+import { attachCompetitiveTotals, calculateCompetitivePoints, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
 
 
 function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
@@ -33,23 +34,31 @@ function responseChoiceKeys(templateType, answer, config = {}) {
   }
   return Array.from(new Set(keys));
 }
-function sortScoreRows(rows, templateType) {
-  const timedTemplates = new Set([TEMPLATE_TYPES.TYPE_ANSWER, TEMPLATE_TYPES.MATCHING, TEMPLATE_TYPES.GUESS_WORD_4PICS, TEMPLATE_TYPES.THINK_SPELL]);
-  return [...rows].sort((a, b) => {
-    const points = Number(b.total_points || 0) - Number(a.total_points || 0);
-    if (points) return points;
-    if (timedTemplates.has(normalizeTemplateType(templateType))) {
-      const aTime = Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER);
-      const bTime = Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER);
-      if (aTime !== bTime) return aTime - bTime;
-    }
-    return `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`);
-  });
+function sortScoreRows(rows) {
+  return sortCompetitiveRows(rows);
 }
 
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
 const pausedQuestionState = new Map();
+// Holds the exact paused display value for three seconds after resume, then the
+// normal deadline continues from that same value without adding visible time.
+const resumedQuestionState = new Map();
+// Tracks live rank movement so achievement progress can count real overtakes.
+const previousCompetitiveRanks = new Map();
+let overtakeTableReady = false;
+async function ensureOvertakeTable(){
+  if(overtakeTableReady) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS student_competitive_overtakes (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    student_user_id BIGINT NOT NULL,
+    session_id BIGINT NOT NULL,
+    overtakes INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_overtake_student (student_user_id), INDEX idx_overtake_session (session_id)
+  )`);
+  overtakeTableReady=true;
+}
 // Temporarily disabled for gameplay testing. Tab-out events and warnings remain recorded.
 const AUTO_KICK_AFTER_TAB_OUTS = false;
 
@@ -152,6 +161,7 @@ export function registerSessionSockets(io) {
       if (!s || s.status !== "LIVE") return;
 
       pausedQuestionState.delete(Number(sessionId));
+      resumedQuestionState.delete(Number(sessionId));
       await pool.query(
         `UPDATE sessions SET current_question_index=current_question_index+1, question_started_at=DATE_ADD(NOW(), INTERVAL 3 SECOND) WHERE id=:sid`,
         { sid: sessionId }
@@ -197,6 +207,7 @@ export function registerSessionSockets(io) {
         const serverNowUnix = session.server_now_unix != null ? Number(session.server_now_unix) : Date.now() / 1000;
         const elapsed = startedUnix != null ? Math.max(0, Math.floor(serverNowUnix - startedUnix)) : 0;
         pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
+        resumedQuestionState.delete(Number(sessionId));
         await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
         await broadcastState(io, sessionId);
         await broadcastGroups(io, sessionId);
@@ -209,8 +220,13 @@ export function registerSessionSockets(io) {
         if (session.status === "PAUSED" && paused) {
           const elapsed = Math.max(0, Number(paused.total || 0) - Number(paused.remaining || 0));
           questionStartOffsetSec = 3 - elapsed;
+          resumedQuestionState.set(Number(sessionId), {
+            remaining: Math.max(0, Number(paused.remaining || 0)),
+            holdUntil: Date.now() + 3000,
+          });
         } else if (session.status === "LOBBY" || session.question_started_unix == null) {
           questionStartOffsetSec = 3;
+          resumedQuestionState.delete(Number(sessionId));
         }
         pausedQuestionState.delete(Number(sessionId));
       }
@@ -232,10 +248,11 @@ export function registerSessionSockets(io) {
       );
       if (status === "ENDED") {
         pausedQuestionState.delete(Number(sessionId));
+        resumedQuestionState.delete(Number(sessionId));
         await pool.query(
           `UPDATE quizzes q
            JOIN sessions s ON s.quiz_id = q.id
-           SET q.status='BANKED'
+           SET q.status='BANKED', q.updated_at=NOW()
            WHERE s.id=:sid AND q.deleted_at IS NULL`,
           { sid: sessionId }
         );
@@ -281,7 +298,7 @@ export function registerSessionSockets(io) {
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(`SELECT status FROM sessions WHERE id=:sid`, { sid: sessionId });
-      if (!session || session.status !== 'LOBBY') return socket.emit("student:error", { message: "Groups can only be joined before the session starts." });
+      if (!session || !['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) return socket.emit("student:error", { message: "This session is no longer accepting group joins." });
       const [[group]] = await pool.query(`SELECT * FROM session_groups WHERE id=:gid AND session_id=:sid`, { gid: groupId, sid: sessionId });
       if (!group) return socket.emit("student:error", { message: "Group not found." });
 
@@ -403,12 +420,12 @@ export function registerSessionSockets(io) {
     });
 
     // All answer submission funnels through one event so template scoring stays centralized on the server.
-    socket.on("answer:submit", async ({ sessionId, questionId, answer }) => {
+    socket.on("answer:submit", async ({ sessionId, questionId, answer, timeExpired = false }) => {
       if (!allowAction("answer:submit")) return;
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(
-        `SELECT s.*, q.template_type, q.points_per_question
+        `SELECT s.*, q.template_type, q.points_per_question, q.time_limit_sec AS quiz_time_limit_sec
          FROM sessions s JOIN quizzes q ON q.id=s.quiz_id
          WHERE s.id=:sid`,
         { sid: sessionId }
@@ -470,13 +487,26 @@ export function registerSessionSockets(io) {
           { sid: sessionId, gid: groupId, qid: questionId }
         );
         if (pending) {
+          if (timeExpired) {
+            await pool.query(
+              `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
+               VALUES(:proposalId,:participantId,'AGREE')
+               ON DUPLICATE KEY UPDATE vote='AGREE'`,
+              { proposalId: pending.id, participantId }
+            );
+            await resolveGroupProposalIfReady(io, pending.id, sessionId);
+            return;
+          }
           return socket.emit("student:error", { message: "Your group already has a pending answer. Vote on it first." });
         }
 
+        const proposalAnswer = timeExpired && answer && typeof answer === "object" && !Array.isArray(answer)
+          ? { ...answer, __tw_time_expired: true }
+          : answer;
         const [result] = await pool.query(
           `INSERT INTO group_answer_proposals(session_id, group_id, question_id, proposer_participant_id, answer_json, status)
            VALUES(:sid,:gid,:qid,:pid,:ans,'PENDING')`,
-          { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(answer ?? null) }
+          { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(proposalAnswer ?? null) }
         );
 
         await pool.query(
@@ -490,7 +520,7 @@ export function registerSessionSockets(io) {
         return;
       }
 
-      await handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
+      await handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer, timeExpired });
     });
     socket.on("disconnect", async () => {
       const { role, sessionId, participantId } = socket.data || {};
@@ -510,7 +540,7 @@ export function registerSessionSockets(io) {
         await broadcastState(io, sessionId);
         const timeout = setTimeout(async () => {
           await pool.query(`UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('PAUSED','LIVE')`, { sid: sessionId });
-          await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED' WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
+          await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
           await broadcastState(io, sessionId);
           teacherDisconnectTimers.delete(sessionId);
         }, 5 * 60 * 1000);
@@ -552,7 +582,7 @@ async function isQuestionTimeUp(session, questionId = null) {
   return elapsed > timeLimitSec + 1;
 }
 
-async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
+async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer, timeExpired = false }) {
   const tt = normalizeTemplateType(session.template_type);
   if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
     await handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
@@ -568,17 +598,8 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
     return;
   }
 
-  if (await isQuestionTimeUp(session, questionId)) {
-    try {
-      await pool.query(
-        `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
-         VALUES(:sid,:pid,:qid,:ans,0,0)`,
-        { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(answer ?? null) }
-      );
-    } catch {}
-    socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up" });
-    return;
-  }
+  const serverTimedOut = await isQuestionTimeUp(session, questionId);
+  const preliminaryExpiredSubmission = !!timeExpired || serverTimedOut;
 
   const [[q]] = await pool.query(
     `SELECT id, correct_json, config_json FROM quiz_questions WHERE id=:qid AND quiz_id=:quizId AND deleted_at IS NULL`,
@@ -591,13 +612,23 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
   const scored = scoreAnswer({ templateType: session.template_type, correct, answer, config, basePoints });
   const isCorrect = !!scored.isCorrect;
-  const points = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
+  const rawPoints = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
+  const timeLimitMs = Math.max(0, Number(config?.timeLimitSec || session.quiz_time_limit_sec || 0)) * 1000;
+  const [[timingRow]] = await pool.query(
+    `SELECT GREATEST(0, TIMESTAMPDIFF(MICROSECOND, question_started_at, NOW(3)) / 1000) AS elapsed_ms FROM sessions WHERE id=:sid LIMIT 1`,
+    { sid: sessionId }
+  );
+  const elapsedMs = Math.max(0, Number(timingRow?.elapsed_ms || 0));
+  const expiredSubmission = preliminaryExpiredSubmission || (timeLimitMs > 0 && elapsedMs > timeLimitMs + 300);
+  const points = expiredSubmission ? 0 : rawPoints;
+  const competitivePoints = calculateCompetitivePoints({ templateType: session.template_type, scored, basePoints, elapsedMs, timeLimitMs, timeExpired: expiredSubmission });
+  const storedAnswer = withCompetitiveMeta(answer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
 
   try {
     await pool.query(
       `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
        VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
-      { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(answer ?? null), ic: isCorrect ? 1 : 0, pts: points }
+      { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(storedAnswer), ic: isCorrect ? 1 : 0, pts: points }
     );
   } catch {
     socket.emit("answer:ack", { isCorrect: null, points: 0, locked: true, message: "Answer already submitted" });
@@ -614,8 +645,11 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
     totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
     hasWrongSelected: !!scored.hasWrongSelected,
     templateType: tt,
+    explanation: String(config?.explanation || ""),
+    competitivePoints,
+    timeExpired: expiredSubmission,
   });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, choiceKeys: responseChoiceKeys(tt, answer, config) });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, choiceKeys: responseChoiceKeys(tt, answer, config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -817,7 +851,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   }
 
   const [[session]] = await pool.query(
-    `SELECT s.*, q.template_type, q.points_per_question
+    `SELECT s.*, q.template_type, q.points_per_question, q.time_limit_sec AS quiz_time_limit_sec
      FROM sessions s JOIN quizzes q ON q.id=s.quiz_id
      WHERE s.id=:sid`,
     { sid: sessionId }
@@ -946,9 +980,23 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     return;
   }
 
-  const scored = scoreAnswer({ templateType: session.template_type, correct, answer, config, basePoints });
+  const preliminaryExpiredSubmission = !!answer?.__tw_time_expired || await isQuestionTimeUp(session, proposal.question_id);
+  const scoreableAnswer = answer && typeof answer === "object" && !Array.isArray(answer)
+    ? Object.fromEntries(Object.entries(answer).filter(([key]) => key !== "__tw_time_expired"))
+    : answer;
+  const scored = scoreAnswer({ templateType: session.template_type, correct, answer: scoreableAnswer, config, basePoints });
   const isCorrect = !!scored.isCorrect;
-  const points = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
+  const rawPoints = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
+  const timeLimitMs = Math.max(0, Number(config?.timeLimitSec || session.quiz_time_limit_sec || 0)) * 1000;
+  const [[timingRow]] = await pool.query(
+    `SELECT GREATEST(0, TIMESTAMPDIFF(MICROSECOND, question_started_at, NOW(3)) / 1000) AS elapsed_ms FROM sessions WHERE id=:sid LIMIT 1`,
+    { sid: sessionId }
+  );
+  const elapsedMs = Math.max(0, Number(timingRow?.elapsed_ms || 0));
+  const expiredSubmission = preliminaryExpiredSubmission || (timeLimitMs > 0 && elapsedMs > timeLimitMs + 300);
+  const points = expiredSubmission ? 0 : rawPoints;
+  const competitivePoints = calculateCompetitivePoints({ templateType: session.template_type, scored, basePoints, elapsedMs, timeLimitMs, timeExpired: expiredSubmission });
+  const storedAnswer = withCompetitiveMeta(scoreableAnswer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
 
   for (const member of members) {
     const [[existing]] = await pool.query(
@@ -959,7 +1007,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       await pool.query(
         `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
          VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
-        { sid: sessionId, pid: member.id, qid: proposal.question_id, ans: JSON.stringify(answer ?? null), ic: isCorrect ? 1 : 0, pts: points }
+        { sid: sessionId, pid: member.id, qid: proposal.question_id, ans: JSON.stringify(storedAnswer), ic: isCorrect ? 1 : 0, pts: points }
       );
       await recalcParticipantScore(sessionId, member.id);
     }
@@ -973,6 +1021,9 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
       hasWrongSelected: !!scored.hasWrongSelected,
       templateType: normalizeTemplateType(session.template_type),
+      explanation: String(config?.explanation || ""),
+      competitivePoints,
+      timeExpired: expiredSubmission,
     });
   }
 
@@ -981,8 +1032,10 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     approved: true,
     isCorrect,
     points,
+    competitivePoints,
+    timeExpired: expiredSubmission,
   });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, answer, config) });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, scoreableAnswer, config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -1072,7 +1125,7 @@ async function broadcastScores(io, sessionId) {
   let scores;
   if (session?.join_mode === "GROUP") {
     const [rows] = await pool.query(
-      `SELECT MIN(sp.id) AS participant_id, COALESCE(sg.display_name, sg.default_name) AS group_name, MAX(COALESCE(sc.total_points,0)) AS total_points,
+      `SELECT MIN(sp.id) AS participant_id, sg.id AS group_id, COALESCE(sg.display_name, sg.default_name) AS group_name, GROUP_CONCAT(sp.id ORDER BY sp.id) AS member_ids, MAX(COALESCE(sc.total_points,0)) AS total_points,
               MIN(sp.first_name) AS first_name, MIN(sp.last_name) AS last_name,
               CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
                    ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, MIN(sp.joined_at)), MAX(r.answered_at)) / 1000 END AS completion_ms
@@ -1086,24 +1139,55 @@ async function broadcastScores(io, sessionId) {
        GROUP BY sg.id, sg.display_name, sg.default_name, session_row.started_at`,
       { sid: sessionId }
     );
-    scores = sortScoreRows(rows, session?.template_type);
+    scores = sortScoreRows(await attachCompetitiveTotals(pool, sessionId, rows, { groupMode: true }));
   } else {
     const [rows] = await pool.query(
-      `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name,
+      `SELECT sc.participant_id, sc.total_points, p.student_user_id, p.first_name, p.last_name, p.group_name, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
               CASE WHEN MAX(r.answered_at) IS NULL THEN NULL
                    ELSE TIMESTAMPDIFF(MICROSECOND, COALESCE(session_row.started_at, p.joined_at), MAX(r.answered_at)) / 1000 END AS completion_ms
        FROM scores sc
        JOIN session_participants p ON p.id=sc.participant_id
        JOIN sessions session_row ON session_row.id=sc.session_id
+       LEFT JOIN users u ON u.id=p.student_user_id
+       LEFT JOIN student_profiles stp ON stp.user_id=p.student_user_id
        LEFT JOIN responses r ON r.session_id=sc.session_id AND r.participant_id=sc.participant_id
        WHERE sc.session_id=:sid
-       GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, session_row.started_at, p.joined_at`,
+       GROUP BY sc.participant_id, sc.total_points, p.student_user_id, p.first_name, p.last_name, p.group_name, stp.profile_image, u.profile_image, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
-    scores = sortScoreRows(rows, session?.template_type);
+    scores = sortScoreRows(await attachCompetitiveTotals(pool, sessionId, rows));
   }
-  io.to(roomSession(sessionId)).emit("scores:update", scores);
   io.to(roomTeacher(sessionId)).emit("scores:update", scores);
+
+  const top5 = scores.slice(0, 5);
+  if (session?.join_mode === "GROUP") {
+    for (const row of scores) {
+      const memberIds = String(row.member_ids || "").split(",").map(Number).filter(Boolean);
+      const rank = scores.indexOf(row) + 1;
+      for (const participantId of memberIds) {
+        io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: rank, myScore: row });
+      }
+    }
+  } else {
+    await ensureOvertakeTable();
+    const rankMap=previousCompetitiveRanks.get(Number(sessionId))||new Map();
+    for (let index = 0; index < scores.length; index += 1) {
+      const row = scores[index];
+      const participantId=Number(row.participant_id);
+      const nextRank=index+1;
+      const previousRank=rankMap.get(participantId);
+      if(previousRank && nextRank < previousRank && row.student_user_id){
+        const overtakes=Math.max(1,previousRank-nextRank);
+        await pool.query(`INSERT INTO student_competitive_overtakes(student_user_id,session_id,overtakes) VALUES(:uid,:sid,:count)`,{uid:Number(row.student_user_id),sid:Number(sessionId),count:overtakes});
+      }
+      rankMap.set(participantId,nextRank);
+      io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: nextRank, myScore: row });
+    }
+    previousCompetitiveRanks.set(Number(sessionId),rankMap);
+  }
+
+  const [[statusRow]] = await pool.query(`SELECT status FROM sessions WHERE id=:sid`, { sid: sessionId });
+  if (statusRow?.status === "ENDED") io.to(roomSession(sessionId)).emit("scores:update", scores);
 }
 
 async function broadcastState(io, sessionId) {
@@ -1137,6 +1221,15 @@ async function broadcastState(io, sessionId) {
   const currentQ = qs[Number(state.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
   state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
+  const resumeHold = resumedQuestionState.get(Number(sessionId));
+  if (state.status === "LIVE" && resumeHold && Date.now() < Number(resumeHold.holdUntil || 0)) {
+    state.resume_hold_remaining_sec = Number(resumeHold.remaining || 0);
+    state.resume_hold_until_ms = Number(resumeHold.holdUntil || 0);
+  } else {
+    if (resumeHold) resumedQuestionState.delete(Number(sessionId));
+    state.resume_hold_remaining_sec = null;
+    state.resume_hold_until_ms = null;
+  }
   const serverNowUnixSec = state.server_now_unix != null ? Number(state.server_now_unix) : Date.now() / 1000;
   const startedUnixSec = state.question_started_unix != null ? Number(state.question_started_unix) : null;
   state.server_now_ms = Math.round(serverNowUnixSec * 1000);

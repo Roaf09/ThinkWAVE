@@ -12,6 +12,7 @@ import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherPressButton } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../lib/tutorialState";
+import { getSessionBackground } from "../../lib/sessionBackgrounds";
 
 export default function Analytics({ guestMode = false }) {
   const { sessionId, classId, quizId } = useParams();
@@ -113,6 +114,18 @@ export default function Analytics({ guestMode = false }) {
 
   const session = analytics?.session || {};
   const tone = templateTone(session.template_type, colors, dark);
+  const analyticsBackground = getSessionBackground(session.background_key);
+  const analyticsPageStyle = analyticsBackground
+    ? {
+        minHeight: "100vh",
+        paddingBottom: 40,
+        backgroundColor: colors.pageBg,
+        backgroundImage: `linear-gradient(${dark ? "rgba(4,12,32,.58)" : "rgba(238,242,255,.48)"}, ${dark ? "rgba(4,12,32,.58)" : "rgba(238,242,255,.48)"}), url("${analyticsBackground.src}")`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }
+    : { minHeight: "100vh", background: colors.pageBg, paddingBottom: 40 };
   const showAdvanced = true;
   const scores = useMemo(() => buildScores(analytics, showAdvanced), [analytics, showAdvanced]);
   const exportAllowed = advancedPlan || guestMode;
@@ -139,21 +152,21 @@ export default function Analytics({ guestMode = false }) {
     navigate("/teacher", { state: { tab: "classes", classId: targetClassId, openClassAnalytics: !!targetClassId } });
   }
 
-  return <div className="tw-analytics-page" style={{ minHeight: "100vh", background: colors.pageBg, paddingBottom: 40 }}><div className="container">
+  return <div className="tw-analytics-page" style={analyticsPageStyle}><div className="container tw-analytics-container-wide">
     <div style={{ display: "grid", gap: 18 }}>
       <section className="tw-analytics-card" style={{ ...card(C), overflow: "hidden", position: "relative" }}>
         <div style={{ position: "absolute", inset: "0 0 auto 0", height: 5, background: tone.accent }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => navigate(-1)} style={secondaryBtn(C)}>← Back</button>
+        <div className="tw-analytics-title-row">
+          <h2 className="tw-analytics-quiz-title" style={{ color: C.text }}>{session.quiz_title || (assigned ? `Assigned Quiz #${quizId}` : `Session #${sessionId}`)}</h2>
+          <TeacherPressButton tone="blue" className="tw-analytics-back-press" onClick={() => navigate(-1)}>Back</TeacherPressButton>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 14, flexWrap: "wrap", marginTop: 10 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div className="tw-analytics-badges-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ ...pill(C), color: tone.accent, borderColor: tone.border, background: tone.softBg }}>{templateLabel(session.template_type)}</span>
               <span style={pill(C)}>{assigned ? "Assigned session" : session.join_mode === "GROUP" ? "Group live session" : "Solo live session"}</span>
             </div>
-            <h2 style={{ margin: "12px 0 5px", color: C.text, fontWeight: 950, overflow: "hidden", textOverflow: "ellipsis" }}>{session.quiz_title || (assigned ? `Assigned Quiz #${quizId}` : `Session #${sessionId}`)}</h2>
-            <div style={{ color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>{guestMode ? formatDate(session.display_date) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}</>}</div>
+            <div style={{ marginTop: 8, color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>{guestMode ? formatDate(session.display_date) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}</>}</div>
           </div>
           {exportAllowed && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
@@ -206,7 +219,7 @@ export default function Analytics({ guestMode = false }) {
       </ThinkBotTutorial>
     )}
 
-    <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
+    <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme tw-analytics-theme" size={22} />
   </div></div>;
 }
 
@@ -285,29 +298,53 @@ function LegacyQuestionRows({ C, tone, questions }) {
 function QuestionAnalytics({ C, tone, templateType, questions }) {
   const tt = normalizeTemplateType(templateType);
   const [expandedIndex, setExpandedIndex] = useState(null);
-  const [closingIndex, setClosingIndex] = useState(null);
   const [batchIndex, setBatchIndex] = useState(0);
+  const [batchExpanded, setBatchExpanded] = useState(false);
   const [showCounts, setShowCounts] = useState(false);
   const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
   const toggleCounts = (event) => { event?.stopPropagation?.(); setShowCounts((value) => !value); };
   if (!questions.length) return <div className="tw-analytics-results-card" data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>{batchMode ? "Per-batch Results" : "Per-question Results"}</div><div style={emptyCard(C)}>No question-level results are available yet.</div></div>;
+
   if (batchMode) {
     const index = Math.min(batchIndex, questions.length - 1);
     const question = questions[index];
-    return <div className="tw-analytics-results-card tw-analytics-batch-results" data-tutorial="analytics-question-results" style={subCard(C)}><div style={{ ...sectionTitle(C), display: "flex", justifyContent: "space-between", alignItems: "center" }}><span>Per-batch Results</span><span style={{ display: "flex", gap: 7 }}><ArrowButton C={C} direction="left" disabled={index <= 0} onClick={() => setBatchIndex((v) => Math.max(0, v - 1))} /><ArrowButton C={C} direction="right" disabled={index >= questions.length - 1} onClick={() => setBatchIndex((v) => Math.min(questions.length - 1, v + 1))} /></span></div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div>;
-  }
-  return <div className="tw-analytics-results-card" data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>Per-question Results</div><div className={`tw-analytics-question-list${expandedIndex !== null ? " has-expanded" : ""}`}>{questions.map((question, index) => {
-    const expanded = expandedIndex === index;
-    const closing = closingIndex === index;
-    const hidden = expandedIndex !== null && !expanded;
-    return <div key={question.question_id || index} data-tutorial={index === 0 ? "analytics-question-card" : undefined} role="button" aria-expanded={expanded} aria-hidden={hidden ? "true" : undefined} tabIndex={hidden ? -1 : 0} className={`tw-analytics-question-card${expanded ? " is-expanded" : ""}${closing ? " is-closing" : ""}${hidden ? " is-hidden" : ""}`} onClick={() => !expanded && !hidden && setExpandedIndex(index)} onKeyDown={(event) => { if (!expanded && !hidden && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setExpandedIndex(index); } }} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
-      {expanded ? <ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} closing={closing} onCollapseEnd={() => { setExpandedIndex(null); setClosingIndex(null); }} onClose={(event) => { event.stopPropagation(); setClosingIndex(index); }} /> : <div className="tw-analytics-question-summary"><span style={{ color: tone.accent, fontWeight: 950 }}>Q{index + 1}</span><span className="tw-analytics-question-prompt">{question.prompt || "Untitled question"}</span><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></div>}
+    return <div className="tw-analytics-results-card tw-analytics-batch-results" data-tutorial="analytics-question-results" style={subCard(C)}>
+      <div style={{ ...sectionTitle(C), display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Per-batch Results</span>
+        <span style={{ display: "flex", gap: 7 }}><ArrowButton C={C} direction="left" disabled={index <= 0} onClick={() => { setBatchExpanded(false); setBatchIndex((v) => Math.max(0, v - 1)); }} /><ArrowButton C={C} direction="right" disabled={index >= questions.length - 1} onClick={() => { setBatchExpanded(false); setBatchIndex((v) => Math.min(questions.length - 1, v + 1)); }} /></span>
+      </div>
+      <div className={`tw-analytics-question-card tw-analytics-batch-card${batchExpanded ? " is-expanded" : ""}`} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+        <div role="button" tabIndex={0} className="tw-analytics-question-toggle" aria-expanded={batchExpanded} onClick={() => setBatchExpanded((value) => !value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBatchExpanded((value) => !value); } }}>
+          <span style={{ color: tone.accent, fontWeight: 950 }}>B{index + 1}</span>
+          <span className="tw-analytics-question-prompt">{question.prompt || "Untitled batch"}</span>
+          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+          <TwIcon name={batchExpanded ? "chevronUp" : "chevronDown"} size={18} />
+        </div>
+        <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+      </div>
     </div>;
-  })}</div></div>;
+  }
+
+  return <div className="tw-analytics-results-card" data-tutorial="analytics-question-results" style={subCard(C)}>
+    <div style={sectionTitle(C)}>Per-question Results</div>
+    <div className={`tw-analytics-question-list${expandedIndex !== null ? " has-expanded" : ""}`}>{questions.map((question, index) => {
+      const expanded = expandedIndex === index;
+      const hidden = expandedIndex !== null && !expanded;
+      return <div key={question.question_id || index} data-tutorial={index === 0 ? "analytics-question-card" : undefined} aria-hidden={hidden ? "true" : undefined} className={`tw-analytics-question-card${expanded ? " is-expanded" : ""}${hidden ? " is-hidden" : ""}`} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+        <div role="button" className="tw-analytics-question-toggle" aria-expanded={expanded} tabIndex={hidden ? -1 : 0} onClick={() => !hidden && setExpandedIndex(expanded ? null : index)} onKeyDown={(event) => { if (!hidden && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setExpandedIndex(expanded ? null : index); } }}>
+          <span style={{ color: tone.accent, fontWeight: 950 }}>Q{index + 1}</span>
+          <span className="tw-analytics-question-prompt">{question.prompt || "Untitled question"}</span>
+          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+          <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={18} />
+        </div>
+        <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+      </div>;
+    })}</div>
+  </div>;
 }
 
-function ExpandedQuestionDetail({ C, tone, tt, question, index, onClose, showCounts, onToggleCounts, closing = false, onCollapseEnd }) {
-  return <div className="tw-analytics-expanded-detail" onAnimationEnd={closing ? onCollapseEnd : undefined}><div className="tw-analytics-expanded-head"><span style={{ color: tone.accent, fontWeight: 950 }}>Q{index + 1}</span><button type="button" onClick={onClose} className="tw-analytics-close" style={{ color: C.text }}><TwIcon name="close" size={18} /></button></div><div className="tw-analytics-full-prompt">{question.prompt || "Untitled question"}</div>
+function ExpandedQuestionDetail({ C, tone, tt, question, showCounts, onToggleCounts }) {
+  return <div className="tw-analytics-expanded-detail"><div className="tw-analytics-full-prompt">{question.prompt || "Untitled question"}</div>
     {tt === "MCQ" && <AggregateChoices C={C} question={question} showLetters imageOnly={String(question.config_json?.mcqMode || "").toUpperCase() === "MODIFIED"} showCounts={showCounts} onToggleCounts={onToggleCounts} />}
     {tt === "TRUE_FALSE" && <AggregateChoices C={C} question={question} showCounts={showCounts} onToggleCounts={onToggleCounts} />}
     {tt === "TYPE_ANSWER" && <AnswerOnly C={C} text={question.correct_json?.text || question.config_json?.answer || "No answer set"} />}

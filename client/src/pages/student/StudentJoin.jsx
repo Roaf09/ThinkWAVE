@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
@@ -17,22 +17,17 @@ export default function StudentJoin() {
   const { dark, toggleTheme } = useTheme();
 
   const prefilled = sp.get("code") || "";
-  const [step, setStep] = useState(prefilled ? "name" : "code");
-  const [code, setCode] = useState(prefilled);
+  const code = prefilled;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleCode(e) {
-    e.preventDefault();
-    if (code.trim().length < 4) {
-      setMsg("Please enter a valid join code.");
-      return;
-    }
-    setMsg("");
-    setStep("name");
-  }
+  useEffect(() => {
+    if (!prefilled) nav("/?join=guest", { replace: true });
+  }, [nav, prefilled]);
+
+  if (!prefilled) return null;
 
   async function handleJoin(e) {
     e.preventDefault();
@@ -78,32 +73,14 @@ export default function StudentJoin() {
       <div style={s.blob1} />
       <div style={s.blob2} />
 
-      <div style={s.topBar}>
-        <Link to="/" style={{ ...s.topLink, color: mutedC, borderColor: cardBor }}>
-          ← Back to landing
-        </Link>
-        <ThemeIconButton dark={dark} onClick={toggleTheme} style={{ ...s.topLink, color:mutedC, borderColor:cardBor, background:"transparent" }} />
-      </div>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-guest-join-theme" size={20} />
 
-      <div style={s.logo}>
+      <Link to="/" aria-label="Back to ThinkWAVE landing page" className="tw-guest-join-logo" style={s.logo}>
         <span style={{ ...s.logoThink, color: textC }}>Think</span>
         <span style={s.logoWave}>WAVE</span>
-      </div>
+      </Link>
 
-      {step === "code" && (
-        <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>
-          <p style={{ ...s.cardLabel, color: textC }}>Enter Session Code</p>
-          <p style={{ fontSize: 13, color: mutedC, margin: "0 0 20px", textAlign: "center" }}>Ask your teacher for the live-session code.</p>
-          <form onSubmit={handleCode} style={s.form}>
-            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="123456" maxLength={12} autoFocus style={{ ...s.codeInput, background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
-            {msg && <p style={s.errMsg}>{msg}</p>}
-            <button type="submit" style={s.joinBtn}>Continue →</button>
-          </form>
-        </div>
-      )}
-
-      {step === "name" && (
-        <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>
+      <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>
           <p style={{ ...s.cardLabel, color: textC }}>What's your name?</p>
           <p style={{ fontSize: 13, color: mutedC, margin: "0 0 20px", textAlign: "center" }}>
             Code: <b style={{ color: textC, letterSpacing: 2 }}>{code}</b>
@@ -112,11 +89,10 @@ export default function StudentJoin() {
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" required autoFocus style={{ ...s.nameInput, background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
             <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name (optional)" style={{ ...s.nameInput, background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
             {msg && <p style={s.errMsg}>{msg}</p>}
-            <button type="submit" disabled={loading} style={{ ...s.joinBtn, opacity: loading ? 0.7 : 1 }}>{loading ? "Joining…" : "Join Session"}</button>
-            <button type="button" onClick={() => setStep("code")} style={{ ...s.backLink, color: mutedC }}>← Change code</button>
+            <button type="submit" disabled={loading} className="tw-guest-join-primary" style={{ ...s.joinBtn, opacity: loading ? 0.7 : 1 }}>{loading ? "Joining…" : "Join Session"}</button>
+            <button type="button" onClick={() => nav("/?join=guest")} style={{ ...s.backLink, color: mutedC }}>Change code</button>
           </form>
         </div>
-      )}
 
       <p style={{ color: mutedC, fontSize: 12, marginTop: 20, zIndex: 1 }}>No account needed · Just your name and code</p>
     </div>
@@ -129,7 +105,7 @@ const s = {
   blob2: { position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,0.08) 0%,transparent 70%)", bottom: -100, right: -100, pointerEvents: "none" },
   topBar: { position: "fixed", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
   topLink: { border: "1px solid", borderRadius: 20, padding: "8px 14px", textDecoration: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  logo: { display: "flex", alignItems: "baseline", marginBottom: 28, zIndex: 1 },
+  logo: { display: "flex", alignItems: "baseline", marginBottom: 28, zIndex: 1, textDecoration: "none", cursor: "pointer" },
   logoThink: { fontSize: 32, fontWeight: 900 },
   logoWave: { fontSize: 32, fontWeight: 900, color: "#2b6cff" },
   card: { borderRadius: 24, padding: "36px 32px", width: "min(100%,420px)", zIndex: 1, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" },

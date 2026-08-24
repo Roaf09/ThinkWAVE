@@ -24,6 +24,7 @@ export default function HostLive({ guestMode = false }) {
   const [roster, setRoster] = useState([]);
   const [groups, setGroups] = useState([]);
   const [scores, setScores] = useState([]);
+  const [scoreMode, setScoreMode] = useState("competitive");
   const [msg, setMsg] = useState("");
   const [starting, setStarting] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -185,20 +186,44 @@ export default function HostLive({ guestMode = false }) {
     ? groups.filter((group) => (group.members || []).some((member) => Number(member.connected) === 1)).length
     : connected, [joinMode, groups, connected]);
   const sortedRoster = useMemo(() => [...roster].sort((a, b) => `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`)), [roster]);
-  const leaders = useMemo(() => [...scores].sort((a, b) => Number(b.total_points || 0) - Number(a.total_points || 0)).slice(0, 3), [scores]);
-  const scoreByParticipant = useMemo(() => new Map(scores.map((score) => [Number(score.participant_id), Number(score.total_points || 0)])), [scores]);
   const displayRoster = useMemo(() => tutorialDemo ? [...roster, ...tutorialBots] : roster, [tutorialDemo, roster, tutorialBots]);
   const sortedDisplayRoster = useMemo(() => [...displayRoster].sort((a, b) => `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`)), [displayRoster]);
   const displayScores = useMemo(() => {
     if (!tutorialDemo) return scores;
-    const fakeRows = tutorialBots.map((bot, index) => ({ participant_id: bot.id, first_name: "ThinkBOT", last_name: String(index + 1), total_points: Number(tutorialBotScores[bot.id] || 0) }));
+    const fakeRows = tutorialBots.map((bot, index) => {
+      const normal = Number(tutorialBotScores[bot.id] || 0);
+      return { participant_id: bot.id, first_name: "ThinkBOT", last_name: String(index + 1), total_points: normal, competitive_points: Math.round(normal * 1000), response_time_ms: 0 };
+    });
     return [...scores, ...fakeRows];
   }, [tutorialDemo, tutorialBots, tutorialBotScores, scores]);
-  const displayLeaders = useMemo(() => [...displayScores].sort((a, b) => Number(b.total_points || 0) - Number(a.total_points || 0)).slice(0, 3), [displayScores]);
-  const displayScoreByParticipant = useMemo(() => new Map(displayScores.map((score) => [Number(score.participant_id), Number(score.total_points || 0)])), [displayScores]);
-  const displayExpected = tutorialDemo ? 3 : expected;
-  const displayAnsweredCount = tutorialDemo ? tutorialAnsweredCount : answeredCount;
-  const displayChoiceCounts = tutorialDemo ? tutorialChoiceCounts : choiceCounts;
+  const displayLeaders = useMemo(() => [...displayScores].sort((a, b) => {
+    const primary = scoreMode === "competitive"
+      ? Number(b.competitive_points || 0) - Number(a.competitive_points || 0)
+      : Number(b.total_points || 0) - Number(a.total_points || 0);
+    if (primary) return primary;
+    const secondary = scoreMode === "competitive"
+      ? Number(b.total_points || 0) - Number(a.total_points || 0)
+      : Number(b.competitive_points || 0) - Number(a.competitive_points || 0);
+    if (secondary) return secondary;
+    const aTime = Number(a.response_time_ms || a.completion_ms || Number.MAX_SAFE_INTEGER);
+    const bTime = Number(b.response_time_ms || b.completion_ms || Number.MAX_SAFE_INTEGER);
+    if (aTime !== bTime) return aTime - bTime;
+    return Number(a.participant_id || a.group_id || Number.MAX_SAFE_INTEGER) - Number(b.participant_id || b.group_id || Number.MAX_SAFE_INTEGER);
+  }).slice(0, 3), [displayScores, scoreMode]);
+  // Attendance always shows the teacher/academic score. Competitive points only belong
+  // to the Top Scores view and student-facing leaderboards.
+  const displayScoreByParticipant = useMemo(() => new Map(displayScores.map((score) => [
+    Number(score.participant_id),
+    Number(score.total_points || 0),
+  ])), [displayScores]);
+  const displayExpected = tutorialDemo ? 3 + expected : expected;
+  const displayAnsweredCount = tutorialDemo ? tutorialAnsweredCount + answeredCount : answeredCount;
+  const displayChoiceCounts = useMemo(() => {
+    if (!tutorialDemo) return choiceCounts;
+    const merged = { ...choiceCounts };
+    Object.entries(tutorialChoiceCounts || {}).forEach(([key, value]) => { merged[key] = Number(merged[key] || 0) + Number(value || 0); });
+    return merged;
+  }, [tutorialDemo, tutorialChoiceCounts, choiceCounts]);
 
   useEffect(() => {
     if (guestMode || !tutorialUserId || activeRoster.length < 5 || tabTutorialOpen) return;
@@ -233,6 +258,11 @@ export default function HostLive({ guestMode = false }) {
     }
     if (!isLive) return { remainingSec: 0, progress: 0, total };
     const serverNowMs = nowMs - clockOffsetMs;
+    const resumeHoldUntil = Number(state?.resume_hold_until_ms || 0);
+    const resumeHoldRemaining = Number(state?.resume_hold_remaining_sec);
+    if (resumeHoldUntil > serverNowMs && Number.isFinite(resumeHoldRemaining)) {
+      return { remainingSec: Math.max(0, resumeHoldRemaining), progress: total ? Math.min(1, resumeHoldRemaining / total) : 0, total };
+    }
     const startsAt = state?.question_started_at_ms != null
       ? Number(state.question_started_at_ms)
       : state?.question_started_at ? new Date(state.question_started_at).getTime() : 0;
@@ -521,18 +551,18 @@ export default function HostLive({ guestMode = false }) {
   if (!state) return <div style={{ minHeight: "100vh", background: C.pageBg, display: "grid", placeItems: "center", color: C.muted }}>Loading session…</div>;
 
   const startLabel = starting ? `Starting in ${countdown}…` : isLive ? "Pause" : isPaused ? "Resume" : "Start";
-  const sideBorder = dark ? "rgba(226,232,240,.42)" : "rgba(15,23,42,.28)";
+  const sideBorder = `color-mix(in srgb, ${accent} ${dark ? 72 : 62}%, ${dark ? "#dbeafe" : "#0f172a"})`;
   const joinUrl = `${window.location.origin}/play?code=${encodeURIComponent(state.join_code || "")}`;
   const disableControl = starting || (isLast && isLive && timer.remainingSec === 0);
 
-  return <div className="tw-host-live tw-host-live-v24 tw-host-live-v25" style={{ minHeight: "100vh", backgroundImage: experienceBackground, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", color: C.text, "--host-accent": C.accent, "--host-soft": `${C.accent}18`, "--host-side-border": sideBorder, "--host-action-icon": dark ? "#fff" : "#0f172a" }}>
+  return <div className="tw-host-live tw-host-live-v24 tw-host-live-v25" style={{ minHeight: "100vh", backgroundImage: experienceBackground, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", color: C.text, "--host-accent": accent, "--host-soft": `${C.accent}18`, "--host-side-border": sideBorder, "--host-action-icon": dark ? "#fff" : "#0f172a" }}>
     <header className="tw-host-header" style={{ background: C.headerBg, borderColor: C.border }}>
       <div>
         <div className="tw-host-brand"><span>Think</span><span>WAVE</span><small>Host Panel</small></div>
         <div className="tw-host-status"><StatusPill label={state.status} kind={isLive ? "green" : isEnded ? "neutral" : "yellow"}/>{!isGuestHost && <StatusPill label={joinMode === "GROUP" ? "Group Mode" : "Solo Mode"} kind="blue"/>}{msg && <span style={{ color: C.muted }}>{msg}</span>}</div>
       </div>
       <div className="tw-host-actions">
-        {isEnded && <TeacherPressButton tone="blue" className="tw-host-action-button tw-host-control-white-icon" icon="home" onClick={() => navigate(isGuestHost ? "/guest" : "/teacher", { state: { tab: isGuestHost ? "history" : "home" } })}>Dashboard</TeacherPressButton>}
+        {isEnded && <TeacherPressButton tone="blue" className="tw-host-action-button tw-host-control-white-icon" onClick={() => navigate(isGuestHost ? "/guest" : "/teacher", { state: { tab: isGuestHost ? "history" : "home" } })}>Dashboard</TeacherPressButton>}
         {!isEnded && <>
           <TeacherPressButton data-tutorial="host-panel-start" tone="blue" className="tw-host-action-button tw-host-control-white-icon" icon={isLive ? "pause" : "play"} onClick={handlePrimaryControl} disabled={disableControl || (tutorialDemo && hostTutorialStage === "start" && tutorialBots.length < 3)}>{startLabel}</TeacherPressButton>
           <TeacherPressButton data-tutorial="host-panel-end" tone="red" className="tw-host-action-button tw-host-control-white-icon" icon="stop" onClick={handleEndControl}>End</TeacherPressButton>
@@ -542,22 +572,22 @@ export default function HostLive({ guestMode = false }) {
 
     <main className="tw-host-main tw-host-main-v24">
       <section className="tw-host-scoreboard" style={{ ...card(C), background: dark ? "#16213c" : "#dbeafe" }}>
-        <div className="tw-host-section-title"><h3><TwIcon name="trophy" size={21}/>Top Scores</h3></div>
-        <Podium leaders={displayLeaders} C={C}/>
+        <div className="tw-host-section-title"><h3><TwIcon name="trophy" size={21}/>Top Scores</h3><button type="button" className="tw-host-score-mode-chip" onClick={() => setScoreMode((mode) => mode === "competitive" ? "normal" : "competitive")} title="Switch between competitive and normal points">{scoreMode === "competitive" ? "Competitive points" : "Normal points"}</button></div>
+        <Podium leaders={displayLeaders} C={C} scoreMode={scoreMode} onToggleScoreMode={() => setScoreMode((mode) => mode === "competitive" ? "normal" : "competitive")}/>
       </section>
 
       {!isEnded ? <div className="tw-host-content-grid">
-        <section data-tutorial="host-question-content" className="tw-host-question-card" style={{ ...card(C), border: `4px solid ${dark ? "#2563eb" : "#1d4ed8"}` }}>
+        <section data-tutorial="host-question-content" className="tw-host-question-card" style={{ ...card(C), border: `5px solid color-mix(in srgb, ${accent} 82%, ${C.border})`, boxShadow: `0 10px 0 color-mix(in srgb, ${accent} 44%, ${C.border}), 0 20px 42px ${accent}24` }}>
           <div className="tw-host-question-head">
             <div><h2>{state.quiz_title || "Quiz"}</h2><span className="tw-host-question-count">{state.template_type === "MATCHING" ? "Batch" : "Question"} {Number(state.current_question_index || 0) + 1} of {questions.length}</span></div>
             <div data-tutorial="host-question-metrics" className="tw-host-question-meta">
-              <StatusPill label={`${displayAnsweredCount}/${displayExpected} answered`} kind="blue"/>
-              <StatusPill label={`${Number(currentQ?.config_json?.points ?? state?.points_per_question ?? 1)} pts`} kind="blue"/>
-              <StatusPill label={fmtTime(timer.remainingSec)} kind={timer.remainingSec <= 5 && isLive ? "red" : "green"}/>
-              {isLive && !isLast && <TeacherPressButton tone="blue" className="tw-host-action-button tw-host-control-white-icon" icon="arrowRight" onClick={nextQuestion}>Next</TeacherPressButton>}
+              <StatusPill className={`tw-host-white-metric${displayExpected > 0 && displayAnsweredCount >= displayExpected ? " is-complete" : ""}`} label={`${displayAnsweredCount}/${displayExpected} answered`} kind={displayExpected > 0 && displayAnsweredCount >= displayExpected ? "green" : "blue"}/>
+              <StatusPill className="tw-host-white-metric" label={`${tutorialQuestionMaxPoints(currentQ, normalizeTemplateType(state?.template_type), state?.points_per_question)} pts`} kind="blue"/>
+              <span className={`tw-host-pixel-timer${timer.remainingSec <= 3 && isLive ? " is-danger" : timer.remainingSec <= 4 && isLive ? " is-warning" : ""}`} style={{ "--host-accent": "#22c55e" }}><TwIcon name="clock" size={20}/>{fmtTime(timer.remainingSec)}</span>
+              {isLive && !isLast && <TeacherPressButton tone="blue" className="tw-host-action-button tw-host-control-white-icon tw-host-next-template" style={{ "--tw-press-face": accent, "--tw-press-base": `color-mix(in srgb, ${accent} 62%, #071024)`, "--tw-press-border": `color-mix(in srgb, ${accent} 58%, #fff)` }} icon="arrowRight" onClick={nextQuestion}>Next</TeacherPressButton>}
             </div>
           </div>
-          <div data-tutorial="host-question-progress" className="tw-host-progress" style={{ background: C.border }}><div style={{ width: `${Math.round(timer.progress * 100)}%`, background: timer.remainingSec <= 5 ? "#ef4444" : C.accent }}/></div>
+          <div data-tutorial="host-question-progress" className={`tw-host-progress tw-host-pixel-progress${timer.remainingSec <= 3 && isLive ? " is-danger" : timer.remainingSec <= 4 && isLive ? " is-warning" : ""}`} style={{ "--host-accent": accent }}><div style={{ width: `${Math.round(timer.progress * 100)}%` }}/></div>
           <div className="tw-host-prompt" style={{ background: C.cardBg2, borderColor: C.border }}><h3 style={{ fontSize: fitHostTextSize(currentQ?.prompt, 31, 17) }}>{currentQ?.prompt || "Waiting for the first question"}</h3>{currentQ && <QuestionPreview q={currentQ} templateType={state.template_type} C={C} choiceCounts={displayChoiceCounts}/>}</div>
         </section>
         <div className="tw-host-right-stack">
@@ -571,7 +601,7 @@ export default function HostLive({ guestMode = false }) {
             {joinMode === "GROUP" && state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
           </section>
         </div>
-      </div> : <section className="tw-host-ended-shell" style={card(C)}><div className="tw-host-ended-card"><h2>Session ended</h2><TeacherPressButton data-tutorial="host-panel-analytics" tone="blue" icon="chart" onClick={openAnalyticsFromTutorial}>Open Analytics</TeacherPressButton></div></section>}
+      </div> : <section className="tw-host-ended-shell" style={card(C)}><div className="tw-host-ended-card"><h2>Session ended</h2><TeacherPressButton data-tutorial="host-panel-analytics" tone="blue" icon="chart" className="tw-host-open-analytics" style={{ "--host-accent": accent }} onClick={openAnalyticsFromTutorial}>Open Analytics</TeacherPressButton></div></section>}
     </main>
 
     <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-host-floating-theme" size={22} />
@@ -605,26 +635,27 @@ export default function HostLive({ guestMode = false }) {
 
     {tabTutorialOpen && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-tab-out"]' placement="left" square clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => { if (tutorialUserId) writeTutorialState(tutorialUserId, { fiveStudentTabSeen: true }); setTabTutorialOpen(false); }}><p>This counts the amount of times they leave the session.</p><p>When they reach <strong>2 counts</strong>, ThinkWAVE gives a warning. Reaching <strong>3</strong> will kick them out of the session due to suspicious actions.</p></ThinkBotTutorial>}
 
-    <ActionDialog open={!!confirmAction} plainIcon flatSurface tone={confirmAction === "end" ? "red" : "blue"} icon={<TwIcon name={confirmAction === "end" ? "stop" : isLive ? "pause" : "play"} size={46}/>} title={confirmAction === "end" ? "End this session?" : isLive ? "Pause this session?" : isPaused ? "Resume this session?" : "Start this session?"} message={isLive && confirmAction !== "end" ? "The question timer and gameplay will pause for everyone." : ""} onClose={() => setConfirmAction(null)}><button className="tw-dialog-text-cancel" onClick={() => setConfirmAction(null)}>Cancel</button><button className={`tw-dialog-press ${confirmAction === "end" ? "is-red" : "is-blue"}`} onClick={runConfirmed}><span>{confirmAction === "end" ? "End" : isLive ? "Pause" : isPaused ? "Resume" : "Start"}</span></button></ActionDialog>
-    <ActionDialog open={allAnsweredPrompt} icon={<TwIcon name="check" size={28}/>} title={advanceReason === "timeup" ? "Time is up" : "Everyone has answered"} message={advanceReason === "timeup" ? "Moving to the next question even if some participants did not submit." : ""} onClose={() => setAllAnsweredPrompt(false)}><button onClick={() => setAllAnsweredPrompt(false)} style={secondaryBtn(C, dark)}>Wait</button><button onClick={() => { setAllAnsweredPrompt(false); nextQuestion(); }} style={primaryBtn({ bg: C.accent, fg: "#fff", border: C.accent })}>Go to next ({autoNextCount})</button></ActionDialog>
-    <ActionDialog open={finishedPrompt} plainIcon flatSurface tone="blue" icon={<TwIcon name="trophy" size={46}/>} title="Everyone has finished answering" message="You can end the session when you are ready." onClose={() => setFinishedPrompt(false)}><button onClick={() => setFinishedPrompt(false)} className="tw-dialog-text-cancel">Review scores</button><button className="tw-dialog-press is-blue" onClick={() => { setFinishedPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "ENDED" }); }}><span>End session</span></button></ActionDialog>
-    <ActionDialog open={!!deleteGroupTarget} tone="red" icon={<TwIcon name="trash" size={28}/>} title="Delete group?" message={deleteGroupTarget ? `Delete ${deleteGroupTarget.display_name}? Its students will return to the waiting list.` : ""} onClose={() => setDeleteGroupTarget(null)}><button onClick={() => setDeleteGroupTarget(null)} style={secondaryBtn(C, dark)}>Cancel</button><button onClick={() => { socketRef.current?.emit("teacher:deleteGroup", { sessionId: Number(id), groupId: deleteGroupTarget.id }); setDeleteGroupTarget(null); }} style={primaryBtn({ bg: "#fee2e2", fg: "#dc2626", border: "#fca5a5" })}>Delete</button></ActionDialog>
+    <ActionDialog open={!!confirmAction} plainIcon flatSurface tone={confirmAction === "end" ? "red" : "blue"} icon={<TwIcon name={confirmAction === "end" ? "stop" : isLive ? "pause" : "play"} size={46}/>} title={confirmAction === "end" ? "End this session?" : isLive ? "Pause this session?" : isPaused ? "Resume this session?" : "Start this session?"} message={isLive && confirmAction !== "end" ? "The question timer and gameplay will pause for everyone." : ""} onClose={() => setConfirmAction(null)}><button className="tw-dialog-text-cancel" onClick={() => setConfirmAction(null)}>Cancel</button><TeacherPressButton tone={confirmAction === "end" ? "red" : "blue"} onClick={runConfirmed}>{confirmAction === "end" ? "End" : isLive ? "Pause" : isPaused ? "Resume" : "Start"}</TeacherPressButton></ActionDialog>
+    <ActionDialog open={allAnsweredPrompt} icon={<TwIcon name="check" size={28}/>} title={advanceReason === "timeup" ? "Time is up" : "Everyone has answered"} message={advanceReason === "timeup" ? "Moving to the next question even if some participants did not submit." : ""} onClose={() => setAllAnsweredPrompt(false)}><TeacherPressButton tone="blue" className="tw-host-dialog-blue-no-outline" onClick={() => { setAllAnsweredPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "PAUSED" }); }}>Wait</TeacherPressButton><TeacherPressButton tone="blue" style={{ "--tw-press-face": accent, "--tw-press-base": `color-mix(in srgb, ${accent} 62%, #071024)`, "--tw-press-border": `color-mix(in srgb, ${accent} 58%, #fff)` }} onClick={() => { setAllAnsweredPrompt(false); nextQuestion(); }}>Go to next ({autoNextCount})</TeacherPressButton></ActionDialog>
+    <ActionDialog open={finishedPrompt} plainIcon flatSurface tone="blue" icon={<TwIcon name="trophy" size={46}/>} title="Everyone has finished answering" message="You can end the session when you are ready." onClose={() => setFinishedPrompt(false)}><TeacherPressButton tone="blue" className="tw-host-dialog-blue-no-outline" onClick={() => { setFinishedPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "PAUSED" }); }}>Review scores</TeacherPressButton><TeacherPressButton tone="red" onClick={() => { setFinishedPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "ENDED" }); }}>End session</TeacherPressButton></ActionDialog>
+    <ActionDialog open={!!deleteGroupTarget} tone="red" icon={<TwIcon name="trash" size={28}/>} title="Delete group?" message={deleteGroupTarget ? `Delete ${deleteGroupTarget.display_name}? Its students will return to the waiting list.` : ""} onClose={() => setDeleteGroupTarget(null)}><button className="tw-dialog-press is-neutral" onClick={() => setDeleteGroupTarget(null)}><span>Cancel</span></button><button className="tw-dialog-press is-red" onClick={() => { socketRef.current?.emit("teacher:deleteGroup", { sessionId: Number(id), groupId: deleteGroupTarget.id }); setDeleteGroupTarget(null); }}><span>Delete</span></button></ActionDialog>
   </div>;
 }
 
-const Podium = memo(function Podium({ leaders, C }) {
+const Podium = memo(function Podium({ leaders, C, scoreMode = "competitive", onToggleScoreMode }) {
   const order = [leaders[1], leaders[0], leaders[2]];
   const places = [2, 1, 3];
   return <div className="tw-host-podium">{order.map((row, index) => {
     const place = places[index];
     const name = row ? (row.group_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()) : "Waiting…";
+    const value = scoreMode === "competitive" ? Number(row?.competitive_points || 0) : Number(row?.total_points || 0);
     return <div key={place} className={`tw-host-podium-place place-${place}`}>
       <div className="tw-host-trophy"><TwIcon name="trophy" size={54} strokeWidth={2.2}/><span>{place}</span></div>
-      <div className="tw-host-podium-platform"><b>{name}</b><span className="tw-host-podium-points">{Math.round(Number(row?.total_points || 0))} pts</span></div>
+      <div className="tw-host-podium-platform"><div className="tw-host-podium-person"><div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={row?.group_name ? "users" : "user"} size={18}/>}</div><b>{name}</b></div><button type="button" className="tw-host-podium-points tw-host-score-click" onClick={onToggleScoreMode} title="Click to switch point type">{formatHostScore(value, scoreMode)} pts</button></div>
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}</span><b>{Math.round(Number(score || 0))} pts</b>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" style={{ color: tabColor, fontSize: 12, fontWeight: 800 }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" style={{ color: tabColor, fontSize: 12, fontWeight: 800 }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
 const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choiceCounts = {} }) {
   const cfg = q?.config_json || {};
   const correct = q?.correct_json || {};
@@ -634,15 +665,18 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
     const options = tt === "TRUE_FALSE"
       ? [{ text: "True", image: "" }, { text: "False", image: "" }]
       : (Array.isArray(cfg.options) ? cfg.options : []);
-    return <div className="tw-host-options">{options.map((option, i) => {
+    return <div className={`tw-host-options tw-host-student-choice-grid${tt === "TRUE_FALSE" ? " is-true-false" : ""}`}>{options.map((option, i) => {
       const text = typeof option === "object" ? option.text : option;
       const image = typeof option === "object" ? option.image : "";
       const oddLast = options.length % 2 === 1 && i === options.length - 1;
-      return <div key={i} className={oddLast ? "is-odd-last" : ""} style={{ background: C.cardBg, borderColor: C.border }}>
-        <span>{String.fromCharCode(65 + i)}</span>
-        {image && <img src={image} alt=""/>}
-        {!(tt === "MCQ" && cfg.mcqMode === "MODIFIED" && image) && <b style={{ fontSize: fitHostTextSize(text, 22, 13) }}>{text || "Image option"}</b>}
-        <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)] || 0)} responses`}>{Number(choiceCounts[String(i)] || 0)}</em>
+      const label = tt === "TRUE_FALSE" ? (i === 0 ? "T" : "F") : String.fromCharCode(65 + i);
+      return <div key={i} className={`tw-host-student-choice choice-${i + 1}${oddLast ? " is-odd-last" : ""}`}>
+        <span className="tw-host-student-choice-badge">{label}</span>
+        <span className="tw-host-student-choice-content">
+          {image && <img src={image} alt=""/>}
+          {!(tt === "MCQ" && cfg.mcqMode === "MODIFIED" && image) && <b style={{ fontSize: fitHostTextSize(text, 22, 13) }}>{text || "Image option"}</b>}
+        </span>
+        {tt === "MCQ" && <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)] || 0)} responses`}>{Number(choiceCounts[String(i)] || 0)}</em>}
       </div>;
     })}</div>;
   }
@@ -669,7 +703,8 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
   }
 
   if (tt === "GUESS_WORD_4PICS") {
-    return <div className="tw-host-pics">{[0, 1, 2, 3].map((i) => <div key={i}>{cfg.images?.[i] ? <img src={cfg.images[i]} alt=""/> : "?"}</div>)}</div>;
+    const answer = String(correct?.text || cfg?.target || "").trim();
+    return <div className="tw-host-guess-preview"><div className="tw-host-pics">{[0, 1, 2, 3].map((i) => <div key={i}>{cfg.images?.[i] ? <img src={cfg.images[i]} alt=""/> : "?"}</div>)}</div><div className="tw-host-guess-answer" style={{ background: C.cardBg, borderColor: C.border }}><b>{answer || "No answer set"}</b></div></div>;
   }
 
   if (tt === "THINK_SPELL") {
@@ -746,7 +781,13 @@ function tutorialWrongChoiceIndex(question, templateType, correctIndex) {
   for (let index = 0; index < optionCount; index += 1) if (index !== correctIndex) return index;
   return correctIndex;
 }
-function StatusPill({ label, kind = "neutral" }) { const palette = kind === "green" ? { bg: "#22c55e20", fg: "#22c55e", br: "#22c55e55" } : kind === "yellow" ? { bg: "#fbbf2420", fg: "#f59e0b", br: "#fbbf2455" } : kind === "red" ? { bg: "#ef444420", fg: "#ef4444", br: "#ef444455" } : kind === "blue" ? { bg: "#2b6cff20", fg: "#6792ff", br: "#2b6cff55" } : { bg: "#94a3b820", fg: "#94a3b8", br: "#94a3b855" }; return <span style={{ padding: "5px 11px", borderRadius: 999, fontSize: 12, fontWeight: 850, background: palette.bg, color: palette.fg, border: `1px solid ${palette.br}` }}>{label}</span>; }
+function StatusPill({ label, kind = "neutral", className = "" }) { const palette = kind === "green" ? { bg: "#22c55e20", fg: "#22c55e", br: "#22c55e55" } : kind === "yellow" ? { bg: "#fbbf2420", fg: "#f59e0b", br: "#fbbf2455" } : kind === "red" ? { bg: "#ef444420", fg: "#ef4444", br: "#ef444455" } : kind === "blue" ? { bg: "#2b6cff20", fg: "#6792ff", br: "#2b6cff55" } : { bg: "#94a3b820", fg: "#94a3b8", br: "#94a3b855" }; return <span className={className} style={{ padding: "5px 11px", borderRadius: 999, fontSize: 12, fontWeight: 850, background: palette.bg, color: palette.fg, border: `1px solid ${palette.br}` }}>{label}</span>; }
+function formatHostScore(value, mode = "normal") {
+  const n = Number(value || 0);
+  if (mode === "competitive") return Math.round(n).toLocaleString();
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function fmtTime(sec) { const value = Math.max(0, Number(sec || 0)); return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
 function card(C) { return { background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 20, padding: 20, boxShadow: `0 18px 42px ${C.accent}16` }; }
 function btnStyle(C, variant) { const base = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 15px", borderRadius: 11, fontSize: 13, fontWeight: 800, cursor: "pointer", transition: "all .2s", fontFamily: "inherit" }; if (variant === "primary") return { ...base, background: C.accent, color: "#fff", border: `1px solid ${C.accent}` }; if (variant === "danger") return { ...base, background: "#ef444420", color: "#ef4444", border: "1px solid #ef444455" }; return { ...base, background: C.cardBg2, color: C.text, border: `1px solid ${C.border}` }; }

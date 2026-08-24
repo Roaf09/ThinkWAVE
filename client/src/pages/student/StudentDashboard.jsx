@@ -34,6 +34,7 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(emptyProfile());
   const [birthPickerOpen, setBirthPickerOpen] = useState(false);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [achievementToast, setAchievementToast] = useState(null);
   const [removalNotices, setRemovalNotices] = useState([]);
 
   async function load({ silent = false } = {}) {
@@ -57,6 +58,20 @@ export default function StudentDashboard() {
     const timer = setInterval(() => load({ silent: true }), 5000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const stats=data.achievementStats||{};
+    if(!Object.keys(stats).length) return;
+    const achieved=buildAchievements(stats).filter((item)=>item.completed).map((item)=>item.id);
+    const storageKey=`tw_achievement_mastered_${data.profile?.user_id||"student"}`;
+    let previous=null;
+    try{previous=JSON.parse(localStorage.getItem(storageKey)||"null");}catch{previous=null;}
+    if(Array.isArray(previous)){
+      const fresh=buildAchievements(stats).find((item)=>item.completed&&!previous.includes(item.id));
+      if(fresh){setAchievementToast(fresh);window.setTimeout(()=>setAchievementToast(null),3600);}
+    }
+    localStorage.setItem(storageKey,JSON.stringify(achieved));
+  },[data.achievementStats,data.profile?.user_id]);
 
   useEffect(() => {
     if (!joinProfileStep) return;
@@ -167,7 +182,7 @@ export default function StudentDashboard() {
       <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
           <div><span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span></div>
-          <button onClick={() => setProfileOpen(true)} title="Student Info" style={profileGearBtn(c)}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={20} />}</button>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>{(data.gamification?.favorites||[]).slice(0,3).map((id)=><span key={id} title={ACHIEVEMENT_DEFINITIONS.find((item)=>item.id===id)?.title||"Favorite achievement"} style={{color:"#fbbf24",display:"inline-flex"}}><TwIcon name="trophy" size={12}/></span>)}<button onClick={() => setProfileOpen(true)} title="Student Info" style={profileGearBtn(c)}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <TwIcon name="user" size={20} />}</button></div>
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
@@ -198,38 +213,59 @@ export default function StudentDashboard() {
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the student dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
       {removalNotices[0] && <ClassRemovalModal c={c} notice={removalNotices[0]} onClose={() => acknowledgeRemoval(removalNotices[0])} />}
+      {achievementToast&&<div className="tw-achievement-unlock-toast"><TwIcon name="trophy" size={22}/><div><small>Achievement Mastered</small><strong>{achievementToast.title}</strong></div></div>}
     </div>
   );
 }
 
 const ACHIEVEMENT_DEFINITIONS = [
-  { id: "answer-1", title: "First Answer", metric: "questionsAnswered", target: 1, unit: "questions answered", tone: "blue" },
-  { id: "answer-10", title: "Getting Started", metric: "questionsAnswered", target: 10, unit: "questions answered", tone: "blue" },
-  { id: "answer-30", title: "Curious Mind", metric: "questionsAnswered", target: 30, unit: "questions answered", tone: "blue" },
-  { id: "answer-50", title: "Question Explorer", metric: "questionsAnswered", target: 50, unit: "questions answered", tone: "blue" },
-  { id: "answer-100", title: "Century Solver", metric: "questionsAnswered", target: 100, unit: "questions answered", tone: "blue" },
-  { id: "correct-1", title: "Correct Start", metric: "questionsCorrect", target: 1, unit: "correct answers", tone: "green" },
-  { id: "correct-10", title: "Accuracy Apprentice", metric: "questionsCorrect", target: 10, unit: "correct answers", tone: "green" },
-  { id: "correct-30", title: "Sharp Thinker", metric: "questionsCorrect", target: 30, unit: "correct answers", tone: "green" },
-  { id: "correct-50", title: "Accuracy Expert", metric: "questionsCorrect", target: 50, unit: "correct answers", tone: "green" },
-  { id: "correct-100", title: "Master Mind", metric: "questionsCorrect", target: 100, unit: "correct answers", tone: "green" },
-  { id: "wrong-5", title: "Learning From Mistakes", metric: "questionsIncorrect", target: 5, unit: "incorrect answers reviewed", tone: "orange" },
-  { id: "wrong-20", title: "Keep Trying", metric: "questionsIncorrect", target: 20, unit: "incorrect answers reviewed", tone: "orange" },
-  { id: "quick-1", title: "Quick Starter", metric: "quickCorrect", target: 1, unit: "quick correct answers", tone: "purple" },
-  { id: "quick-10", title: "Lightning Mind", metric: "quickCorrect", target: 10, unit: "quick correct answers", tone: "purple" },
-  { id: "assigned-1", title: "First Assignment", metric: "assignedCompleted", target: 1, unit: "assigned sessions completed", tone: "pink" },
-  { id: "assigned-5", title: "Assignment Regular", metric: "assignedCompleted", target: 5, unit: "assigned sessions completed", tone: "pink" },
-  { id: "live-1", title: "Live Learner", metric: "liveCompleted", target: 1, unit: "live sessions completed", tone: "teal" },
-  { id: "live-5", title: "Live Session Fan", metric: "liveCompleted", target: 5, unit: "live sessions completed", tone: "teal" },
-  { id: "class-1", title: "Classroom Member", metric: "classesJoined", target: 1, unit: "classes joined", tone: "yellow" },
-  { id: "class-3", title: "Community Learner", metric: "classesJoined", target: 3, unit: "classes joined", tone: "yellow" },
+  { id:"top5-1",title:"First Top 5",metric:"top5Count",target:1,unit:"Top 5 finishes",tone:"yellow",tier:"Bronze" },
+  { id:"top5-10",title:"Top 5 Regular",metric:"top5Count",target:10,unit:"Top 5 finishes",tone:"yellow",tier:"Silver" },
+  { id:"top5-50",title:"Top 5 Veteran",metric:"top5Count",target:50,unit:"Top 5 finishes",tone:"yellow",tier:"Gold" },
+  { id:"first-1",title:"Number One",metric:"firstPlaceCount",target:1,unit:"1st-place finishes",tone:"yellow" },
+  { id:"top3-5",title:"Podium Regular",metric:"top3Count",target:5,unit:"Top 3 finishes",tone:"orange" },
+  { id:"overtake-1",title:"First Overtake",metric:"overtakes",target:1,unit:"players overtaken",tone:"teal",tier:"Bronze" },
+  { id:"overtake-25",title:"Rank Climber",metric:"overtakes",target:25,unit:"players overtaken",tone:"teal",tier:"Silver" },
+  { id:"overtake-100",title:"Leaderboard Surfer",metric:"overtakes",target:100,unit:"players overtaken",tone:"teal",tier:"Gold" },
+  { id:"comp-10k",title:"Competitive Starter",metric:"competitivePoints",target:10000,unit:"competitive points",tone:"blue",tier:"Bronze" },
+  { id:"comp-50k",title:"Point Chaser",metric:"competitivePoints",target:50000,unit:"competitive points",tone:"blue",tier:"Silver" },
+  { id:"comp-100k",title:"Wave Champion",metric:"competitivePoints",target:100000,unit:"competitive points",tone:"blue",tier:"Gold" },
+  { id:"fast-flawless",title:"Fast and Flawless",metric:"fastFlawless",target:5,unit:"fast correct answers",tone:"purple" },
+  { id:"perfect-pace",title:"Perfect Pace",metric:"perfectPace",target:1,unit:"5-answer fast streaks",tone:"purple" },
+  { id:"clutch-5",title:"Clutch Answer",metric:"clutchCorrect",target:5,unit:"late correct answers",tone:"orange" },
+  { id:"streak-5",title:"On a Roll",metric:"correctStreak",target:5,unit:"best correct streak",tone:"green",tier:"Bronze" },
+  { id:"streak-10",title:"Unstoppable",metric:"correctStreak",target:10,unit:"best correct streak",tone:"green",tier:"Silver" },
+  { id:"streak-20",title:"Perfect Wave",metric:"correctStreak",target:20,unit:"best correct streak",tone:"green",tier:"Gold" },
+  { id:"answer-100",title:"Century Solver",metric:"questionsAnswered",target:100,unit:"questions answered",tone:"teal" },
+  { id:"correct-100",title:"Master Mind",metric:"questionsCorrect",target:100,unit:"correct answers",tone:"green" },
+  { id:"assigned-5",title:"Assignment Regular",metric:"assignedCompleted",target:5,unit:"assignments completed",tone:"pink" },
+  { id:"live-5",title:"Live Session Fan",metric:"liveCompleted",target:5,unit:"live sessions completed",tone:"teal" },
+  { id:"class-3",title:"Community Learner",metric:"classesJoined",target:3,unit:"classes joined",tone:"yellow" },
 ];
 
 function buildAchievements(stats) {
   return ACHIEVEMENT_DEFINITIONS.map((definition) => {
-    const value = Math.max(0, Number(stats?.[definition.metric] || 0));
-    return { ...definition, value, completed: value >= definition.target };
+    const value=Math.max(0,Number(stats?.[definition.metric]||0));
+    const completed=value>=definition.target;
+    const progress=Math.min(1,value/Math.max(1,definition.target));
+    return { ...definition,value,completed,state:completed?"Mastered":value>0?"In Progress":"Locked",progress };
   });
+}
+
+function studentDisplayName(data){
+  const p=data?.profile||{};
+  const fallback=data?.classes?.[0]||{};
+  return [p.first_name||fallback.first_name,p.last_name||fallback.last_name].filter(Boolean).join(" ")||"Student";
+}
+
+function GoalCard({c,goal}){
+  const pct=Math.min(100,Math.round(Number(goal.value||0)/Math.max(1,Number(goal.target||1))*100));
+  return <article className={`tw-student-goal-card${goal.completed?" is-complete":""}`} style={{background:c.cardBg2,borderColor:goal.completed?"#22c55e":c.border,color:c.text}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"start"}}><strong>{goal.title}</strong><span className="tw-goal-reward">+{Number(goal.reward||0).toLocaleString()} XP</span></div>
+    <div style={{fontSize:12,color:c.textMuted,marginTop:7}}>{Math.min(Number(goal.value||0),Number(goal.target||0)).toLocaleString()} / {Number(goal.target||0).toLocaleString()}</div>
+    <div className="tw-achievement-track"><span style={{width:`${pct}%`}} /></div>
+    <small style={{color:goal.completed?"#22c55e":c.textMuted,fontWeight:900}}>{goal.completed?"Completed — reward added":"Keep playing Live sessions"}</small>
+  </article>;
 }
 
 function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics, onOpenAchievements }) {
@@ -254,9 +290,8 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section><h2 style={{ color: c.text, marginBottom: 4 }}>Student Home</h2></section>
 
-    <section style={card(c)}>
-      <div style={sectionHeader(c)}><div><h3 style={{ margin: 0 }}>Achievements</h3><div style={{ color: c.textMuted, fontSize: 13, marginTop: 5 }}>Complete activities to bring each achievement card to life.</div></div><TeacherPressButton tone="blue" onClick={onOpenAchievements}>View Achievements</TeacherPressButton></div>
-      <AchievementCarousel c={c} dark={dark} achievements={achievements} />
+    <section className="tw-student-home-surface" style={card(c)}>
+      <StudentProgressShowcase c={c} dark={dark} data={data} achievements={achievements} onOpenAchievements={onOpenAchievements} />
       <div className="tw-student-overview-grid">
         <div className="tw-student-work-grid">
           <LiveSessionsCard c={c} dark={dark} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
@@ -274,13 +309,37 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
       </div>
     </section>
 
-    <section style={card(c)}>
+    <section className="tw-student-home-surface" style={card(c)}>
       <h3 style={{ marginTop: 0, color: c.text }}>Most Recent Completed Sessions</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
         <CompletedColumn c={c} title="Live Session" items={recentLiveTop} type="LIVE" onAnalytics={onAnalytics} />
         <CompletedColumn c={c} title="Assigned Session" items={recentAssignedTop} type="ASSIGNED" onAnalytics={onAnalytics} />
       </div>
     </section>
+  </div>;
+}
+
+function StudentProgressShowcase({c,dark,data,achievements,onOpenAchievements}){
+  const [mode,setMode]=useState("daily");
+  const gam=data.gamification||{};
+  const xpPct=Math.min(100,Math.round(Number(gam.currentXp||0)/Math.max(1,Number(gam.xpNeeded||1))*100));
+  const favorites=new Set(gam.favorites||[]);
+  const favoriteItems=achievements.filter((item)=>favorites.has(item.id));
+  const cycleLabel=mode==="daily"?"Daily Goals":mode==="weekly"?"Weekly Goals":"Achievements";
+  const nextMode=()=>setMode((current)=>current==="daily"?"weekly":current==="weekly"?"achievements":"daily");
+  return <div className="tw-student-progression-shell">
+    <div className="tw-student-level-head">
+      <div><h3 style={{margin:0,color:c.text}}>{studentDisplayName(data)}</h3><div style={{color:c.textMuted,fontSize:12,marginTop:4}}>Competitive points become long-term XP. Levels are cosmetic progression only.</div></div>
+      <div className="tw-student-progress-actions"><TeacherPressButton tone="blue" onClick={onOpenAchievements} aria-label="View achievements"><TwIcon name="trophy" size={18}/></TeacherPressButton><TeacherPressButton tone="blue" onClick={nextMode}>{cycleLabel}</TeacherPressButton></div>
+    </div>
+    <div className="tw-level-row">
+      <div className="tw-level-orb" style={{borderColor:c.accent,color:c.text}}>Lv<br/><strong>{Number(gam.level||1)}</strong></div>
+      <div className="tw-level-track" style={{background:c.cardBg2,borderColor:c.border}}><span style={{width:`${xpPct}%`}}/><b>{Number(gam.currentXp||0).toLocaleString()} / {Number(gam.xpNeeded||0).toLocaleString()} XP</b></div>
+    </div>
+    {favoriteItems.length>0&&<div className="tw-favorite-achievements">{favoriteItems.map((item)=><span key={item.id}><TwIcon name="trophy" size={14}/>{item.title}</span>)}</div>}
+    {mode==="daily"&&<><div className="tw-goal-reset">4 Daily Goals · refresh at 6:00 AM</div><div className="tw-goal-grid">{(gam.dailyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} goal={goal}/>)}</div></>}
+    {mode==="weekly"&&<><div className="tw-goal-reset">4 Weekly Goals · refresh Monday at 6:00 AM</div><div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} goal={goal}/>)}</div></>}
+    {mode==="achievements"&&<AchievementCarousel c={c} dark={dark} achievements={achievements}/>} 
   </div>;
 }
 
@@ -303,13 +362,16 @@ function AchievementCarousel({ c, dark, achievements }) {
     const onWheel = (event) => {
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX) || Math.abs(event.deltaY) < 8) return;
       const delta = event.deltaY > 0 ? 1 : -1;
+      // Keep wheel input inside the achievement carousel so browsing achievements
+      // never nudges the dashboard's main scrollbar, including at either end.
+      event.preventDefault();
+      event.stopPropagation();
       const current = startIndexRef.current;
       const next = Math.min(maxStart, Math.max(0, current + delta));
       if (next === current) return;
       const now = Date.now();
-      if (now - wheelLockRef.current < 240) return;
+      if (now - wheelLockRef.current < 180) return;
       wheelLockRef.current = now;
-      event.preventDefault();
       move(delta);
     };
     node.addEventListener("wheel", onWheel, { passive: false });
@@ -332,54 +394,65 @@ function AchievementCard({ c, dark, item }) {
   const paleBg = dark ? "#17233d" : "#eef1f6";
   const ink = item.completed ? (dark ? "#fff" : "#101827") : c.textMuted;
   const progress = Math.min(item.target, item.value);
-  return <article className={`tw-achievement-card tw-achievement-gloss${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
+  return <article className={`tw-achievement-card tw-achievement-gloss is-${item.state.toLowerCase().replace(" ","-")}${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
+    <div className="tw-achievement-state">{item.tier?`${item.tier} · `:""}{item.state}</div>
     <div className="tw-achievement-card-title">{item.title}</div>
-    <div className="tw-achievement-progress">{progress} / {item.target} {item.unit}</div>
-    <div className="tw-achievement-track"><span style={{ width: `${Math.min(100, item.value / item.target * 100)}%` }} /></div>
+    <div className="tw-achievement-progress">{progress.toLocaleString()} / {item.target.toLocaleString()} {item.unit}</div>
+    <div className="tw-achievement-track"><span style={{ width: `${Math.min(100, item.progress*100)}%` }} /></div>
   </article>;
 }
 
 function AchievementModal({ c, dark, achievements, onClose }) {
+  const [favorites,setFavorites]=useState(()=>[]);
+  const [saving,setSaving]=useState(false);
+  useEffect(()=>{ api.get("/student/dashboard").then(({data})=>setFavorites(data?.gamification?.favorites||[])).catch(()=>{}); },[]);
+  async function toggleFavorite(item){
+    if(!item.completed) return;
+    let next=favorites.includes(item.id)?favorites.filter((id)=>id!==item.id):[...favorites,item.id].slice(-3);
+    setFavorites(next);setSaving(true);
+    try{await api.post("/student/achievements/favorites",{achievementIds:next});}finally{setSaving(false);}
+  }
   return <div style={modalBackdrop} onClick={onClose}><section onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(94vw,1040px)", maxHeight: "88vh", overflowY: "auto", position: "relative" }}>
     <button onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button>
     <h2 style={{ marginTop: 0, color: c.text }}>Achievements</h2>
-    <p style={{ color: c.textMuted, marginTop: -4 }}>All 20 starter achievements and your current progress.</p>
-    <div className="tw-achievement-modal-grid">{achievements.map((item) => <AchievementCard key={item.id} c={c} dark={dark} item={item} />)}</div>
+    <p style={{ color: c.textMuted, marginTop: -4 }}>Locked → In Progress → Mastered. Choose up to three mastered achievements for your profile showcase.</p>
+    <div className="tw-achievement-modal-grid">{achievements.map((item) => <div key={item.id} className="tw-achievement-picker"><AchievementCard c={c} dark={dark} item={item}/><button disabled={!item.completed||saving} onClick={()=>toggleFavorite(item)} className={`tw-achievement-favorite${favorites.includes(item.id)?" is-selected":""}`}><TwIcon name="trophy" size={15}/>{favorites.includes(item.id)?"Showcased":"Showcase"}</button></div>)}</div>
   </section></div>;
 }
 
 function ClassesPanel({ c, dark, data, onJoinClass, onAnalytics }) {
   const classes = data.classes || [];
   const assigned = data.recentAssigned || data.recentCompleted || [];
+  const allAssignments = data.assignments || [];
   const live = data.recentLive || [];
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section style={sectionHeader(c)}><div><h2 style={{ marginBottom: 4 }}>Class</h2></div>{classes.length > 0 && <TeacherPressButton tone="blue" onClick={onJoinClass}>Join a Class</TeacherPressButton>}</section>
-    {!classes.length ? <ThinkBotEmptyState c={c} title="It seems you have yet to join a class." actionLabel="Join a Class" onAction={onJoinClass} /> : <section style={card(c)}>
+    {!classes.length ? <ThinkBotEmptyState c={c} title="It seems you have yet to join a class." actionLabel="Join a Class" onAction={onJoinClass} /> : <section className="tw-student-class-surface" style={{...card(c),background:dark?"#1d2c49":c.cardBg}}>
       <h3 style={{ marginTop: 0 }}>Joined Classes</h3>
-      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} dark={dark} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
+      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} dark={dark} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} allAssignments={allAssignments.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
     </section>}
   </div>;
 }
 
-function JoinedClassCard({ c, dark, item, live, assigned, onAnalytics }) {
+function JoinedClassCard({ c, dark, item, live, assigned, allAssignments, onAnalytics }) {
   const [expanded, setExpanded] = useState(false);
-  const subjectName = item.parent_name || item.class_name || "Subject";
-  return <article className="tw-student-class-card" style={{ ...card(c), padding: 0, background: c.cardBg2, overflow: "hidden", border: `3px solid ${dark ? "#405987" : "#a49882"}` }}>
-    <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} style={{ width: "100%", border: 0, background: "transparent", color: c.text, padding: 16, cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center" }}>
-      <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
-        <div style={{ color: c.text, fontWeight: 950, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subjectName}</div>
-        <div style={{ color: c.textMuted, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Class/Section: {item.class_name}</div>
-        <div style={{ color: c.textMuted, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Teacher: {item.teacher_first_name} {item.teacher_last_name}</div>
-      </div>
-      <span style={{ color: c.accent, flexShrink: 0, transform: expanded ? "rotate(-90deg)" : "rotate(90deg)", transition: "transform .2s ease" }}><TwIcon name="arrow" size={21} /></span>
+  const subjectName=item.parent_name||item.class_name||"Subject";
+  const unfinished=(allAssignments||[]).filter((row)=>!row.submission_id).length;
+  const completed=live.length+(allAssignments||[]).filter((row)=>row.submission_id).length;
+  const totalKnown=Math.max(live.length+(allAssignments||[]).length,1);
+  const latest=[...live,...assigned].sort((a,b)=>completedTimestamp(b)-completedTimestamp(a))[0];
+  const nextActivity=(allAssignments||[]).filter((row)=>!row.submission_id&&row.available_from&&new Date(row.available_from)>new Date()).sort((a,b)=>new Date(a.available_from)-new Date(b.available_from))[0];
+  return <article className="tw-student-class-card" style={{...card(c),padding:0,background:dark?"#243654":c.cardBg2,overflow:"hidden",border:`3px solid ${dark?"#5271a5":"#a49882"}`}}>
+    <button type="button" onClick={()=>setExpanded((value)=>!value)} aria-expanded={expanded} className="tw-student-class-card-head" style={{color:c.text}}>
+      <div style={{minWidth:0,display:"grid",gap:5}}><div style={{fontWeight:950}}>{item.class_name}</div><div style={{color:c.textMuted,fontSize:12}}>Subject: {subjectName}</div><div style={{color:c.textMuted,fontSize:12}}>Teacher: {item.teacher_first_name} {item.teacher_last_name}</div></div>
+      <div className="tw-class-card-summary"><span>{unfinished} unfinished</span><span>{completed} completed</span>{latest&&<span>Latest: {Number(latest.score||0)} pts</span>}</div>
+      <span style={{color:c.accent,transform:expanded?"rotate(-90deg)":"rotate(90deg)",transition:"transform .2s ease"}}><TwIcon name="arrow" size={21}/></span>
     </button>
-    {expanded && <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${c.border}` }}>
-      <div style={{ marginTop: 14, color: c.textMuted, fontSize: 12 }}>Student ID: {item.student_id}</div>
-      <div style={{ marginTop: 14, fontSize: 12, textTransform: "uppercase", letterSpacing: ".1em", color: c.textSub, fontWeight: 950 }}>Analytics</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18, marginTop: 10 }}>
-        <CompletedColumn c={c} title="Live Sessions" items={live} type="LIVE" onAnalytics={onAnalytics} compact />
-        <CompletedColumn c={c} title="Assigned Sessions" items={assigned} type="ASSIGNED" onAnalytics={onAnalytics} compact />
-      </div>
+    {expanded&&<div className="tw-student-class-detail" style={{borderTop:`1px solid ${c.border}`}}>
+      <div className="tw-student-class-header-grid"><div><small>Class</small><strong>{item.class_name}</strong></div><div><small>Subject</small><strong>{subjectName}</strong></div><div><small>Teacher</small><strong>{item.teacher_first_name} {item.teacher_last_name}</strong></div><div><small>Progress</small><strong>{Math.round(completed/totalKnown*100)}%</strong></div><div><small>Completed Activities</small><strong>{completed}</strong></div><div><small>Next Activity</small><strong>{nextActivity?new Date(nextActivity.available_from).toLocaleString():"No scheduled activity"}</strong></div></div>
+      <div className="tw-student-class-progress"><ProgressLine c={c} label="Completed activities" value={completed} total={totalKnown} accent="#22c55e"/><ProgressLine c={c} label="Unfinished assignments" value={unfinished} total={totalKnown} accent="#f97316"/><ProgressLine c={c} label="Live sessions attended" value={live.length} total={Math.max(live.length,1)} accent="#2b6cff"/></div>
+      <div style={{marginTop:16,fontSize:12,textTransform:"uppercase",letterSpacing:".1em",color:c.textSub,fontWeight:950}}>Analytics</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:18,marginTop:10}}><CompletedColumn c={c} title="Live Sessions" items={live} type="LIVE" onAnalytics={onAnalytics} compact/><CompletedColumn c={c} title="Assigned Sessions" items={assigned} type="ASSIGNED" onAnalytics={onAnalytics} compact/></div>
     </div>}
   </article>;
 }
