@@ -422,6 +422,22 @@ export default function HostLive({ guestMode = false }) {
     return () => window.clearTimeout(timerId);
   }, [tutorialDemo, hostTutorialStage, isLive]);
 
+  // The question-content explainer is now two short lines shown one at a time
+  // instead of both stacked together: the first line fades in, then after a
+  // beat automatically hands off to "question_metrics", which fades in the
+  // second line in its place.
+  useEffect(() => {
+    if (!tutorialDemo || hostTutorialStage !== "question") return undefined;
+    const timerId = window.setTimeout(() => {
+      setHostTutorialStage("question_metrics");
+    }, 2200);
+    return () => window.clearTimeout(timerId);
+  }, [tutorialDemo, hostTutorialStage]);
+
+  function skipQuestionTutorial() {
+    setHostTutorialStage("end");
+  }
+
   useEffect(() => {
     if (hostTutorialStage !== "question_metrics") return undefined;
     const nodes = Array.from(document.querySelectorAll('[data-tutorial="host-question-metrics"], [data-tutorial="host-question-progress"]'));
@@ -620,13 +636,12 @@ export default function HostLive({ guestMode = false }) {
     {!tabTutorialOpen && hostTutorialStage === "start" && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-start"]' placement="below" square highlightMode="target"><p>Once everyone is ready, start the activity from here.</p></ThinkBotTutorial>}
     {!tabTutorialOpen && ["countdown", "question_delay", "ending"].includes(hostTutorialStage) && <ThinkBotTutorial accentColor={accent} />}
     {!tabTutorialOpen && hostTutorialStage === "question" && (
-      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => setHostTutorialStage("question_metrics")}>
-        <p>This is the question content area. It displays the current question the students are answering on their screens.</p>
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
+        <p className="tw-tutorial-fade-line">This is the question content area. It displays the current question the students are answering on their screens.</p>
       </ThinkBotTutorial>
     )}
     {!tabTutorialOpen && hostTutorialStage === "question_metrics" && (
-      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} highlight={false} allowTargetInteraction={false}>
-        <p>This is the question content area. It displays the current question the students are answering on their screens.</p>
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} highlight={false} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
         <p className="tw-tutorial-fade-line">You can see how many have already answered, how many points the question is worth, and the timer.</p>
       </ThinkBotTutorial>
     )}

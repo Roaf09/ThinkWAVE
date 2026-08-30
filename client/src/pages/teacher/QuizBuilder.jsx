@@ -181,14 +181,24 @@ export default function QuizBuilder({ guestMode = false }) {
   }
 
   function skipFollowupTemplateTutorial() {
+    // Persist the skip immediately. Without this, the "Would you like to see
+    // the tutorial for this template?" prompt reappears the moment the teacher
+    // types or clicks anything, because the trigger effect below re-runs on
+    // every questions/quiz change and re-opens the prompt whenever the stage
+    // is falsy and the template hasn't been marked seen yet.
+    if (!guestMode && tutorialUserId && quiz?.template_type) {
+      markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    }
     finishFollowupTemplateTutorial();
   }
 
   function startFollowupTemplateTutorial() {
-    // A template counts as "used" only after its quiz is successfully saved.
-    // Opening, skipping, or completing the walkthrough alone must not suppress
-    // the tutorial on a later unsaved visit.
-    setBuilderTutorialStage("intro");
+    // This is only ever reached from the "template_prompt" stage, which only
+    // appears once the teacher has already been through the very first
+    // template tutorial. So the "Every template has its own builder tools..."
+    // explainer - which only makes sense the first time ever - is skipped,
+    // jumping straight into the actual walkthrough.
+    setBuilderTutorialStage("question");
   }
 
   useEffect(() => {
@@ -311,10 +321,10 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [builderTutorialStage, tutorialMcqAllChoicesFilled]);
 
   useEffect(() => {
-    if (!["mcq_correct", "specific", "repeat_mcq_correct"].includes(builderTutorialStage) || normalizeTemplateType(quiz?.template_type) !== "MCQ") return undefined;
+    if (!["mcq_correct", "specific"].includes(builderTutorialStage) || normalizeTemplateType(quiz?.template_type) !== "MCQ") return undefined;
     const dots = Array.from(document.querySelectorAll('[data-tutorial="builder-mcq-options"] .tw-mcq-correct-dot'));
     const controls = document.querySelector('[data-tutorial="builder-mcq-controls"]');
-    if (["mcq_correct", "repeat_mcq_correct"].includes(builderTutorialStage)) dots.forEach((node) => node.classList.add("tw-tutorial-mini-pulse"));
+    if (builderTutorialStage === "mcq_correct") dots.forEach((node) => node.classList.add("tw-tutorial-mini-pulse"));
     if (builderTutorialStage === "mcq_correct" && tutorialMcqAllChoicesFilled) controls?.classList.add("tw-tutorial-mini-pulse");
     return () => {
       dots.forEach((node) => node.classList.remove("tw-tutorial-mini-pulse"));
@@ -323,7 +333,7 @@ export default function QuizBuilder({ guestMode = false }) {
   }, [builderTutorialStage, quiz?.template_type, tutorialMcqAllChoicesFilled]);
 
   useEffect(() => {
-    if (!["answer_explanation", "answer_explanation_done", "repeat_explanation"].includes(builderTutorialStage)) return undefined;
+    if (!["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage)) return undefined;
     const timer = window.setTimeout(() => {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
     }, 120);
@@ -434,7 +444,10 @@ export default function QuizBuilder({ guestMode = false }) {
     if (tutorialAddRequested) {
       // Main onboarding: guide the second question one area at a time again.
       // Follow-up/template-specific tutorials keep their shorter repeat flow.
-      setBuilderTutorialStage(!followupTemplateTutorial ? "repeat_meta" : "repeat");
+      // The repeat step always highlights the whole question form with a single
+      // "try again" dialog now, rather than stepping through each field one at
+      // a time - that granular walkthrough only made sense the first time.
+      setBuilderTutorialStage("repeat");
     }
   }
 
@@ -1077,7 +1090,7 @@ export default function QuizBuilder({ guestMode = false }) {
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "intro" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} actionLabel="Okay!" actionDelay={followupTemplateTutorial ? 0 : 2000} onAction={() => setBuilderTutorialStage("question")}>
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} actionLabel="Okay!" actionDelay={2000} onAction={() => setBuilderTutorialStage("question")}>
           <p>Every template has its own builder tools, so this walkthrough is just for <strong>{quiz ? ({ MCQ: "Multiple Choice", TRUE_FALSE: "True or False", TYPE_ANSWER: "Identification", MATCHING: "Matching", GUESS_WORD_4PICS: "Guess Word", THINK_SPELL: "Crossword" }[quiz.template_type] || quiz.template_type) : "this template"}</strong>.</p>
         </ThinkBotTutorial>
       )}
@@ -1216,52 +1229,6 @@ export default function QuizBuilder({ guestMode = false }) {
           <p>Need another one? Use <strong>{isBatchTemplate ? "Add Batch" : "Add Question"}</strong> whenever you want to expand your activity.</p>
         </ThinkBotTutorial>
       )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_meta" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
-          target='[data-tutorial="builder-meta-grid"]' placement="right" square dialogWidth={370}
-          className="tw-tutorial-meta-lower tw-tutorial-meta-points-side" reserveActionSpace actionLabel="Done"
-          onAction={() => setBuilderTutorialStage("repeat_question")}>
-          <p>Now let’s try doing it again for a different question!</p>
-          <p>Set the time limit and points for this question.</p>
-        </ThinkBotTutorial>
-      )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_question" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
-          target='[data-tutorial="builder-question"]' placement="right" square dialogWidth={350}
-          dragKey="builder-repeat-question-dialog" allowTargetInteraction={true} reserveActionSpace
-          actionLabel={trimText((questions[qIndex] || questions[0])?.prompt) ? "Done" : undefined}
-          onAction={() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); setBuilderTutorialStage(normalizeTemplateType(quiz?.template_type) === "MCQ" ? "repeat_mcq_answers" : "repeat"); }}>
-          <p>Enter your next question.</p>
-        </ThinkBotTutorial>
-      )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_mcq_answers" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
-          target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360}
-          dragKey="builder-repeat-mcq-dialog" highlightMode="target" blockInteraction={false} reserveActionSpace
-          actionLabel={tutorialMcqAllChoicesFilled ? "Done" : undefined}
-          onAction={() => setBuilderTutorialStage("repeat_mcq_correct")}>
-          <p>Add the possible answers.</p>
-        </ThinkBotTutorial>
-      )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_mcq_correct" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
-          target='[data-tutorial="builder-mcq-options"]' placement="screen-left" square dialogWidth={360}
-          dragKey="builder-repeat-mcq-dialog" highlight={false} allowTargetInteraction={true} reserveActionSpace
-          actionLabel={(() => { const q = questions[qIndex] || questions[0]; const cfg = q?.config || {}; const cor = q?.correct || {}; const selected = Array.isArray(cor.choices) ? cor.choices.filter(Boolean) : [cor.choice].filter(Boolean); return selected.length >= (cfg.answerMode === "TWO" ? 2 : 1) ? "Done" : undefined; })()}
-          onAction={() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); setBuilderTutorialStage("repeat_explanation"); }}>
-          <p>Now click the small circle beside the correct answer{((questions[qIndex] || questions[0])?.config || {}).answerMode === "TWO" ? "s" : ""}.</p>
-        </ThinkBotTutorial>
-      )}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "repeat_explanation" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
-          target='[data-tutorial="builder-answer-explanation"]' placement="right" square dialogWidth={350}
-          dragKey="builder-repeat-explanation-dialog" className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear"
-          allowTargetInteraction={true} reserveActionSpace
-          actionLabel={trimText(((questions[qIndex] || questions[0])?.config || {}).explanation) ? "Done" : undefined}
-          onAction={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setBuilderTutorialStage("save"); }}>
-          <p>Add the short explanation for the correct answer.</p>
-        </ThinkBotTutorial>
-      )}
       {!guestMode && !modifiedTutorialOpen && ["repeat", "repeat_done"].includes(builderTutorialStage) && (
         <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
           target='[data-tutorial="builder-editor-shell"]'
@@ -1269,7 +1236,7 @@ export default function QuizBuilder({ guestMode = false }) {
           square
           dialogWidth={370}
           dragKey="builder-repeat-dialog"
-          highlight={false}
+          highlightPadding={10}
           allowTargetInteraction={true}
           className="tw-tutorial-done-avatar-clear"
           reserveActionSpace

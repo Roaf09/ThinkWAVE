@@ -352,7 +352,7 @@ export default function ThinkBotTutorial({
         <div className="tw-thinkbot-tutorial-copy">{children}</div>
         {clickAnywhere && <div className="tw-tutorial-click-anywhere">{clickAnywhereLabel}</div>}
         {(reserveActionSpace || actionLabel || secondaryLabel) && <div className={`tw-thinkbot-tutorial-actions is-reserved${actionLabel || secondaryLabel ? " has-action" : ""}`}>
-          {secondaryLabel && <button type="button" className="tw-tutorial-secondary" onClick={onSecondary}>{secondaryLabel}</button>}
+          {secondaryLabel && actionReady && <button type="button" className="tw-tutorial-secondary" onClick={onSecondary}>{secondaryLabel}</button>}
           {actionLabel && actionReady && <button type="button" className="tw-tutorial-press" onClick={onAction}><span>{actionLabel}</span></button>}
         </div>}
       </section>}

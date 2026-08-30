@@ -13,6 +13,7 @@ import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherActionModal } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState, markMainStage } from "../../lib/tutorialState";
+import { TEMPLATE_TYPES } from "../../lib/templateTypes";
 
 import HomeTab           from "./tabs/HomeTab";
 import CreateTab         from "./tabs/CreateTab";
@@ -70,6 +71,30 @@ export default function TeacherDashboard() {
   function patchTutorial(patch) {
     if (!tutorialUserId) return;
     const next = writeTutorialState(tutorialUserId, patch);
+    setTutorialState(next);
+  }
+
+  // Skipping from the very first dialog needs to suppress every leg of the
+  // guided tour, not just the Classes/Create/Sessions nav prompts - otherwise
+  // a teacher who skips still gets ambushed by the Quiz Builder, Host Panel,
+  // or Analytics walkthroughs the first time they reach those screens.
+  function skipMainTutorial() {
+    if (!tutorialUserId) return;
+    const alreadySeenTemplates = readTutorialState(tutorialUserId)?.templateSeen || {};
+    const allTemplatesSeen = Object.keys(TEMPLATE_TYPES).reduce(
+      (acc, templateType) => ({ ...acc, [templateType]: true }),
+      { ...alreadySeenTemplates }
+    );
+    const next = writeTutorialState(tutorialUserId, {
+      mainStarted: true,
+      mainComplete: true,
+      mainStage: "complete",
+      templateSeen: allTemplatesSeen,
+      hostPanelSeen: true,
+      hostSetupSeen: true,
+      assignmentSetupSeen: true,
+      analyticsTutorialSeen: true,
+    });
     setTutorialState(next);
   }
 
@@ -171,7 +196,7 @@ export default function TeacherDashboard() {
         <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
       </main>
 
-      {tutorial.stage === "home_welcome" && <ThinkBotTutorial transparent actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")}><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></ThinkBotTutorial>}
+      {tutorial.stage === "home_welcome" && <ThinkBotTutorial transparent actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel="Skip" onSecondary={skipMainTutorial}><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></ThinkBotTutorial>}
       {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" actionLabel="Let's Go" actionDelay={2000} onAction={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
       {tutorial.stage === "nav_classes" && <ThinkBotTutorial target='[data-tutorial="nav-classes"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>}
       {tutorial.stage === "nav_create" && <ThinkBotTutorial target='[data-tutorial="nav-create"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Create</strong>.</p></ThinkBotTutorial>}

@@ -14,6 +14,29 @@ function toMysqlDateTime(value) {
   return value ? String(value).replace("T", " ") : null;
 }
 
+// MariaDB has no native JSON column type (JSON is just a LONGTEXT alias there),
+// so mysql2 always returns config_json/correct_json as a raw JSON *string*,
+// never as a pre-parsed object. Whenever we copy a question's config/correct
+// from one quiz_questions row into another (assign, duplicate, copy-to-bank),
+// we must parse that string back into a real value before re-stringifying it
+// for the new row. Skipping the parse step double-encodes the column (the
+// stored value becomes a JSON string containing escaped JSON text instead of
+// a JSON object), which silently empties things like MCQ `options` for every
+// reader downstream. This helper is safe to use on a value that is already a
+// genuine object too, so it works regardless of what the driver hands back.
+function reencodeJsonColumn(value) {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value));
+    } catch {
+      // Not valid JSON text - treat it as a literal string value.
+      return JSON.stringify(value);
+    }
+  }
+  return JSON.stringify(value);
+}
+
 export async function listQuizzes(req, res) {
   const [rows] = await pool.query(
     `SELECT q.*,
@@ -234,8 +257,8 @@ export async function copyQuizToBank(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: q.config_json != null ? JSON.stringify(q.config_json) : null,
-        corr: q.correct_json != null ? JSON.stringify(q.correct_json) : null,
+        cfg: reencodeJsonColumn(q.config_json),
+        corr: reencodeJsonColumn(q.correct_json),
       }
     );
   }
@@ -296,8 +319,8 @@ export async function duplicateQuiz(req, res) {
         qid: created.insertId,
         ord: q.question_order,
         prompt: q.prompt,
-        cfg: q.config_json != null ? JSON.stringify(q.config_json) : null,
-        corr: q.correct_json != null ? JSON.stringify(q.correct_json) : null,
+        cfg: reencodeJsonColumn(q.config_json),
+        corr: reencodeJsonColumn(q.correct_json),
       }
     );
   }
@@ -356,7 +379,7 @@ export async function assignQuiz(req, res) {
     await pool.query(
       `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: q.config_json != null ? JSON.stringify(q.config_json) : null, corr: q.correct_json != null ? JSON.stringify(q.correct_json) : null }
+      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: reencodeJsonColumn(q.config_json), corr: reencodeJsonColumn(q.correct_json) }
     );
   }
 

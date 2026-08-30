@@ -14,7 +14,7 @@ import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { isInstitutionPlan } from "../../../lib/planLimits";
 import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
-import { DEFAULT_SESSION_BACKGROUND, SESSION_BACKGROUNDS } from "../../../lib/sessionBackgrounds";
+import { DEFAULT_SESSION_BACKGROUND, SESSION_BACKGROUNDS, getSessionBackgroundsForCategory } from "../../../lib/sessionBackgrounds";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { finishMainTutorial, readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 
@@ -227,7 +227,12 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       setAssignQuiz(null);
       await load();
       setAssignmentSaved(true);
-      setAssignmentNotice({ className: selectedClass?.name || selectedClass?.pathLabel || "your class" });
+      // The "assignment is live" explainer is a one-time first-run notice, not a
+      // confirmation to repeat on every assignment - show it once per teacher.
+      if (tutorial?.userId && !readTutorialState(tutorial.userId).assignmentLiveNoticeSeen) {
+        writeTutorialState(tutorial.userId, { assignmentLiveNoticeSeen: true });
+        setAssignmentNotice({ className: selectedClass?.name || selectedClass?.pathLabel || "your class" });
+      }
       window.setTimeout(() => setAssignmentSaved(false), 2000);
     } catch (error) {
       showFlash(error?.response?.data?.message || "Failed to create assignment.", "error");
@@ -379,7 +384,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
         <button data-tutorial="host-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
         <TeacherPressButton data-tutorial="host-start" tone="blue" disabled={!classId} onClick={() => { if (tutorialStage === "host_start") onTutorialFinish?.(); onStart(quiz, joinMode, classId, backgroundKey); }}>Start</TeacherPressButton>
       </div>
-      <BackgroundPicker selectedKey={backgroundKey} onSelect={(key) => { setBackgroundKey(key); if (tutorialStage === "host_background") onTutorialStage?.("host_start"); }} c={c} />
+      <BackgroundPicker selectedKey={backgroundKey} onSelect={(key) => { setBackgroundKey(key); if (tutorialStage === "host_background") onTutorialStage?.("host_start"); }} c={c} category={quiz.category} />
     </section>
     {zoomedPreview && <div className="tw-host-preview-zoom-backdrop" onClick={(event) => { event.stopPropagation(); setZoomedPreview(null); }}>
       <div className={`tw-host-preview-zoom-card is-${zoomedPreview}`} onClick={(event) => event.stopPropagation()}>
@@ -393,15 +398,22 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
   </div>;
 }
 
-function BackgroundPicker({ selectedKey, onSelect, c }) {
+function BackgroundPicker({ selectedKey, onSelect, c, category }) {
   const visibleCount = 4;
-  const total = SESSION_BACKGROUNDS.length;
+  const pool = useMemo(() => getSessionBackgroundsForCategory(category), [category]);
+  const total = pool.length;
   const [startIndex, setStartIndex] = useState(0);
   const [slideDirection, setSlideDirection] = useState("next");
   const lastWheelAt = useRef(0);
   const carouselRef = useRef(null);
-  const selectedIndex = SESSION_BACKGROUNDS.findIndex((item) => item.key === selectedKey);
-  const visible = Array.from({ length: Math.min(visibleCount, total) }, (_, offset) => SESSION_BACKGROUNDS[(startIndex + offset) % total]);
+  const selectedIndex = pool.findIndex((item) => item.key === selectedKey);
+  const visible = Array.from({ length: Math.min(visibleCount, total) }, (_, offset) => pool[(startIndex + offset) % total]);
+
+  // If the audience category changes (or the picker mounts) and the currently
+  // selected background isn't in this category's pool, reset the carousel
+  // back to the start of the filtered pool instead of pointing at a
+  // background the teacher can no longer see here.
+  useEffect(() => { setStartIndex(0); }, [category]);
 
   function move(step) {
     if (!total) return;
@@ -512,7 +524,7 @@ function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutorialStage,
       <div style={{ color: c.textMuted, fontSize: 13 }}>Students will only be able to answer within the selected schedule.</div>
       <button data-tutorial="assign-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
       <div className="tw-assignment-primary-actions" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 4 }}><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
-      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} />
+      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} category={quiz.category} />
     </div>
     {tutorialStage === "assign_schedule" && !editing && <ThinkBotTutorial target='[data-tutorial="assign-schedule"]' placement="left" square><p>Assignments are completed by students on their own time. Start by deciding when students can access this activity.</p></ThinkBotTutorial>}
     {tutorialStage === "assign_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="assign-class"]' placement="left" square highlightMode="target"><p>Now choose which class should receive the assignment.</p></ThinkBotTutorial>}
