@@ -1,7 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
 import ThemeIconButton from "./ThemeIconButton";
+import { TwIcon } from "./TwUI";
+
+// Emoji-based bubble for the Sign Up modal. Reuses the same .tw-icon-bubble
+// class (and its .tw-role-option-<tone> color overrides) as the SVG
+// IconBubble so it matches the "Get Started" modal styling without adding
+// new CSS, but renders a plain emoji glyph instead of a stroked icon.
+function EmojiBubble({ emoji, size = 42 }) {
+  return (
+    <span className="tw-icon-bubble" style={{ width: size, height: size, borderRadius: Math.round(size * 0.32), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: Math.round(size * 0.52), lineHeight: 1 }}>
+      {emoji}
+    </span>
+  );
+}
 
 export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false, hideTheme = false }) {
   const c = useColors();
@@ -9,11 +23,17 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
   const nav = useNavigate();
   const loc = useLocation();
   const onLanding = loc.pathname === "/";
+  const [signupOpen, setSignupOpen] = useState(false);
   const goHome = (event) => { event.preventDefault(); sessionStorage.setItem("tw_public_from", "left"); nav("/"); };
   const goSection = (id) => {
     if (onLanding) onSection?.(id);
     else nav(`/#${id}`);
   };
+  function chooseSignup(role) {
+    setSignupOpen(false);
+    if (role === "student") nav("/student-login", { state: { authFrom: "right", mode: "register" } });
+    else nav("/register", { state: { authFrom: "right" } });
+  }
   return (
     <header className="tw-public-header" style={{ background:c.cardBg3, borderBottom:`1px solid ${c.border}` }}>
       <Link to="/" onClick={goHome} className="tw-public-logo"><span style={{ color:c.text }}>Think</span><span>WAVE</span></Link>
@@ -33,8 +53,32 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
         ><span aria-hidden="true">S</span></Link>}
         {!hideTheme && <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />}
         {setupComplete && <Link to="/login" state={{ authFrom: "left" }} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
-        {setupComplete && <Link to="/register" state={{ authFrom: "right" }} className="tw-public-signup tw-header-signup">Sign Up</Link>}
+        {setupComplete && <button type="button" onClick={() => setSignupOpen(true)} className="tw-public-signup tw-header-signup" style={{ cursor:"pointer" }}>Sign Up</button>}
       </div>
+
+      {signupOpen && createPortal(
+        <>
+          <div className="tw-modal-backdrop" onClick={() => setSignupOpen(false)} />
+          <div className="tw-start-modal" style={{ background:c.cardBg3, borderColor:c.border, color:c.text }}>
+            <button className="tw-modal-x" onClick={() => setSignupOpen(false)}><TwIcon name="close" /></button>
+            <h2>Sign Up</h2>
+            <p style={{ color:c.textMuted }}>Choose how you want to Sign up to enter ThinkWAVE.</p>
+            <div className="tw-modal-options">
+              <button className="tw-role-option tw-role-option-green" onClick={() => chooseSignup("student")}>
+                <EmojiBubble emoji="🧑‍🎓" />
+                <b>Student Sign Up</b>
+                <small>Enter as a student</small>
+              </button>
+              <button className="tw-role-option tw-role-option-blue" onClick={() => chooseSignup("teacher")}>
+                <EmojiBubble emoji="🧑‍🏫" />
+                <b>Teacher Sign Up</b>
+                <small>Enter as a teacher</small>
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
     </header>
   );
 }

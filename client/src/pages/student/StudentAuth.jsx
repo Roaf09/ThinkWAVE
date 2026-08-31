@@ -4,7 +4,7 @@
 
 import React, { useMemo, useState } from "react";
 import PublicHeader from "../../components/PublicHeader";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken } from "../../lib/auth";
 import { useColors, useTheme } from "../../context/ThemeContext";
@@ -30,10 +30,13 @@ function passwordChecks(pw) {
 
 export default function StudentAuth({ onLoginSuccess }) {
   const nav = useNavigate();
+  const loc = useLocation();
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
-  const [mode, setMode] = useState("login");
-  const [authMotion, setAuthMotion] = useState("from-left");
+  // Arriving from the header's "Student Sign Up" option should land directly
+  // on the register form instead of the default login view.
+  const [mode, setMode] = useState(loc.state?.mode === "register" ? "register" : "login");
+  const [authMotion, setAuthMotion] = useState(loc.state?.authFrom === "right" ? "from-right" : "from-left");
   function switchMode(next) {
     if (next === mode) return;
     setAuthMotion(next === "register" ? "exit-left" : "exit-right");
