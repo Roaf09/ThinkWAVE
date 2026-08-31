@@ -38,7 +38,6 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
   function chooseLogin(role) {
     setLoginOpen(false);
     if (role === "student") nav("/student-login", { state: { authFrom: "right", mode: "login" } });
-    else if (role === "admin") nav("/login?role=admin", { state: { authFrom: "right" } });
     else nav("/login", { state: { authFrom: "right" } });
   }
   return (
@@ -94,7 +93,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
             <button className="tw-modal-x" onClick={() => setLoginOpen(false)}><TwIcon name="close" /></button>
             <h2>Log in</h2>
             <p style={{ color:c.textMuted }}>Choose how you want to Log in to enter ThinkWAVE.</p>
-            <div className="tw-modal-options tw-login-options">
+            <div className="tw-modal-options">
               <button className="tw-role-option tw-role-option-green" onClick={() => chooseLogin("student")}>
                 <EmojiBubble emoji="🧑‍🎓" />
                 <b>Student Log in</b>
@@ -104,11 +103,6 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
                 <EmojiBubble emoji="🧑‍🏫" />
                 <b>Teacher Log in</b>
                 <small>Enter as a teacher</small>
-              </button>
-              <button className="tw-role-option tw-role-option-yellow" onClick={() => chooseLogin("admin")}>
-                <EmojiBubble emoji="⚙️" />
-                <b>Admin Log in</b>
-                <small>Enter as an Admin</small>
               </button>
             </div>
           </div>

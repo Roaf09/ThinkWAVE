@@ -4275,12 +4275,3 @@ body.dark-mode .tw-create-template-tutorial-target.tw-tutorial-active-target{
 
 /* 10.16 preview button normalization */
 .tw-host-preview-clickable { background: transparent !important; padding: 0 !important; border-style: solid; font: inherit; }
-
-/* Login popup: 3 equal-width role buttons (Student/Teacher/Admin) side by
-   side on screens wide enough to fit them. Existing .tw-modal-options mobile
-   rules (max-width:620px) still collapse this to a single column since they
-   match on the shared .tw-modal-options class regardless of this addition. */
-@media (min-width:621px){
-  .tw-modal-options.tw-login-options{ grid-template-columns:repeat(3,1fr); }
-  .tw-modal-options.tw-login-options>button.tw-role-option{ min-height:150px; padding:20px 14px; }
-}
