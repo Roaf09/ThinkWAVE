@@ -24,6 +24,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
   const loc = useLocation();
   const onLanding = loc.pathname === "/";
   const [signupOpen, setSignupOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const goHome = (event) => { event.preventDefault(); sessionStorage.setItem("tw_public_from", "left"); nav("/"); };
   const goSection = (id) => {
     if (onLanding) onSection?.(id);
@@ -33,6 +34,12 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
     setSignupOpen(false);
     if (role === "student") nav("/student-login", { state: { authFrom: "right", mode: "register" } });
     else nav("/register", { state: { authFrom: "right" } });
+  }
+  function chooseLogin(role) {
+    setLoginOpen(false);
+    if (role === "student") nav("/student-login", { state: { authFrom: "right", mode: "login" } });
+    else if (role === "admin") nav("/login?role=admin", { state: { authFrom: "right" } });
+    else nav("/login", { state: { authFrom: "right" } });
   }
   return (
     <header className="tw-public-header" style={{ background:c.cardBg3, borderBottom:`1px solid ${c.border}` }}>
@@ -52,7 +59,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
           style={{ color:c.text, borderColor:c.border, opacity: concealSuper ? 0 : 1 }}
         ><span aria-hidden="true">S</span></Link>}
         {!hideTheme && <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />}
-        {setupComplete && <Link to="/login" state={{ authFrom: "left" }} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border }}>Login</Link>}
+        {setupComplete && <button type="button" onClick={() => setLoginOpen(true)} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border, cursor:"pointer" }}>Login</button>}
         {setupComplete && <button type="button" onClick={() => setSignupOpen(true)} className="tw-public-signup tw-header-signup" style={{ cursor:"pointer" }}>Sign Up</button>}
       </div>
 
@@ -73,6 +80,35 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
                 <EmojiBubble emoji="🧑‍🏫" />
                 <b>Teacher Sign Up</b>
                 <small>Enter as a teacher</small>
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
+      {loginOpen && createPortal(
+        <>
+          <div className="tw-modal-backdrop" onClick={() => setLoginOpen(false)} />
+          <div className="tw-start-modal" style={{ background:c.cardBg3, borderColor:c.border, color:c.text }}>
+            <button className="tw-modal-x" onClick={() => setLoginOpen(false)}><TwIcon name="close" /></button>
+            <h2>Log in</h2>
+            <p style={{ color:c.textMuted }}>Choose how you want to Log in to enter ThinkWAVE.</p>
+            <div className="tw-modal-options">
+              <button className="tw-role-option tw-role-option-green" onClick={() => chooseLogin("student")}>
+                <EmojiBubble emoji="🧑‍🎓" />
+                <b>Student Log in</b>
+                <small>Enter as a student</small>
+              </button>
+              <button className="tw-role-option tw-role-option-blue" onClick={() => chooseLogin("teacher")}>
+                <EmojiBubble emoji="🧑‍🏫" />
+                <b>Teacher Log in</b>
+                <small>Enter as a teacher</small>
+              </button>
+              <button className="tw-role-option tw-role-option-yellow" onClick={() => chooseLogin("admin")} style={{ gridColumn: "1 / -1", maxWidth: 260, justifySelf: "center" }}>
+                <EmojiBubble emoji="⚙️" />
+                <b>Admin Log in</b>
+                <small>Enter as an Admin</small>
               </button>
             </div>
           </div>
