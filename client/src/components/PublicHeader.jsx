@@ -94,7 +94,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
             <button className="tw-modal-x" onClick={() => setLoginOpen(false)}><TwIcon name="close" /></button>
             <h2>Log in</h2>
             <p style={{ color:c.textMuted }}>Choose how you want to Log in to enter ThinkWAVE.</p>
-            <div className="tw-modal-options">
+            <div className="tw-modal-options tw-login-options">
               <button className="tw-role-option tw-role-option-green" onClick={() => chooseLogin("student")}>
                 <EmojiBubble emoji="🧑‍🎓" />
                 <b>Student Log in</b>
@@ -105,7 +105,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
                 <b>Teacher Log in</b>
                 <small>Enter as a teacher</small>
               </button>
-              <button className="tw-role-option tw-role-option-yellow" onClick={() => chooseLogin("admin")} style={{ gridColumn: "1 / -1", maxWidth: 260, justifySelf: "center" }}>
+              <button className="tw-role-option tw-role-option-yellow" onClick={() => chooseLogin("admin")}>
                 <EmojiBubble emoji="⚙️" />
                 <b>Admin Log in</b>
                 <small>Enter as an Admin</small>
