@@ -399,7 +399,7 @@ export function VoiceRecordingPanel({ question, templateType, onChange, ui, c, c
 
 function CorrectAnswerExplanation({ value, onChange, ui, c }) {
   return <div className="tw-correct-answer-explanation" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `2px solid ${c.accent}55`, background: `${c.accent}0c` }}>
-    <label style={{ ...ui.smallLabel, display: "block", marginBottom: 7, color: c.text }}>Explanation (Optional)</label>
+    <label style={{ ...ui.smallLabel, display: "block", marginBottom: 7, color: c.text }}>Explanation</label>
     <textarea data-tutorial="builder-answer-explanation" maxLength={1000} rows={3} value={value || ""} onChange={(event) => onChange(event.target.value.slice(0, 1000))} placeholder="Optional: explain why this answer is correct." style={{ ...ui.input, minHeight: 82, resize: "vertical", lineHeight: 1.5 }} />
   </div>;
 }
