@@ -22,22 +22,6 @@ const ALL_TEMPLATES = [
   { value: "THINK_SPELL", label: "Crossword", icon: "spell", tone: "purple" },
 ];
 
-// Which templates get pulled to the front of the grid (and get the
-// "Recommended" badge) once a category is chosen.
-const RECOMMENDED_TEMPLATES_BY_CATEGORY = {
-  K12: ["MCQ", "TRUE_FALSE", "GUESS_WORD_4PICS"],
-  COLLEGE: ["MATCHING", "TYPE_ANSWER", "THINK_SPELL"],
-};
-
-function orderTemplatesForCategory(category) {
-  const recommended = RECOMMENDED_TEMPLATES_BY_CATEGORY[category];
-  if (!recommended || !recommended.length) return ALL_TEMPLATES;
-  const front = recommended.map((value) => ALL_TEMPLATES.find((t) => t.value === value)).filter(Boolean);
-  const rest = ALL_TEMPLATES.filter((t) => !recommended.includes(t.value));
-  return [...front, ...rest];
-}
-
-
 const card = (c, extra = {}) => ({
   background: c.cardBg,
   border: `1px solid ${c.border}`,
@@ -91,11 +75,7 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
     return Array.from(byType.values()).slice(0, 3);
   }, [recentQuizzes]);
 
-  const orderedTemplates = useMemo(() => orderTemplatesForCategory(form.category), [form.category]);
-  const recommendedTemplateSet = useMemo(
-    () => new Set(RECOMMENDED_TEMPLATES_BY_CATEGORY[form.category] || []),
-    [form.category]
-  );
+
 
   function patch(next) { setForm((prev) => ({ ...prev, ...next })); }
 
@@ -140,22 +120,6 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
           <label style={labelStyle(c)}>Category</label>
           <div style={{ display: "flex", gap: 10, maxWidth: 560 }}>
             {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => { patch({ category: cat }); if (tutorial?.stage === "create_choose_category") tutorial.setStage?.("create_choose_template"); }} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
-          </div>
-        </div>
-
-        <div data-tutorial="create-template-section" className="tw-create-template-tutorial-target">
-          <label style={labelStyle(c)}>Quiz Template</label>
-          <div className="tw-teacher-template-grid">
-            {orderedTemplates.map((template) => {
-              const active = form.templateType === template.value;
-              const tone = templateTone(template.value, c, active);
-              const ink = templateInk(template.value, dark);
-              const isRecommended = recommendedTemplateSet.has(template.value);
-              return <button key={template.value} type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
-                {isRecommended && <span className="tw-template-recommended-badge">Recommended</span>}
-                <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
-              </button>;
-            })}
           </div>
         </div>
 
