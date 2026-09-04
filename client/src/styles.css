@@ -1232,6 +1232,37 @@ body.dark-mode .tw-admin-institution-panel{box-shadow:0 18px 42px rgba(0,0,0,.34
   .tw-standard-dashboard-main,.tw-responsive-dashboard-main{min-height:calc(100dvh - 68px)!important}
 }
 
+.tw-template-recommended-badge{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:3;
+
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  min-height:0;
+  width:auto;
+
+  padding:5px 9px;
+
+  border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;
+
+  background:rgba(255,255,255,.72);
+  color:var(--template-ink,#173f9b);
+
+  font-size:10px;
+  font-weight:850;
+  line-height:1;
+  white-space:nowrap;
+
+  box-sizing:border-box;
+  pointer-events:none;
+
+  transform:none;
+}
 
 /* Revision 8.6.6 — Admin press buttons keep their lower 3D base stationary. */
 .tw-admin-press{
@@ -1322,10 +1353,10 @@ body.dark-mode .tw-admin-institution-panel{box-shadow:0 18px 42px rgba(0,0,0,.34
 .tw-teacher-create-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .tw-teacher-template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
 .tw-teacher-template-press{appearance:none;border:0;border-radius:16px;padding:0;background:var(--template-base);cursor:pointer;box-shadow:0 12px 24px rgba(15,23,42,.14);transition:filter .16s ease,box-shadow .16s ease;min-height:108px}
-.tw-teacher-template-press>span{height:100%;min-height:108px;padding:16px;border:4px solid var(--template-border);border-radius:16px;background:var(--template-face);display:flex;align-items:center;justify-content:center;gap:12px;transform:translateY(-6px);transition:transform .14s ease,filter .16s ease;box-sizing:border-box}
-.tw-teacher-template-press:hover>span{filter:brightness(.93);transform:translateY(-7px)}
-.tw-teacher-template-press:active>span{transform:translateY(0);filter:brightness(.87)}
-.tw-teacher-template-press.is-active>span{box-shadow:inset 0 0 0 2px currentColor}
+.tw-teacher-template-press>.tw-template-content{height:100%;min-height:108px;padding:16px;border:4px solid var(--template-border);border-radius:16px;background:var(--template-face);display:flex;align-items:center;justify-content:center;gap:12px;transform:translateY(-6px);transition:transform .14s ease,filter .16s ease;box-sizing:border-box}
+.tw-teacher-template-press:hover>.tw-template-content{filter:brightness(.93);transform:translateY(-7px)}
+.tw-teacher-template-press:active>.tw-template-content{transform:translateY(0);filter:brightness(.87)}
+.tw-teacher-template-press.is-active>.tw-template-content{box-shadow:inset 0 0 0 2px currentColor}
 .tw-teacher-create-submit{justify-self:stretch;width:100%}.tw-teacher-create-submit>span{width:100%;min-height:50px}
 .tw-teacher-shortcut-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .tw-teacher-shortcut-card{min-height:135px;text-align:left;display:grid;align-content:center;gap:8px;cursor:pointer;transition:transform .18s ease,filter .18s ease,box-shadow .18s ease}

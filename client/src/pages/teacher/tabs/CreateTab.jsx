@@ -152,12 +152,30 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
               const ink = templateInk(template.value, dark);
               const isRecommended = recommendedTemplateSet.has(template.value);
               return <button key={template.value} type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
-                {isRecommended && <span className="tw-template-recommended-badge">Recommended</span>}
-                <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
-              </button>;
-            })}
-          </div>
-        </div>
+                {isRecommended && (
+                 <span className="tw-template-recommended-badge">
+                  Recommended
+                  </span>
+                )}
+
+                <span className="tw-template-content">
+                <IconBubble
+                   name={template.icon}
+                  c={c}
+                  size={44}
+                  iconSize={22}
+                   style={{
+                   background: tone.iconBg,
+                  borderColor: tone.iconBorder,
+                   color: ink
+                     }}
+                   />
+                    <b style={{ color: ink }}>{template.label}</b>
+                    </span>
+                   </button>;
+                     })}
+                 </div>
+                 </div>
 
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
         <TeacherPressButton type="submit" tone="blue" disabled={saving} data-tutorial="create-open-builder" className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
