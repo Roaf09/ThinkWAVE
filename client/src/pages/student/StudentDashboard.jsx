@@ -9,8 +9,9 @@ import { clearRole, clearToken } from "../../lib/auth";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
-import { templateLabel, templateTone } from "../../lib/templatePalette";
+import { templateLabel, templateTone, templateCardChrome } from "../../lib/templatePalette";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../teacher/TeacherUI";
+import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 
 
 export default function StudentDashboard() {
@@ -34,8 +35,12 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(emptyProfile());
   const [birthPickerOpen, setBirthPickerOpen] = useState(false);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [achievementToast, setAchievementToast] = useState(null);
   const [removalNotices, setRemovalNotices] = useState([]);
+  const [accountEmail, setAccountEmail] = useState("");
+
+  useEffect(() => { api.get("/auth/me").then(({ data }) => setAccountEmail(data?.email || "")).catch(() => {}); }, []);
 
   async function load({ silent = false } = {}) {
     try {
@@ -179,6 +184,14 @@ export default function StudentDashboard() {
 
   return (
     <div className="tw-responsive-dashboard" style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s" }}>
+      <MobileTopHeader
+        c={c}
+        name={`${profile.firstName} ${profile.lastName}`.trim() || "Student"}
+        email={accountEmail}
+        avatarSrc={profile.profileImage}
+        onSettings={() => setProfileOpen(true)}
+        onLogout={() => setShowLogout(true)}
+      />
       <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
           <div><span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span></div>
@@ -198,11 +211,13 @@ export default function StudentDashboard() {
       <main className="tw-responsive-dashboard-main" style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "scroll", overflowX: "hidden", scrollbarGutter: "stable both-edges", boxSizing: "border-box" }}>
         {msg && <div className="container" style={{ paddingBottom: 0 }}><div style={notice(c, "error")}>{msg}</div></div>}
         {activeTab === "home" ? (
-          <HomePanel c={c} dark={dark} data={data} nav={nav} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} onOpenAchievements={() => setAchievementsOpen(true)} />
+          <HomePanel c={c} dark={dark} data={data} nav={nav} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} onOpenAchievements={() => setAchievementsOpen(true)} onOpenProgressModal={() => setProgressModalOpen(true)} />
         ) : (
-          <ClassesPanel c={c} dark={dark} data={data} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} />
+          <ClassesPanel c={c} dark={dark} data={data} nav={nav} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} onJoinLive={joinLiveSession} joiningSession={joiningSession} />
         )}
       </main>
+
+      <MobileTabBar c={c} items={navItems} activeId={activeTab} onSelect={setActiveTab} />
 
       {joinOpen && <JoinClassModal c={c} classCode={classCode} setClassCode={setClassCode} profile={profile} setProfile={setProfile} profileStep={joinProfileStep} countdown={countdown} onSubmit={joinClass} onClose={() => { setJoinOpen(false); setJoinProfileStep(false); setClassCode(""); }} />}
       {profileOpen && <ProfileModal c={c} profile={profile} setProfile={setProfile} message={profileMsg} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileMsg(""); }} onUpload={() => fileRef.current?.click()} onDelete={deleteProfileImage} onBirth={() => setBirthPickerOpen(true)} />}
@@ -210,6 +225,7 @@ export default function StudentDashboard() {
       {birthPickerOpen && <BirthDateModal c={c} value={profile.birthDate} onSelect={(birthDate) => { setProfile((current) => ({ ...current, birthDate })); setBirthPickerOpen(false); }} onClose={() => setBirthPickerOpen(false)} />}
       {analyticsTarget && <StudentAnalyticsModal c={c} target={analyticsTarget} onClose={() => setAnalyticsTarget(null)} />}
       {achievementsOpen && <AchievementModal c={c} dark={dark} achievements={buildAchievements(data.achievementStats || {})} onClose={() => setAchievementsOpen(false)} />}
+      {progressModalOpen && <MobileProgressModal c={c} dark={dark} data={data} onClose={() => setProgressModalOpen(false)} />}
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the student dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
       {removalNotices[0] && <ClassRemovalModal c={c} notice={removalNotices[0]} onClose={() => acknowledgeRemoval(removalNotices[0])} />}
@@ -248,7 +264,7 @@ function buildAchievements(stats) {
     const value=Math.max(0,Number(stats?.[definition.metric]||0));
     const completed=value>=definition.target;
     const progress=Math.min(1,value/Math.max(1,definition.target));
-    return { ...definition,value,completed,state:completed?"Mastered":value>0?"In Progress":"Locked",progress };
+    return { ...definition,value,completed,state:completed?"Completed":value>0?"In Progress":"Locked",progress };
   });
 }
 
@@ -258,17 +274,20 @@ function studentDisplayName(data){
   return [p.first_name||fallback.first_name,p.last_name||fallback.last_name].filter(Boolean).join(" ")||"Student";
 }
 
-function GoalCard({c,goal}){
+function GoalCard({c,dark,goal}){
   const pct=Math.min(100,Math.round(Number(goal.value||0)/Math.max(1,Number(goal.target||1))*100));
-  return <article className={`tw-student-goal-card${goal.completed?" is-complete":""}`} style={{background:c.cardBg2,borderColor:goal.completed?"#22c55e":c.border,color:c.text}}>
+  const completeBg=dark?"#126532":"#9ee6b6";
+  const paleBg=dark?"#17233d":"#eef1f6";
+  const ink=goal.completed?(dark?"#fff":"#101827"):c.text;
+  return <article className={`tw-student-goal-card tw-achievement-gloss${goal.completed?" is-complete":""}`} style={{background:goal.completed?completeBg:paleBg,borderColor:goal.completed?completeBg:c.border,color:ink}}>
     <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"start"}}><strong>{goal.title}</strong><span className="tw-goal-reward">+{Number(goal.reward||0).toLocaleString()} XP</span></div>
-    <div style={{fontSize:12,color:c.textMuted,marginTop:7}}>{Math.min(Number(goal.value||0),Number(goal.target||0)).toLocaleString()} / {Number(goal.target||0).toLocaleString()}</div>
+    <div style={{fontSize:12,color:goal.completed?(dark?"rgba(255,255,255,.82)":"rgba(16,24,39,.68)"):c.textMuted,marginTop:7}}>{Math.min(Number(goal.value||0),Number(goal.target||0)).toLocaleString()} / {Number(goal.target||0).toLocaleString()}</div>
     <div className="tw-achievement-track"><span style={{width:`${pct}%`}} /></div>
-    <small style={{color:goal.completed?"#22c55e":c.textMuted,fontWeight:900}}>{goal.completed?"Completed — reward added":"Keep playing Live sessions"}</small>
+    {goal.completed&&<small style={{color:dark?"#eafff1":"#0f5132",fontWeight:900}}>Completed</small>}
   </article>;
 }
 
-function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics, onOpenAchievements }) {
+function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics, onOpenAchievements, onOpenProgressModal }) {
   const assignments = data.assignments || [];
   const recentAssigned = data.recentAssigned || data.recentCompleted || [];
   const recentLive = data.recentLive || [];
@@ -291,13 +310,13 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
     <section><h2 style={{ color: c.text, marginBottom: 4 }}>Student Home</h2></section>
 
     <section className="tw-student-home-surface" style={card(c)}>
-      <StudentProgressShowcase c={c} dark={dark} data={data} achievements={achievements} onOpenAchievements={onOpenAchievements} />
+      <StudentProgressShowcase c={c} dark={dark} data={data} achievements={achievements} onOpenAchievements={onOpenAchievements} onOpenProgressModal={onOpenProgressModal} />
       <div className="tw-student-overview-grid">
         <div className="tw-student-work-grid">
           <LiveSessionsCard c={c} dark={dark} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
-          <WorkCard c={c} dark={dark} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<TeacherPressButton tone="blue" className="tw-student-live-action" onClick={() => nav(`/student/async/${item.quiz_id}`)}>Answer Now</TeacherPressButton>} />} />
+          <WorkCard c={c} dark={dark} title="Ready to answer" icon="check" items={openAssigned} empty="No assigned works are open right now." variant="ready" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="ready" action={<TeacherPressButton tone="blue" className="tw-student-live-action" aria-label="Answer" title="Answer" onClick={() => nav(`/student/async/${item.quiz_id}`)}><TwIcon name="answerCheck" size={18}/></TeacherPressButton>} />} />
           <WorkCard c={c} dark={dark} title="Upcoming works" icon="calendar" items={upcoming} empty="No scheduled works are waiting to open." variant="upcoming" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} />} />
-          <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<TeacherPressButton tone="blue" onClick={() => nav(`/student/async/${item.quiz_id}`)}>Answer Now</TeacherPressButton>} />} />
+          <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={nearing} empty="No works are due within the next 2 hours." variant="deadline" render={(item) => <WorkItem key={item.quiz_id} c={c} item={item} variant="deadline" action={<TeacherPressButton tone="blue" aria-label="Answer" title="Answer" onClick={() => nav(`/student/async/${item.quiz_id}`)}><TwIcon name="answerCheck" size={18}/></TeacherPressButton>} />} />
         </div>
         <div className="tw-student-progress-panel" style={{ display: "grid", gap: 16, alignContent: "start", padding: 18, borderRadius: 18, background: c.cardBg2, border: `3px solid ${dark ? "#39527f" : "#9a8f7a"}`, boxShadow: dark ? "0 18px 34px rgba(0,0,0,.28)" : "0 18px 34px rgba(91,72,40,.16)" }}>
           <div style={{ color: c.text, fontWeight: 950 }}>Weekly Progress</div>
@@ -310,16 +329,16 @@ function HomePanel({ c, dark, data, nav, onJoinLive, joiningSession, onAnalytics
     </section>
 
     <section className="tw-student-home-surface" style={card(c)}>
-      <h3 style={{ marginTop: 0, color: c.text }}>Most Recent Completed Sessions</h3>
+      <h3 style={{ marginTop: 0, color: c.text }}>Recent Sessions</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 22 }}>
-        <CompletedColumn c={c} title="Live Session" items={recentLiveTop} type="LIVE" onAnalytics={onAnalytics} />
-        <CompletedColumn c={c} title="Assigned Session" items={recentAssignedTop} type="ASSIGNED" onAnalytics={onAnalytics} />
+        <CompletedColumn c={c} title="Live Session Results" items={recentLiveTop} type="LIVE" onAnalytics={onAnalytics} />
+        <CompletedColumn c={c} title="Assignment Results" items={recentAssignedTop} type="ASSIGNED" onAnalytics={onAnalytics} />
       </div>
     </section>
   </div>;
 }
 
-function StudentProgressShowcase({c,dark,data,achievements,onOpenAchievements}){
+function StudentProgressShowcase({c,dark,data,achievements,onOpenAchievements,onOpenProgressModal}){
   const [mode,setMode]=useState("daily");
   const gam=data.gamification||{};
   const xpPct=Math.min(100,Math.round(Number(gam.currentXp||0)/Math.max(1,Number(gam.xpNeeded||1))*100));
@@ -329,17 +348,35 @@ function StudentProgressShowcase({c,dark,data,achievements,onOpenAchievements}){
   const nextMode=()=>setMode((current)=>current==="daily"?"weekly":current==="weekly"?"achievements":"daily");
   return <div className="tw-student-progression-shell">
     <div className="tw-student-level-head">
-      <div><h3 style={{margin:0,color:c.text}}>{studentDisplayName(data)}</h3><div style={{color:c.textMuted,fontSize:12,marginTop:4}}>Competitive points become long-term XP. Levels are cosmetic progression only.</div></div>
-      <div className="tw-student-progress-actions"><TeacherPressButton tone="blue" onClick={onOpenAchievements} aria-label="View achievements"><TwIcon name="trophy" size={18}/></TeacherPressButton><TeacherPressButton tone="blue" onClick={nextMode}>{cycleLabel}</TeacherPressButton></div>
+      <div><h3 style={{margin:0,color:c.text}}>{studentDisplayName(data)}</h3></div>
+      <div className="tw-student-progress-actions"><TeacherPressButton className="tw-mobile-trophy-trigger" tone="blue" onClick={onOpenProgressModal} aria-label="Open goals and achievements"><TwIcon name="trophy" size={18}/></TeacherPressButton><div className="tw-desktop-progress-actions"><TeacherPressButton tone="blue" onClick={onOpenAchievements} aria-label="View achievements"><TwIcon name="trophy" size={18}/></TeacherPressButton><TeacherPressButton tone="blue" onClick={nextMode}>{cycleLabel}</TeacherPressButton></div></div>
     </div>
     <div className="tw-level-row">
-      <div className="tw-level-orb" style={{borderColor:c.accent,color:c.text}}>Lv<br/><strong>{Number(gam.level||1)}</strong></div>
-      <div className="tw-level-track" style={{background:c.cardBg2,borderColor:c.border}}><span style={{width:`${xpPct}%`}}/><b>{Number(gam.currentXp||0).toLocaleString()} / {Number(gam.xpNeeded||0).toLocaleString()} XP</b></div>
+      <div className="tw-level-orb tw-level-orb-silver" style={{borderColor:dark?"#8b93a3":"#c3c9d4",color:c.text}}><strong>{Number(gam.level||1)}</strong></div>
+      <div className="tw-level-track tw-level-track-compact" style={{background:c.cardBg2,borderColor:c.border}}><span style={{width:`${xpPct}%`}}/><b>{Number(gam.currentXp||0).toLocaleString()} / {Number(gam.xpNeeded||0).toLocaleString()} XP</b></div>
     </div>
     {favoriteItems.length>0&&<div className="tw-favorite-achievements">{favoriteItems.map((item)=><span key={item.id}><TwIcon name="trophy" size={14}/>{item.title}</span>)}</div>}
-    {mode==="daily"&&<><div className="tw-goal-reset">4 Daily Goals · refresh at 6:00 AM</div><div className="tw-goal-grid">{(gam.dailyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} goal={goal}/>)}</div></>}
-    {mode==="weekly"&&<><div className="tw-goal-reset">4 Weekly Goals · refresh Monday at 6:00 AM</div><div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} goal={goal}/>)}</div></>}
+        {mode==="weekly"&&<><div className="tw-goal-reset">4 Weekly Goals · refresh Monday at 6:00 AM</div><div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div></>}
     {mode==="achievements"&&<AchievementCarousel c={c} dark={dark} achievements={achievements}/>} 
+  </div>;
+}
+
+function MobileProgressModal({ c, dark, data, onClose }) {
+  const [mode, setMode] = useState("daily");
+  useEffect(() => { const previous = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = previous; }; }, []);
+  const gam = data.gamification || {};
+  const achievements = buildAchievements(data.achievementStats || {});
+  const modes = ["daily", "weekly", "achievements"];
+  const index = modes.indexOf(mode);
+  const move = (delta) => setMode(modes[(index + delta + modes.length) % modes.length]);
+  const title = mode === "daily" ? "Daily Goals" : mode === "weekly" ? "Weekly Goals" : "Achievements";
+  return <div className="tw-mobile-progress-modal-backdrop" onClick={onClose}>
+    <section className="tw-mobile-progress-modal" style={{background:c.cardBg,borderColor:c.border,color:c.text}} onClick={(e)=>e.stopPropagation()}>
+      <div className="tw-mobile-progress-title"><button onClick={()=>move(-1)} aria-label="Previous"><TwIcon name="arrow" size={20} style={{transform:"rotate(180deg)"}}/></button><h3>{title}</h3><button onClick={()=>move(1)} aria-label="Next"><TwIcon name="arrow" size={20}/></button></div>
+      {mode === "daily" && <div className="tw-goal-grid">{(gam.dailyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div>}
+      {mode === "weekly" && <div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div>}
+      {mode === "achievements" && <div className="tw-achievement-modal-scroll">{achievements.map((item)=><div key={item.id} className="tw-achievement-picker"><AchievementCard c={c} dark={dark} item={item} onShowcase={()=>{}} /></div>)}</div>} 
+    </section>
   </div>;
 }
 
@@ -384,7 +421,7 @@ function AchievementCarousel({ c, dark, achievements }) {
   </div>;
 }
 
-function AchievementCard({ c, dark, item }) {
+function AchievementCard({ c, dark, item, onShowcase }) {
   const palettes = {
     blue: ["#a9c3ff", "#204aa8"], green: ["#9ee6b6", "#126532"], orange: ["#ffd08a", "#944807"],
     purple: ["#c8b5ff", "#5b239f"], pink: ["#f8b4d9", "#8f245b"], teal: ["#91e2da", "#0c625b"], yellow: ["#ffe38e", "#8a6200"],
@@ -394,8 +431,8 @@ function AchievementCard({ c, dark, item }) {
   const paleBg = dark ? "#17233d" : "#eef1f6";
   const ink = item.completed ? (dark ? "#fff" : "#101827") : c.textMuted;
   const progress = Math.min(item.target, item.value);
-  return <article className={`tw-achievement-card tw-achievement-gloss is-${item.state.toLowerCase().replace(" ","-")}${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}>
-    <div className="tw-achievement-state">{item.tier?`${item.tier} · `:""}{item.state}</div>
+  return <article className={`tw-achievement-card tw-achievement-gloss is-${item.state.toLowerCase().replace(" ","-")}${item.completed ? " is-complete" : ""}`} style={{ background: item.completed ? completeBg : paleBg, color: ink, borderColor: item.completed ? completeBg : c.border }}><button type="button" className="tw-achievement-card-trophy" disabled={!item.completed} onClick={() => onShowcase?.(item)} title={item.completed ? "Showcase achievement" : "Complete achievement first"}><TwIcon name="trophy" size={13}/></button>
+    <div className="tw-achievement-state">{item.state}</div>
     <div className="tw-achievement-card-title">{item.title}</div>
     <div className="tw-achievement-progress">{progress.toLocaleString()} / {item.target.toLocaleString()} {item.unit}</div>
     <div className="tw-achievement-track"><span style={{ width: `${Math.min(100, item.progress*100)}%` }} /></div>
@@ -413,44 +450,72 @@ function AchievementModal({ c, dark, achievements, onClose }) {
     try{await api.post("/student/achievements/favorites",{achievementIds:next});}finally{setSaving(false);}
   }
   return <div style={modalBackdrop} onClick={onClose}><section onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(94vw,1040px)", maxHeight: "88vh", overflowY: "auto", position: "relative" }}>
-    <button onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button>
+    
     <h2 style={{ marginTop: 0, color: c.text }}>Achievements</h2>
-    <p style={{ color: c.textMuted, marginTop: -4 }}>Locked → In Progress → Mastered. Choose up to three mastered achievements for your profile showcase.</p>
-    <div className="tw-achievement-modal-grid">{achievements.map((item) => <div key={item.id} className="tw-achievement-picker"><AchievementCard c={c} dark={dark} item={item}/><button disabled={!item.completed||saving} onClick={()=>toggleFavorite(item)} className={`tw-achievement-favorite${favorites.includes(item.id)?" is-selected":""}`}><TwIcon name="trophy" size={15}/>{favorites.includes(item.id)?"Showcased":"Showcase"}</button></div>)}</div>
+    <div className="tw-achievement-modal-grid">{achievements.map((item) => <div key={item.id} className="tw-achievement-picker"><AchievementCard c={c} dark={dark} item={item} onShowcase={toggleFavorite}/></div>)}</div>
   </section></div>;
 }
 
-function ClassesPanel({ c, dark, data, onJoinClass, onAnalytics }) {
+function ClassesPanel({ c, dark, data, nav, onJoinClass, onAnalytics, onJoinLive, joiningSession }) {
   const classes = data.classes || [];
   const assigned = data.recentAssigned || data.recentCompleted || [];
   const allAssignments = data.assignments || [];
   const live = data.recentLive || [];
+  const openLive = data.openLiveSessions || [];
+  const [expandedId, setExpandedId] = useState(null);
   return <div className="container" style={{ display: "grid", gap: 18 }}>
     <section style={sectionHeader(c)}><div><h2 style={{ marginBottom: 4 }}>Class</h2></div>{classes.length > 0 && <TeacherPressButton tone="blue" onClick={onJoinClass}>Join a Class</TeacherPressButton>}</section>
     {!classes.length ? <ThinkBotEmptyState c={c} title="It seems you have yet to join a class." actionLabel="Join a Class" onAction={onJoinClass} /> : <section className="tw-student-class-surface" style={{...card(c),background:dark?"#1d2c49":c.cardBg}}>
       <h3 style={{ marginTop: 0 }}>Joined Classes</h3>
-      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <JoinedClassCard key={item.enrollment_id} c={c} dark={dark} item={item} live={live.filter((session) => Number(session.class_id) === Number(item.class_id))} assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))} allAssignments={allAssignments.filter((session) => Number(session.class_id) === Number(item.class_id))} onAnalytics={onAnalytics} />)}</div>
+      <div style={{ display: "grid", gap: 16 }}>{classes.map((item) => <div key={item.enrollment_id} className={`tw-student-class-card-slot${expandedId&&expandedId!==item.enrollment_id?" is-faded":""}`}>
+        <JoinedClassCard c={c} dark={dark} nav={nav} item={item}
+          live={live.filter((session) => Number(session.class_id) === Number(item.class_id))}
+          assigned={assigned.filter((session) => Number(session.class_id) === Number(item.class_id))}
+          allAssignments={allAssignments.filter((session) => Number(session.class_id) === Number(item.class_id))}
+          openLive={openLive.filter((session) => Number(session.class_id) === Number(item.class_id))}
+          onAnalytics={onAnalytics} onJoinLive={onJoinLive} joiningSession={joiningSession}
+          expanded={expandedId===item.enrollment_id}
+          onToggle={()=>setExpandedId((current)=>current===item.enrollment_id?null:item.enrollment_id)} />
+      </div>)}</div>
     </section>}
   </div>;
 }
 
-function JoinedClassCard({ c, dark, item, live, assigned, allAssignments, onAnalytics }) {
-  const [expanded, setExpanded] = useState(false);
+function JoinedClassCard({ c, dark, nav, item, live, assigned, allAssignments, openLive, onAnalytics, onJoinLive, joiningSession, expanded, onToggle }) {
   const subjectName=item.parent_name||item.class_name||"Subject";
+  const sectionName=item.class_name||"Section";
   const unfinished=(allAssignments||[]).filter((row)=>!row.submission_id).length;
   const completed=live.length+(allAssignments||[]).filter((row)=>row.submission_id).length;
   const totalKnown=Math.max(live.length+(allAssignments||[]).length,1);
   const latest=[...live,...assigned].sort((a,b)=>completedTimestamp(b)-completedTimestamp(a))[0];
   const nextActivity=(allAssignments||[]).filter((row)=>!row.submission_id&&row.available_from&&new Date(row.available_from)>new Date()).sort((a,b)=>new Date(a.available_from)-new Date(b.available_from))[0];
+  const now=Date.now();
+  const openAssigned=(allAssignments||[]).filter((row)=>!row.submission_id&&isAssignmentOpen(row,now));
+  const classUpcoming=(allAssignments||[]).filter((row)=>!row.submission_id&&assignmentStart(row)>now);
+  const classNearing=openAssigned.filter((row)=>assignmentEnd(row)-now<=2*60*60*1000);
+  const classReady=openAssigned.filter((row)=>assignmentEnd(row)-now>2*60*60*1000);
   return <article className="tw-student-class-card" style={{...card(c),padding:0,background:dark?"#243654":c.cardBg2,overflow:"hidden",border:`3px solid ${dark?"#5271a5":"#a49882"}`}}>
-    <button type="button" onClick={()=>setExpanded((value)=>!value)} aria-expanded={expanded} className="tw-student-class-card-head" style={{color:c.text}}>
-      <div style={{minWidth:0,display:"grid",gap:5}}><div style={{fontWeight:950}}>{item.class_name}</div><div style={{color:c.textMuted,fontSize:12}}>Subject: {subjectName}</div><div style={{color:c.textMuted,fontSize:12}}>Teacher: {item.teacher_first_name} {item.teacher_last_name}</div></div>
+    <button type="button" onClick={onToggle} aria-expanded={expanded} className={`tw-student-class-card-head${expanded?" is-expanded":""}`} style={{color:c.text}}>
+      <div style={{minWidth:0,display:"grid",gap:5}} className="tw-student-class-head-text">
+        <div className="tw-student-class-subject">{subjectName}</div>
+        <div className="tw-student-class-head-fade" style={{color:c.textMuted,fontSize:12}}>
+          <div>Section: {sectionName}</div>
+          <div>Teacher: {item.teacher_first_name} {item.teacher_last_name}</div>
+        </div>
+      </div>
       <div className="tw-class-card-summary"><span>{unfinished} unfinished</span><span>{completed} completed</span>{latest&&<span>Latest: {Number(latest.score||0)} pts</span>}</div>
-      <span style={{color:c.accent,transform:expanded?"rotate(-90deg)":"rotate(90deg)",transition:"transform .2s ease"}}><TwIcon name="arrow" size={21}/></span>
+      
     </button>
     {expanded&&<div className="tw-student-class-detail" style={{borderTop:`1px solid ${c.border}`}}>
-      <div className="tw-student-class-header-grid"><div><small>Class</small><strong>{item.class_name}</strong></div><div><small>Subject</small><strong>{subjectName}</strong></div><div><small>Teacher</small><strong>{item.teacher_first_name} {item.teacher_last_name}</strong></div><div><small>Progress</small><strong>{Math.round(completed/totalKnown*100)}%</strong></div><div><small>Completed Activities</small><strong>{completed}</strong></div><div><small>Next Activity</small><strong>{nextActivity?new Date(nextActivity.available_from).toLocaleString():"No scheduled activity"}</strong></div></div>
+      <div className="tw-student-class-header-grid"><div><small>Section</small><strong>{sectionName}</strong></div><div><small>Teacher</small><strong>{item.teacher_first_name} {item.teacher_last_name}</strong></div><div><small>Progress</small><strong>{Math.round(completed/totalKnown*100)}%</strong></div><div><small>Completed Activities</small><strong>{completed}</strong></div><div><small>Next Activity</small><strong>{nextActivity?new Date(nextActivity.available_from).toLocaleString():"No scheduled activity"}</strong></div></div>
       <div className="tw-student-class-progress"><ProgressLine c={c} label="Completed activities" value={completed} total={totalKnown} accent="#22c55e"/><ProgressLine c={c} label="Unfinished assignments" value={unfinished} total={totalKnown} accent="#f97316"/><ProgressLine c={c} label="Live sessions attended" value={live.length} total={Math.max(live.length,1)} accent="#2b6cff"/></div>
+      <div style={{marginTop:18,fontSize:12,textTransform:"uppercase",letterSpacing:".1em",color:c.textSub,fontWeight:950}}>This Class's Work</div>
+      <div className="tw-student-work-grid" style={{marginTop:10}}>
+        <LiveSessionsCard c={c} dark={dark} sessions={openLive} onJoin={onJoinLive} joiningSession={joiningSession} />
+        <WorkCard c={c} dark={dark} title="Ready to answer" icon="check" items={classReady} empty="No assigned works are open right now." variant="ready" render={(row) => <WorkItem key={row.quiz_id} c={c} item={row} variant="ready" action={<TeacherPressButton tone="blue" className="tw-student-live-action" aria-label="Answer" title="Answer" onClick={() => nav(`/student/async/${row.quiz_id}`)}><TwIcon name="answerCheck" size={18}/></TeacherPressButton>} />} />
+        <WorkCard c={c} dark={dark} title="Upcoming works" icon="calendar" items={classUpcoming} empty="No scheduled works are waiting to open." variant="upcoming" render={(row) => <WorkItem key={row.quiz_id} c={c} item={row} />} />
+        <WorkCard c={c} dark={dark} title="Nearing deadline" icon="alert" items={classNearing} empty="No works are due within the next 2 hours." variant="deadline" render={(row) => <WorkItem key={row.quiz_id} c={c} item={row} variant="deadline" action={<TeacherPressButton tone="blue" aria-label="Answer" title="Answer" onClick={() => nav(`/student/async/${row.quiz_id}`)}><TwIcon name="answerCheck" size={18}/></TeacherPressButton>} />} />
+      </div>
       <div style={{marginTop:16,fontSize:12,textTransform:"uppercase",letterSpacing:".1em",color:c.textSub,fontWeight:950}}>Analytics</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:18,marginTop:10}}><CompletedColumn c={c} title="Live Sessions" items={live} type="LIVE" onAnalytics={onAnalytics} compact/><CompletedColumn c={c} title="Assigned Sessions" items={assigned} type="ASSIGNED" onAnalytics={onAnalytics} compact/></div>
     </div>}
@@ -465,14 +530,26 @@ function CompletedColumn({ c, title, items, type, onAnalytics, compact = false }
   </div>;
 }
 
+function ReportPill({ c, tone, children }) {
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 850, border: `1px solid ${tone?.border || c.border}`, background: tone?.softBg || c.cardBg2, color: tone?.accent || c.textMuted }}>{children}</span>;
+}
+
 function CompletedSessionCard({ c, item, type, onClick }) {
-  const tone = templateTone(item.template_type, c);
-  return <button onClick={onClick} style={{ textAlign: "left", padding: 13, borderRadius: 15, border: `4px solid ${tone.border}`, background: tone.cardBg, color: c.text, cursor: "pointer", fontFamily: "inherit", transition: "transform .18s ease, box-shadow .18s ease" }} onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = tone.shadow; }} onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
-    <div style={{ color: tone.accent, fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" }}>{templateLabel(item.template_type)}</div>
-    <div style={{ fontWeight: 950, marginTop: 6 }}>{item.quiz_title || item.title || "Completed session"}</div>
-    <div style={{ color: c.textMuted, fontSize: 12, marginTop: 5 }}>{item.class_name || "Class"}</div>
-    <div style={{ color: tone.accent, fontWeight: 950, marginTop: 9 }}>{Number(item.score || 0)}{type === "ASSIGNED" ? ` / ${Number(item.max_score || 0)}` : " pts"}</div>
-  </button>;
+  const tone = templateTone(item.template_type, c, false);
+  const assigned = type === "ASSIGNED";
+  return <div className="tw-session-card tw-class-home-session-card" style={{ ...templateCardChrome(item.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease", cursor: "pointer" }) }} role="button" tabIndex={0} onClick={onClick} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); } }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div><div style={{ fontWeight: 900, color: c.text }}>{item.quiz_title || item.title || "Completed session"}</div><div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{item.class_name || "Class"}</div></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ReportPill c={c} tone={tone}>{templateLabel(item.template_type)}</ReportPill>
+        <ReportPill c={c}>{Number(item.score || 0)}{assigned ? ` / ${Number(item.max_score || 0)}` : " pts"}</ReportPill>
+      </div>
+    </div>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ color: c.textMuted, fontSize: 13 }}>{assigned ? "Assignment" : "Live session"} results are ready to review.</div>
+      <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); onClick(); }}>Open Analytics</button>
+    </div>
+  </div>;
 }
 
 function studentWorkTone(dark, variant) {
@@ -485,17 +562,42 @@ function studentWorkTone(dark, variant) {
   return palettes[variant] || palettes.upcoming;
 }
 
+function GridCardOpenModal({ c, title, icon, tone, items, onClose, renderItem }) {
+  return <div style={modalBackdrop} onClick={onClose}><section onClick={(event) => event.stopPropagation()} style={{ ...card(c), width: "min(94vw,640px)", maxHeight: "82vh", overflowY: "auto", position: "relative", background: tone.bg, border: `4px solid ${tone.border}` }}>
+    <button onClick={onClose} style={{ ...iconBtn(c), position: "absolute", top: 14, right: 14 }}><TwIcon name="close" size={18} /></button>
+    <div style={{ ...workTitle(c), color: tone.fg, marginBottom: 14, paddingRight: 40 }}><TwIcon name={icon} size={20} />{title}<span style={{ color: c.textMuted, fontWeight: 700, fontSize: 13 }}>({items.length})</span></div>
+    <div style={{ display: "grid", gap: 12 }}>{items.map(renderItem)}</div>
+  </section></div>;
+}
+
 function LiveSessionsCard({ c, dark, sessions, onJoin, joiningSession }) {
   const tone = studentWorkTone(dark, "live");
-  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}><div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name="spark" size={18} /> Join live session</div>{!sessions.length ? <div style={{ color: tone.fg, fontSize: 13 }}>No live sessions are open right now.</div> : sessions.map((session) => {
+  const [open, setOpen] = useState(false);
+  function renderSession(session) {
     const status = session.status === "LOBBY" ? "Waiting in lobby" : session.status === "PAUSED" ? "Paused" : "Session started";
-    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background: c.cardBg, border: `2px solid ${tone.border}` }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ color: tone.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(session.template_type)}</span><span className="tw-student-live-status" style={{ padding: "5px 10px", borderRadius: 999, background: dark ? "#6f4c00" : "#fff0ad", border: "2px solid #f59e0b", color: dark ? "#ffe8a3" : "#7a4b00", fontSize: 11, fontWeight: 950 }}>{status}</span></div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><TeacherPressButton tone="blue" className="tw-student-live-action" disabled={joiningSession === session.session_id} onClick={() => onJoin(session)}>{joiningSession === session.session_id ? "Joining…" : session.status === "LOBBY" ? "Join Lobby" : "Join Current Question"}</TeacherPressButton></div>;
-  })}</div>;
+    return <div key={session.session_id} style={{ padding: 12, borderRadius: 14, background: c.cardBg, border: `2px solid ${tone.border}` }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}><span style={{ color: tone.accent, fontSize: 11, fontWeight: 950 }}>{templateLabel(session.template_type)}</span><span className="tw-student-live-status" style={{ padding: "5px 10px", borderRadius: 999, background: dark ? "#6f4c00" : "#fff0ad", border: "2px solid #f59e0b", color: dark ? "#ffe8a3" : "#7a4b00", fontSize: 11, fontWeight: 950 }}>{status}</span></div><div style={{ color: c.text, fontWeight: 950, marginTop: 5 }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 12, margin: "5px 0 10px" }}>{session.class_name}</div><TeacherPressButton tone="blue" className="tw-student-live-action" disabled={joiningSession === session.session_id} onClick={() => onJoin(session)}>{joiningSession === session.session_id ? "Joining…" : <TwIcon name="play" size={18}/>}</TeacherPressButton></div>;
+  }
+  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}>
+    <div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name="spark" size={18} /> Join live session</div>
+    {!sessions.length ? <div style={{ color: tone.fg, fontSize: 13 }}>No live sessions are open right now.</div> : <>
+      {renderSession(sessions[0])}
+      {sessions.length > 1 && <button type="button" className="tw-grid-card-open-btn" style={{ color: tone.fg, borderColor: tone.border }} onClick={() => setOpen(true)}>Open ({sessions.length})</button>}
+    </>}
+    {open && <GridCardOpenModal c={c} title="Join live session" icon="spark" tone={tone} items={sessions} onClose={() => setOpen(false)} renderItem={renderSession} />}
+  </div>;
 }
 
 function WorkCard({ c, dark, title, icon, items, empty: emptyText, render, variant = "upcoming" }) {
   const tone = studentWorkTone(dark, variant);
-  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}><div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name={icon} size={18} />{title}</div>{!items.length ? <div style={{ color: tone.fg, fontSize: 13, lineHeight: 1.5 }}>{emptyText}</div> : items.map(render)}</div>;
+  const [open, setOpen] = useState(false);
+  return <div style={{ ...workCard(c), background: tone.bg, border: `4px solid ${tone.border}`, color: tone.fg }}>
+    <div style={{ ...workTitle(c), color: tone.fg }}><TwIcon name={icon} size={18} />{title}</div>
+    {!items.length ? <div style={{ color: tone.fg, fontSize: 13, lineHeight: 1.5 }}>{emptyText}</div> : <>
+      {render(items[0])}
+      {items.length > 1 && <button type="button" className="tw-grid-card-open-btn" style={{ color: tone.fg, borderColor: tone.border }} onClick={() => setOpen(true)}>Open ({items.length})</button>}
+    </>}
+    {open && <GridCardOpenModal c={c} title={title} icon={icon} tone={tone} items={items} onClose={() => setOpen(false)} renderItem={render} />}
+  </div>;
 }
 
 function WorkItem({ c, item, action }) {

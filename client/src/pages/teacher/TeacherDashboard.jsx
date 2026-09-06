@@ -12,6 +12,7 @@ import { TwIcon } from "../../components/TwUI";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherActionModal } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
+import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import { readTutorialState, writeTutorialState, markMainStage } from "../../lib/tutorialState";
 import { TEMPLATE_TYPES } from "../../lib/templateTypes";
 
@@ -149,6 +150,15 @@ export default function TeacherDashboard() {
     { id: "bank", label: bankLabel, icon: "bank" },
     { id: "history", label: "History", icon: "history" },
   ];
+  const mobilePrimaryNav = navItems.slice(0, 4);
+  const mobileSecondaryNav = navItems.slice(4);
+
+  function handleNavSelect(id) {
+    setActiveTab(id);
+    if (tutorial.stage === "nav_classes" && id === "classes") setTutorialStage("classes_intro_delay");
+    if (tutorial.stage === "nav_create" && id === "create") setTutorialStage("create_intro_delay");
+    if (tutorial.stage === "nav_sessions" && id === "live") setTutorialStage("sessions_intro");
+  }
 
   function renderTab() {
     switch (activeTab) {
@@ -164,6 +174,14 @@ export default function TeacherDashboard() {
 
   return (
     <div className={`tw-responsive-dashboard${activeTab === "live" ? " tw-sessions-dashboard" : ""}`} style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background 0.3s" }}>
+      <MobileTopHeader
+        c={c}
+        name={`${profile.firstName} ${profile.lastName}`.trim() || "Teacher"}
+        email={profile.email}
+        avatarSrc={profile.profileImage}
+        onSettings={() => setProfileOpen(true)}
+        onLogout={() => setShowLogout(true)}
+      />
       <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "baseline" }}><span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span></div>
@@ -174,12 +192,7 @@ export default function TeacherDashboard() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
           {navItems.map((item) => (
-            <button key={item.id} data-tutorial={`nav-${item.id}`} style={navButton(c, activeTab === item.id)} onClick={() => {
-              setActiveTab(item.id);
-              if (tutorial.stage === "nav_classes" && item.id === "classes") setTutorialStage("classes_intro_delay");
-              if (tutorial.stage === "nav_create" && item.id === "create") setTutorialStage("create_intro_delay");
-              if (tutorial.stage === "nav_sessions" && item.id === "live") setTutorialStage("sessions_intro");
-            }}>
+            <button key={item.id} data-tutorial={`nav-${item.id}`} style={navButton(c, activeTab === item.id)} onClick={() => handleNavSelect(item.id)}>
               <span style={{ width: 20, display: "inline-flex", justifyContent: "center" }}><TwIcon name={item.icon} size={18} /></span>
               <span key={item.id === "bank" ? item.label : `${item.id}-${item.label}`} className={item.id === "bank" ? "sidebar-bank-label" : undefined}>{item.label}</span>
             </button>
@@ -195,6 +208,8 @@ export default function TeacherDashboard() {
       <main className={`tw-responsive-dashboard-main${activeTab === "live" ? " tw-sessions-main" : ""}`} style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
         <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
       </main>
+
+      <MobileTabBar c={c} items={mobilePrimaryNav} secondaryItems={mobileSecondaryNav} activeId={activeTab} onSelect={handleNavSelect} />
 
       {tutorial.stage === "home_welcome" && <ThinkBotTutorial transparent actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel="Skip" onSecondary={skipMainTutorial}><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></ThinkBotTutorial>}
       {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" actionLabel="Let's Go" actionDelay={2000} onAction={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
