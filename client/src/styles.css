@@ -4047,8 +4047,21 @@ body.dark-mode .tw-plan-basic-action:hover{
   gap:10px!important;
 }
 .tw-class-home-session-card{
-  min-height:0!important;
+  /* .tw-session-card (the shared base class every session card uses) sets
+     overflow:hidden. Per the CSS sizing spec, a grid/flex item's automatic
+     minimum size is treated as 0 whenever overflow isn't visible - so this
+     card (itself a nested grid, sitting in a parent grid track sized by
+     grid-auto-rows:auto) was collapsing to a sliver instead of sizing to its
+     actual two-row content (title/date/pills, then description/button),
+     squeezing every card in a class's "Live Session Reports" list on top of
+     the next one. min-height:0 relied entirely on that automatic-size
+     resolution to still work out, which it did not reliably do on first
+     paint. An explicit floor sized for this card's two rows sidesteps that
+     resolution rather than depending on it; height:auto still lets it grow
+     past this for longer content (wrapped pills, longer titles). */
+  min-height:140px!important;
   height:auto!important;
+  overflow:visible!important;
   box-sizing:border-box;
 }
 .tw-class-home-session-card:hover{
