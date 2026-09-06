@@ -9,8 +9,31 @@ import { Server as IOServer } from "socket.io";
 import { env } from "./env.js";
 import { makeApp } from "./app.js";
 import { registerSessionSockets } from "./modules/sessions/sessions.socket.js";
+import { registerAssignmentSockets } from "./modules/student/assignment.socket.js";
+import { setIO } from "./socketRegistry.js";
 import jwt from "jsonwebtoken";
 import { pool } from "./db.js";
+
+// Safety net: this column has repeatedly caused ER_BAD_FIELD_ERROR crashes
+// (assignment submission, student dashboard) on databases that predate it.
+// The app already degrades gracefully if this fails for any reason (no
+// permission, etc.) - this just removes the need to remember to run the
+// migration script manually. Safe/idempotent: checks first, only alters if
+// genuinely missing.
+async function ensureCompetitivePointsColumn() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) AS c FROM information_schema.columns
+       WHERE table_schema = DATABASE() AND table_name = 'async_quiz_submissions' AND column_name = 'competitive_points'`
+    );
+    if (Number(rows?.[0]?.c || 0) > 0) return;
+    await pool.query(`ALTER TABLE async_quiz_submissions ADD COLUMN competitive_points INT NOT NULL DEFAULT 0 AFTER max_score`);
+    console.log("[startup] Added missing async_quiz_submissions.competitive_points column.");
+  } catch (err) {
+    console.warn("[startup] Could not verify/add competitive_points column automatically:", err?.message || err);
+  }
+}
+await ensureCompetitivePointsColumn();
 
 // Create the Express app first so REST routes and middleware exist before sockets attach.
 const app = makeApp();
@@ -43,6 +66,8 @@ io.use(async (socket, next) => {
 });
 
 registerSessionSockets(io);
+registerAssignmentSockets(io);
+setIO(io);
 
 httpServer.listen(env.PORT, () => {
   console.log(`API listening on http://localhost:${env.PORT}`);

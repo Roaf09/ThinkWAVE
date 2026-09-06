@@ -92,10 +92,6 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
   }, [recentQuizzes]);
 
   const orderedTemplates = useMemo(() => orderTemplatesForCategory(form.category), [form.category]);
-  const recommendedTemplateSet = useMemo(
-    () => new Set(RECOMMENDED_TEMPLATES_BY_CATEGORY[form.category] || []),
-    [form.category]
-  );
 
   function patch(next) { setForm((prev) => ({ ...prev, ...next })); }
 
@@ -145,12 +141,14 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
 
         <div data-tutorial="create-template-section" className="tw-create-template-tutorial-target">
           <label style={labelStyle(c)}>Quiz Template</label>
+          {!!form.category && <div className="tw-template-recommended-banner-row">
+            <span className={`tw-template-recommended-banner${dark ? " is-dark" : ""}`}>Recommended</span>
+          </div>}
           <div className="tw-teacher-template-grid">
             {orderedTemplates.map((template) => {
               const active = form.templateType === template.value;
               const tone = templateTone(template.value, c, active);
               const ink = templateInk(template.value, dark);
-              const isRecommended = recommendedTemplateSet.has(template.value);
               return <button key={template.value} type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
                 {isRecommended && (
                  <span className="tw-template-recommended-badge">
@@ -176,6 +174,7 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
                      })}
                  </div>
                  </div>
+
 
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
         <TeacherPressButton type="submit" tone="blue" disabled={saving} data-tutorial="create-open-builder" className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>

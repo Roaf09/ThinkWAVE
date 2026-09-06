@@ -21,6 +21,7 @@ import {
   findDuplicates,
   normalizeMatchingPayload,
   safeJson,
+  stableStringify,
   trimText,
   validateQuestion,
 } from "./quiz-builder/quizBuilderUtils";
@@ -132,7 +133,11 @@ export default function QuizBuilder({ guestMode = false }) {
       if (!guestMode && loaded.length) {
         try {
           const { data: bankRows } = await api.get("/question-bank");
-          const normalizeSig = (prompt, config, correct) => JSON.stringify([String(prompt || "").trim(), config || {}, correct || {}]);
+          // Must match server's stable (key-sorted) comparison exactly -
+          // plain JSON.stringify would treat two identical questions as
+          // different just because their object keys were built in a
+          // different order, which was silently breaking this check.
+          const normalizeSig = (prompt, config, correct) => `${String(prompt || "").trim().toLowerCase()}|${stableStringify(config)}|${stableStringify(correct)}`;
           const bankSigs = new Set((bankRows || []).filter((row) => normalizeTemplateType(row.template_type) === normalizeTemplateType(data.quiz?.template_type)).map((row) => normalizeSig(row.prompt, safeJson(row.config_json) || row.config_json || {}, safeJson(row.correct_json) || row.correct_json || {})));
           setBankSavedOrders(new Set(loaded.filter((row) => bankSigs.has(normalizeSig(row.prompt, row.config, row.correct))).map((row) => Number(row.order))));
         } catch { setBankSavedOrders(new Set()); }
@@ -954,7 +959,7 @@ export default function QuizBuilder({ guestMode = false }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action tw-builder-save-bank-fixed${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff", "--tw-press-face": builderTemplateAccent, "--tw-press-base": builderActionBase, "--tw-press-border": builderActionBorder }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
+                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action tw-builder-save-bank-fixed${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff", "--tw-press-face": builderTemplateAccent, "--tw-press-base": builderActionBase, "--tw-press-border": builderActionBorder }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || (builderTutorialStage !== "bank" && validateQuestion(currentQ, quiz.template_type).length > 0)} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
                     <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
                   </div>
                 </div>
