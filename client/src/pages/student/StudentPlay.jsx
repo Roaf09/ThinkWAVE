@@ -354,7 +354,15 @@ export default function StudentPlay() {
     const s = makeSocket();
     socketRef.current = s;
     s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey }));
-    s.on("student:connected", () => { void soundManager.startBGM("lobby"); });
+    s.on("student:connected", (payload = {}) => {
+      void soundManager.startBGM("lobby");
+      // A reconnect (network blip, refresh) doesn't carry over this
+      // component's own "have I answered this one" state, which otherwise
+      // only lives in memory - without this the question briefly renders as
+      // open again even though the server already has this participant's
+      // answer on file and will reject a resubmit.
+      if (payload.alreadyAnsweredQuestionId != null) setSubmittedQId(payload.alreadyAnsweredQuestionId);
+    });
     s.on("student:error", (e) => setMsg(e?.message || "Could not join the session."));
     s.on("antiCheat:warning", (payload) => { setAntiCheat({ type:"warning", message:payload?.message || "We noticed that you tabbed out during the live session." }); setAntiCountdown(Number(payload?.confirmDelaySec || 5)); });
     s.on("antiCheat:kicked", (payload) => {

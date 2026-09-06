@@ -61,10 +61,19 @@ async function ensureOvertakeTable(){
 }
 // Temporarily disabled for gameplay testing. Tab-out events and warnings remain recorded.
 const AUTO_KICK_AFTER_TAB_OUTS = false;
+// A dropped WiFi/tab-throttle blip disconnects and reconnects within seconds.
+// Marking `connected=0` (and broadcasting it) the instant the socket drops
+// made the teacher's online/offline display flicker for students who never
+// really left, and let the "expected to answer" count (computed client-side
+// from this same connected flag) undercount them mid-question, letting the
+// question auto-advance/skip while they were still about to submit. Give
+// reconnects this long to land before treating a drop as a real departure.
+const STUDENT_DISCONNECT_GRACE_MS = 8_000;
 
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
   const pendingKickTimers = new Map();
+  const studentDisconnectTimers = new Map();
 
   io.on("connection", (socket) => {
     const actionTimes = new Map();
@@ -275,6 +284,12 @@ export function registerSessionSockets(io) {
         });
       }
 
+      // Reconnecting inside the grace window means the earlier disconnect
+      // never actually reached the "mark offline" step below — cancel it so
+      // this participant never gets broadcast as having gone offline at all.
+      const pendingDisconnect = studentDisconnectTimers.get(p.id);
+      if (pendingDisconnect) { clearTimeout(pendingDisconnect); studentDisconnectTimers.delete(p.id); }
+
       socket.data.role = "STUDENT";
       socket.data.sessionId = sessionId;
       socket.data.participantId = p.id;
@@ -287,7 +302,31 @@ export function registerSessionSockets(io) {
       const [[groupRow]] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: p.id });
       if (groupRow?.group_id) socket.join(roomGroup(sessionId, groupRow.group_id));
 
-      socket.emit("student:connected", { participantId: p.id });
+      // Whether this participant already has a response on file for whatever
+      // question is currently live is server-authoritative and always
+      // enforced (handleSoloAnswer/group flow both reject a duplicate
+      // submission), but the client's own "have I answered this one" flag is
+      // plain in-memory React state that a reconnect doesn't know about -
+      // without this, a student who reconnects mid-question after already
+      // submitting sees the question rendered as open again.
+      let alreadyAnsweredQuestionId = null;
+      const [[liveSession]] = await pool.query(
+        `SELECT status, current_question_index, questions_snapshot_json FROM sessions WHERE id=:sid`,
+        { sid: sessionId }
+      );
+      if (liveSession && liveSession.status === "LIVE") {
+        const snapshot = safeJson(liveSession.questions_snapshot_json) || [];
+        const currentQuestion = snapshot[Number(liveSession.current_question_index || 0)];
+        if (currentQuestion?.id) {
+          const [[response]] = await pool.query(
+            `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
+            { sid: sessionId, pid: p.id, qid: currentQuestion.id }
+          );
+          if (response) alreadyAnsweredQuestionId = currentQuestion.id;
+        }
+      }
+
+      socket.emit("student:connected", { participantId: p.id, alreadyAnsweredQuestionId });
       await broadcastRoster(io, sessionId);
       await broadcastState(io, sessionId);
       await broadcastGroups(io, sessionId);
@@ -527,11 +566,21 @@ export function registerSessionSockets(io) {
       if (!sessionId) return;
 
       if (role === "STUDENT" && participantId) {
-        await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
-        const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
-        for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
-        await broadcastRoster(io, sessionId);
-        await broadcastGroups(io, sessionId);
+        const existingTimer = studentDisconnectTimers.get(participantId);
+        if (existingTimer) clearTimeout(existingTimer);
+        const timer = setTimeout(async () => {
+          studentDisconnectTimers.delete(participantId);
+          try {
+            await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
+            const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
+            for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
+            await broadcastRoster(io, sessionId);
+            await broadcastGroups(io, sessionId);
+          } catch (error) {
+            console.error("student disconnect grace handling failed:", error);
+          }
+        }, STUDENT_DISCONNECT_GRACE_MS);
+        studentDisconnectTimers.set(participantId, timer);
         return;
       }
 
@@ -548,6 +597,37 @@ export function registerSessionSockets(io) {
       }
     });
   });
+}
+
+// Every mechanism that eventually marks a session ENDED - the 5-minute
+// teacher-disconnect grace above, the client-side idle-after-last-question
+// timer in HostLive.jsx - depends on an in-memory timer/Map that only exists
+// while this process is running. A session that's LOBBY/LIVE/PAUSED at the
+// moment the server restarts (a Render redeploy, a crash) has no surviving
+// path to ever reach ENDED: its timers are gone, and nothing else revisits
+// it. It sits stuck forever - invisible to Session History (which only
+// lists status='ENDED' rows) and cluttering the teacher's active-sessions
+// list. Sweep those once at boot using last_heartbeat_at, which this file
+// already writes on every teacher:join/teacher:heartbeat but never reads
+// anywhere. Ten minutes comfortably covers a normal reconnect after a
+// redeploy without prematurely closing something still genuinely in progress.
+export async function closeOrphanedSessions() {
+  const [rows] = await pool.query(
+    `SELECT id FROM sessions
+     WHERE status IN ('LOBBY','LIVE','PAUSED')
+       AND (last_heartbeat_at IS NULL OR last_heartbeat_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))`
+  );
+  for (const { id: sessionId } of rows) {
+    await pool.query(
+      `UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('LOBBY','LIVE','PAUSED')`,
+      { sid: sessionId }
+    );
+    await pool.query(
+      `UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`,
+      { sid: sessionId }
+    );
+  }
+  if (rows.length) console.log(`Closed ${rows.length} orphaned live session(s) left over from a previous server run.`);
 }
 
 function roomSession(sessionId) { return `session:${sessionId}`; }

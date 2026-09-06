@@ -126,6 +126,16 @@ export async function upsertQuestions(req, res) {
     ...item,
     order: index,
   }));
+  // This handler always soft-deletes every existing question for the quiz
+  // before inserting the submitted set (below). An empty/missing `questions`
+  // payload - a malformed request, a stale client state, anything - would
+  // otherwise wipe a quiz's real questions with nothing to replace them, and
+  // the builder's own "no questions loaded" fallback (QuizBuilder.jsx) then
+  // quietly shows a single blank question next time it's opened, which reads
+  // to a teacher as "my saved, published quiz turned blank." The builder
+  // never legitimately has zero questions to save, so refuse this outright
+  // rather than let it destroy content.
+  if (!items.length) return res.status(400).json({ message: "A quiz needs at least one question." });
   const normalizedTemplate = normalizeTemplateType(q[0].template_type);
   if (normalizedTemplate === "MATCHING") {
     const invalidMatching = items.some((item) => {

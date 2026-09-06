@@ -43,7 +43,15 @@ const JoinSchema = z.object({
   lastName: z.string().optional(),
 });
 
-sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), optionalAuth, validateBody(JoinSchema), asyncHandler(joinSession));
+// This limiter's default key is the requester's IP (middleware/rateLimit.js),
+// and a whole classroom typically joins from behind one school NAT/WiFi
+// gateway - they all share this bucket. At max:20 the 21st student from that
+// network hit "Too many requests" even though the session's own capacity
+// (checked separately below, in joinSession, via max_participants) allows up
+// to 45. Raised well above any realistic per-network join burst; the real
+// per-session capacity is still enforced by joinSession, this only guards
+// against a script hammering the endpoint.
+sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 300 }), optionalAuth, validateBody(JoinSchema), asyncHandler(joinSession));
 sessionsRouter.get("/history", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getTeacherSessionHistory));
 sessionsRouter.get("/active", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listActiveSessions));
 sessionsRouter.post("/", requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(CreateSchema), asyncHandler(createSession));

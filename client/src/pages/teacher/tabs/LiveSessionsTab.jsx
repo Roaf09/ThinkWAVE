@@ -213,7 +213,9 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       await load();
       setOpenQuizId(quiz.id);
       setPromotedQuizIds((rows) => [Number(quiz.id), ...rows.filter((value) => Number(value) !== Number(quiz.id))]);
-      showFlash(data?.existing ? "That live session is already open." : "Session created. Opening the host panel…");
+      showFlash(data?.existing
+        ? `A live session for this quiz is already open in ${data.joinMode === "GROUP" ? "Group" : "Solo"} mode — reopening it instead of starting a new one. End it first if you want to switch modes.`
+        : "Session created. Opening the host panel…");
       if (!guestMode && data?.id) navigate(`/teacher/sessions/${data.id}/live`);
     } catch (error) {
       showFlash(error?.response?.data?.message || "Failed to create session.", "error");
@@ -335,7 +337,7 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div><div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 800, color: c.textSub, marginBottom: 8 }}>Quiz overview</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div></div>
           <div data-session-actions={quiz.id} style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 12001 : 1 }}>
-            <TeacherPressButton data-tutorial="session-host-live" tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
+            <TeacherPressButton data-tutorial="session-host-live" tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession} title={!isPublished ? "Publish this quiz first to host it live." : inSession ? "This quiz already has an active live session." : "Host this quiz live"}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
             {!guestMode && <TeacherPressButton data-tutorial="session-assign" tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
             <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
             {moreOpen && <div className="tw-session-quick-menu" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 12002, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}>
@@ -377,7 +379,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
       <div className="tw-host-mode-row">
-        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}${!institutionPlan ? " is-basic-locked" : ""}`} disabled={!institutionPlan} title={!institutionPlan ? "Basic plan uses Solo mode." : "Host a solo session"} onClick={() => institutionPlan && setJoinMode("SOLO")}><span>Solo</span></button>
+        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} title="Host a solo session" onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
         <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan} title={institutionPlan ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => institutionPlan && setJoinMode("GROUP")}><span>Group</span></button>
       </div>
       <div className="tw-host-launch-controls">

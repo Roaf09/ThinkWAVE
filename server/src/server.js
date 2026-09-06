@@ -8,7 +8,7 @@ import http from "http";
 import { Server as IOServer } from "socket.io";
 import { env } from "./env.js";
 import { makeApp } from "./app.js";
-import { registerSessionSockets } from "./modules/sessions/sessions.socket.js";
+import { registerSessionSockets, closeOrphanedSessions } from "./modules/sessions/sessions.socket.js";
 import jwt from "jsonwebtoken";
 import { pool } from "./db.js";
 
@@ -43,6 +43,12 @@ io.use(async (socket, next) => {
 });
 
 registerSessionSockets(io);
+
+// Sessions still LOBBY/LIVE/PAUSED from before this process last started have
+// no way to ever reach ENDED on their own (see closeOrphanedSessions) - clear
+// them before accepting traffic so they don't linger in Session History gaps
+// or the active-sessions list.
+closeOrphanedSessions().catch((error) => console.error("closeOrphanedSessions failed:", error));
 
 httpServer.listen(env.PORT, () => {
   console.log(`API listening on http://localhost:${env.PORT}`);

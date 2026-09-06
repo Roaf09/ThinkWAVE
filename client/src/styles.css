@@ -1770,14 +1770,16 @@ body.dark-mode .tw-builder-floating-theme { color: #fff !important; }
   .tw-guess-word-image { aspect-ratio: 4 / 3; }
 }
 
-/* Pressed bank selector remains blue but visibly unavailable; the other matches an Open button. */
+/* The currently-open tab (Quiz Bank vs Question Bank) must read as the
+   prominent one — it was previously the dimmed side, which made it
+   impossible to tell which bank you were looking at. */
 .tw-teacher-bank-toggle .tw-admin-press:not(.is-muted-selected) {
   --tw-press-face: #2b6cff !important;
   --tw-press-base: #1749bd !important;
   --tw-press-border: #6f9aff !important;
   color: #fff !important;
-  opacity: 1 !important;
-  filter: none !important;
+  opacity: .58 !important;
+  filter: grayscale(.22) saturate(.68) !important;
 }
 .tw-teacher-bank-toggle .is-muted-selected,
 .tw-teacher-bank-toggle .is-muted-selected:disabled {
@@ -1785,8 +1787,8 @@ body.dark-mode .tw-builder-floating-theme { color: #fff !important; }
   --tw-press-base: #1749bd !important;
   --tw-press-border: #6f9aff !important;
   color: #fff !important;
-  opacity: .48 !important;
-  filter: grayscale(.22) saturate(.68) !important;
+  opacity: 1 !important;
+  filter: none !important;
 }
 
 /* Host-live setup window. */
@@ -2890,6 +2892,10 @@ body.dark-mode .tw-host-prompt{background:rgba(255,255,255,.09)!important;border
   display:flex!important;align-items:center!important;justify-content:flex-start!important;
 }
 .tw-host-options>div b{text-align:left!important;flex:1!important}
+/* True/False labels are short fixed words ("True"/"False") — the shared MCQ
+   wrap rules above (overflow-wrap:anywhere) break them one letter per line
+   whenever the row squeezes narrow. Keep them on one line. */
+.tw-host-options.is-true-false .tw-host-student-choice-content b{white-space:nowrap!important;overflow-wrap:normal!important}
 .tw-host-identification-answer{width:min(100%,860px)!important;min-height:76px!important}
 .tw-host-question-meta>span:nth-of-type(3){background:#16a34a22!important;color:#16a34a!important;border-color:#22c55e66!important;font-weight:950!important;box-shadow:0 0 14px rgba(34,197,94,.3)!important}
 .sp-dashboard-return{

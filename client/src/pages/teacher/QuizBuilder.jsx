@@ -685,15 +685,23 @@ export default function QuizBuilder({ guestMode = false }) {
       timeLimitSec: parsedConfig?.timeLimitSec ?? 30,
       points: parsedConfig?.points ?? 1,
     };
+    // If the slot the teacher currently has open is still blank (they haven't
+    // typed a question into it), fill that slot in place. This used to always
+    // insert a brand-new slot next to it instead, leaving the blank one behind
+    // as a second, empty question.
+    const currentIsBlank = questions.length > 0 && !trimText(questions[qIndex]?.prompt);
     const insertAt = qIndex === questions.length - 1 ? questions.length : qIndex;
     markUnsaved((qs) => {
       const next = [...qs];
-      next.splice(insertAt, 0, newQ);
+      if (currentIsBlank && next[qIndex]) next[qIndex] = { ...newQ, order: qIndex };
+      else next.splice(insertAt, 0, newQ);
       return next.map((item, index) => ({ ...item, order: index }));
     });
-    setNavDir(insertAt > qIndex ? "next" : "prev");
-    setQIndex(insertAt);
-    setNavTick((v) => v + 1);
+    if (!currentIsBlank) {
+      setNavDir(insertAt > qIndex ? "next" : "prev");
+      setQIndex(insertAt);
+      setNavTick((v) => v + 1);
+    }
     setBankOpen(false);
     setMsg("");
   }
@@ -1318,7 +1326,7 @@ export default function QuizBuilder({ guestMode = false }) {
           tone="blue"
           icon="spark"
           title="Publish Quiz?"
-          message="Students will now be able to host and join this quiz live. You can still view and edit it later if needed."
+          message="You'll be able to host this quiz live and students can join. You can still view and edit it later if needed."
           onClose={() => setModal(null)}
           ui={ui}
           c={c}

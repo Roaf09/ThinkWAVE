@@ -171,7 +171,12 @@ export default function HostLive({ guestMode = false }) {
   const isLive = state?.status === "LIVE";
   const isPaused = state?.status === "PAUSED";
   const joinMode = state?.join_mode || "SOLO";
-  const isLast = !!state && Number(state.current_question_index || 0) >= Math.max(0, questions.length - 1);
+  // questions.length can be 0 for a moment (initial load, a reconnect race
+  // before a fresh snapshot lands) — treating that as "index >= -1" made
+  // every question look like the last one, which armed the 3-minute
+  // idle-then-auto-end effect below on any mid-session question, not just
+  // the true final one. Without a known question count, this is never "last".
+  const isLast = !!state && questions.length > 0 && Number(state.current_question_index || 0) >= questions.length - 1;
   const rosterStats = useMemo(() => {
     const active = roster.filter((row) => !row.kicked_at);
     const connectedCount = active.filter((row) => Number(row.connected) === 1).length;
@@ -662,15 +667,16 @@ const Podium = memo(function Podium({ leaders, C, scoreMode = "competitive", onT
   const places = [2, 1, 3];
   return <div className="tw-host-podium">{order.map((row, index) => {
     const place = places[index];
+    const isPracticeBot = Number(row?.participant_id) < 0;
     const name = row ? (row.group_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()) : "Waiting…";
     const value = scoreMode === "competitive" ? Number(row?.competitive_points || 0) : Number(row?.total_points || 0);
     return <div key={place} className={`tw-host-podium-place place-${place}`}>
       <div className="tw-host-trophy"><TwIcon name="trophy" size={54} strokeWidth={2.2}/><span>{place}</span></div>
-      <div className="tw-host-podium-platform"><div className="tw-host-podium-person"><div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={row?.group_name ? "users" : "user"} size={18}/>}</div><b>{name}</b></div><button type="button" className="tw-host-podium-points tw-host-score-click" onClick={onToggleScoreMode} title="Click to switch point type">{formatHostScore(value, scoreMode)} pts</button></div>
+      <div className="tw-host-podium-platform"><div className="tw-host-podium-person"><div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={row?.group_name ? "users" : "user"} size={18}/>}</div><b>{name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." style={{ fontStyle: "normal", opacity: .7, fontSize: 11, marginLeft: 4 }}>(Practice)</em> : null}</b></div><button type="button" className="tw-host-podium-points tw-host-score-click" onClick={onToggleScoreMode} title="Click to switch point type">{formatHostScore(value, scoreMode)} pts</button></div>
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" style={{ color: tabColor, fontSize: 12, fontWeight: 800 }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." style={{ fontStyle: "normal", opacity: .7, fontSize: 11, marginLeft: 4 }}>(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" style={{ color: tabColor, fontSize: 12, fontWeight: 800 }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
 const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choiceCounts = {} }) {
   const cfg = q?.config_json || {};
   const correct = q?.correct_json || {};

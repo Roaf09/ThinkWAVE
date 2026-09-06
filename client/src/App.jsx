@@ -28,7 +28,7 @@ import StudentAuth         from "./pages/student/StudentAuth.jsx";
 import StudentDashboard    from "./pages/student/StudentDashboard.jsx";
 import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
 
-import { getRole, getToken } from "./lib/auth";
+import { getRole, getToken, getTabToken, clearToken, clearRole } from "./lib/auth";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
 import StarField from "./components/StarField.jsx";
@@ -107,6 +107,25 @@ function Shell({ children, toast, setToast }) {
 export default function App() {
   const [toast, setToast] = useState(null);
   useEffect(() => { setAuthToken(getToken()); }, []);
+
+  // The auth token lives in localStorage, which every tab of this browser
+  // shares. If a different account (or role) logs in on another tab, it
+  // silently overwrites the token this tab is using, and this tab breaks on
+  // its next request with no explanation. Detect that swap the moment it
+  // happens and send this tab back to a safe, logged-out state instead.
+  useEffect(() => {
+    function handleStorage(event) {
+      if (event.key !== "qz_token") return;
+      const tabToken = getTabToken();
+      if (!tabToken || event.newValue === tabToken) return;
+      clearToken();
+      clearRole();
+      window.alert("You were signed out because a different account signed in from another tab in this browser.");
+      window.location.href = "/";
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   async function handleLoginSuccess(token, role, loginMeta = {}) {
     setAuthToken(token);
