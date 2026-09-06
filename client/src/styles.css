@@ -3168,14 +3168,22 @@ body.dark-mode .tw-landing-fixed-theme{color:#fff!important}
 .tw-analytics-question-card:hover{transform:translateY(-1px)}
 .tw-analytics-question-card.is-expanded{cursor:default;animation:tw-analytics-expand .24s ease both}
 @keyframes tw-analytics-expand{from{opacity:.35;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
-.tw-analytics-question-summary{display:grid;grid-template-columns:minmax(46px,auto) minmax(0,1fr) minmax(94px,auto);gap:10px;align-items:center;padding:12px}
-.tw-analytics-question-prompt{font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tw-analytics-expanded-detail{display:grid;gap:14px;padding:16px}
+/* This was written for a class named .tw-analytics-question-summary, but the
+   actual toggle row in Analytics.jsx uses .tw-analytics-question-toggle - so
+   none of this ever applied, and the row (Q-number, prompt, correct/wrong
+   badges, expand chevron) fell back to unstyled inline flow. Retargeted to
+   the real class, with a 4th column added for the chevron. */
+.tw-analytics-question-toggle{display:grid;grid-template-columns:minmax(28px,auto) minmax(0,1fr) auto auto;gap:10px;align-items:start;padding:12px}
+/* Was nowrap+ellipsis, which single-line-truncates with no visible "..." -
+   any question too long for one line just got cut off mid-word and was
+   impossible to read even after expanding. Let it wrap instead. */
+.tw-analytics-question-prompt{font-weight:780;white-space:normal;overflow-wrap:break-word}
+.tw-analytics-expanded-detail{display:grid;gap:14px;padding:20px}
 .tw-analytics-expanded-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .tw-analytics-close{border:0;background:transparent;padding:6px;display:grid;place-items:center;cursor:pointer;border-radius:8px}
 .tw-analytics-full-prompt{font-size:17px;font-weight:850;line-height:1.5}
 .tw-analytics-choice-grid{display:grid;gap:9px}
-.tw-analytics-choice-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid transparent}
+.tw-analytics-choice-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;border:1px solid transparent}
 .tw-analytics-choice-row.is-correct{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.42)}
 .tw-analytics-choice-row.is-wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.34)}
 .tw-analytics-choice-row.is-student-choice{background:rgba(43,108,255,.14);border-color:rgba(43,108,255,.5)}
@@ -3233,7 +3241,7 @@ body.dark-mode .tw-landing-fixed-theme{color:#fff!important}
 
 @media(max-width:1100px){.tw-analytics-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){
-  .tw-analytics-question-summary{grid-template-columns:auto minmax(0,1fr);}.tw-analytics-question-summary>*:last-child{grid-column:1/-1;justify-self:start}
+  .tw-analytics-question-toggle{grid-template-columns:auto minmax(0,1fr);}.tw-analytics-question-toggle>*:nth-child(3),.tw-analytics-question-toggle>*:nth-child(4){grid-column:1/-1;justify-self:start}
   .tw-analytics-choice-row{grid-template-columns:32px minmax(0,1fr)}.tw-analytics-choice-stat{grid-column:2;justify-self:start}
   .tw-analytics-pair-head{display:none}.tw-analytics-pair-row{grid-template-columns:1fr}.tw-analytics-word-row{grid-template-columns:minmax(0,1fr) auto}.tw-analytics-word-row>*:last-child{grid-column:1/-1;justify-self:start}
   .tw-student-analytics-detail{padding-left:12px}
