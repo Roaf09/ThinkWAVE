@@ -697,7 +697,7 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
           {image && <img src={image} alt=""/>}
           {!(tt === "MCQ" && cfg.mcqMode === "MODIFIED" && image) && <b style={{ fontSize: fitHostTextSize(text, 22, 13) }}>{text || "Image option"}</b>}
         </span>
-        {tt === "MCQ" && <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)] || 0)} responses`}>{Number(choiceCounts[String(i)] || 0)}</em>}
+        {tt === "MCQ" && Number(choiceCounts[String(i)] || 0) > 0 && <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)])} responses`}>{Number(choiceCounts[String(i)])}</em>}
       </div>;
     })}</div>;
   }
