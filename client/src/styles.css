@@ -2610,7 +2610,7 @@ body.dark-mode .tw-host-ended-shell{background:rgba(8,18,39,.72)!important}
 .tw-host-options>div b{min-width:0;max-width:100%;line-height:1.2;overflow-wrap:anywhere;text-wrap:balance}
 .tw-host-matching-preview>div>h4{margin:0 0 9px;text-align:center;font-size:16px;color:var(--host-accent);text-transform:uppercase;letter-spacing:.08em}
 .tw-host-media-choice{justify-content:space-between!important;text-align:left!important;width:100%;box-sizing:border-box;overflow:hidden}
-.tw-host-media-choice b{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.22}
+.tw-host-media-choice b{flex:1;min-width:0;overflow-wrap:break-word;line-height:1.22}
 .tw-host-media-choice img{order:2;margin-left:auto!important}
 .tw-host-pics{width:min(100%,310px)!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
 .tw-host-pics>div{width:100%!important;aspect-ratio:1!important;max-height:none!important}
@@ -2891,14 +2891,27 @@ body.dark-mode .tw-host-prompt{background:rgba(255,255,255,.09)!important;border
   height:76px!important;min-height:76px!important;max-height:76px!important;
   display:flex!important;align-items:center!important;justify-content:flex-start!important;
 }
-.tw-host-options>div b{text-align:left!important;flex:1!important}
+.tw-host-options>div b{text-align:left!important;flex:1!important;overflow-wrap:break-word!important}
+/* The content column (badge circle -> option text -> live response count)
+   had no width/flex rules of its own, so it sat shrink-to-fit against the
+   left edge while flex's justify-content:flex-start left a big empty gap
+   before the count on the right. Because it never claimed the row's actual
+   width, even short option text ("<link>", "<div>") wrapped inside the
+   3-line clamp below far sooner than it needed to, and got cut off mid-word.
+   Let it fill the space the row actually has. */
+.tw-host-student-choice-content{
+  display:flex!important;
+  align-items:center!important;
+  flex:1 1 auto!important;
+  min-width:0!important;
+}
 /* True/False labels are short fixed words ("True"/"False") — the shared MCQ
-   wrap rules above (overflow-wrap:anywhere) break them one letter per line
-   whenever the row squeezes narrow. Keep them on one line. Also undo the
-   multi-line-clamp box (display:-webkit-box + overflow:hidden, set earlier
-   for long MCQ option text) - combined with nowrap it clipped "True"/"False"
-   to a couple of characters instead of showing them, since a nowrap line
-   inside a clamped, overflow-hidden box still gets cut at the box edge. */
+   wrap rules above break long text across lines, which these two never need.
+   Keep them on one line. Also undo the multi-line-clamp box
+   (display:-webkit-box + overflow:hidden, set earlier for long MCQ option
+   text) - combined with nowrap it clipped "True"/"False" to a couple of
+   characters instead of showing them, since a nowrap line inside a clamped,
+   overflow-hidden box still gets cut at the box edge. */
 .tw-host-options.is-true-false .tw-host-student-choice-content b{
   white-space:nowrap!important;
   overflow-wrap:normal!important;
