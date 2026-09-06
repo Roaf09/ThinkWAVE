@@ -2904,6 +2904,17 @@ body.dark-mode .tw-host-prompt{background:rgba(255,255,255,.09)!important;border
   align-items:center!important;
   flex:1 1 auto!important;
   min-width:0!important;
+  /* .tw-host-options>div>span (line 767) was written for the single circular
+     A/B/C/D badge and matches any direct-child span of a choice row - this
+     content span is a second one added later, and inherited that circle's
+     28x28, border-radius:50% badge look by accident. It went unnoticed while
+     this span stayed narrow; giving it flex:1 above stretched that 28px-tall
+     circle into a 545px-wide ellipse behind the text. Reset the badge-only
+     properties back to normal here. */
+  width:auto!important;
+  height:auto!important;
+  border-radius:0!important;
+  background:transparent!important;
 }
 /* True/False labels are short fixed words ("True"/"False") — the shared MCQ
    wrap rules above break long text across lines, which these two never need.
