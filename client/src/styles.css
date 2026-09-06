@@ -2894,9 +2894,41 @@ body.dark-mode .tw-host-prompt{background:rgba(255,255,255,.09)!important;border
 .tw-host-options>div b{text-align:left!important;flex:1!important}
 /* True/False labels are short fixed words ("True"/"False") — the shared MCQ
    wrap rules above (overflow-wrap:anywhere) break them one letter per line
-   whenever the row squeezes narrow. Keep them on one line. */
-.tw-host-options.is-true-false .tw-host-student-choice-content b{white-space:nowrap!important;overflow-wrap:normal!important}
+   whenever the row squeezes narrow. Keep them on one line. Also undo the
+   multi-line-clamp box (display:-webkit-box + overflow:hidden, set earlier
+   for long MCQ option text) - combined with nowrap it clipped "True"/"False"
+   to a couple of characters instead of showing them, since a nowrap line
+   inside a clamped, overflow-hidden box still gets cut at the box edge. */
+.tw-host-options.is-true-false .tw-host-student-choice-content b{
+  white-space:nowrap!important;
+  overflow-wrap:normal!important;
+  display:inline-block!important;
+  -webkit-line-clamp:unset!important;
+  overflow:visible!important;
+}
 .tw-host-identification-answer{width:min(100%,860px)!important;min-height:76px!important}
+/* The "Competitive points" toggle had no styling at all - a bare default
+   button sitting next to the Top Scores heading. Match the same rounded
+   pill/chip language used by the LOBBY/Solo Mode status pills and the score
+   pills elsewhere on this panel, tinted to the current template's accent so
+   it blends instead of standing out as unstyled. */
+.tw-host-score-mode-chip{
+  appearance:none;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:850;
+  line-height:1;
+  padding:7px 13px;
+  border-radius:999px;
+  border:1px solid color-mix(in srgb, var(--host-accent) 45%, transparent);
+  background:color-mix(in srgb, var(--host-accent) 16%, transparent);
+  color:var(--host-accent);
+  cursor:pointer;
+  transition:filter .15s ease, transform .1s ease;
+}
+.tw-host-score-mode-chip:hover{filter:brightness(1.15)}
+.tw-host-score-mode-chip:active{transform:translateY(1px)}
+.tw-host-score-mode-chip:focus-visible{outline:2px solid var(--host-accent);outline-offset:2px}
 .tw-host-question-meta>span:nth-of-type(3){background:#16a34a22!important;color:#16a34a!important;border-color:#22c55e66!important;font-weight:950!important;box-shadow:0 0 14px rgba(34,197,94,.3)!important}
 .sp-dashboard-return{
   padding:0 0 6px!important;background:#1749bd!important;box-shadow:0 12px 26px rgba(43,108,255,.28)!important;
