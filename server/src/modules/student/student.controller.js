@@ -6,56 +6,8 @@ import { pool } from "../../db.js";
 import { scoreAnswer, normalizeTemplateType } from "../quizzes/templates.js";
 import { makeReconnectKey } from "../../utils/codes.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
-import { calculateCompetitivePoints } from "../sessions/leaderboard.js";
-import { getIO } from "../../socketRegistry.js";
-import { broadcastAssignmentLeaderboard } from "./assignment.socket.js";
 
 const asyncAnswerChecks = new Map();
-
-async function buildAssignmentLeaderboard(quizId) {
-  const [rows] = await pool.query(
-    `SELECT a.student_user_id, a.score, a.max_score, a.competitive_points, a.submitted_at,
-            u.first_name, u.last_name, COALESCE(stp.profile_image, u.profile_image) AS profile_image
-     FROM async_quiz_submissions a
-     JOIN users u ON u.id = a.student_user_id
-     LEFT JOIN student_profiles stp ON stp.user_id = a.student_user_id
-     WHERE a.quiz_id = :qid
-     ORDER BY a.competitive_points DESC, a.score DESC, a.submitted_at ASC, a.student_user_id ASC`,
-    { qid: quizId }
-  );
-  return rows.map((row, index) => ({
-    student_user_id: Number(row.student_user_id),
-    first_name: row.first_name || "",
-    last_name: row.last_name || "",
-    profile_image: row.profile_image || null,
-    score: Number(row.score),
-    max_score: Number(row.max_score),
-    competitive_points: Number(row.competitive_points || 0),
-    submitted_at: row.submitted_at,
-    rank: index + 1,
-  }));
-}
-
-export async function getAssignmentLeaderboard(req, res) {
-  const quizId = Number(req.params.quizId);
-  const [[quiz]] = await pool.query(
-    `SELECT q.id FROM quizzes q
-     JOIN class_enrollments e ON e.class_id=q.class_id AND e.student_user_id=:uid AND e.removed_at IS NULL
-     WHERE q.id=:qid AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL`,
-    { uid: req.user.sub, qid: quizId }
-  );
-  if (!quiz) return res.status(404).json({ message: "Quiz not found." });
-  let leaderboard = [];
-  try {
-    leaderboard = await buildAssignmentLeaderboard(quizId);
-  } catch (err) {
-    if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
-    // Missing competitive_points column - see submitStudentQuiz for the
-    // migration note. Return an empty leaderboard rather than a 500.
-    leaderboard = [];
-  }
-  res.json({ leaderboard });
-}
 
 async function ensureStudentGamificationTables() {
   await pool.query(`CREATE TABLE IF NOT EXISTS student_goal_claims (
@@ -320,53 +272,6 @@ export async function getStudentDashboard(req, res) {
      FROM session_participants p LEFT JOIN responses r ON r.participant_id=p.id AND r.session_id=p.session_id AND r.answered_at>=:since
      WHERE p.student_user_id=:uid AND p.joined_at>=:since2`, { uid, since:boundaries.weeklyAt, since2:boundaries.weeklyAt }
   );
-  // Daily/weekly goals are earned through assignments too, not just live
-  // sessions - tally submitted assignment activity in the same windows and
-  // add it on top of the live-session numbers above.
-  let dailyAssignmentSubs = [];
-  let weeklyAssignmentSubs = [];
-  try {
-    [dailyAssignmentSubs] = await pool.query(
-      `SELECT quiz_id, answers_json, competitive_points, submitted_at FROM async_quiz_submissions WHERE student_user_id=:uid AND submitted_at>=:since`,
-      { uid, since: boundaries.dailyAt }
-    );
-    [weeklyAssignmentSubs] = await pool.query(
-      `SELECT quiz_id, answers_json, competitive_points, submitted_at FROM async_quiz_submissions WHERE student_user_id=:uid AND submitted_at>=:since`,
-      { uid, since: boundaries.weeklyAt }
-    );
-  } catch (err) {
-    // Assignment-based goal credit needs the competitive_points column added
-    // by server/scripts/add_assignment_competitive_points_column.js. If that
-    // migration hasn't been run yet, don't take the whole dashboard down -
-    // just skip assignment credit for goals until it has been applied.
-    if (err?.code === "ER_BAD_FIELD_ERROR") {
-      console.warn("[student.dashboard] async_quiz_submissions.competitive_points is missing - run `node server/scripts/add_assignment_competitive_points_column.js` to enable assignment credit toward daily/weekly goals.");
-      dailyAssignmentSubs = [];
-      weeklyAssignmentSubs = [];
-    } else {
-      throw err;
-    }
-  }
-  function tallyAssignmentGoalStats(rows) {
-    let correct = 0, competitive = 0;
-    for (const row of rows) {
-      competitive += Number(row.competitive_points || 0);
-      const checked = safeJson(row.answers_json);
-      if (Array.isArray(checked)) correct += checked.filter((entry) => entry?.isCorrect).length;
-    }
-    return { submissions: rows.length, correct, competitive };
-  }
-  const dailyAssignmentTally = tallyAssignmentGoalStats(dailyAssignmentSubs);
-  const weeklyAssignmentTally = tallyAssignmentGoalStats(weeklyAssignmentSubs);
-  let weeklyAssignmentTop3 = 0;
-  for (const submission of weeklyAssignmentSubs) {
-    const [[{ higher }]] = await pool.query(
-      `SELECT COUNT(*) AS higher FROM async_quiz_submissions o
-       WHERE o.quiz_id=:qid AND (o.competitive_points>:cp OR (o.competitive_points=:cp AND o.submitted_at<:submittedAt))`,
-      { qid: submission.quiz_id, cp: Number(submission.competitive_points || 0), submittedAt: submission.submitted_at }
-    );
-    if (Number(higher) < 3) weeklyAssignmentTop3 += 1;
-  }
   const top5Count=rankRows.filter((row)=>Number(row.final_rank)<=5).length;
   const top3Count=rankRows.filter((row)=>Number(row.final_rank)<=3).length;
   const firstPlaceCount=rankRows.filter((row)=>Number(row.final_rank)===1).length;
@@ -383,8 +288,8 @@ export async function getStudentDashboard(req, res) {
     { key:'weekly-top',title:'Podium Push',metric:'top3',target:1,reward:3500 },
     { key:'weekly-points',title:'Competitive Climb',metric:'competitive',target:12000,reward:4500 },
   ];
-  const dailyValues={ sessions:Number(dailyGoalStats?.sessions||0)+dailyAssignmentTally.submissions,correct:Number(dailyGoalStats?.correct||0)+dailyAssignmentTally.correct,competitive:Number(dailyGoalStats?.competitive||0)+dailyAssignmentTally.competitive };
-  const weeklyValues={ sessions:Number(weeklyGoalStats?.sessions||0)+weeklyAssignmentTally.submissions,correct:Number(weeklyGoalStats?.correct||0)+weeklyAssignmentTally.correct,competitive:Number(weeklyGoalStats?.competitive||0)+weeklyAssignmentTally.competitive,top3:weeklyTop3+weeklyAssignmentTop3 };
+  const dailyValues={ sessions:Number(dailyGoalStats?.sessions||0),correct:Number(dailyGoalStats?.correct||0),competitive:Number(dailyGoalStats?.competitive||0) };
+  const weeklyValues={ sessions:Number(weeklyGoalStats?.sessions||0),correct:Number(weeklyGoalStats?.correct||0),competitive:Number(weeklyGoalStats?.competitive||0),top3:weeklyTop3 };
   for (const goal of dailyGoals) if (Number(dailyValues[goal.metric]||0)>=goal.target) await pool.query(`INSERT IGNORE INTO student_goal_claims(student_user_id,goal_key,period_key,xp_reward) VALUES(:uid,:goal,:period,:reward)`,{uid,goal:goal.key,period:boundaries.dailyKey,reward:goal.reward});
   for (const goal of weeklyGoals) if (Number(weeklyValues[goal.metric]||0)>=goal.target) await pool.query(`INSERT IGNORE INTO student_goal_claims(student_user_id,goal_key,period_key,xp_reward) VALUES(:uid,:goal,:period,:reward)`,{uid,goal:goal.key,period:boundaries.weeklyKey,reward:goal.reward});
   const [[bonusRow]] = await pool.query(`SELECT COALESCE(SUM(xp_reward),0) AS bonus_xp FROM student_goal_claims WHERE student_user_id=:uid`,{uid});
@@ -681,10 +586,9 @@ export async function submitStudentQuiz(req, res) {
     `SELECT id, prompt, config_json, correct_json FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  const byId = new Map(answers.map((a) => [Number(a.questionId), a]));
+  const byId = new Map(answers.map((a) => [Number(a.questionId), a.answer]));
   let score = 0;
   let maxScore = 0;
-  let competitivePoints = 0;
   const checked = [];
   for (const q of questions) {
     const config = safeJson(q.config_json) || {};
@@ -700,57 +604,20 @@ export async function submitStudentQuiz(req, res) {
       : template === "MATCHING"
         ? basePoints * matchingPairs
         : basePoints;
-    const entry = byId.get(Number(q.id));
-    const answer = entry?.answer ?? null;
+    const answer = byId.get(Number(q.id)) ?? null;
     const result = scoreAnswer({ templateType: template, correct, answer, config, basePoints });
     const points = Number(result.pointsAwarded || 0);
     score += points;
-    // Reuses the exact same formula live sessions use for competitive points,
-    // so the assignment leaderboard is genuinely consistent with live ones.
-    const timeLimitSec = Math.max(1, Number(config.timeLimitSec || quiz.time_limit_sec || 30));
-    const timeExpired = !!answer?.timedOut;
-    const responseMs = Math.max(0, Math.min(Number(entry?.responseMs || 0), timeLimitSec * 1000));
-    competitivePoints += calculateCompetitivePoints({
-      templateType: template,
-      scored: result,
-      basePoints,
-      elapsedMs: responseMs,
-      timeLimitMs: timeLimitSec * 1000,
-      timeExpired,
-    });
     checked.push({ questionId: q.id, answer, isCorrect: !!result.isCorrect, points });
   }
 
-  let competitivePointsColumnMissing = false;
-  try {
-    await pool.query(
-      `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score,competitive_points)
-       VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore,:competitivePoints)`,
-      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore, competitivePoints: Math.round(competitivePoints) }
-    );
-  } catch (err) {
-    if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
-    // competitive_points hasn't been added to this database yet - run
-    // `node server/scripts/add_assignment_competitive_points_column.js`.
-    // Still record the submission so the student's answers are never lost;
-    // just skip competitive points/leaderboard until the migration runs.
-    competitivePointsColumnMissing = true;
-    console.warn("[submitStudentQuiz] async_quiz_submissions.competitive_points is missing - run `node server/scripts/add_assignment_competitive_points_column.js`. Submission saved without competitive points.");
-    await pool.query(
-      `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score)
-       VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore)`,
-      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore }
-    );
-  }
+  await pool.query(
+    `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score)
+     VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore)`,
+    { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore }
+  );
   for (const key of asyncAnswerChecks.keys()) {
     if (key.startsWith(`${req.user.sub}:${quizId}:`)) asyncAnswerChecks.delete(key);
   }
-  let leaderboard = [];
-  let myRank = null;
-  if (!competitivePointsColumnMissing) {
-    leaderboard = await buildAssignmentLeaderboard(quizId);
-    broadcastAssignmentLeaderboard(getIO(), quizId, { quizId, leaderboard });
-    myRank = leaderboard.find((row) => row.student_user_id === Number(req.user.sub))?.rank || null;
-  }
-  res.json({ ok: true, score, maxScore, competitivePoints: competitivePointsColumnMissing ? 0 : Math.round(competitivePoints), rank: myRank, leaderboard });
+  res.json({ ok: true, score, maxScore });
 }

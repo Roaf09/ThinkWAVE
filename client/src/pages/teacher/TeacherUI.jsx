@@ -33,7 +33,7 @@ export function TeacherMetricCard({ icon, label, value, hint, tone = "blue", onC
 export function TeacherPressButton({ tone = "blue", className = "", icon, children, type = "button", ...props }) {
   return (
     <button type={type} {...props} className={`tw-admin-press tw-admin-press-${tone} tw-teacher-press ${className}`.trim()}>
-      <span>{icon ? <TwIcon name={icon} size={17} /> : null}{children != null && <span className="tw-press-label">{children}</span>}</span>
+      <span>{icon ? <TwIcon name={icon} size={17} /> : null}{children}</span>
     </button>
   );
 }

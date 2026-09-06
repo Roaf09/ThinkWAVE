@@ -1,18 +1,6 @@
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateLabel } from "../../../lib/templatePalette";
 
-// Mirrors the server's stableStringify (server/src/modules/question_bank/question_bank.controller.js)
-// exactly, so client-side "is this already in the bank?" checks match the
-// server's own duplicate detection - a plain JSON.stringify would wrongly
-// treat two identical questions as different just because their object
-// keys happened to be built in a different order.
-export function stableStringify(value) {
-  if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
-  return JSON.stringify(value);
-}
-
 export function normalizeSemanticText(value) {
   const stopWords = new Set(["a", "an", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in", "is", "it", "its", "of", "on", "that", "the", "these", "this", "to", "was", "were", "what", "which", "who", "whom", "with"]);
   return String(value || "")

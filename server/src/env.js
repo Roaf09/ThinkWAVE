@@ -30,14 +30,13 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || "dev_secret_change_me",
   BOOTSTRAP_SECRET: String(process.env.BOOTSTRAP_SECRET || "").trim(),
 
-DB_HOST: process.env.DB_HOST || "127.0.0.1",
-DB_PORT: Number(process.env.DB_PORT || 3306),
-DB_USER: process.env.DB_USER || "root",
-DB_PASS: process.env.DB_PASS || "",
-DB_NAME: process.env.DB_NAME || "thinkwave",
-DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
-DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "",
-
+  DB_HOST: process.env.DB_HOST || "thinkwave-mysql-thinkwave-mysql.g.aivencloud.com",
+  DB_PORT: Number(process.env.DB_PORT || 15614),
+  DB_USER: process.env.DB_USER || "avnadmin",
+  DB_PASS: process.env.DB_PASS || "",
+  DB_NAME: process.env.DB_NAME || "defaultdb",
+  DB_SSL: String(process.env.DB_SSL || "false").toLowerCase() === "true",
+  DB_SSL_CA_PATH: process.env.DB_SSL_CA_PATH || "/etc/secrets/ca.pem",
 
   MAILGUN_API_KEY: process.env.MAILGUN_API_KEY || "",
   MAILGUN_DOMAIN: process.env.MAILGUN_DOMAIN || "",

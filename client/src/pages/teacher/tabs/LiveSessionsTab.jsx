@@ -197,19 +197,13 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   useEffect(() => {
     if (!String(tutorial?.stage || "").startsWith("sessions_")) return;
     if (!filteredQuizzes.length) return;
-    // Prefer a published (hostable) quiz as the tutorial target. If the quiz
-    // pinned to the top is stuck as a draft - e.g. from an earlier attempt
-    // that hit a bug before publishing - keep looking rather than leaving the
-    // teacher stuck on "let's choose Host Live" pointed at a button they
-    // can't actually click.
-    const currentQuiz = filteredQuizzes.find((quiz) => Number(quiz.id) === Number(openQuizId));
-    if (currentQuiz && currentQuiz.status === "PUBLISHED") return;
-    const bestCandidate = filteredQuizzes.find((quiz) => quiz.status === "PUBLISHED") || filteredQuizzes[0];
-    const bestId = Number(bestCandidate.id);
-    if (Number(openQuizId) === bestId) return;
-    setOpenQuizId(bestId);
-    setPromotedQuizIds((rows) => [bestId, ...rows.filter((id) => Number(id) !== bestId)]);
-  }, [tutorial?.stage, filteredQuizzes, openQuizId]);
+    setOpenQuizId((current) => {
+      if (current) return current;
+      const firstId = Number(filteredQuizzes[0].id);
+      setPromotedQuizIds((rows) => [firstId, ...rows.filter((id) => Number(id) !== firstId)]);
+      return firstId;
+    });
+  }, [tutorial?.stage, filteredQuizzes.length]);
 
   async function createLiveSession(quiz, joinMode = "SOLO", classId = null, backgroundKey = DEFAULT_SESSION_BACKGROUND) {
     try {
@@ -427,19 +421,6 @@ function BackgroundPicker({ selectedKey, onSelect, c, category }) {
     setStartIndex((value) => (value + step + total) % total);
   }
 
-  // Mobile: swipe the row instead of tapping arrow buttons (arrows are
-  // hidden below the mobile breakpoint via CSS).
-  const touchStartRef = useRef(null);
-  function onTouchStart(event) { touchStartRef.current = event.touches[0].clientX; }
-  function onTouchEnd(event) {
-    const startX = touchStartRef.current;
-    touchStartRef.current = null;
-    if (startX == null) return;
-    const dx = event.changedTouches[0].clientX - startX;
-    if (Math.abs(dx) < 34) return;
-    move(dx < 0 ? 1 : -1);
-  }
-
   useEffect(() => {
     const node = carouselRef.current;
     if (!node || !total) return undefined;
@@ -459,7 +440,7 @@ function BackgroundPicker({ selectedKey, onSelect, c, category }) {
 
   return <div className="tw-session-background-picker" data-tutorial="session-backgrounds">
     <div className="tw-session-background-head"><span>Choose a gameplay background</span><small style={{ color: c.textMuted }}>{selectedIndex >= 0 ? `${selectedIndex + 1} of ${total}` : "No background selected"}</small></div>
-    <div ref={carouselRef} className="tw-session-background-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div ref={carouselRef} className="tw-session-background-carousel">
       <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={() => move(-1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
       <div className="tw-session-background-track">
         <div key={startIndex} className={`tw-session-background-track-inner is-${slideDirection}`}>

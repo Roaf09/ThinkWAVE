@@ -163,8 +163,8 @@ export default function HomeTab({ setActiveTab }) {
           <h2 style={{ marginBottom: 4, color: c.text }}>Home</h2>
         </section>
 
-        <section className="tw-home-top-grid" style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
-          <div className="tw-home-quick-metrics" style={{ display: "grid", gap: 14 }}>
+        <section style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
+          <div style={{ display: "grid", gap: 14 }}>
             <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Quizzes currently available in Sessions" tone="blue" onClick={() => setActiveTab?.("live")} />
             <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
@@ -181,7 +181,7 @@ export default function HomeTab({ setActiveTab }) {
               </div>
             </div>
 
-            <div className="tw-mini-info-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
               <MiniInfo c={c} label="Class Handled" value={classesHandled} tone="red" />
               <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" />
               <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" />
@@ -206,7 +206,7 @@ export default function HomeTab({ setActiveTab }) {
           </div>
         </section>
 
-        <section className="tw-home-mid-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(280px, 0.9fr)", gap: 16 }}>
+        <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(280px, 0.9fr)", gap: 16 }}>
           <div style={shellCard(c)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
               <div>
@@ -217,13 +217,13 @@ export default function HomeTab({ setActiveTab }) {
             {recentSessions.length === 0 ? (
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
             ) : (
-              <div className="tw-session-card-grid" style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 10 }}>
                 {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} />)}
               </div>
             )}
           </div>
 
-          <div className="tw-home-performance" style={shellCard(c)}>
+          <div style={shellCard(c)}>
             <div style={{ fontWeight: 900, fontSize: 17, color: c.text, marginBottom: 10 }}>Performance highlights</div>
             {performanceHighlights.length === 0 ? (
               <EmptyState c={c} icon="chart" title="No highlights yet" message="Recent analytics will surface smart highlights here after more completed live sessions." compact />
@@ -250,18 +250,9 @@ export default function HomeTab({ setActiveTab }) {
 function SessionCard({ session, analytics, c, navigate }) {
   const tone = templateTone(session.template_type, c, false);
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
-  const goToAnalytics = () => navigate(assigned ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}` : `/teacher/analytics/${session.id}`);
   return (
-    <div
-      className="tw-session-card"
-      role="button"
-      tabIndex={0}
-      onClick={goToAnalytics}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); goToAnalytics(); } }}
-      style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease", cursor: "pointer" }) }}
-    >
-      {/* Desktop layout - hidden on mobile, replaced by the compact square below */}
-      <div className="tw-session-card-desktop-row" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+    <div className="tw-session-card" style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease" }) }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
           <div style={{ fontWeight: 900, color: c.text }}>{session.quiz_title}</div>
           <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{new Date(session.ended_at || session.available_until || session.started_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div>
@@ -273,18 +264,11 @@ function SessionCard({ session, analytics, c, navigate }) {
           {analytics && <span style={pill(c, { borderColor: c.greenBorder, background: c.greenBg, color: c.greenFg })}>Avg {analytics.summary?.avg_score ?? 0}</span>}
         </div>
       </div>
-      <div className="tw-session-card-desktop-row" style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ color: c.textMuted, fontSize: 13 }}>
           {session.question_count || 0} questions · {assigned ? `${session.avg_score ?? 0} average score` : analytics?.questions?.length ? `${Math.round(Number(analytics.questions[0]?.pct_correct || 0))}% correct on the first tracked item` : "Analytics ready to open"}
         </div>
-        <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); goToAnalytics(); }}>Open Analytics</button>
-      </div>
-
-      {/* Mobile layout - compact square card, title + question count + participants only */}
-      <div className="tw-session-card-mobile-square">
-        <div className="tw-session-card-mobile-title" style={{ color: c.text }}>{session.quiz_title}</div>
-        <div className="tw-session-card-mobile-meta" style={{ color: c.textMuted }}><TwIcon name="chart" size={13} /> {session.question_count || 0} questions</div>
-        <div className="tw-session-card-mobile-meta" style={{ color: c.textMuted }}><TwIcon name="student" size={13} /> {session.participant_count || 0} {assigned ? "submitted" : "participants"}</div>
+        <button type="button" className="tw-analytics-text-link" onClick={() => navigate(assigned ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}` : `/teacher/analytics/${session.id}`)}>Open Analytics</button>
       </div>
     </div>
   );

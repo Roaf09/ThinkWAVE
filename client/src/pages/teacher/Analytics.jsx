@@ -28,7 +28,6 @@ export default function Analytics({ guestMode = false }) {
   const [advancedPlan, setAdvancedPlan] = useState(false);
   const [exporting, setExporting] = useState("");
   const [expandedStudentId, setExpandedStudentId] = useState(null);
-  const [mobileResultsView, setMobileResultsView] = useState("students");
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [analyticsTutorialStage, setAnalyticsTutorialStage] = useState(null);
   const [tutorialStudentOpened, setTutorialStudentOpened] = useState(false);
@@ -67,7 +66,7 @@ export default function Analytics({ guestMode = false }) {
               } catch { /* keep the analytics payload if session state is unavailable */ }
             }
             analyticsData = buildTutorialDemoAnalytics(analyticsData, sourceQuestions);
-            tabs = buildTutorialDemoTabs(analyticsResponse.data?.tabMonitoring);
+            tabs = buildTutorialDemoTabs();
           } else {
             tabs = Array.isArray(analyticsData?.tabMonitoring) ? analyticsData.tabMonitoring : [];
           }
@@ -169,10 +168,10 @@ export default function Analytics({ guestMode = false }) {
             </div>
             <div style={{ marginTop: 8, color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>{guestMode ? formatDate(session.display_date) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}</>}</div>
           </div>
-          {exportAllowed && <div className="tw-analytics-export-row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
-            <TeacherPressButton type="button" tone="neutral" className="tw-analytics-export-btn" icon="download" disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</TeacherPressButton>
-            <TeacherPressButton type="button" tone="neutral" className="tw-analytics-export-btn" icon="download" disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</TeacherPressButton>
+          {exportAllowed && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
+            <TeacherPressButton type="button" tone="neutral" disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</TeacherPressButton>
+            <TeacherPressButton type="button" tone="neutral" disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</TeacherPressButton>
           </div>}
         </div>
       </section>
@@ -186,10 +185,8 @@ export default function Analytics({ guestMode = false }) {
         </div>
         {loading ? <div style={{ color: C.muted, textAlign: "center", padding: 42, fontWeight: 850 }}>Loading analytics…</div> : showAdvanced ? (
           <div className="tw-analytics-advanced-layout">
-            <div className={`tw-analytics-panel-wrap${mobileResultsView === "students" ? " is-mobile-visible" : ""}`}>
-              <Scoreboard C={C} scores={scores} tone={tone} analytics={analytics || {}} tabMonitoring={tabMonitoring} expandedStudentId={expandedStudentId} setExpandedStudentId={setExpandedStudentId} />
-            </div>
-            <AdvancedAnalyticsPanel C={C} analytics={analytics || {}} assigned={assigned} tone={tone} mobileView={mobileResultsView} onToggleMobileView={() => setMobileResultsView((view) => (view === "students" ? "questions" : "students"))} />
+            <Scoreboard C={C} scores={scores} tone={tone} analytics={analytics || {}} tabMonitoring={tabMonitoring} expandedStudentId={expandedStudentId} setExpandedStudentId={setExpandedStudentId} />
+            <AdvancedAnalyticsPanel C={C} analytics={analytics || {}} assigned={assigned} tone={tone} />
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: guestMode ? "repeat(auto-fit, minmax(300px, 1fr))" : "1fr", gap: 18, alignItems: "start" }}>
@@ -282,22 +279,15 @@ function BasicAnalyticsPanel({ C, analytics, assigned, tone }) {
   </div>;
 }
 
-function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onToggleMobileView }) {
+function AdvancedAnalyticsPanel({ C, analytics, assigned, tone }) {
   const summary = analytics.summary || {};
   const questions = analytics.questions || [];
   const tt = normalizeTemplateType(analytics?.session?.template_type);
-  const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
   return <div className="tw-analytics-detail-column" style={{ display: "grid", gap: 16 }}>
     <div className="tw-analytics-metrics-grid" data-tutorial="analytics-summary">
       <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label="Lowest" value={summary.min_score ?? 0} /><MetricCard C={C} tone={tone} label="Highest" value={summary.max_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : "Participants"} value={summary.participant_count ?? 0} />
     </div>
-    <button type="button" className="tw-analytics-mobile-toggle-btn" onClick={onToggleMobileView}>
-      <span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span>
-      <TwIcon name="swap" size={15} />
-    </button>
-    <div className={`tw-analytics-panel-wrap${mobileView === "questions" ? " is-mobile-visible" : ""}`}>
-      <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} />
-    </div>
+    <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} />
   </div>;
 }
 
@@ -450,8 +440,6 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
   const session = { ...(base?.session || {}) };
   const tt = normalizeTemplateType(session.template_type);
   const rawQuestions = sourceQuestions.length ? sourceQuestions : (base?.questions || []);
-  const realBaseQuestions = Array.isArray(base?.questions) ? base.questions : [];
-  const realQuestionsById = new Map(realBaseQuestions.map((q) => [Number(q?.question_id ?? q?.id), q]));
   const questions = rawQuestions.map((source, index) => {
     const config = parseMaybeJson(source?.config_json) || {};
     const correct = parseMaybeJson(source?.correct_json) || {};
@@ -513,49 +501,10 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
       const words = Array.isArray(correct.answers) && correct.answers.length ? correct.answers : (Array.isArray(config.answers) ? config.answers : []);
       detail.word_stats = words.map((word, wordIndex) => ({ index: wordIndex, word, correct_count: 2, incorrect_count: 1, pct_correct: 66.67, pct_incorrect: 33.33 }));
     }
-
-    // Blend in any real (guest/student) responses to this question instead of
-    // showing bot-only numbers - a teacher who lets real people join the
-    // tutorial session should see them reflected here, not just the bots.
-    const realQuestion = realQuestionsById.get(detail.question_id) || realBaseQuestions[index] || null;
-    const realTotal = Number(realQuestion?.total_answers || 0);
-    if (realQuestion && realTotal > 0) {
-      const realCorrect = Number(realQuestion.correct_answers || 0);
-      detail.total_answers += realTotal;
-      detail.correct_answers += realCorrect;
-      detail.incorrect_answers = Math.max(0, detail.total_answers - detail.correct_answers);
-      detail.pct_correct = Number(((detail.correct_answers / detail.total_answers) * 100).toFixed(2));
-      detail.pct_incorrect = Number((100 - detail.pct_correct).toFixed(2));
-      if (Array.isArray(detail.choice_stats) && Array.isArray(realQuestion.choice_stats)) {
-        detail.choice_stats = detail.choice_stats.map((option) => {
-          const realOption = realQuestion.choice_stats.find((row) => String(row.id) === String(option.id)) || realQuestion.choice_stats[option.index];
-          const selected_count = option.selected_count + Number(realOption?.selected_count || 0);
-          return { ...option, selected_count, selected_pct: Number(((selected_count / detail.total_answers) * 100).toFixed(2)) };
-        });
-      }
-      if (Array.isArray(detail.pair_stats) && Array.isArray(realQuestion.pair_stats)) {
-        detail.pair_stats = detail.pair_stats.map((pair) => {
-          const realPair = realQuestion.pair_stats[pair.index];
-          const correct_count = pair.correct_count + Number(realPair?.correct_count || 0);
-          const incorrect_count = pair.incorrect_count + Number(realPair?.incorrect_count || 0);
-          const totalPair = correct_count + incorrect_count;
-          return { ...pair, correct_count, incorrect_count, pct_correct: totalPair ? Number(((correct_count / totalPair) * 100).toFixed(2)) : 0, pct_incorrect: totalPair ? Number(((incorrect_count / totalPair) * 100).toFixed(2)) : 0 };
-        });
-      }
-      if (Array.isArray(detail.word_stats) && Array.isArray(realQuestion.word_stats)) {
-        detail.word_stats = detail.word_stats.map((wordStat) => {
-          const realWord = realQuestion.word_stats[wordStat.index];
-          const correct_count = wordStat.correct_count + Number(realWord?.correct_count || 0);
-          const incorrect_count = wordStat.incorrect_count + Number(realWord?.incorrect_count || 0);
-          const totalWord = correct_count + incorrect_count;
-          return { ...wordStat, correct_count, incorrect_count, pct_correct: totalWord ? Number(((correct_count / totalWord) * 100).toFixed(2)) : 0, pct_incorrect: totalWord ? Number(((incorrect_count / totalWord) * 100).toFixed(2)) : 0 };
-        });
-      }
-    }
     return detail;
   });
 
-  const botStudents = [0, 1, 2].map((botIndex) => {
+  const students = [0, 1, 2].map((botIndex) => {
     const responses = questions.map((question, questionIndex) => {
       const maxPoints = tutorialQuestionMaxPoints(question, tt, session.points_per_question);
       const correctForBot = botIndex === 0 || (botIndex === 1 && questions.length > 1 && questionIndex === 0);
@@ -583,13 +532,7 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
       responses,
     };
   });
-  // Real participants (guests included) sit alongside the bots rather than
-  // being replaced by them.
-  const realStudents = Array.isArray(base?.students) ? base.students : [];
-  const students = [...realStudents, ...botStudents];
   const values = students.map((student) => Number(student.total_points || 0));
-  const realGuestCount = Number(base?.summary?.guest_count || 0);
-  const realStudentCount = Number(base?.summary?.student_count ?? realStudents.length);
   return {
     ...(base || {}),
     session,
@@ -597,12 +540,12 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
     students,
     summary: {
       ...(base?.summary || {}),
-      participant_count: realStudentCount + realGuestCount + 3,
-      student_count: realStudentCount + 3,
-      guest_count: realGuestCount,
-      avg_score: values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1)) : 0,
-      min_score: values.length ? Math.min(...values) : 0,
-      max_score: values.length ? Math.max(...values) : 0,
+      participant_count: 3,
+      student_count: 3,
+      guest_count: 0,
+      avg_score: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1)),
+      min_score: Math.min(...values),
+      max_score: Math.max(...values),
     },
   };
 }
@@ -620,10 +563,8 @@ function tutorialQuestionMaxPoints(question, templateType, fallbackPoints = 1) {
   }
   return perUnit;
 }
-function buildTutorialDemoTabs(realTabMonitoring) {
-  const botRows = [1, 2, 3].map((number) => ({ participant_id: -100 - number, first_name: "ThinkBOT", last_name: String(number), tab_out_count: 0 }));
-  const realRows = Array.isArray(realTabMonitoring) ? realTabMonitoring : [];
-  return [...realRows, ...botRows];
+function buildTutorialDemoTabs() {
+  return [1, 2, 3].map((number) => ({ participant_id: -100 - number, first_name: "ThinkBOT", last_name: String(number), tab_out_count: 0 }));
 }
 function parseMaybeJson(value) { if (!value) return {}; if (typeof value === "object") return value; try { return JSON.parse(value); } catch { return {}; } }
 function normalizeDemoOption(option, index) { if (option && typeof option === "object") return { id: String(option.id || `option-${index + 1}`), text: String(option.text ?? option.label ?? ""), image: String(option.image ?? "") }; return { id: `option-${index + 1}`, text: String(option ?? ""), image: "" }; }

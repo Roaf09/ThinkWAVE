@@ -30,8 +30,6 @@ const iconSet = {
   chart: [<path key="1" d="M5 19V5" />, <path key="2" d="M5 19h14" />, <path key="3" d="M8.5 15v-3" />, <path key="4" d="M12 15V8" />, <path key="5" d="M15.5 15v-5" />],
   check: [<path key="1" d="m5 12 4 4 10-10" />],
   alert: [<path key="1" d="M12 4 21 20H3L12 4Z" />, <path key="2" d="M12 9v4" />, <path key="3" d="M12 17h.01" />],
-  qa: [<path key="1" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Z" />, <path key="2" d="m8.2 12.2 2.4 2.4 5.4-5.4" />, <path key="3" d="M12 3.5v2" />],
-  answerCheck: [<rect key="1" x="4" y="4" width="16" height="11" rx="3" />, <path key="2" d="M8.5 15v3.2l4-3.2" />, <path key="3" d="m8.3 9.5 2.1 2.1 4.3-4.3" />],
   mcq: [<path key="1" d="M6 7h12" />, <path key="2" d="M6 12h12" />, <path key="3" d="M6 17h8" />],
   truefalse: [<path key="1" d="m4.5 12 3 3 5-6" />, <path key="2" d="m15 9 4.5 6" />, <path key="3" d="m19.5 9-4.5 6" />],
   identification: [<path key="1" d="M5 6h14" />, <path key="2" d="M5 12h9" />, <path key="3" d="M5 18h6" />, <path key="4" d="M16 17l3-3 2 2-3 3h-2v-2Z" />],
@@ -74,8 +72,6 @@ const iconSet = {
   eye: [<path key="1" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />, <circle key="2" cx="12" cy="12" r="2.8" />],
   eyeOff: [<path key="1" d="m4 4 16 16" />, <path key="2" d="M10.2 6.3A10.8 10.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8" />, <path key="3" d="M7.1 7.2C4.2 8.9 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8" />, <path key="4" d="M10.5 10.5a2.2 2.2 0 0 0 3 3" />],
   close: [<path key="1" d="m6 6 12 12" />, <path key="2" d="M18 6 6 18" />],
-  menu: [<path key="1" d="M4.5 7h15" />, <path key="2" d="M4.5 12h15" />, <path key="3" d="M4.5 17h15" />],
-  swap: [<path key="1" d="M7 16V4M7 4 3 8M7 4l4 4" />, <path key="2" d="M17 8v12m0 0 4-4m-4 4-4-4" />],
 };
 
 export function TwIcon({ name = "spark", size = 20, strokeWidth = 2.6, style, title }) {

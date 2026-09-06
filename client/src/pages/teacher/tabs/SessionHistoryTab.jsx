@@ -102,7 +102,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
     rows.sort((a, b) => {
       if (sortBy === "title") return String(a.quiz_title || "").localeCompare(String(b.quiz_title || ""));
       if (sortBy === "score") return Number(b.avg_score || 0) - Number(a.avg_score || 0);
-      return new Date(b.sort_at || b.ended_at || 0).getTime() - new Date(a.sort_at || a.ended_at || 0).getTime();
+      return new Date(b.ended_at || 0).getTime() - new Date(a.ended_at || 0).getTime();
     });
     return rows;
   }, [sessions, query, modeFilter, sortBy]);
@@ -112,7 +112,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
     return filtered.reduce((acc, session) => {
-      const ts = new Date(session.sort_at || session.ended_at || 0).getTime();
+      const ts = new Date(session.ended_at || 0).getTime();
       const key = ts >= startOfToday ? "Today" : ts >= startOfWeek ? "This Week" : "Earlier";
       (acc[key] ||= []).push(session);
       return acc;

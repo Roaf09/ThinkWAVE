@@ -347,7 +347,7 @@ export default function ClassesTab({ setActiveTab, tutorial }) {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ color: c.text, fontWeight: 900, fontSize: 17 }}>My Folders</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
+            {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
             <TeacherPressButton tone="blue" icon="plus" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
             {isSectionFolder && <TeacherPressButton tone="blue" icon="link" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
           </div>
@@ -430,14 +430,14 @@ function reportDate(value) {
 
 function AssignmentResultRow({ r, c, onAnalytics }) {
   const tone = templateTone(r.template_type, c, false);
-  return <div className="tw-session-card tw-class-home-session-card" role="button" tabIndex={0} onClick={onAnalytics} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onAnalytics(); } }} style={{ ...templateCardChrome(r.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease", cursor: "pointer" }) }}>
+  return <div className="tw-session-card tw-class-home-session-card" style={{ ...templateCardChrome(r.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease" }) }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <div><div style={{ fontWeight: 900, color: c.text }}>{r.quiz_title}</div><div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{reportDate(r.available_until || r.available_from || r.created_at)}</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><ReportPill c={c} tone={tone}>{templateLabel(r.template_type)}</ReportPill><ReportPill c={c}>Assignment</ReportPill><ReportPill c={c}>{r.submitted_count || 0} submitted</ReportPill></div>
     </div>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
       <div style={{ color: c.textMuted, fontSize: 13 }}>Assignment analytics and submissions are ready to review.</div>
-      <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); onAnalytics(); }}>Open Analytics</button>
+      <button type="button" className="tw-analytics-text-link" onClick={onAnalytics}>Open Analytics</button>
     </div>
   </div>;
 }
@@ -445,15 +445,14 @@ function AssignmentResultRow({ r, c, onAnalytics }) {
 function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
   const assigned = session.session_type === "ASSIGNED" || session.join_mode === "ASSIGNED";
   const tone = templateTone(session.template_type, c, false);
-  const openReport = assigned ? onOpenAssigned : onOpenLive;
-  return <div className="tw-session-card tw-class-home-session-card" role="button" tabIndex={0} onClick={openReport} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openReport(); } }} style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease", cursor: "pointer" }) }}>
+  return <div className="tw-session-card tw-class-home-session-card" style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease" }) }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
       <div><div style={{ fontWeight: 900, color: c.text }}>{session.quiz_title}</div><div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{reportDate(session.ended_at || session.available_until || session.started_at)}</div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><ReportPill c={c} tone={tone}>{templateLabel(session.template_type)}</ReportPill><ReportPill c={c}>{assigned ? "Assignment" : "Live session"}</ReportPill><ReportPill c={c}>{session.participant_count || 0} {assigned ? "submitted" : "participants"}</ReportPill></div>
     </div>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
       <div style={{ color: c.textMuted, fontSize: 13 }}>{session.question_count || 0} questions · Analytics ready to open</div>
-      <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); openReport(); }}>Open Analytics</button>
+      <button type="button" className="tw-analytics-text-link" onClick={assigned ? onOpenAssigned : onOpenLive}>Open Analytics</button>
     </div>
   </div>;
 }
