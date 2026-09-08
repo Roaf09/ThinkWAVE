@@ -12,6 +12,7 @@ import { templateCardChrome, templateLabel, templateTone } from "../../../lib/te
 import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
+import { manilaDateTime } from "../../../lib/dateFormat";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -193,7 +194,7 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
                       <div>
                         <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{session.quiz_title}</div>
-                        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{new Date(session.ended_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div>
+                        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <span style={badge(c, { borderColor: templateTone(session.template_type, c, false).border, background: templateTone(session.template_type, c, false).softBg, color: templateTone(session.template_type, c, false).accent })}>{templateLabel(session.template_type)}</span>
@@ -256,7 +257,7 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
       const tone = templateTone(session.template_type, c, false);
       return <div key={session.id} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-          <div><div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{new Date(session.ended_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div></div>
+          <div><div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div></div>
           <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(150px,1fr))", gap: 10, marginTop: 14 }}><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>

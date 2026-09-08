@@ -13,6 +13,7 @@ import { TeacherPressButton } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../lib/tutorialState";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
+import { manilaDateTime } from "../../lib/dateFormat";
 
 export default function Analytics({ guestMode = false }) {
   const { sessionId, classId, quizId } = useParams();
@@ -167,7 +168,7 @@ export default function Analytics({ guestMode = false }) {
               <span style={{ ...pill(C), color: tone.accent, borderColor: tone.border, background: tone.softBg }}>{templateLabel(session.template_type)}</span>
               <span style={pill(C)}>{assigned ? "Assigned session" : session.join_mode === "GROUP" ? "Group live session" : "Solo live session"}</span>
             </div>
-            <div style={{ marginTop: 8, color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>{guestMode ? formatDate(session.display_date) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(session.display_date)}</>}</div>
+            <div style={{ marginTop: 8, color: C.muted, fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>{guestMode ? formatDate(sessionDisplayTimestamp(session)) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(sessionDisplayTimestamp(session))}</>}</div>
           </div>
           {exportAllowed && <div className="tw-analytics-export-row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
@@ -677,7 +678,14 @@ function buildScores(analytics, advancedPlan = false) {
   return students.map((student) => ({ key: student.participant_id, participant_id: student.participant_id, label: `${student.first_name || ""} ${student.last_name || ""}`.trim() || `Student ${student.participant_id}`, total_points: Number(student.total_points || 0), completion_ms: student.completion_ms })).sort(sortScore);
 }
 function sortScore(a, b) { return Number(b.total_points || 0) - Number(a.total_points || 0) || Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER) - Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER) || String(a.label).localeCompare(String(b.label)); }
-function formatDate(value) { if (!value) return "No date"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }); }
+function formatDate(value) { if (!value) return "No date"; const formatted = manilaDateTime(value, { dateStyle: "medium", timeStyle: "short" }); return formatted || String(value); }
+// session.display_date is a string the server already formatted for the PDF/Excel
+// exports (which can't do their own client-side Intl formatting) - re-parsing an
+// already human-formatted string here would depend on the *viewer's* browser
+// timezone to interpret it, reintroducing the exact bug this file is fixing. The
+// raw ended_at/started_at/created_at fields are plain ISO timestamps and are
+// always present on the same session object; prefer those for on-screen display.
+function sessionDisplayTimestamp(session) { return session?.ended_at || session?.started_at || session?.created_at || session?.display_date; }
 function palette(c, dark) { return { text: c.text, muted: c.textMuted || c.textSub, border: c.border, cardBg: c.cardBg, cardBg2: c.cardBg2, accent: c.accent, redFg: c.redFg || "#b91c1c", redBg: c.redBg || (dark ? "rgba(239,68,68,.12)" : "#fef2f2"), redBorder: c.redBorder || "rgba(239,68,68,.35)", greenFg: c.greenFg || "#15803d", greenBg: c.greenBg || (dark ? "rgba(34,197,94,.12)" : "#f0fdf4"), greenBorder: c.greenBorder || "rgba(34,197,94,.35)" }; }
 function card(C) { return { background: C.cardBg, border: `3px solid ${C.border}`, borderRadius: 20, padding: 18, boxShadow: "0 16px 38px rgba(15,23,42,.08)", transition: "transform .22s ease, box-shadow .22s ease, border-color .22s ease" }; }
 function subCard(C) { return { background: C.cardBg2, border: `3px solid ${C.border}`, borderRadius: 17, padding: 15, transition: "transform .22s ease, box-shadow .22s ease" }; }

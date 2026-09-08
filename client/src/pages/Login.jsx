@@ -72,10 +72,13 @@ export default function Login({ onLoginSuccess }) {
         return;
       }
       const msg = response.message || "Login failed.";
-      if (msg.toLowerCase().includes("invalid credentials")) {
-        setNotFound(true);
-      }
-      setError(msg);
+      // The server deliberately returns this same generic message whether
+      // the email isn't registered at all or the password is just wrong -
+      // that ambiguity is intentional (it stops a login attempt from being
+      // used to check which emails have accounts). Treating it as "no
+      // account, go register" was flatly wrong for the far more common case
+      // of a real account with a mistyped password.
+      setError(msg.toLowerCase().includes("invalid credentials") ? "Incorrect email or password. Please try again." : msg);
     }
   }
 

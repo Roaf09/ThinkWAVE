@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE } from "../../lib/api";
+import { manilaDateTime } from "../../lib/dateFormat";
 
 const ALL_TEMPLATES = [
   { value:"MCQ",              label:"Multiple-choice", icon:"🔤" },
@@ -197,7 +198,7 @@ export function GuestHistoryTab() {
     })();
   }, []);
 
-  const fmtDate=(d)=>d?new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):"—";
+  const fmtDate=(d)=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
 
   if (loading) return <div className="container"><div className="card">Loading…</div></div>;
 

@@ -10,6 +10,7 @@ import { useColors, useTheme } from "../../../context/ThemeContext";
 import { EmptyState, TwIcon } from "../../../components/TwUI";
 import { TeacherMetricCard, TeacherPressButton } from "../TeacherUI";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
+import { manilaDateTime } from "../../../lib/dateFormat";
 
 const shellCard = (c, extra = {}) => ({
   background: c.cardBg,
@@ -264,7 +265,7 @@ function SessionCard({ session, analytics, c, navigate }) {
       <div className="tw-session-card-desktop-row" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div>
           <div style={{ fontWeight: 900, color: c.text }}>{session.quiz_title}</div>
-          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{new Date(session.ended_at || session.available_until || session.started_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</div>
+          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{manilaDateTime(session.ended_at || session.available_until || session.started_at, { dateStyle: "medium", timeStyle: "short" })}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <span style={pill(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>

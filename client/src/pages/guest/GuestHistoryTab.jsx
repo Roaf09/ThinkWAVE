@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { manilaDateTime } from "../../lib/dateFormat";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 
@@ -30,7 +31,7 @@ export default function GuestHistoryTab() {
     })();
   }, []);
 
-  const fmtDate=(d)=>d?new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):"—";
+  const fmtDate=(d)=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
 
   if (loading) return <div className="container"><div className="card">Loading…</div></div>;
 

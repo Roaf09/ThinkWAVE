@@ -18,11 +18,19 @@ function safeJson(v) {
   try { return JSON.parse(v); } catch { return null; }
 }
 
+// Feeds the "Date" shown on the Session Analytics page, the PDF export, and
+// the Excel export - all three read this same formatted string. Without an
+// explicit timeZone, toLocaleString renders using whatever timezone the
+// Node process itself happens to be running in (UTC on Render, or whatever
+// the local machine's OS clock is set to), not Philippine time - the raw
+// value is already a correct absolute instant (mysql2 parses it under the
+// pool's Asia/Manila convention, see db.js), so only the display step was
+// picking the wrong timezone.
 function fmtDate(value) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function cleanTemplateLabel(value) {
@@ -241,7 +249,10 @@ export async function exportSessionXlsx(req, res) {
     { header: "Total Points", key: "total_points", width: 16 },
     { header: "Joined At", key: "joined_at", width: 24 },
   ];
-  data.students.forEach((r) => attendance.addRow(r));
+  // Pass joined_at through fmtDate rather than the raw Date object - exceljs
+  // serializes a Date cell using its own UTC/local convention, which is the
+  // same class of timezone mismatch fmtDate above exists to avoid.
+  data.students.forEach((r) => attendance.addRow({ ...r, joined_at: fmtDate(r.joined_at) }));
   attendance.getRow(1).font = { bold: true };
 
   const qSheet = workbook.addWorksheet("Per Question Percentage");

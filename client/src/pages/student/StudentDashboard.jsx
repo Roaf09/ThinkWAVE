@@ -12,6 +12,7 @@ import ThemeIconButton from "../../components/ThemeIconButton";
 import { templateLabel, templateTone, templateCardChrome } from "../../lib/templatePalette";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../teacher/TeacherUI";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
+import { manilaDateTime, manilaDate } from "../../lib/dateFormat";
 
 
 export default function StudentDashboard() {
@@ -709,12 +710,16 @@ function completedTimestamp(item) { return new Date(item.ended_at || item.submit
 function assignmentStart(item) { return item.available_from ? new Date(item.available_from).getTime() : 0; }
 function assignmentEnd(item) { return item.available_until ? new Date(item.available_until).getTime() : Number.MAX_SAFE_INTEGER; }
 function isAssignmentOpen(item, now = Date.now()) { return now >= assignmentStart(item) && now <= assignmentEnd(item); }
-function formatAssignmentWindow(item) { const start = item.available_from ? new Date(item.available_from).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "No start"; const end = item.available_until ? new Date(item.available_until).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "No deadline"; return `${start} → ${end}`; }
+function formatAssignmentWindow(item) { const start = item.available_from ? manilaDateTime(item.available_from, { dateStyle: "medium", timeStyle: "short" }) : "No start"; const end = item.available_until ? manilaDateTime(item.available_until, { dateStyle: "medium", timeStyle: "short" }) : "No deadline"; return `${start} → ${end}`; }
 function isThisWeek(value) { if (!value) return false; const date = new Date(value); const now = new Date(); const start = new Date(now); const day = (now.getDay() + 6) % 7; start.setDate(now.getDate() - day); start.setHours(0,0,0,0); const end = new Date(start); end.setDate(start.getDate() + 7); return date >= start && date < end; }
 function calendarDays(view) { const first = new Date(view.getFullYear(), view.getMonth(), 1).getDay(); const count = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate(); return [...Array(first).fill(null), ...Array.from({ length: count }, (_, i) => i + 1)]; }
 function sameDay(selected, view, day) { return selected.getFullYear() === view.getFullYear() && selected.getMonth() === view.getMonth() && selected.getDate() === day; }
 function toDateValue(date) { const pad = (n) => String(n).padStart(2, "0"); return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`; }
-function formatDateOnly(value) { const date = new Date(`${String(value).slice(0,10)}T12:00:00`); return date.toLocaleDateString("en-PH", { dateStyle: "long" }); }
+// Anchor the noon-buffer instant to Manila explicitly (+08:00) instead of the
+// browser's own local zone, then read it back in Manila too - otherwise a
+// browser far enough from Manila could still push the displayed date a day
+// off in either direction.
+function formatDateOnly(value) { return manilaDate(`${String(value).slice(0,10)}T12:00:00+08:00`, { dateStyle: "long" }); }
 
 const metricGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12, marginTop: 16 };
 const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 20, zIndex: 3000 };

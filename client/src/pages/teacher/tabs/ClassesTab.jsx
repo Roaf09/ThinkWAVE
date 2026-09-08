@@ -12,6 +12,7 @@ import { TwIcon } from "../../../components/TwUI";
 import { isInstitutionPlan } from "../../../lib/planLimits";
 import { TeacherPressButton, ThinkBotEmptyState, TeacherActionModal } from "../TeacherUI";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
+import { manilaDateTime } from "../../../lib/dateFormat";
 
 function card(c, extra = {}) {
   return {
@@ -424,8 +425,8 @@ function ReportPill({ c, tone, children }) {
 
 function reportDate(value) {
   if (!value) return "Report ready";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Report ready" : date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+  const formatted = manilaDateTime(value, { dateStyle: "medium", timeStyle: "short" });
+  return formatted || "Report ready";
 }
 
 function AssignmentResultRow({ r, c, onAnalytics }) {

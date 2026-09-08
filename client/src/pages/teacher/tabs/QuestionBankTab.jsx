@@ -13,6 +13,7 @@ import { TwIcon } from "../../../components/TwUI";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
 import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../../templates/thinkspell/thinkSpell";
+import { manilaDate } from "../../../lib/dateFormat";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 
@@ -340,7 +341,7 @@ function QuestionCard({ question: q, onRemove, c }) {
           {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
         </div>}
 
-        <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {new Date(q.saved_at).toLocaleDateString("en-PH")}</div>
+        <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {manilaDate(q.saved_at)}</div>
       </div>
     </div>
   );

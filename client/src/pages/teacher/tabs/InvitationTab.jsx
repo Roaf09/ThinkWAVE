@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
+import { manilaDate } from "../../../lib/dateFormat";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -33,7 +34,7 @@ export default function InvitationTab() {
         setJoinedInfo({
           institutionName: data.institution_name,
           role: data.role,
-          joinedDate: new Date().toLocaleDateString("en-PH"),
+          joinedDate: manilaDate(new Date()),
           status: data.is_active ? "Active" : "Inactive",
           invitedBy: "Institution administrator",
         });
@@ -50,7 +51,7 @@ export default function InvitationTab() {
       setJoinedInfo({
         institutionName: data.institutionName,
         role: "TEACHER",
-        joinedDate: new Date().toLocaleDateString("en-PH"),
+        joinedDate: manilaDate(new Date()),
         status: "Active",
         invitedBy: "Institution administrator",
       });

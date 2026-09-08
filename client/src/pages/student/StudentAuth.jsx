@@ -101,8 +101,10 @@ export default function StudentAuth({ onLoginSuccess }) {
         return;
       }
       const text = response.message || "Student access failed.";
-      if (text.toLowerCase().includes("invalid credentials")) setNotFound(true);
-      setMsg(text);
+      // Same ambiguous "Invalid credentials" the server returns for both a
+      // wrong password and an unregistered email, on purpose (see Login.jsx)
+      // - do not claim the account doesn't exist from it.
+      setMsg(text.toLowerCase().includes("invalid credentials") ? "Incorrect email or password. Please try again." : text);
     }
   }
 

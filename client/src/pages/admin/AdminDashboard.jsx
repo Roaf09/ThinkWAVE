@@ -7,12 +7,13 @@ import {TwIcon} from "../../components/TwUI";
 import DashboardShell from "../../components/DashboardShell";
 import {ProfileSettingsModal,ProfileSavedOverlay,useDashboardProfile} from "../../components/ProfileSettings";
 import {DualLineChart,DonutChart,BarChart} from "../../components/SimpleCharts";
+import {manilaDateTime,manilaDate} from "../../lib/dateFormat";
 
 const NAV=[{id:"overview",label:"Overview",icon:"home"},{id:"teachers",label:"Teachers",icon:"teacher"},{id:"institution",label:"Institution",icon:"classes"}];
 const card=(c,extra={})=>({background:c.cardBg,border:`1px solid ${c.border}`,borderRadius:18,padding:18,boxShadow:"0 18px 40px rgba(15,23,42,.07)",...extra});
 const quiet=(c,extra={})=>({background:c.cardBg2,border:`1px solid ${c.border}`,borderRadius:14,padding:14,...extra});
-const fmt=d=>d?new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):"—";
-const weekLabel=value=>value?new Date(value).toLocaleDateString("en-PH",{month:"short",day:"numeric"}):"";
+const fmt=d=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
+const weekLabel=value=>value?manilaDate(value,{month:"short",day:"numeric"}):"";
 
 export default function AdminDashboard(){const nav=useNavigate();const c=useColors();const {dark,toggleTheme}=useTheme();const [activeTab,setActiveTab]=useState("overview");const [setupDone,setSetupDone]=useState(true);const [institution,setInstitution]=useState("");const [setupName,setSetupName]=useState("");const [setupError,setSetupError]=useState("");const [logout,setLogout]=useState(false);const profileState=useDashboardProfile();
 useEffect(()=>{api.get("/admin-dashboard/setup-status").then(({data})=>{setSetupDone(data.setupDone??true);setInstitution(data.institutionName||"")}).catch(()=>{})},[]);

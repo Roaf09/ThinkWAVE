@@ -599,3 +599,36 @@ body.dark-mode .sp-explanation-feedback{background:rgba(10,23,48,.96);color:#f8f
 .quiz-shell-new .quiz-choices .choice-btn.active{
   filter:brightness(.76) saturate(1.06)!important;
 }
+
+/* Live Top 5 is `position:fixed` pinned to the left edge (see the Revision
+   10.26+ rules above) - on a desktop-width screen that sits in empty space
+   beside the centered question card, but below the app's own mobile
+   breakpoint (760px, matching styles.css's .tw-mobile-header) the question
+   card itself spans nearly the full width, so the panel floats directly on
+   top of the prompt and first answer choice instead of beside them. Every
+   revision above only ever resized/repositioned it within that same
+   fixed-overlay approach, which cannot avoid the overlap at this width.
+   Below the breakpoint it now starts collapsed to a small round tab (the
+   `minimized` state in StudentPlay.jsx's LiveLeaderboardPanel) instead of
+   the full list - tapping it pulls the full panel out over the question
+   deliberately, and tapping again puts it away, instead of either always
+   covering gameplay content or never being reachable at all on a phone. */
+.sp-live-top5-toggle{display:none}
+@media(max-width:760px){
+  .sp-live-top5-toggle{
+    display:grid!important;place-items:center;width:38px;height:38px;
+    border:0;background:transparent;color:inherit;cursor:pointer;padding:0;
+  }
+  .sp-live-top5.is-minimized{
+    width:38px!important;min-width:0!important;height:38px!important;
+    padding:0!important;border-radius:50%!important;overflow:hidden;
+    box-shadow:0 6px 16px rgba(15,23,42,.22)!important;
+  }
+  .sp-live-top5.is-minimized .sp-live-top5-panel{display:none!important}
+  .sp-live-top5:not(.is-minimized) .sp-live-top5-toggle{
+    position:absolute;top:6px;right:6px;width:26px;height:26px;z-index:1;
+    background:color-mix(in srgb,var(--sp-template-accent,#2b6cff) 16%,transparent);
+    border-radius:50%;
+  }
+  .sp-live-top5:not(.is-minimized) .sp-live-top5-panel{padding-right:18px}
+}
