@@ -174,7 +174,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   // teacher's already-published quiz vanish from Sessions the moment their
   // session ended, which reads as "my saved, published quiz got unpublished
   // and removed" even though nothing was lost.
-  const liveQuizzes = useMemo(() => quizzes.filter((quiz) => quiz.delivery_mode !== "ASYNCHRONOUS"), [quizzes]);
+  const liveQuizzes = useMemo(() => quizzes.filter((quiz) => quiz.status !== "BANKED" && quiz.delivery_mode !== "ASYNCHRONOUS"), [quizzes]);
   const anyStatusFilterChecked = statusFilters.DRAFT || statusFilters.PUBLISHED;
   const filteredQuizzes = useMemo(() => {
     const q = query.trim().toLowerCase();
