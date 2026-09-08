@@ -697,7 +697,10 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
           {image && <img src={image} alt=""/>}
           {!(tt === "MCQ" && cfg.mcqMode === "MODIFIED" && image) && <b style={{ fontSize: fitHostTextSize(text, 22, 13) }}>{text || "Image option"}</b>}
         </span>
-        {tt === "MCQ" && <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)] || 0)} responses`}>{Number(choiceCounts[String(i)] || 0)}</em>}
+        {/* True/False shares this options loop and its slots line up with what
+            the server already sends for it (true -> 0, false -> 1), so it gets
+            the same per-choice counter as MCQ. */}
+        {(tt === "MCQ" || tt === "TRUE_FALSE") && <em className="tw-host-choice-count" aria-label={`${Number(choiceCounts[String(i)] || 0)} responses`}>{Number(choiceCounts[String(i)] || 0)}</em>}
       </div>;
     })}</div>;
   }
