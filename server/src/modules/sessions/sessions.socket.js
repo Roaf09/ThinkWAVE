@@ -37,6 +37,23 @@ function responseChoiceKeys(templateType, answer, config = {}) {
 function sortScoreRows(rows) {
   return sortCompetitiveRows(rows);
 }
+// buildQuestionsSnapshot (sessions.controller.js) shuffles MCQ options into
+// their own copy, once, at session-creation time - that shuffled order is
+// what's actually rendered as A/B/C/D to both the students and the teacher's
+// Host Panel (both read session.questions_snapshot_json). Scoring re-fetches
+// quiz_questions.config_json fresh by id, which is the ORIGINAL, unshuffled
+// author order - fine for scoring itself (correctness is matched by option
+// id, not position), but responseChoiceKeys() turns an answer into a
+// positional index, and computing that against the wrong ordering points it
+// at whatever option happens to sit in that slot in the unshuffled list
+// instead of the one actually shown at that letter. Look up this question's
+// config from the same snapshot everyone is actually looking at.
+function snapshotQuestionConfig(session, questionId) {
+  const snapshot = safeJson(session?.questions_snapshot_json);
+  if (!Array.isArray(snapshot)) return null;
+  const entry = snapshot.find((item) => Number(item?.id) === Number(questionId));
+  return entry?.config_json || null;
+}
 
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
@@ -765,7 +782,7 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
     competitivePoints,
     timeExpired: expiredSubmission,
   });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, choiceKeys: responseChoiceKeys(tt, answer, config) });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, choiceKeys: responseChoiceKeys(tt, answer, snapshotQuestionConfig(session, questionId) || config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -1151,7 +1168,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     competitivePoints,
     timeExpired: expiredSubmission,
   });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, scoreableAnswer, config) });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, scoreableAnswer, snapshotQuestionConfig(session, proposal.question_id) || config) });
   await broadcastScores(io, sessionId);
 }
 

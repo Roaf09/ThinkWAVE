@@ -12,6 +12,17 @@ import { getTeacherPlan } from "../plans/plan.js";
 import { buildDetailedQuestionAnalytics, buildStudentResponseDetails, safeJsonValue as safeAnalyticsJson } from "../analytics/analytics.helpers.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
+import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
+
+// Same Asia/Manila pinning as analytics.controller.js's fmtDate - without an
+// explicit timeZone this renders in whatever zone the Node process runs in
+// (UTC on Render), not Philippine time.
+function fmtExportDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 async function getTeacherFolders(teacherId) {
   const [rows] = await pool.query(
@@ -240,20 +251,31 @@ export async function exportClassAsyncXlsx(req, res) {
   const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
   if (!data) return res.status(404).json({ message: "Async quiz not found." });
   const workbook = new ExcelJS.Workbook();
+  workbook.creator = "ThinkWAVE";
   const sheet = workbook.addWorksheet("Async Results");
+  const submitted = data.rows.filter((r) => r.submitted_at).length;
+  const scores = data.rows.filter((r) => r.score != null).map((r) => Number(r.score));
   sheet.addRows([
     ["ThinkWAVE Asynchronous Quiz Results"],
     ["Class", data.quiz.class_name],
     ["Quiz", data.quiz.title],
-    ["Start", data.quiz.available_from],
-    ["End", data.quiz.available_until],
+    ["Opens", fmtExportDate(data.quiz.available_from)],
+    ["Closes", fmtExportDate(data.quiz.available_until)],
+    ["Submitted", `${submitted} of ${data.rows.length}`],
+    ["Average", scores.length ? Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(2)) : "—"],
+    ["Highest", scores.length ? Math.max(...scores) : "—"],
+    ["Lowest", scores.length ? Math.min(...scores) : "—"],
     [],
   ]);
+  sheet.getRow(1).font = { bold: true, size: 16 };
   sheet.columns = [
-    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 24 },
+    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 28 },
   ];
   sheet.addRow(["Last Name", "First Name", "M.I.", "Student ID", "Score", "Max", "Submitted At"]).font = { bold: true };
-  data.rows.forEach((r) => sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", r.submitted_at || "Not submitted"]));
+  // Pre-format submitted_at rather than handing exceljs a raw Date - it
+  // serializes date cells on its own UTC/local convention, which is the same
+  // timezone mismatch fmtExportDate exists to avoid.
+  data.rows.forEach((r) => sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]));
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.xlsx"`);
   await workbook.xlsx.write(res);
@@ -269,12 +291,53 @@ export async function exportClassAsyncPdf(req, res) {
   res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.pdf"`);
   const doc = new PDFDocument({ margin: 40, size: "A4" });
   doc.pipe(res);
-  doc.fontSize(16).text(data.quiz.title || "Asynchronous Quiz Results");
-  doc.fontSize(10).fillColor("#555").text(`Class: ${data.quiz.class_name || "—"}`).text(`Start: ${data.quiz.available_from || "—"}`).text(`End: ${data.quiz.available_until || "—"}`);
-  doc.moveDown();
-  data.rows.forEach((r, idx) => {
-    doc.fillColor("#000").fontSize(9).text(`${idx + 1}. ${r.last_name}, ${r.first_name} ${r.middle_initial || ""} | ${r.student_id} | ${r.score ?? "—"}/${r.max_score ?? "—"} | ${r.submitted_at ? "Submitted" : "Not submitted"}`);
+  const left = doc.page.margins.left;
+
+  doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(data.quiz.title || "Asynchronous Quiz Results", left, doc.page.margins.top);
+  doc.font("Helvetica").fontSize(10).fillColor("#64748b").text("Assigned Quiz Results");
+
+  const submitted = data.rows.filter((r) => r.submitted_at).length;
+  const scores = data.rows.filter((r) => r.score != null).map((r) => Number(r.score));
+  // Same fields the Excel export carries, plus the submitted/average roll-up
+  // the teacher would otherwise have to work out by hand from the rows.
+  let y = drawInfoBlock(doc, {
+    x: left,
+    y: doc.y + 10,
+    rows: [
+      ["Class", data.quiz.class_name],
+      ["Opens", fmtExportDate(data.quiz.available_from)],
+      ["Closes", fmtExportDate(data.quiz.available_until)],
+      ["Submitted", `${submitted} of ${data.rows.length}`],
+      ["Average", scores.length ? (scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(2) : "—"],
+      ["Highest", scores.length ? Math.max(...scores) : "—"],
+      ["Lowest", scores.length ? Math.min(...scores) : "—"],
+    ],
   });
+
+  drawTable(doc, {
+    x: left,
+    y,
+    title: "Student Results",
+    columns: [
+      { label: "Last Name", width: 92 },
+      { label: "First Name", width: 86 },
+      { label: "M.I.", width: 30 },
+      { label: "Student ID", width: 76 },
+      { label: "Score", width: 42, align: "right" },
+      { label: "Max", width: 37, align: "right" },
+      { label: "Submitted At", width: 152 },
+    ],
+    rows: data.rows.map((r) => [
+      r.last_name,
+      r.first_name,
+      r.middle_initial || "",
+      r.student_id,
+      r.score ?? "—",
+      r.max_score ?? "—",
+      r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted",
+    ]),
+  });
+
   doc.end();
 }
 

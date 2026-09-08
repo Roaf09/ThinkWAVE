@@ -574,11 +574,22 @@ export async function logTabEvent(req, res) {
   const sessionId = Number(req.params.id);
   if (!participantId) return res.status(400).json({ message: "participantId required" });
   try {
+    // This is the unload/sendBeacon path for the same event the socket handler
+    // records (student:tabOut in sessions.socket.js). Apply the same guards it
+    // does, so a stale beacon can't add tab-outs to a session that already
+    // ended or credit a participant who isn't in this session.
+    const [[participant]] = await pool.query(
+      `SELECT p.id, p.kicked_at, s.status
+       FROM session_participants p JOIN sessions s ON s.id=p.session_id
+       WHERE p.id=:pid AND p.session_id=:sid`,
+      { pid: participantId, sid: sessionId }
+    );
+    if (!participant || participant.kicked_at || participant.status === "ENDED") return res.json({ ok: true, recorded: false });
     await pool.query(
       `INSERT INTO tab_events(session_id, participant_id) VALUES(:sid,:pid)`,
       { sid: sessionId, pid: participantId }
     );
-    res.json({ ok: true });
+    res.json({ ok: true, recorded: true });
   } catch (e) {
     res.status(500).json({ message: "Server error" });
   }

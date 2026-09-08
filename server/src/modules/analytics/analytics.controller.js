@@ -11,6 +11,7 @@ import { getTeacherPlan } from "../plans/plan.js";
 import { buildDetailedQuestionAnalytics, buildStudentResponseDetails } from "./analytics.helpers.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "../sessions/sessionBackground.runtime.js";
+import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
 
 function safeJson(v) {
   if (!v) return null;
@@ -295,43 +296,78 @@ export async function exportSessionPdf(req, res) {
 
   const doc = new PDFDocument({ margin: 40, size: "A4" });
   doc.pipe(res);
+  const left = doc.page.margins.left;
 
-  doc.fontSize(18).text(data.session.quiz_title || `Session #${sessionId}`, { continued: false });
-  doc.fontSize(10).fillColor("#555").text("Session Analytics");
-  doc.moveDown(0.3);
-  doc.fillColor("#000").fontSize(11)
-    .text(`Template: ${data.session.template_label}`)
-    .text(`Folder: ${data.session.folder_name}`)
-    .text(`Date: ${data.session.display_date}`)
-    .text(`Join Mode: ${data.session.join_mode}`)
-    .text(`Join Code: ${data.session.join_code}`);
+  doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(data.session.quiz_title || `Session #${sessionId}`, left, doc.page.margins.top);
+  doc.font("Helvetica").fontSize(10).fillColor("#64748b").text("Session Analytics");
 
-  doc.moveDown(0.8);
-  doc.fontSize(13).text("Summary", { underline: true });
-  doc.fontSize(10)
-    .text(`Average: ${data.summary.avg_score ?? 0}`)
-    .text(`Min: ${data.summary.min_score ?? 0}`)
-    .text(`Max: ${data.summary.max_score ?? 0}`)
-    .text(`Attendance: ${data.summary.participant_count ?? data.students.length}`);
-
-  doc.moveDown(0.8);
-  doc.fontSize(13).text("Attendance", { underline: true });
-  data.students.forEach((r, idx) => {
-    doc.fontSize(9).text(`${idx + 1}. ${r.last_name || ""}, ${r.first_name || ""} ${r.assigned_group_name ? `(${r.assigned_group_name})` : ""} — ${r.total_points} pt(s)`);
+  // Mirrors the Excel "Summary" sheet exactly, so the two exports read as the
+  // same record in two formats.
+  let y = drawInfoBlock(doc, {
+    x: left,
+    y: doc.y + 10,
+    rows: [
+      ["Template", data.session.template_label],
+      ["Class / Folder", data.session.folder_name],
+      ["Date", data.session.display_date],
+      ["Join Mode", data.session.join_mode],
+      ["Join Code", data.session.join_code],
+      ["Average", data.summary.avg_score ?? 0],
+      ["Lowest", data.summary.min_score ?? 0],
+      ["Highest", data.summary.max_score ?? 0],
+      ["Attendance", data.summary.participant_count ?? data.students.length],
+    ],
   });
 
-  doc.addPage();
-  doc.fontSize(13).text("Per-question Percentage", { underline: true });
-  data.questions.forEach((q, idx) => {
-    doc.moveDown(0.35);
-    doc.fontSize(10).fillColor("#000").text(`Q${Number(q.question_order ?? idx) + 1}: ${q.prompt || ""}`);
-    doc.fontSize(9).fillColor("#555").text(`${q.pct_correct ?? 0}% answered correct (${q.correct_answers}/${q.total_answers || 0}); ${q.pct_incorrect ?? 0}% answered incorrect (${q.incorrect_answers}/${q.total_answers || 0})`);
+  y = drawTable(doc, {
+    x: left,
+    y,
+    title: "Attendance",
+    columns: [
+      { label: "Last Name", width: 105 },
+      { label: "First Name", width: 105 },
+      { label: "Group", width: 95 },
+      { label: "Points", width: 50, align: "right" },
+      { label: "Joined At", width: 160 },
+    ],
+    rows: data.students.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.total_points, fmtDate(r.joined_at)]),
   });
 
-  doc.moveDown(0.9);
-  doc.fontSize(13).fillColor("#000").text("Tab Monitoring", { underline: true });
-  data.tabMonitoring.forEach((r, idx) => {
-    doc.fontSize(9).text(`${idx + 1}. ${r.last_name || ""}, ${r.first_name || ""} ${r.assigned_group_name ? `(${r.assigned_group_name})` : ""} — ${r.tab_out_count || 0} tab out`);
+  y = drawTable(doc, {
+    x: left,
+    y,
+    title: "Per-question Percentage",
+    columns: [
+      { label: "#", width: 26, align: "right" },
+      { label: "Prompt", width: 205 },
+      { label: "Answers", width: 52, align: "right" },
+      { label: "Correct", width: 52, align: "right" },
+      { label: "% Correct", width: 60, align: "right" },
+      { label: "Wrong", width: 50, align: "right" },
+      { label: "% Wrong", width: 60, align: "right" },
+    ],
+    rows: data.questions.map((q, idx) => [
+      Number(q.question_order ?? idx) + 1,
+      q.prompt,
+      q.total_answers ?? 0,
+      q.correct_answers ?? 0,
+      `${q.pct_correct ?? 0}%`,
+      q.incorrect_answers ?? 0,
+      `${q.pct_incorrect ?? 0}%`,
+    ]),
+  });
+
+  drawTable(doc, {
+    x: left,
+    y,
+    title: "Tab Monitoring",
+    columns: [
+      { label: "Last Name", width: 130 },
+      { label: "First Name", width: 130 },
+      { label: "Group", width: 145 },
+      { label: "Tab Outs", width: 110, align: "right" },
+    ],
+    rows: data.tabMonitoring.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.tab_out_count || 0]),
   });
 
   doc.end();

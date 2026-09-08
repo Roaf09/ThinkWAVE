@@ -62,6 +62,13 @@ sessionsRouter.get("/:id/full-analytics", requireAuth, requireRole("TEACHER", "G
 sessionsRouter.post("/:id/start", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(startSession));
 sessionsRouter.post("/:id/pause", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(pauseSession));
 sessionsRouter.post("/:id/end", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(endSession));
-sessionsRouter.post("/:id/tab-event", rateLimit({ windowMs: 60 * 1000, max: 10 }), asyncHandler(logTabEvent));
+// Same per-IP-behind-one-school-NAT problem as /join above: this limiter's key
+// is the requester's IP, and a whole class shares it. StudentPlay.jsx now
+// sendBeacon()s here when the page is being torn down (the one case a socket
+// emit can't survive), so at max:10/min a class would have its tab-outs
+// silently dropped after the first few. Per-participant duplicate protection
+// is the client-side throttle, not this limiter - this only guards against a
+// script hammering the endpoint.
+sessionsRouter.post("/:id/tab-event", rateLimit({ windowMs: 60 * 1000, max: 400 }), asyncHandler(logTabEvent));
 sessionsRouter.get("/:id/tab-monitoring", requireAuth, requireRole("TEACHER"), asyncHandler(getTabMonitoring));
 sessionsRouter.delete("/:id", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(deleteTeacherSession));
