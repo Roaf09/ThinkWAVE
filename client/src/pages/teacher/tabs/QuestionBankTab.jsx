@@ -64,8 +64,22 @@ const btn = (c, primary = false) => ({
   cursor: "pointer",
 });
 
+function useIsMobileViewport(breakpoint = 760) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler); };
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }) {
   const [view, setView] = useState("quiz");
+  const isMobile = useIsMobileViewport();
   const [quizzes, setQuizzes] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +88,8 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
+  const [templateFilter, setTemplateFilter] = useState("ALL");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [bankTutorialStage, setBankTutorialStage] = useState(null);
   const c = useColors();
   const { dark } = useTheme();
@@ -163,9 +179,8 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
 
   const filteredQuizBankItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
     const rows = quizBankItems.filter((quiz) => {
-      if (templateFilter && normalizeBankTemplate(quiz.template_type) !== templateFilter) return false;
+      if (templateFilter !== "ALL" && normalizeBankTemplate(quiz.template_type) !== templateFilter) return false;
       if (!q) return true;
       return [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
@@ -176,18 +191,17 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
       return bTime - aTime || Number(b.id || 0) - Number(a.id || 0);
     });
     return rows;
-  }, [quizBankItems, query, sortBy]);
+  }, [quizBankItems, query, templateFilter, sortBy]);
 
   const filteredQuestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
     const rows = [...questions].filter((question) => {
-      if (templateFilter && normalizeBankTemplate(question.template_type) !== templateFilter) return false;
+      if (templateFilter !== "ALL" && normalizeBankTemplate(question.template_type) !== templateFilter) return false;
       return !q || [question.prompt, question.template_type, question.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
     rows.sort((a, b) => sortBy === "title" ? String(a.prompt || "").localeCompare(String(b.prompt || "")) : new Date(b.saved_at || 0).getTime() - new Date(a.saved_at || 0).getTime());
     return rows;
-  }, [questions, query, sortBy]);
+  }, [questions, query, templateFilter, sortBy]);
 
   const currentHasItems = view === "quiz" ? quizBankItems.length > 0 : questions.length > 0;
 
@@ -201,21 +215,35 @@ export default function QuestionBankTab({ setBankLabel, setActiveTab, tutorial }
         </section>
 
         <section className="tw-bank-switch-shell" style={card(c, { padding: 12 })}>
-          <div className="tw-teacher-bank-toggle">
+          {isMobile ? <div className="tw-teacher-bank-toggle tw-teacher-bank-toggle-single">
+            <TeacherPressButton data-tutorial="bank-question-toggle" tone="blue" icon="swap" onClick={() => (view === 'quiz' ? openQuestionBank() : setView('quiz'))}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</TeacherPressButton>
+          </div> : <div className="tw-teacher-bank-toggle">
             <TeacherPressButton tone="blue" className={view === 'quiz' ? 'is-selected is-muted-selected' : ''} disabled={view === 'quiz'} onClick={() => setView('quiz')}>Quiz Bank</TeacherPressButton>
             <TeacherPressButton data-tutorial="bank-question-toggle" tone="blue" className={view === 'question' ? 'is-selected is-muted-selected' : ''} disabled={view === 'question'} onClick={openQuestionBank}>Question Bank</TeacherPressButton>
-          </div>
+          </div>}
         </section>
 
-        {currentHasItems && <section className="tw-bank-search-shell" style={card(c)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(150px, 0.7fr)', gap: 12 }}>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'quiz' ? 'Search by quiz title, template, or category' : 'Search saved questions'} style={inputStyle(c)} />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}>
-              <option value='recent'>Newest first</option>
-              <option value='title'>Title A–Z</option>
-              {Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}
-            </select>
+        {currentHasItems && <section className="tw-bank-search-shell" style={card(c, { position: 'relative', overflow: 'visible' })}>
+          <div className="tw-search-filter-row">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'quiz' ? 'Search by quiz title, template, or category' : 'Search saved questions'} className="tw-search-filter-input" style={inputStyle(c)} />
+            <TeacherPressButton type="button" tone="neutral" icon="filter" className={`tw-filter-toggle-btn${filterOpen ? " is-selected" : ""}${templateFilter !== "ALL" ? " has-active-filters" : ""}`} onClick={() => setFilterOpen((v) => !v)}>Filter</TeacherPressButton>
           </div>
+          {filterOpen && <div className="tw-filter-panel" style={card(c, { position: 'absolute', top: 'calc(100% + 8px)', right: 12, left: 12, zIndex: 40 })}>
+            <div className="tw-filter-panel-group">
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.06em', color: c.textMuted, marginBottom: 6 }}>Template</label>
+              <select value={templateFilter} onChange={(e) => setTemplateFilter(e.target.value)} style={inputStyle(c)}>
+                <option value='ALL'>All templates</option>
+                {Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={value}>{meta.label}</option>)}
+              </select>
+            </div>
+            <div className="tw-filter-panel-group">
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.06em', color: c.textMuted, marginBottom: 6 }}>Sort by</label>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle(c)}>
+                <option value='recent'>Newest first</option>
+                <option value='title'>Title A–Z</option>
+              </select>
+            </div>
+          </div>}
         </section>}
 
         {msg && <div style={{ ...card(c, { padding: '12px 14px', boxShadow: 'none' }), color: c.textMuted, fontSize: 13, fontWeight: 700 }}>{msg}</div>}

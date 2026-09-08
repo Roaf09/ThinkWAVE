@@ -46,6 +46,7 @@ export default function Register() {
     email: "", password: "", confirmPassword: "",
   });
   const [showPw, setShowPw] = useState(false);
+  const [showPwHelp, setShowPwHelp] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
   const [error, setError] = useState("");
   const [inviteState, setInviteState] = useState(isAdminReg ? "checking" : "valid");
@@ -114,7 +115,7 @@ export default function Register() {
       <PublicHeader compact hideSuper hideTheme />
 
       <main style={s.main}>
-        <div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c, dark)}>
+        <div className={`tw-auth-form-shell tw-auth-register-shell ${exitClass || enterClass}`} style={s.card(c, dark)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{isAdminReg ? "Create your admin account" : "Create your account"}</h1>
             <p style={s.subtitle(c)}>
@@ -122,74 +123,98 @@ export default function Register() {
             </p>
           </div>
 
-          <div style={s.columns}>
-            <form onSubmit={submit} style={s.form}>
-              <div style={s.row}>
-                <div style={s.field}>
-                  <label style={s.label(c)}>First name</label>
-                  <input style={s.input(c)} value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required />
-                </div>
-                <div style={s.field}>
-                  <label style={s.label(c)}>Last name</label>
-                  <input style={s.input(c)} value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required />
-                </div>
-              </div>
-
+          <div className="tw-auth-columns" style={s.columns}>
+          <form onSubmit={submit} style={s.form}>
+            <div style={s.row}>
               <div style={s.field}>
-                <label style={s.label(c)}>Email address</label>
-                <input type="email" style={{...s.input(c),opacity:isAdminReg?0.82:1}} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly={isAdminReg} required />
+                <label style={s.label(c)}>First name</label>
+                <input style={s.input(c)} value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required />
               </div>
-
               <div style={s.field}>
+                <label style={s.label(c)}>Last name</label>
+                <input style={s.input(c)} value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required />
+              </div>
+            </div>
+
+            <div style={s.field}>
+              <label style={s.label(c)}>Email address</label>
+              <input type="email" style={{...s.input(c),opacity:isAdminReg?0.82:1}} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly={isAdminReg} required />
+            </div>
+
+            <div style={s.field}>
+              <div style={s.labelRow}>
                 <label style={s.label(c)}>Password</label>
-                <div style={s.passwordWrap}>
-                  <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
-                </div>
+                <button type="button" className="tw-pw-help-btn" aria-label="Password requirements" onClick={() => setShowPwHelp(true)}><TwIcon name="help" size={16} /></button>
               </div>
-
-              <div style={s.field}>
-                <label style={s.label(c)}>Confirm password</label>
-                <div style={s.passwordWrap}>
-                  <input
-                    type={showConfPw ? "text" : "password"}
-                    style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }}
-                    value={form.confirmPassword}
-                    onChange={(e) => set({ confirmPassword: e.target.value })}
-                    placeholder="••••••••"
-                    required
-                  />
-                  <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
-                </div>
-                {form.confirmPassword && (
-                  <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>
-                    {matches ? "✓ Passwords match" : "✗ Passwords do not match"}
-                  </span>
-                )}
+              <div style={s.passwordWrap}>
+                <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: isStrong ? 76 : 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
+                {isStrong && <span className="tw-pw-strong-check" aria-label="Password meets all requirements"><TwIcon name="check" size={16} /></span>}
+                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
+            </div>
 
-              {error && (
-                <div style={s.feedbackBox(feedbackTone)}>
-                  <div style={s.errorHeader}>
-                    <span style={s.errorTitle(feedbackTone)}>
-                      {isSuccess ? "Success!" : "Need help?"}
-                    </span>
-                    {!isSuccess && <button type="button" style={s.errorClose(feedbackTone)} onClick={() => setError("")}>×</button>}
-                  </div>
-                  <p style={s.errorMsg(feedbackTone)}>{error}</p>
-                </div>
+            <div style={s.field}>
+              <label style={s.label(c)}>Confirm password</label>
+              <div style={s.passwordWrap}>
+                <input
+                  type={showConfPw ? "text" : "password"}
+                  style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }}
+                  value={form.confirmPassword}
+                  onChange={(e) => set({ confirmPassword: e.target.value })}
+                  placeholder="••••••••"
+                  required
+                />
+                <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
+              </div>
+              {form.confirmPassword && (
+                <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>
+                  {matches ? "✓ Passwords match" : "✗ Passwords do not match"}
+                </span>
               )}
+            </div>
 
-              <div style={s.btnWrap}>
-                <button type="submit" className="tw-auth-primary" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Account"}</button>
+            {error && (
+              <div style={s.feedbackBox(feedbackTone)}>
+                <div style={s.errorHeader}>
+                  <span style={s.errorTitle(feedbackTone)}>
+                    {isSuccess ? "Success!" : "Need help?"}
+                  </span>
+                  {!isSuccess && <button type="button" style={s.errorClose(feedbackTone)} onClick={() => setError("")}>×</button>}
+                </div>
+                <p style={s.errorMsg(feedbackTone)}>{error}</p>
               </div>
+            )}
 
-              {!isAdminReg && <p style={s.loginPrompt(c)}>
-                Already have an account? <button type="button" onClick={moveToLogin} style={{...s.loginLink,background:"none",border:0,cursor:"pointer",padding:0}}>Log in here</button>
-              </p>}
-            </form>
+            <div style={s.btnWrap}>
+              <button type="submit" className="tw-auth-primary" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Teacher Account"}</button>
+            </div>
 
-            <div className="tw-password-requirements-panel" style={s.reqPanel(c)}>
+            {!isAdminReg && <p style={s.loginPrompt(c)}>
+              Already have an account? <button type="button" onClick={moveToLogin} style={{...s.loginLink,background:"none",border:0,cursor:"pointer",padding:0}}>Log in here</button>
+            </p>}
+          </form>
+
+          <div className="tw-password-requirements-panel" style={s.reqPanel(c)}>
+            <div style={s.reqTitle(c)}>Password requirements</div>
+            <div style={s.reqList}>
+              {Object.entries(REQ_LABELS).map(([key, label]) => (
+                <div key={key} style={s.reqItem}>
+                  <span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} />
+                  <span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={s.strengthBar(c)}>
+              <div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} />
+            </div>
+            <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>
+              {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
+            </div>
+          </div>
+          </div>
+
+          {showPwHelp && <div className="tw-pw-help-backdrop" onClick={() => setShowPwHelp(false)}>
+            <div className="tw-pw-help-modal" style={{ background: c.cardBg3, border: `1px solid ${c.border}`, color: c.text }} onClick={(e) => e.stopPropagation()}>
               <div style={s.reqTitle(c)}>Password requirements</div>
               <div style={s.reqList}>
                 {Object.entries(REQ_LABELS).map(([key, label]) => (
@@ -206,7 +231,7 @@ export default function Register() {
                 {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
               </div>
             </div>
-          </div>
+          </div>}
         </div>
       </main>
       <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
@@ -234,6 +259,7 @@ const s = {
   row: { display: "flex", gap: 12 },
   field: { display: "flex", flexDirection: "column", gap: 6, flex: 1 },
   label: (c) => ({ fontSize: 13, fontWeight: 600, color: c.text }),
+  labelRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   input: (c) => ({ padding: "12px 16px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none", transition: "border-color 0.15s" }),
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },

@@ -30,6 +30,8 @@ const iconSet = {
   chart: [<path key="1" d="M5 19V5" />, <path key="2" d="M5 19h14" />, <path key="3" d="M8.5 15v-3" />, <path key="4" d="M12 15V8" />, <path key="5" d="M15.5 15v-5" />],
   check: [<path key="1" d="m5 12 4 4 10-10" />],
   alert: [<path key="1" d="M12 4 21 20H3L12 4Z" />, <path key="2" d="M12 9v4" />, <path key="3" d="M12 17h.01" />],
+  qa: [<path key="1" d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.5 8.5 0 0 0 12 3.5Z" />, <path key="2" d="m8.2 12.2 2.4 2.4 5.4-5.4" />, <path key="3" d="M12 3.5v2" />],
+  answerCheck: [<rect key="1" x="4" y="4" width="16" height="11" rx="3" />, <path key="2" d="M8.5 15v3.2l4-3.2" />, <path key="3" d="m8.3 9.5 2.1 2.1 4.3-4.3" />],
   mcq: [<path key="1" d="M6 7h12" />, <path key="2" d="M6 12h12" />, <path key="3" d="M6 17h8" />],
   truefalse: [<path key="1" d="m4.5 12 3 3 5-6" />, <path key="2" d="m15 9 4.5 6" />, <path key="3" d="m19.5 9-4.5 6" />],
   identification: [<path key="1" d="M5 6h14" />, <path key="2" d="M5 12h9" />, <path key="3" d="M5 18h6" />, <path key="4" d="M16 17l3-3 2 2-3 3h-2v-2Z" />],
@@ -62,6 +64,12 @@ const iconSet = {
   briefcase: [<rect key="1" x="4" y="7" width="16" height="12" rx="2" />, <path key="2" d="M9 7V5h6v2M4 12h16M10 12v2h4v-2" />],
   analytics: [<path key="1" d="M4 19V9" />, <path key="2" d="M10 19V5" />, <path key="3" d="M16 19v-7" />, <path key="4" d="M3 19h18" />],
   arrowRight: [<path key="1" d="M5 12h14" />, <path key="2" d="m14 7 5 5-5 5" />],
+  arrowLeft: [<path key="1" d="M19 12H5" />, <path key="2" d="m10 7-5 5 5 5" />],
+  undo: [<path key="1" d="M8 7 3 12l5 5" />, <path key="2" d="M3 12h10.5a6.5 6.5 0 0 1 0 13H12" />],
+  redo: [<path key="1" d="M16 7l5 5-5 5" />, <path key="2" d="M21 12H10.5a6.5 6.5 0 0 0 0 13H12" />],
+  duplicate: [<rect key="1" x="8" y="8" width="12" height="12" rx="2.5" />, <path key="2" d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3H6a3 3 0 0 0-3 3v7.5A2.5 2.5 0 0 0 5.5 16H8" />],
+  lock: [<rect key="1" x="5" y="11" width="14" height="9" rx="2.5" />, <path key="2" d="M8 11V7a4 4 0 0 1 8 0v4" />],
+  unlock: [<rect key="1" x="5" y="11" width="14" height="9" rx="2.5" />, <path key="2" d="M8 11V7a4 4 0 0 1 7.4-2.2" />],
   download: [<path key="1" d="M12 4v11" />, <path key="2" d="m7 11 5 5 5-5" />, <path key="3" d="M5 20h14" />],
   link: [<path key="1" d="M9.5 14.5 14.5 9" />, <path key="2" d="M7.5 16.5 6 18a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0" />, <path key="3" d="m16.5 7.5 1.5-1.5a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0" />],
   plus: [<path key="1" d="M12 5v14" />, <path key="2" d="M5 12h14" />],
@@ -72,6 +80,10 @@ const iconSet = {
   eye: [<path key="1" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />, <circle key="2" cx="12" cy="12" r="2.8" />],
   eyeOff: [<path key="1" d="m4 4 16 16" />, <path key="2" d="M10.2 6.3A10.8 10.8 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8" />, <path key="3" d="M7.1 7.2C4.2 8.9 2.5 12 2.5 12s3.5 6 9.5 6c1.4 0 2.7-.3 3.8-.8" />, <path key="4" d="M10.5 10.5a2.2 2.2 0 0 0 3 3" />],
   close: [<path key="1" d="m6 6 12 12" />, <path key="2" d="M18 6 6 18" />],
+  menu: [<path key="1" d="M4.5 7h15" />, <path key="2" d="M4.5 12h15" />, <path key="3" d="M4.5 17h15" />],
+  swap: [<path key="1" d="M7 16V4M7 4 3 8M7 4l4 4" />, <path key="2" d="M17 8v12m0 0 4-4m-4 4-4-4" />],
+  filter: [<path key="1" d="M4 5.5h16" />, <path key="2" d="M7.5 12h9" />, <path key="3" d="M10.5 18.5h3" />],
+  help: [<path key="1" d="M9.4 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.1-2.5 3.7" />, <path key="2" d="M12 16.6v.05" />],
 };
 
 export function TwIcon({ name = "spark", size = 20, strokeWidth = 2.6, style, title }) {

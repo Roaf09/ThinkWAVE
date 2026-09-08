@@ -52,6 +52,14 @@ export default function QuizPreviewModal({ quiz, onClose }) {
   const correct = safeJson(currentQ?.correct_json);
   const tone = templateTone(quiz.template_type, c, false);
 
+  // Mobile: fully hide the pill-shaped bottom tab bar while this preview is
+  // open (see .tw-preview-modal-open in styles.css), instead of relying on
+  // the backdrop's translucency to sit on top of it.
+  useEffect(() => {
+    document.body.classList.add("tw-mobile-modal-open");
+    return () => document.body.classList.remove("tw-mobile-modal-open");
+  }, []);
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9200, display: "grid", placeItems: "center", padding: 20, background: dark ? "rgba(0,0,0,.70)" : "rgba(15,23,42,.48)", backdropFilter: "blur(8px)" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(95vw, 780px)", maxHeight: "90vh", background: c.cardBg, border: `1.5px solid ${tone.border}`, borderRadius: 22, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: `0 30px 80px ${tone.accent}28` }}>

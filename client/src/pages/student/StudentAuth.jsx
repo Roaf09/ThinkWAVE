@@ -9,6 +9,7 @@ import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken } from "../../lib/auth";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
+import ThemeIconButton from "../../components/ThemeIconButton";
 
 const REQ_LABELS = {
   length: "At least 8 characters",
@@ -49,6 +50,7 @@ export default function StudentAuth({ onLoginSuccess }) {
   }
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
   const [showPw, setShowPw] = useState(false);
+  const [showPwHelp, setShowPwHelp] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [msg, setMsg] = useState("");
@@ -107,10 +109,10 @@ export default function StudentAuth({ onLoginSuccess }) {
   return (
     <div className="tw-starry-page" style={s.page(c)}>
       <div style={s.glow} />
-      <PublicHeader compact hideSuper />
+      <PublicHeader compact hideSuper hideTheme />
 
       <main style={s.main}>
-        <div className={`tw-auth-form-shell ${authMotion}`} style={mode === "login" ? s.card(c) : s.registerCard(c)}>
+        <div className={`tw-auth-form-shell ${mode !== "login" ? "tw-auth-register-shell" : ""} ${authMotion}`} style={mode === "login" ? s.card(c) : s.registerCard(c)}>
           <div style={s.cardTop}>
             <h1 style={s.title(c)}>{mode === "login" ? "Welcome back" : "Create your student account"}</h1>
             <p style={s.subtitle(c)}>{mode === "login" ? "Student login only. Sign in to your ThinkWAVE account." : "Register a student account for ThinkWAVE."}</p>
@@ -144,20 +146,24 @@ export default function StudentAuth({ onLoginSuccess }) {
               <p style={s.footText(c)}>Need a student account? <button type="button" onClick={() => switchMode("register")} style={s.inlineButton}>Register here</button></p>
             </>
           ) : (
-            <div style={s.columns}>
+            <>
+              <div className="tw-auth-columns" style={s.columns}>
               <form onSubmit={submit} style={s.formWide}>
                 <div style={s.row}>
                   <div style={s.field}><label style={s.label(c)}>First name</label><input style={s.input(c)} value={form.firstName} onChange={(e) => patch({ firstName: e.target.value })} placeholder="Juan" required /></div>
                   <div style={s.field}><label style={s.label(c)}>Last name</label><input style={s.input(c)} value={form.lastName} onChange={(e) => patch({ lastName: e.target.value })} placeholder="Dela Cruz" required /></div>
                 </div>
                 <div style={s.field}><label style={s.label(c)}>Email address</label><input type="email" style={s.input(c)} value={form.email} onChange={(e) => patch({ email: e.target.value })} placeholder="you@example.com" required /></div>
-                <div style={s.field}><label style={s.label(c)}>Password</label><div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button></div></div>
+                <div style={s.field}>
+                  <div style={s.labelRow}><label style={s.label(c)}>Password</label><button type="button" className="tw-pw-help-btn" aria-label="Password requirements" onClick={() => setShowPwHelp(true)}><TwIcon name="help" size={16} /></button></div>
+                  <div style={s.passwordWrap}><input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: isStrong ? 76 : 48 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required />{isStrong && <span className="tw-pw-strong-check" aria-label="Password meets all requirements"><TwIcon name="check" size={16} /></span>}<button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button></div>
+                </div>
                 <div style={s.field}><label style={s.label(c)}>Confirm password</label><div style={s.passwordWrap}><input type={showConfPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button></div>{form.confirmPassword && <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
                 {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
                 <button type="submit" className="tw-auth-primary" style={s.submitBtn}>Create Student Account</button>
                 <p style={s.footText(c)}>Already have an account? <button type="button" onClick={() => switchMode("login")} style={s.inlineButton}>Log in here</button></p>
               </form>
-              <div style={s.reqPanel(c)}>
+              <div className="tw-password-requirements-panel" style={s.reqPanel(c)}>
                 <div style={s.reqTitle(c)}>Password requirements</div>
                 <div style={s.reqList}>
                   {Object.entries(REQ_LABELS).map(([key, label]) => <div key={key} style={s.reqItem}><span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} /><span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span></div>)}
@@ -165,10 +171,22 @@ export default function StudentAuth({ onLoginSuccess }) {
                 <div style={s.strengthBar(c)}><div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} /></div>
                 <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>{isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}</div>
               </div>
-            </div>
+              </div>
+              {showPwHelp && <div className="tw-pw-help-backdrop" onClick={() => setShowPwHelp(false)}>
+                <div className="tw-pw-help-modal" style={{ background: c.cardBg3, border: `1px solid ${c.border}`, color: c.text }} onClick={(e) => e.stopPropagation()}>
+                  <div style={s.reqTitle(c)}>Password requirements</div>
+                  <div style={s.reqList}>
+                    {Object.entries(REQ_LABELS).map(([key, label]) => <div key={key} style={s.reqItem}><span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} /><span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span></div>)}
+                  </div>
+                  <div style={s.strengthBar(c)}><div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} /></div>
+                  <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>{isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}</div>
+                </div>
+              </div>}
+            </>
           )}
         </div>
       </main>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 
@@ -199,6 +217,7 @@ const s = {
   row: { display: "flex", gap: 12 },
   field: { display: "flex", flexDirection: "column", gap: 6, flex: 1 },
   label: (c) => ({ fontSize: 13, fontWeight: 600, color: c.text }),
+  labelRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   input: (c) => ({ padding: "12px 16px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box" }),
   passwordWrap: { position: "relative" },
   showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },

@@ -37,6 +37,7 @@ const card = (c, extra = {}) => ({
   ...extra,
 });
 const btn = (c) => ({ padding: "9px 13px", borderRadius: 12, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, fontWeight: 800, fontSize: 13, cursor: "pointer" });
+const labelStyleSmall = (c) => ({ display: "block", fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", color: c.textMuted, marginBottom: 6 });
 
 function normalizeLiveTemplate(value) {
   if (value === "FOUR_PICS_ONE_WORD") return "GUESS_WORD_4PICS";
@@ -82,8 +83,10 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   const [hostSetupQuiz, setHostSetupQuiz] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("recent");
+  const [templateFilter, setTemplateFilter] = useState("ALL");
+  const [statusFilters, setStatusFilters] = useState({ DRAFT: false, PUBLISHED: false });
+  const [filterOpen, setFilterOpen] = useState(false);
   const [institutionPlan, setInstitutionPlan] = useState(false);
   const [openQuizId, setOpenQuizId] = useState(null);
   const [promotedQuizIds, setPromotedQuizIds] = useState(() => {
@@ -166,16 +169,22 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
     });
   }
 
-  const liveQuizzes = useMemo(() => quizzes.filter((quiz) => quiz.status !== "BANKED" && quiz.delivery_mode !== "ASYNCHRONOUS"), [quizzes]);
+  // A quiz goes PUBLISHED -> IN_SESSION -> BANKED once its live session ends,
+  // so it can be reused from the Quiz Bank tab. Excluding BANKED here made a
+  // teacher's already-published quiz vanish from Sessions the moment their
+  // session ended, which reads as "my saved, published quiz got unpublished
+  // and removed" even though nothing was lost.
+  const liveQuizzes = useMemo(() => quizzes.filter((quiz) => quiz.delivery_mode !== "ASYNCHRONOUS"), [quizzes]);
+  const anyStatusFilterChecked = statusFilters.DRAFT || statusFilters.PUBLISHED;
   const filteredQuizzes = useMemo(() => {
     const q = query.trim().toLowerCase();
     const rows = liveQuizzes.filter((quiz) => {
-      const active = activeByQuizId.has(Number(quiz.id));
-      if (statusFilter === "ACTIVE" && !active) return false;
-      if (statusFilter === "READY" && active) return false;
-      if (statusFilter === "PUBLISHED" && quiz.status !== "PUBLISHED") return false;
-      const templateFilter = sortBy.startsWith("template:") ? sortBy.slice(9) : null;
-      if (templateFilter && normalizeLiveTemplate(quiz.template_type) !== templateFilter) return false;
+      // BANKED reads/behaves as published everywhere else in this tab (see
+      // isPublished in QuizCard below) - fold it into the same filter bucket
+      // so the "Published" chip doesn't hide a quiz that's just parked
+      // between live sessions.
+      if (anyStatusFilterChecked && !statusFilters[quiz.status === "BANKED" ? "PUBLISHED" : quiz.status]) return false;
+      if (templateFilter !== "ALL" && normalizeLiveTemplate(quiz.template_type) !== templateFilter) return false;
       return !q || [quiz.title, quiz.template_type, quiz.category].some((value) => String(value || "").toLowerCase().includes(q));
     });
     rows.sort((a, b) => {
@@ -192,18 +201,24 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       return bUpdated - aUpdated || Number(b.id) - Number(a.id);
     });
     return rows;
-  }, [liveQuizzes, query, statusFilter, sortBy, activeByQuizId, promotedQuizIds]);
+  }, [liveQuizzes, query, statusFilters, anyStatusFilterChecked, templateFilter, sortBy, promotedQuizIds]);
 
   useEffect(() => {
     if (!String(tutorial?.stage || "").startsWith("sessions_")) return;
     if (!filteredQuizzes.length) return;
-    setOpenQuizId((current) => {
-      if (current) return current;
-      const firstId = Number(filteredQuizzes[0].id);
-      setPromotedQuizIds((rows) => [firstId, ...rows.filter((id) => Number(id) !== firstId)]);
-      return firstId;
-    });
-  }, [tutorial?.stage, filteredQuizzes.length]);
+    // Prefer a published (hostable) quiz as the tutorial target. If the quiz
+    // pinned to the top is stuck as a draft - e.g. from an earlier attempt
+    // that hit a bug before publishing - keep looking rather than leaving the
+    // teacher stuck on "let's choose Host Live" pointed at a button they
+    // can't actually click.
+    const currentQuiz = filteredQuizzes.find((quiz) => Number(quiz.id) === Number(openQuizId));
+    if (currentQuiz && currentQuiz.status === "PUBLISHED") return;
+    const bestCandidate = filteredQuizzes.find((quiz) => quiz.status === "PUBLISHED") || filteredQuizzes[0];
+    const bestId = Number(bestCandidate.id);
+    if (Number(openQuizId) === bestId) return;
+    setOpenQuizId(bestId);
+    setPromotedQuizIds((rows) => [bestId, ...rows.filter((id) => Number(id) !== bestId)]);
+  }, [tutorial?.stage, filteredQuizzes, openQuizId]);
 
   async function createLiveSession(quiz, joinMode = "SOLO", classId = null, backgroundKey = DEFAULT_SESSION_BACKGROUND) {
     try {
@@ -250,11 +265,29 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   return <>
     <div className="container tw-live-sessions-page" style={{ display: "grid", gap: 18, overflow: "visible", background: c.pageBg, alignContent: "start", gridAutoRows: "max-content" }}>
       <section><h2 style={{ marginBottom: 4, color: c.text }}>{guestMode ? "Sessions" : "Live Sessions"}</h2></section>
-      {liveQuizzes.length > 0 && <section style={card(c)}><div className="tw-session-filter-grid">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search quizzes" style={inputStyle(c)} />
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={inputStyle(c)}><option value="ALL">All quizzes</option><option value="READY">Not active yet</option><option value="ACTIVE">Active sessions</option><option value="PUBLISHED">Published only</option></select>
-        <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option>{Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={`template:${value}`}>{meta.label}</option>)}</select>
-      </div></section>}
+      {liveQuizzes.length > 0 && <section style={card(c, { position: "relative", overflow: "visible" })}>
+        <div className="tw-search-filter-row">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search quizzes" className="tw-search-filter-input" style={inputStyle(c)} />
+          <TeacherPressButton type="button" tone="neutral" icon="filter" className={`tw-filter-toggle-btn${filterOpen ? " is-selected" : ""}${anyStatusFilterChecked || templateFilter !== "ALL" ? " has-active-filters" : ""}`} onClick={() => setFilterOpen((value) => !value)}>Filter</TeacherPressButton>
+        </div>
+        {filterOpen && <div className="tw-filter-panel" style={card(c, { position: "absolute", top: "calc(100% + 8px)", right: 12, left: 12, zIndex: 40 })}>
+          <div className="tw-filter-panel-group">
+            <label style={labelStyleSmall(c)}>Template</label>
+            <select value={templateFilter} onChange={(event) => setTemplateFilter(event.target.value)} style={inputStyle(c)}><option value="ALL">All templates</option>{Object.entries(TEMPLATE_PALETTES).map(([value, meta]) => <option key={value} value={value}>{meta.label}</option>)}</select>
+          </div>
+          <div className="tw-filter-panel-group">
+            <label style={labelStyleSmall(c)}>Status</label>
+            <div className="tw-filter-chip-row">
+              <button type="button" className={`tw-filter-chip${statusFilters.DRAFT ? " is-active" : ""}`} onClick={() => setStatusFilters((prev) => ({ ...prev, DRAFT: !prev.DRAFT }))}>Drafts</button>
+              <button type="button" className={`tw-filter-chip${statusFilters.PUBLISHED ? " is-active" : ""}`} onClick={() => setStatusFilters((prev) => ({ ...prev, PUBLISHED: !prev.PUBLISHED }))}>Published</button>
+            </div>
+          </div>
+          <div className="tw-filter-panel-group">
+            <label style={labelStyleSmall(c)}>Sort by</label>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} style={inputStyle(c)}><option value="recent">Newest first</option><option value="title">Title A–Z</option></select>
+          </div>
+        </div>}
+      </section>}
       {flash && <div style={{ ...card(c, { padding: "12px 16px", boxShadow: "none", background: flash.kind === "error" ? c.redBg : c.greenBg, borderColor: flash.kind === "error" ? c.redBorder : c.greenBorder }), color: flash.kind === "error" ? c.redFg : c.greenFg, fontWeight: 800, fontSize: 13 }}>{flash.text}</div>}
       {!liveQuizzes.length ? <ThinkBotEmptyState c={c} title="You do not have any quizzes ready yet." actionLabel={guestMode ? "Create & Open Builder" : undefined} onAction={guestMode ? () => setActiveTab?.("create") : undefined} /> : !filteredQuizzes.length ? <div style={card(c)}>No quizzes match your current filters.</div> : <div style={{ display: "grid", gap: 12 }}>{filteredQuizzes.map((quiz) => <QuizCard
         key={quiz.id}
@@ -310,7 +343,9 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
   const tone = templateTone(quiz.template_type, c, false);
-  const isPublished = quiz.status === "PUBLISHED";
+  // BANKED means "published, session ended, parked for reuse" - still
+  // hostable, so it reads/behaves the same as PUBLISHED here.
+  const isPublished = quiz.status === "PUBLISHED" || quiz.status === "BANKED";
   const inSession = !!activeSession;
   const builderPath = guestMode ? `/guest/quizzes/${quiz.id}/builder` : `/teacher/quizzes/${quiz.id}/builder`;
   const hostPath = guestMode ? `/guest/sessions/${activeSession?.id}/live` : `/teacher/sessions/${activeSession?.id}/live`;
@@ -339,14 +374,16 @@ function QuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssig
           <div data-session-actions={quiz.id} style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 12001 : 1 }}>
             <TeacherPressButton data-tutorial="session-host-live" tone="blue" onClick={() => onHost(quiz)} disabled={!isPublished || inSession} title={!isPublished ? "Publish this quiz first to host it live." : inSession ? "This quiz already has an active live session." : "Host this quiz live"}>{inSession ? "Already active" : "Host Live"}</TeacherPressButton>
             {!guestMode && <TeacherPressButton data-tutorial="session-assign" tone="neutral" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
-            <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
-            {moreOpen && <div className="tw-session-quick-menu" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 12002, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}>
-              <button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button>
-              <button onClick={() => { setMoreOpen(false); navigate(builderPath); }} style={menuBtn(c)}>Edit</button>
-              {!guestMode && <button onClick={() => { setMoreOpen(false); onCopyToBank(quiz); }} style={{ ...menuBtn(c), color: c.yellowFg }}>Add to Quiz Bank</button>}
-              {!guestMode && <button onClick={() => { setMoreOpen(false); onDuplicate(quiz); }} style={menuBtn(c)}>Duplicate</button>}
-              <button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
-            </div>}
+            <div className="tw-session-more-wrap" style={{ position: "relative" }}>
+              <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
+              {moreOpen && <div className="tw-session-quick-menu" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 12002, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}>
+                <button onClick={() => { setMoreOpen(false); onPreview(quiz); }} style={menuBtn(c)}>Preview</button>
+                <button onClick={() => { setMoreOpen(false); navigate(builderPath); }} style={menuBtn(c)}>Edit</button>
+                {!guestMode && <button onClick={() => { if (quiz.status === "DRAFT") return; setMoreOpen(false); onCopyToBank(quiz); }} disabled={quiz.status === "DRAFT"} title={quiz.status === "DRAFT" ? "Save or publish this quiz before adding it to the Quiz Bank" : undefined} style={{ ...menuBtn(c), color: quiz.status === "DRAFT" ? c.textMuted : c.yellowFg, cursor: quiz.status === "DRAFT" ? "not-allowed" : "pointer", opacity: quiz.status === "DRAFT" ? 0.55 : 1 }}>Add to Quiz Bank</button>}
+                {!guestMode && <button onClick={() => { setMoreOpen(false); onDuplicate(quiz); }} style={menuBtn(c)}>Duplicate</button>}
+                <button onClick={() => { setMoreOpen(false); onDelete(quiz); }} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>
+              </div>}
+            </div>
           </div>
         </div>
       </div>
@@ -371,6 +408,13 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
   const template = normalizeLiveTemplate(quiz.template_type);
   const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
+
+  // Mobile: hide the pill-shaped bottom tab bar while this setup modal is open.
+  useEffect(() => {
+    document.body.classList.add("tw-mobile-modal-open");
+    return () => document.body.classList.remove("tw-mobile-modal-open");
+  }, []);
+
   return <div className="tw-host-launch-backdrop" onClick={() => { if (!tutorialStage) onClose?.(); }}>
     <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: dark ? "#102443" : solidModalBg(c), borderColor: c.border, color: c.text }}>
       <div className="tw-host-preview-dual">
@@ -378,7 +422,7 @@ function HostLaunchModal({ quiz, folders, institutionPlan, c, dark, onClose, onS
         <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
-      <div className="tw-host-mode-row">
+      <div className={`tw-host-mode-row${!institutionPlan ? " tw-host-mode-row-basic" : ""}`}>
         <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} title="Host a solo session" onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
         <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan} title={institutionPlan ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => institutionPlan && setJoinMode("GROUP")}><span>Group</span></button>
       </div>
@@ -423,6 +467,19 @@ function BackgroundPicker({ selectedKey, onSelect, c, category }) {
     setStartIndex((value) => (value + step + total) % total);
   }
 
+  // Mobile: swipe the row instead of tapping arrow buttons (arrows are
+  // hidden below the mobile breakpoint via CSS).
+  const touchStartRef = useRef(null);
+  function onTouchStart(event) { touchStartRef.current = event.touches[0].clientX; }
+  function onTouchEnd(event) {
+    const startX = touchStartRef.current;
+    touchStartRef.current = null;
+    if (startX == null) return;
+    const dx = event.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) < 34) return;
+    move(dx < 0 ? 1 : -1);
+  }
+
   useEffect(() => {
     const node = carouselRef.current;
     if (!node || !total) return undefined;
@@ -442,7 +499,7 @@ function BackgroundPicker({ selectedKey, onSelect, c, category }) {
 
   return <div className="tw-session-background-picker" data-tutorial="session-backgrounds">
     <div className="tw-session-background-head"><span>Choose a gameplay background</span><small style={{ color: c.textMuted }}>{selectedIndex >= 0 ? `${selectedIndex + 1} of ${total}` : "No background selected"}</small></div>
-    <div ref={carouselRef} className="tw-session-background-carousel">
+    <div ref={carouselRef} className="tw-session-background-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={() => move(-1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
       <div className="tw-session-background-track">
         <div key={startIndex} className={`tw-session-background-track-inner is-${slideDirection}`}>

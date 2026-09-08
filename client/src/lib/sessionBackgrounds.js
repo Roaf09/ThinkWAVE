@@ -1,135 +1,195 @@
 export const SESSION_BACKGROUNDS = [
   {
     "key": "background-01",
-    "label": "Black Grey Simple Illustration Chalkboard",
+    "label": "K-12 Background 1",
     "src": "/media/session-backgrounds/background-01.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-02",
-    "label": "Blue Beige School Cute Blank Note A4",
+    "label": "K-12 Background 2",
     "src": "/media/session-backgrounds/background-02.webp",
     "category": "K12"
   },
   {
     "key": "background-03",
-    "label": "Blue Green Colorful Daycare Center",
+    "label": "K-12 Background 3",
     "src": "/media/session-backgrounds/background-03.webp",
     "category": "K12"
   },
   {
     "key": "background-04",
-    "label": "Blue Green Colorful Daycare Center",
+    "label": "K-12 Background 4",
     "src": "/media/session-backgrounds/background-04.webp",
     "category": "K12"
   },
   {
     "key": "background-05",
-    "label": "Blue and Green Illustrated Hot Weather",
+    "label": "K-12 Background 5",
     "src": "/media/session-backgrounds/background-05.webp",
     "category": "K12"
   },
   {
     "key": "background-06",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 6",
     "src": "/media/session-backgrounds/background-06.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-07",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 7",
     "src": "/media/session-backgrounds/background-07.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-08",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 8",
     "src": "/media/session-backgrounds/background-08.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-09",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 9",
     "src": "/media/session-backgrounds/background-09.webp",
     "category": "K12"
   },
   {
     "key": "background-10",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 10",
     "src": "/media/session-backgrounds/background-10.webp",
     "category": "K12"
   },
   {
     "key": "background-11",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 11",
     "src": "/media/session-backgrounds/background-11.webp",
     "category": "K12"
   },
   {
     "key": "background-12",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 12",
     "src": "/media/session-backgrounds/background-12.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-13",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 13",
     "src": "/media/session-backgrounds/background-13.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-14",
-    "label": "Blue and Yellow Handwritten Classroom Rules Blank Education",
+    "label": "K-12 Background 14",
     "src": "/media/session-backgrounds/background-14.webp",
     "category": "K12"
   },
   {
     "key": "background-15",
-    "label": "Colorful Illustrated Creative Project",
+    "label": "K-12 Background 15",
     "src": "/media/session-backgrounds/background-15.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-16",
-    "label": "Cute Colorful Welcome Back to School Intro",
+    "label": "K-12 Background 16",
     "src": "/media/session-backgrounds/background-16.webp",
-    "category": "COLLEGE"
+    "category": "K12"
   },
   {
     "key": "background-17",
-    "label": "Green and Blue Illustrated Emotional Development in Childhood",
+    "label": "College Background 1",
     "src": "/media/session-backgrounds/background-17.webp",
     "category": "COLLEGE"
   },
   {
     "key": "background-18",
-    "label": "Multicolor Playful Emotions",
+    "label": "College Background 2",
     "src": "/media/session-backgrounds/background-18.webp",
-    "category": "K12"
+    "category": "COLLEGE"
   },
   {
     "key": "background-19",
-    "label": "Pastel Aesthetic Group Project",
+    "label": "College Background 3",
     "src": "/media/session-backgrounds/background-19.webp",
     "category": "COLLEGE"
   },
   {
     "key": "background-20",
-    "label": "Pink and Yellow Illustrative Class Syllabus",
+    "label": "College Background 4",
     "src": "/media/session-backgrounds/background-20.webp",
     "category": "COLLEGE"
   },
   {
     "key": "background-21",
-    "label": "Welcome Back to School in Blue, Peach and Gray Hand Drawn Illustrativ",
+    "label": "College Background 5",
     "src": "/media/session-backgrounds/background-21.webp",
-    "category": "K12"
+    "category": "COLLEGE"
   },
   {
     "key": "background-22",
-    "label": "White and Colorful Cute Blank Page Border",
+    "label": "College Background 6",
     "src": "/media/session-backgrounds/background-22.webp",
-    "category": "K12"
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-23",
+    "label": "College Background 7",
+    "src": "/media/session-backgrounds/background-23.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-24",
+    "label": "College Background 8",
+    "src": "/media/session-backgrounds/background-24.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-25",
+    "label": "College Background 9",
+    "src": "/media/session-backgrounds/background-25.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-26",
+    "label": "College Background 10",
+    "src": "/media/session-backgrounds/background-26.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-27",
+    "label": "College Background 11",
+    "src": "/media/session-backgrounds/background-27.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-28",
+    "label": "College Background 12",
+    "src": "/media/session-backgrounds/background-28.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-29",
+    "label": "College Background 13",
+    "src": "/media/session-backgrounds/background-29.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-30",
+    "label": "College Background 14",
+    "src": "/media/session-backgrounds/background-30.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-31",
+    "label": "College Background 15",
+    "src": "/media/session-backgrounds/background-31.webp",
+    "category": "COLLEGE"
+  },
+  {
+    "key": "background-32",
+    "label": "College Background 16",
+    "src": "/media/session-backgrounds/background-32.webp",
+    "category": "COLLEGE"
   }
 ];
 

@@ -9,5 +9,10 @@ import { API_BASE } from "./api";
 import { getToken } from "./auth";
 
 export function makeSocket() {
-  return io(API_BASE, { transports: ["websocket"], auth: { token: getToken() } });
+  // websocket-only means a network that blocks/interferes with the WS
+  // upgrade (common on school wifi proxies) fails the connection outright
+  // instead of falling back - the client then retries in a tight loop,
+  // which is what was burning through the student:connect rate limit and
+  // surfacing as "too many requests" on join.
+  return io(API_BASE, { transports: ["websocket", "polling"], auth: { token: getToken() } });
 }

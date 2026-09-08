@@ -86,7 +86,7 @@ export function BankModal({ templateType, onSelect, onClose, ui, c }) {
  * type more than the first answer word.  Now rawText is the local source of
  * truth while the user is typing; only the parsed array is sent upstream.
  */
-export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null }) {
+export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null, isMobile = false }) {
   const initialAnswers = Array.isArray(cor.answers) && cor.answers.length
     ? cor.answers
     : Array.isArray(cfg.answers) && cfg.answers.length
@@ -214,6 +214,59 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
     onChange({ config: { ...cfg, answers, gridSize: shuffled.gridSize, grid: shuffled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
   }
 
+  const gridPreview = (
+    <div style={{ minHeight: isMobile ? 0 : 330, display: "grid", placeItems: "center", padding: 14, borderRadius: 18, border: `1.5px solid ${ui.templateBorder || c.border}`, background: c.cardBg }}>
+      <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}-${isArranging}`} style={{ width: "min(100%, 430px)", display: "grid", gridTemplateColumns: `repeat(${visiblePreview.gridSize}, minmax(0,1fr))`, gap: visiblePreview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
+        {visiblePreview.grid.map((letter, index) => <div className="tw-crossword-grid-cell" key={index} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: visiblePreview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontWeight: 900, fontSize: visiblePreview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease, opacity .24s ease", animation: letter ? "twTilePop 240ms ease both" : "none" }}>{letter}</div>)}
+      </div>
+    </div>
+  );
+  if (isMobile) {
+    return (
+      <div style={{ ...ui.innerCard, display: "grid", gridTemplateColumns: "1fr", gap: 12 }} className="tw-crossword-mobile">
+        <div data-tutorial="builder-crossword-word-editor">
+          <div className="tw-crossword-word-head">
+            <label style={ui.smallLabel}>Valid or correct words</label>
+            <div className="tw-crossword-word-actions">
+              <button type="button" className="tw-builder-press tw-builder-press-neutral" onClick={removeWordField} disabled={wordFields.length <= 4} aria-label="Remove word field">−</button>
+              <button type="button" className="tw-builder-press tw-builder-press-blue" onClick={addWordField} disabled={wordFields.length >= fieldLimit} aria-label="Add word field">＋</button>
+            </div>
+          </div>
+          <div data-tutorial="builder-crossword-words" className="tw-crossword-word-grid">
+            {wordFields.map((word, index) => (
+              <input
+                key={index}
+                maxLength={255}
+                value={word}
+                placeholder={`Word ${index + 1}`}
+                onChange={(event) => updateWord(index, event.target.value)}
+                style={ui.input}
+              />
+            ))}
+          </div>
+          {maxWords && <div style={{ color: c.textMuted, fontSize: 11, marginTop: 6 }}>Upgrade plan to support more words per batch!</div>}
+        </div>
+        {gridPreview}
+        <div>
+          <label style={ui.smallLabel}>Grid size</label>
+          <select value={gridSize} onChange={(e) => setGridSize(e.target.value)} style={{ ...ui.select, display: "block", width: "100%", marginTop: 7 }} disabled={!normalized.length}>
+            {Array.from({ length: Math.max(1, maxGrid - minGrid + 1) }, (_, i) => minGrid + i).map((size) => <option key={size} value={size}>{size} × {size}</option>)}
+          </select>
+        </div>
+        <button
+          data-tutorial="builder-crossword-fill"
+          type="button"
+          className={`tw-builder-press tw-builder-press-blue${cfg.gridFilled ? " is-filled" : ""}`}
+          onClick={fillGrid}
+          disabled={!canFill || isArranging || cfg.gridFilled}
+          style={{ ...ui.primaryBtn, opacity: canFill ? 1 : .5, cursor: canFill && !isArranging && !cfg.gridFilled ? "pointer" : "not-allowed" }}
+        >
+          {isArranging ? <>Arranging<span className="tw-arranging-dots">{".".repeat(arrangeDots)}</span></> : cfg.gridFilled ? "Filled Up" : "Fill It Up!"}
+        </button>
+        <button data-tutorial="builder-crossword-shuffle" type="button" className="tw-builder-press tw-builder-press-neutral" onClick={shuffleGrid} disabled={!canFill || !cfg.gridFilled || isArranging} style={{ ...ui.secondaryBtn, opacity: canFill && cfg.gridFilled && !isArranging ? 1 : .5, cursor: canFill && cfg.gridFilled && !isArranging ? "pointer" : "not-allowed" }}>Shuffle</button>
+      </div>
+    );
+  }
   return (
     <div style={{ ...ui.innerCard, display: "grid", gridTemplateColumns: "minmax(260px,.85fr) minmax(300px,1.15fr)", gap: 18, alignItems: "start" }}>
       <div style={{ display: "grid", gap: 12 }}>
@@ -262,11 +315,7 @@ export function ThinkSpellEditor({ cor, cfg, onChange, ui, c, maxWords = null })
         </button>
         <button data-tutorial="builder-crossword-shuffle" type="button" className="tw-builder-press tw-builder-press-neutral" onClick={shuffleGrid} disabled={!canFill || !cfg.gridFilled || isArranging} style={{ ...ui.secondaryBtn, opacity: canFill && cfg.gridFilled && !isArranging ? 1 : .5, cursor: canFill && cfg.gridFilled && !isArranging ? "pointer" : "not-allowed" }}>Shuffle</button>
       </div>
-      <div style={{ minHeight: 330, display: "grid", placeItems: "center", padding: 14, borderRadius: 18, border: `1.5px solid ${ui.templateBorder || c.border}`, background: c.cardBg }}>
-        <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}-${isArranging}`} style={{ width: "min(100%, 430px)", display: "grid", gridTemplateColumns: `repeat(${visiblePreview.gridSize}, minmax(0,1fr))`, gap: visiblePreview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
-          {visiblePreview.grid.map((letter, index) => <div className="tw-crossword-grid-cell" key={index} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: visiblePreview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontWeight: 900, fontSize: visiblePreview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease, opacity .24s ease", animation: letter ? "twTilePop 240ms ease both" : "none" }}>{letter}</div>)}
-        </div>
-      </div>
+      {gridPreview}
     </div>
   );
 }
@@ -399,12 +448,12 @@ export function VoiceRecordingPanel({ question, templateType, onChange, ui, c, c
 
 function CorrectAnswerExplanation({ value, onChange, ui, c }) {
   return <div className="tw-correct-answer-explanation" style={{ marginTop: 14, padding: 14, borderRadius: 14, border: `2px solid ${c.accent}55`, background: `${c.accent}0c` }}>
-    <label style={{ ...ui.smallLabel, display: "block", marginBottom: 7, color: c.text }}>Explanation</label>
-    <textarea data-tutorial="builder-answer-explanation" maxLength={1000} rows={3} value={value || ""} onChange={(event) => onChange(event.target.value.slice(0, 1000))} placeholder="Optional: explain why this answer is correct." style={{ ...ui.input, minHeight: 82, resize: "vertical", lineHeight: 1.5 }} />
+    <label style={{ ...ui.smallLabel, display: "block", marginBottom: 7, color: c.text }}>Why is this the correct answer?</label>
+    <textarea data-tutorial="builder-answer-explanation" maxLength={1000} rows={3} value={value || ""} onChange={(event) => onChange(event.target.value.slice(0, 1000))} placeholder="Explain: optional" style={{ ...ui.input, minHeight: 82, resize: "vertical", lineHeight: 1.5 }} />
   </div>;
 }
 
-export function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = false }) {
+export function TemplateEditor({ templateType, category, q, onChange, ui, c, isBasic = false, isMobile = false }) {
   const [showMatchingSuggest, setShowMatchingSuggest] = useState(false);
   const [matchingPairIndex, setMatchingPairIndex] = useState(0);
   const [matchingDirection, setMatchingDirection] = useState("next");
@@ -414,6 +463,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
   const [mcqDragIndex, setMcqDragIndex] = useState(null);
   const [mcqDragOver, setMcqDragOver] = useState(null);
   const [mcqDropMode, setMcqDropMode] = useState("before");
+  const [mcqMenuOpen, setMcqMenuOpen] = useState(false);
   const mcqDragArmedRef = useRef(null);
   const tt = normalizeTemplateType(templateType);
   const cfg = q.config || {};
@@ -506,37 +556,60 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
     }
 
     const selectedOpt = opts.find((opt) => correctChoices.some((choice) => choiceMatchesValue(opt, choice)));
+    const mcqModeButtons = (
+      <>
+        <button type="button" className={`tw-builder-press tw-builder-mini-white${mcqMode === "NORMAL" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
+        <button data-tutorial="builder-mcq-modified" type="button" className={`tw-builder-press tw-builder-mini-white${mcqMode === "MODIFIED" ? " is-selected" : ""}`} disabled={isBasic} title={isBasic ? "Institution plan feature" : ""} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, opacity: isBasic ? .4 : 1, cursor: isBasic ? "not-allowed" : "pointer" }} onClick={() => { window.dispatchEvent(new CustomEvent("thinkwave:tutorial-event", { detail: { type: "mcq-modified" } })); setMcqMode("MODIFIED"); }}>Modified</button>
+        <button type="button" className={`tw-builder-press tw-builder-mini-white${answerMode === "ONE" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
+        <button type="button" className={`tw-builder-press tw-builder-mini-white${answerMode === "TWO" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setAnswerMode("TWO")}>2 answers</button>
+      </>
+    );
+    const mcqChoiceStepButtons = mcqMode === "NORMAL" ? (
+      <>
+        <button type="button" className="tw-builder-press tw-builder-mini-white" title="Delete choice" aria-label="Delete choice" style={{ ...ui.secondaryBtn, padding: "4px 11px", fontSize: 16 }} disabled={opts.length <= MIN} onClick={() => {
+          const next = opts.slice(0, -1);
+          const kept = correctChoices.filter((choice) => next.some((row) => choiceMatchesValue(row, choice)));
+          emitOptions(next, { ...cor, choice: kept[0] || "", choices: kept });
+        }}>−</button>
+        <button type="button" className="tw-builder-press tw-builder-mini-white" title="Add choice" aria-label="Add choice" style={{ ...ui.secondaryBtn, padding: "4px 11px", fontSize: 16 }} disabled={isBasic && opts.length >= MAX} onClick={() => {
+          if (opts.length >= MAX) { if (!isBasic) setShowMatchingSuggest(true); return; }
+          emitOptions([...opts, { id: newChoiceId(), text: "", image: "" }]);
+        }}>＋</button>
+      </>
+    ) : null;
     return (
-      <div data-tutorial="builder-mcq-section" style={ui.innerCard}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
-          <h4 style={ui.innerTitle}>
-            Multiple Choice <span style={ui.innerMeta}>({mcqMode === "MODIFIED" ? "4 image choices" : `${opts.length}, min ${MIN}/max ${MAX}`})</span>
+      <div data-tutorial="builder-mcq-section" style={ui.innerCard} className={isMobile ? "tw-mcq-mobile" : undefined}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? 8 : 12, gap: 12, flexWrap: "wrap" }}>
+          <h4 style={{ ...ui.innerTitle, margin: 0 }}>
+            Multiple Choice {!isMobile && <span style={ui.innerMeta}>({mcqMode === "MODIFIED" ? "4 image choices" : `${opts.length}, min ${MIN}/max ${MAX}`})</span>}
           </h4>
+          {isMobile ? (
+            <button type="button" className="tw-mcq-menu-toggle" aria-label={mcqMenuOpen ? "Close answer options" : "Open answer options"} aria-expanded={mcqMenuOpen} onClick={() => setMcqMenuOpen((v) => !v)}>{mcqMenuOpen ? "✕" : "☰"}</button>
+          ) : (
           <div className="tw-mcq-control-stack" data-tutorial="builder-mcq-controls">
             <div className="tw-mcq-control-row">
-              <button type="button" className={`tw-builder-press tw-builder-mini-white${mcqMode === "NORMAL" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setMcqMode("NORMAL")}>Normal</button>
-              <button data-tutorial="builder-mcq-modified" type="button" className={`tw-builder-press tw-builder-mini-white${mcqMode === "MODIFIED" ? " is-selected" : ""}`} disabled={isBasic} title={isBasic ? "Institution plan feature" : ""} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12, opacity: isBasic ? .4 : 1, cursor: isBasic ? "not-allowed" : "pointer" }} onClick={() => { window.dispatchEvent(new CustomEvent("thinkwave:tutorial-event", { detail: { type: "mcq-modified" } })); setMcqMode("MODIFIED"); }}>Modified</button>
-              <button type="button" className={`tw-builder-press tw-builder-mini-white${answerMode === "ONE" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setAnswerMode("ONE")}>1 answer</button>
-              <button type="button" className={`tw-builder-press tw-builder-mini-white${answerMode === "TWO" ? " is-selected" : ""}`} style={{ ...ui.secondaryBtn, padding: "4px 10px", fontSize: 12 }} onClick={() => setAnswerMode("TWO")}>2 answers</button>
+              {mcqModeButtons}
             </div>
-            {mcqMode === "NORMAL" && <div className="tw-mcq-control-row is-secondary">
-              <button type="button" className="tw-builder-press tw-builder-mini-white" title="Delete choice" aria-label="Delete choice" style={{ ...ui.secondaryBtn, padding: "4px 11px", fontSize: 16 }} disabled={opts.length <= MIN} onClick={() => {
-                const next = opts.slice(0, -1);
-                const kept = correctChoices.filter((choice) => next.some((row) => choiceMatchesValue(row, choice)));
-                emitOptions(next, { ...cor, choice: kept[0] || "", choices: kept });
-              }}>−</button>
-              <button type="button" className="tw-builder-press tw-builder-mini-white" title="Add choice" aria-label="Add choice" style={{ ...ui.secondaryBtn, padding: "4px 11px", fontSize: 16 }} disabled={isBasic && opts.length >= MAX} onClick={() => {
-                if (opts.length >= MAX) { if (!isBasic) setShowMatchingSuggest(true); return; }
-                emitOptions([...opts, { id: newChoiceId(), text: "", image: "" }]);
-              }}>＋</button>
-            </div>}
           </div>
+          )}
         </div>
-
-        <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 12 }}>
-          {mcqMode === "MODIFIED"
-            ? "Click the small circle to set it as the correct answer."
-            : <>Drag choices to reorder. Mark {answerMode === "TWO" ? "exactly two" : "one"} correct answer{answerMode === "TWO" ? "s" : ""}.</>}
+        {isMobile && mcqMenuOpen && (
+          <div className="tw-mcq-mobile-menu" data-tutorial="builder-mcq-controls">
+            <div className="tw-mcq-control-row">
+              {mcqModeButtons}
+            </div>
+          </div>
+        )}
+        {mcqMode === "MODIFIED" && (
+          <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 12 }}>
+            Click the small circle to set it as the correct answer.
+          </div>
+        )}
+        <div className="tw-mcq-choice-step-row">
+          <span className="tw-mcq-choice-step-spacer" />
+          <div className="tw-mcq-control-row is-secondary">
+            {mcqChoiceStepButtons}
+          </div>
         </div>
 
         <div data-tutorial="builder-mcq-options" data-tutorial-correct="true" data-tutorial-modified-grid={mcqMode === "MODIFIED" ? "true" : undefined} className={mcqMode === "MODIFIED" ? "tw-mcq-modified-grid" : "tw-mcq-normal-list"}>
@@ -614,10 +687,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
         </div>
 
         {answerMode === "TWO" && <div style={{ marginTop: 14, color: c.textMuted, fontSize: 12 }}>Two-answer mode gives 50% of the question points for each correct selected answer.</div>}
-        <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 12, background: selectedOpt ? `${c.accent}14` : c.cardBg2, border: `1px solid ${selectedOpt ? c.accent : c.border}`, fontSize: 13, color: selectedOpt ? c.accent : c.textMuted, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-          {selectedOpt ? <>✓ Correct answer{answerMode === "TWO" ? "s" : ""}: <span style={{ fontWeight: 900 }}>{correctChoices.map((choice) => choiceDisplay(opts.find((row) => choiceMatchesValue(row, choice)), "Selected choice")).join(" + ")}</span></> : <>○ No correct answer selected yet</>}
-        </div>
-        {selectedOpt && <CorrectAnswerExplanation value={cfg.explanation || ""} onChange={(explanation) => onChange({ config: { ...cfg, options: opts, answerMode, mcqMode, explanation } })} ui={ui} c={c} />}
+        {correctChoices.length > 0 && <CorrectAnswerExplanation value={cfg.explanation || ""} onChange={(explanation) => onChange({ config: { ...cfg, options: opts, answerMode, mcqMode, explanation } })} ui={ui} c={c} />}
 
         {showMatchingSuggest && <ActionDialog tone="blue" icon="matching" plainIcon title="Too many choices?" message={<><p style={{ margin: "0 0 12px" }}>MCQ is capped at <strong style={{ color: c.text }}>5 choices</strong>. If you need more options, the <strong style={{ color: c.accent }}>Matching</strong> template is a better fit.</p><div style={{ background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "12px 14px", fontSize: 13, lineHeight: 1.6 }}>Converting will <strong style={{ color: c.text }}>reset this question&apos;s choices and correct answer</strong>. Your question text will be kept.</div></>} onClose={() => setShowMatchingSuggest(false)} width="min(100%, 440px)" actions={<div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}><button type="button" className="tw-builder-press tw-builder-press-blue" style={{ ...primaryBtn({ bg: c.accent, fg: "#fff", border: c.accent }), width: "100%", padding: "13px 16px", boxShadow: `0 12px 26px ${c.accent}38` }} onClick={() => { setShowMatchingSuggest(false); onChange({ config: { colA: [{ text: "", image: "" }], colB: [{ text: "", image: "" }], dummyB: [] }, correct: { pairs: [{ aIndex: 0, bIndex: 0 }] }, _convertToMatching: true }); }}>Yes, convert to Matching</button><button type="button" className="tw-builder-press tw-builder-press-neutral" style={{ ...ui.secondaryBtn, width: "100%", padding: "13px 16px", fontSize: 14, fontWeight: 800 }} onClick={() => setShowMatchingSuggest(false)}>Keep MCQ</button></div>} />}
       </div>
@@ -813,10 +883,10 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
     }
 
     return (
-      <div style={ui.innerCard}>
+      <div style={ui.innerCard} className={isMobile ? "tw-matching-mobile" : undefined}>
         <div data-tutorial="builder-matching-pairs">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-          <div><h4 style={ui.innerTitle}>Matching Pairs</h4></div>
+        <div className="tw-matching-head-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: isMobile ? "nowrap" : "wrap", marginBottom: 14 }}>
+          <div><h4 style={{ ...ui.innerTitle, margin: 0 }}>Matching Pairs</h4></div>
           <div className="tw-matching-pair-actions">
             <button
               type="button"
@@ -839,13 +909,21 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
             <div className="tw-matching-pair-fields">
               <div>
                 <label style={ui.smallLabel}>Column A</label>
-                <input maxLength={255} value={colA[activePair]?.text || ""} placeholder={imagesEnabled ? "Concept, term, or caption (optional)" : "Concept or term"} onChange={(e) => updateA(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                {isMobile ? (
+                  <textarea rows={3} maxLength={255} value={colA[activePair]?.text || ""} placeholder={imagesEnabled ? "Concept, term, or caption (optional)" : "Concept or term"} onChange={(e) => updateA(activePair, { text: e.target.value.slice(0, 255) })} style={{ ...ui.input, minHeight: 78, resize: "vertical", lineHeight: 1.45 }} />
+                ) : (
+                  <input maxLength={255} value={colA[activePair]?.text || ""} placeholder={imagesEnabled ? "Concept, term, or caption (optional)" : "Concept or term"} onChange={(e) => updateA(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                )}
                 {imagesEnabled && <ImageUploadTile compact value={colA[activePair]?.image || ""} label="Upload Column A image" onChange={(value) => updateA(activePair, { image: value })} c={c} accent={ui.templateAccent} />}
               </div>
               <div className="tw-matching-link">⇄</div>
               <div>
-                <label style={ui.smallLabel}>Column B Correct Match</label>
-                <input maxLength={255} value={pairB[activePair]?.text || ""} placeholder={imagesEnabled ? "Answer or caption (optional)" : "Correct match"} onChange={(e) => updateB(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                <label style={ui.smallLabel}>Column B</label>
+                {isMobile ? (
+                  <textarea rows={3} maxLength={255} value={pairB[activePair]?.text || ""} placeholder={imagesEnabled ? "Answer or caption (optional)" : "Correct match"} onChange={(e) => updateB(activePair, { text: e.target.value.slice(0, 255) })} style={{ ...ui.input, minHeight: 78, resize: "vertical", lineHeight: 1.45 }} />
+                ) : (
+                  <input maxLength={255} value={pairB[activePair]?.text || ""} placeholder={imagesEnabled ? "Answer or caption (optional)" : "Correct match"} onChange={(e) => updateB(activePair, { text: e.target.value.slice(0, 255) })} style={ui.input} />
+                )}
                 {imagesEnabled && <ImageUploadTile compact value={pairB[activePair]?.image || ""} label="Upload Column B image" onChange={(value) => updateB(activePair, { image: value })} c={c} accent={ui.templateAccent} />}
               </div>
             </div>
@@ -891,6 +969,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isB
         ui={ui}
         c={c}
         maxWords={isBasic ? 4 : null}
+        isMobile={isMobile}
       />
     );
   }
@@ -915,12 +994,14 @@ export function getUi(c, dark, templateType) {
       flexWrap: "wrap",
       gap: 12,
       padding: "14px 28px",
-      background: palette.accent,
+      background: `linear-gradient(135deg, color-mix(in srgb, ${palette.accent} 80%, #ffffff) 0%, ${palette.accent} 55%, color-mix(in srgb, ${palette.accent} 86%, #000000) 100%)`,
       borderBottom: `4px solid ${palette.border}`,
+      boxShadow: dark ? `0 10px 30px ${palette.accent}22` : `0 10px 30px ${palette.accent}20`,
+    },
+    stickyHead: {
       position: "sticky",
       top: 0,
-      zIndex: 10,
-      boxShadow: dark ? `0 10px 30px ${palette.accent}22` : `0 10px 30px ${palette.accent}20`,
+      zIndex: 30,
     },
     titleEditorWrap: {
       display: "flex",
@@ -1023,7 +1104,9 @@ export function getUi(c, dark, templateType) {
       border: `3px solid ${palette.border}`,
       borderRadius: 22,
       padding: "28px 32px",
-      boxShadow: dark ? `0 10px 34px ${palette.accent}20` : `0 12px 34px ${palette.accent}24`,
+      boxShadow: dark
+        ? `0 10px 34px ${palette.accent}20, 0 24px 44px -16px rgba(0,0,0,.55)`
+        : `0 12px 34px ${palette.accent}24, 0 26px 46px -18px rgba(15,23,42,.22)`,
     },
     metaGrid: {
       display: "grid",

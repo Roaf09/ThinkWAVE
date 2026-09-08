@@ -9,7 +9,7 @@ import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import { IconBubble, TwIcon } from "../../../components/TwUI";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
-import { templateTone, templateCardChrome } from "../../../lib/templatePalette";
+import { templateTone, templateCardChrome, templateAccent } from "../../../lib/templatePalette";
 import { TeacherPressButton } from "../TeacherUI";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 
@@ -92,10 +92,6 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
   }, [recentQuizzes]);
 
   const orderedTemplates = useMemo(() => orderTemplatesForCategory(form.category), [form.category]);
-  const recommendedTemplateSet = useMemo(
-    () => new Set(RECOMMENDED_TEMPLATES_BY_CATEGORY[form.category] || []),
-    [form.category]
-  );
 
   function patch(next) { setForm((prev) => ({ ...prev, ...next })); }
 
@@ -150,35 +146,19 @@ export default function CreateTab({ setActiveTab, guestMode = false, tutorial })
               const active = form.templateType === template.value;
               const tone = templateTone(template.value, c, active);
               const ink = templateInk(template.value, dark);
-              const isRecommended = recommendedTemplateSet.has(template.value);
-              return <button key={template.value} type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
-                {isRecommended && (
-                 <span className="tw-template-recommended-badge">
-                  Recommended
-                  </span>
-                )}
-
-                <span className="tw-template-content">
-                <IconBubble
-                   name={template.icon}
-                  c={c}
-                  size={44}
-                  iconSize={22}
-                   style={{
-                   background: tone.iconBg,
-                  borderColor: tone.iconBorder,
-                   color: ink
-                     }}
-                   />
-                    <b style={{ color: ink }}>{template.label}</b>
-                    </span>
-                   </button>;
-                     })}
-                 </div>
-                 </div>
+              const accent = templateAccent(template.value);
+              const isRecommended = !!form.category && (RECOMMENDED_TEMPLATES_BY_CATEGORY[form.category] || []).includes(template.value);
+              return <div key={template.value} className="tw-teacher-template-cell">
+                <button type="button" data-tutorial={`create-template-${template.value}`} className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => { patch({ templateType: template.value }); if (tutorial?.stage === "create_choose_template") tutorial.setStage?.("create_open_builder", { tutorialTemplateType: template.value }); }} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, "--rec-badge-bg": `${accent}22`, "--rec-badge-fg": dark ? "#ffffff" : ink, "--rec-badge-border": accent, color: ink }}>
+                  <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><span className="tw-teacher-template-labelstack">{isRecommended && <span className="tw-template-recommended-badge">Recommended</span>}<b style={{ color: ink }}>{template.label}</b></span></span>
+                </button>
+                {active && <TeacherPressButton type="submit" tone="blue" disabled={saving} data-tutorial="create-open-builder" className="tw-teacher-create-submit tw-teacher-create-submit-inline" style={{ "--tpl-submit-face": accent, "--tpl-submit-border": accent, "--tpl-submit-base": `color-mix(in srgb, ${accent} 62%, #000)` }}>{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>}
+              </div>;
+            })}
+          </div>
+        </div>
 
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-        <TeacherPressButton type="submit" tone="blue" disabled={saving} data-tutorial="create-open-builder" className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
       </form>
     </section>
 

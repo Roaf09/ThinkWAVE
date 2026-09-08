@@ -125,7 +125,11 @@ export async function createSession(req, res) {
     { qid: quizId, tid: req.user.sub }
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-  if (quiz.status !== "PUBLISHED") return res.status(400).json({ message: "Only published live-session quizzes can be hosted." });
+  // BANKED means "published, previous live session ended, parked for reuse" -
+  // still hostable. Rejecting it here (while the Sessions tab now shows a
+  // BANKED quiz as "Ready" and lets a teacher click Host Live on it directly)
+  // would silently fail with a confusing error instead of just re-hosting it.
+  if (quiz.status !== "PUBLISHED" && quiz.status !== "BANKED") return res.status(400).json({ message: "Only published live-session quizzes can be hosted." });
   if (quiz.delivery_mode === "ASYNCHRONOUS") return res.status(400).json({ message: "Asynchronous quizzes appear in the student dashboard instead of live sessions." });
 
   const [[active]] = await pool.query(
@@ -445,7 +449,8 @@ export async function getTeacherSessionHistory(req, res) {
             ELSE (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id)
           END) AS participant_count,
          JSON_LENGTH(s.questions_snapshot_json) AS question_count,
-         'LIVE' AS session_type
+         'LIVE' AS session_type,
+         s.ended_at AS sort_at
        FROM sessions s
        JOIN quizzes q ON q.id = s.quiz_id
        LEFT JOIN classes c ON c.id = s.class_id
@@ -466,7 +471,7 @@ export async function getTeacherSessionHistory(req, res) {
          q.id AS quiz_id,
          NULL AS join_code,
          'ASSIGNED' AS join_mode,
-         'ENDED' AS status,
+         (CASE WHEN q.available_until IS NULL OR q.available_until <= NOW() THEN 'ENDED' ELSE 'ACTIVE' END) AS status,
          q.available_from AS started_at,
          q.available_until AS ended_at,
          q.title AS quiz_title,
@@ -478,18 +483,20 @@ export async function getTeacherSessionHistory(req, res) {
          COALESCE(MAX(a.score), 0) AS top_score,
          COUNT(a.id) AS participant_count,
          (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS question_count,
-         'ASSIGNED' AS session_type
+         'ASSIGNED' AS session_type,
+         -- Active/undated assignments sort as "now" so they surface as recent
+         -- activity instead of only appearing once their deadline has passed.
+         LEAST(COALESCE(q.available_until, NOW()), NOW()) AS sort_at
        FROM quizzes q
        JOIN classes c ON c.id=q.class_id
        LEFT JOIN async_quiz_submissions a ON a.quiz_id=q.id
        WHERE q.teacher_id=:tid
          AND q.delivery_mode='ASYNCHRONOUS'
          AND q.deleted_at IS NULL
-         AND q.available_until IS NOT NULL
-         AND q.available_until <= NOW()
+         AND (q.available_from IS NULL OR q.available_from <= NOW())
        GROUP BY q.id, q.title, q.template_type, q.category, q.class_id, c.name, q.available_from, q.available_until
      ) history_rows
-     ORDER BY ended_at DESC`,
+     ORDER BY sort_at DESC`,
     { tid: teacherId }
   );
 

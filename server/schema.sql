@@ -354,6 +354,7 @@ CREATE TABLE async_quiz_submissions (
   answers_json    JSON NULL,
   score           DECIMAL(6,2) NOT NULL DEFAULT 0.00,
   max_score       DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+  competitive_points INT NOT NULL DEFAULT 0,
   submitted_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_async_submissions_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
   CONSTRAINT fk_async_submissions_class FOREIGN KEY (class_id) REFERENCES classes(id),

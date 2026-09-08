@@ -6,9 +6,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
-import { useColors, useTheme } from "../../context/ThemeContext";
+import { LIGHT } from "../../context/ThemeContext";
 import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
-import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwIcon } from "../../components/TwUI";
 import { TeacherPressButton } from "./TeacherUI";
 import { getTemplateLimit, isInstitutionPlan } from "../../lib/planLimits";
@@ -21,6 +20,7 @@ import {
   findDuplicates,
   normalizeMatchingPayload,
   safeJson,
+  stableStringify,
   trimText,
   validateQuestion,
 } from "./quiz-builder/quizBuilderUtils";
@@ -28,13 +28,48 @@ import { BankModal, BuilderModal, getUi, MediaInput, TemplateEditor, VoiceRecord
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { hasSeenTemplateTutorial, markTemplateTutorialSeen, readTutorialState, writeTutorialState } from "../../lib/tutorialState";
 
+function truncateBuilderTitle(title, limit = 25) {
+  const clean = String(title || "");
+  if (clean.length <= limit) return clean;
+  return `${clean.slice(0, limit)}...`;
+}
+
+function useIsMobileViewport(breakpoint = 900) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
+    return () => { mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler); };
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function QuizBuilder({ guestMode = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { dark, toggleTheme } = useTheme();
-  const c = useColors();
+  // Quiz Builder always renders in light mode, regardless of the app-wide
+  // theme toggle (its own light/dark button has been removed).
+  const dark = false;
+  const c = LIGHT;
+  const isMobile = useIsMobileViewport();
   const [quiz, setQuiz] = useState(null);
   const ui = useMemo(() => getUi(c, dark, quiz?.template_type), [c, dark, quiz?.template_type]);
+
+  // While Quiz Builder is mounted, make sure body.dark-mode-scoped CSS
+  // doesn't leak dark styling into it, even if the rest of the app is set
+  // to dark. Restored on unmount.
+  useEffect(() => {
+    const hadDark = document.body.classList.contains("dark-mode");
+    document.body.classList.remove("dark-mode");
+    document.body.classList.add("light-mode");
+    return () => {
+      document.body.classList.toggle("dark-mode", hadDark);
+      document.body.classList.toggle("light-mode", !hadDark);
+    };
+  }, []);
   const [questions, setQuestions] = useState([]);
   const [qIndex, setQIndex] = useState(0);
   const [settings, setSettings] = useState(null);
@@ -66,7 +101,12 @@ export default function QuizBuilder({ guestMode = false }) {
   const [questionStripClosing, setQuestionStripClosing] = useState(false);
   const [stripDrag, setStripDrag] = useState({ from: null, to: null, mode: null });
   const [stripSettleIndex, setStripSettleIndex] = useState(null);
-  const [questionDrag, setQuestionDrag] = useState({ active: false, settled: false, x: 0, y: 0, edge: null });
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [overflowTitleEditing, setOverflowTitleEditing] = useState(false);
+  const [qMenuOpen, setQMenuOpen] = useState(false);
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
+  useEffect(() => { setQMenuOpen(false); }, [qIndex]);
   const isBasic = !institutionPlan;
   const planLimit = getTemplateLimit(quiz?.template_type);
 
@@ -132,7 +172,11 @@ export default function QuizBuilder({ guestMode = false }) {
       if (!guestMode && loaded.length) {
         try {
           const { data: bankRows } = await api.get("/question-bank");
-          const normalizeSig = (prompt, config, correct) => JSON.stringify([String(prompt || "").trim(), config || {}, correct || {}]);
+          // Must match server's stable (key-sorted) comparison exactly -
+          // plain JSON.stringify would treat two identical questions as
+          // different just because their object keys were built in a
+          // different order, which was silently breaking this check.
+          const normalizeSig = (prompt, config, correct) => `${String(prompt || "").trim().toLowerCase()}|${stableStringify(config)}|${stableStringify(correct)}`;
           const bankSigs = new Set((bankRows || []).filter((row) => normalizeTemplateType(row.template_type) === normalizeTemplateType(data.quiz?.template_type)).map((row) => normalizeSig(row.prompt, safeJson(row.config_json) || row.config_json || {}, safeJson(row.correct_json) || row.correct_json || {})));
           setBankSavedOrders(new Set(loaded.filter((row) => bankSigs.has(normalizeSig(row.prompt, row.config, row.correct))).map((row) => Number(row.order))));
         } catch { setBankSavedOrders(new Set()); }
@@ -398,7 +442,8 @@ export default function QuizBuilder({ guestMode = false }) {
       setIsSaved(false);
       setTitleDraft(clean);
       setTitleEditing(false);
-      setMsg("Quiz title updated.");
+      // Intentionally silent on success: no "Quiz title updated" popup.
+      setMsg("");
     } catch (e) {
       setMsg(e?.response?.data?.message || "Failed to update title.");
     } finally {
@@ -494,6 +539,110 @@ export default function QuizBuilder({ guestMode = false }) {
       return next;
     });
   }
+
+  // --- Small builder features: duplicate, move, lock, undo/redo ---------
+
+  function duplicateCurrentQuestion() {
+    if (!currentQ) return;
+    const copy = JSON.parse(JSON.stringify(currentQ));
+    delete copy.id;
+    const insertAt = qIndex + 1;
+    markUnsaved((qs) => {
+      const next = [...qs];
+      next.splice(insertAt, 0, copy);
+      return next.map((q, i) => ({ ...q, order: i }));
+    });
+    setNavDir("next");
+    setQIndex(insertAt);
+    setNavTick((v) => v + 1);
+  }
+
+  function moveQuestion(direction) {
+    const target = qIndex + direction;
+    if (target < 0 || target >= questions.length) return;
+    markUnsaved((qs) => {
+      const next = [...qs];
+      const tmp = next[qIndex];
+      next[qIndex] = next[target];
+      next[target] = tmp;
+      return next.map((q, i) => ({ ...q, order: i }));
+    });
+    setNavDir(direction > 0 ? "next" : "prev");
+    setQIndex(target);
+    setNavTick((v) => v + 1);
+  }
+
+  const lockSaveRequestRef = useRef(false);
+  function toggleLock() {
+    if (!currentQ) return;
+    const wasLocked = !!currentQ.config?.locked;
+    lockSaveRequestRef.current = true;
+    markUnsaved((qs) => {
+      const next = [...qs];
+      next[qIndex] = { ...next[qIndex], config: { ...(next[qIndex].config || {}), locked: !wasLocked } };
+      return next;
+    });
+  }
+  useEffect(() => {
+    if (lockSaveRequestRef.current) {
+      lockSaveRequestRef.current = false;
+      _doSave({ showModal: false });
+    }
+  }, [questions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Undo/redo works at the level of the whole `questions` array: any
+  // mutation anywhere in the builder (typing, adding, deleting, duplicating,
+  // moving, locking...) eventually flows through setQuestions, so watching
+  // that single value catches every kind of change without having to
+  // instrument each handler individually. Rapid-fire changes (typing) are
+  // coalesced into one history entry after a short pause so undo moves in
+  // sensible chunks instead of one keystroke at a time.
+  const historyRef = useRef({ stack: [], index: -1, skip: false, timer: null });
+  const [historyTick, setHistoryTick] = useState(0);
+  useEffect(() => {
+    const h = historyRef.current;
+    if (h.skip) { h.skip = false; return; }
+    if (!questions || !questions.length) return;
+    const snapshot = JSON.parse(JSON.stringify(questions));
+    if (h.timer) clearTimeout(h.timer);
+    h.timer = window.setTimeout(() => {
+      h.stack = h.stack.slice(0, h.index + 1);
+      h.stack.push(snapshot);
+      if (h.stack.length > 60) h.stack.shift();
+      h.index = h.stack.length - 1;
+      setHistoryTick((v) => v + 1);
+    }, 550);
+    return () => { if (h.timer) clearTimeout(h.timer); };
+  }, [questions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function undo() {
+    const h = historyRef.current;
+    if (h.index <= 0) return;
+    if (h.timer) { clearTimeout(h.timer); h.timer = null; }
+    h.index -= 1;
+    h.skip = true;
+    const restored = JSON.parse(JSON.stringify(h.stack[h.index]));
+    editVersionRef.current += 1;
+    setQuestions(restored);
+    setIsSaved(false);
+    setQIndex((i) => Math.min(i, restored.length - 1));
+    setHistoryTick((v) => v + 1);
+  }
+  function redo() {
+    const h = historyRef.current;
+    if (h.index >= h.stack.length - 1) return;
+    if (h.timer) { clearTimeout(h.timer); h.timer = null; }
+    h.index += 1;
+    h.skip = true;
+    const restored = JSON.parse(JSON.stringify(h.stack[h.index]));
+    editVersionRef.current += 1;
+    setQuestions(restored);
+    setIsSaved(false);
+    setQIndex((i) => Math.min(i, restored.length - 1));
+    setHistoryTick((v) => v + 1);
+  }
+  const canUndo = historyRef.current.index > 0;
+  const canRedo = historyRef.current.index < historyRef.current.stack.length - 1;
 
   function goPrev() {
     if (qIndex === 0) return;
@@ -720,6 +869,9 @@ export default function QuizBuilder({ guestMode = false }) {
     if (questionStripOpen) closeQuestionStrip();
     else {
       setSettingsOpen(false);
+      setOverflowOpen(false);
+      setOverflowTitleEditing(false);
+      setQMenuOpen(false);
       setQuestionStripClosing(false);
       setQuestionStripOpen(true);
     }
@@ -752,53 +904,6 @@ export default function QuizBuilder({ guestMode = false }) {
     window.setTimeout(() => setStripSettleIndex(null), 330);
     setNavTick((v) => v + 1);
     setStripDrag({ from: null, to: null, mode: null });
-  }
-
-  function beginQuestionFormDrag(event) {
-    if (questions.length < 2 || event.button !== 0) return;
-    event.preventDefault();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const nearestStart = startX < window.innerWidth / 2 ? "left" : "right";
-    const startEdge = nearestStart === "left" && qIndex > 0 ? "left" : nearestStart === "right" && qIndex < questions.length - 1 ? "right" : (qIndex > 0 ? "left" : "right");
-    setQuestionDrag({ active: true, settled: false, x: 0, y: 0, edge: startEdge });
-    const settleTimer = window.setTimeout(() => setQuestionDrag((current) => current.active ? { ...current, settled: true } : current), 190);
-    const onMove = (moveEvent) => {
-      const rawX = moveEvent.clientX - startX;
-      const rawY = moveEvent.clientY - startY;
-      const edgeDistance = Math.min(moveEvent.clientX, Math.max(0, window.innerWidth - moveEvent.clientX));
-      const edgeResistance = edgeDistance < 170 ? 0.72 + (edgeDistance / 170) * 0.28 : 1;
-      const x = Math.sign(rawX) * Math.pow(Math.abs(rawX), 0.94) * edgeResistance;
-      const y = Math.sign(rawY) * Math.pow(Math.abs(rawY), 0.94);
-      const nearest = moveEvent.clientX < window.innerWidth / 2 ? "left" : "right";
-      const edge = nearest === "left" && qIndex > 0 ? "left" : nearest === "right" && qIndex < questions.length - 1 ? "right" : (qIndex > 0 ? "left" : qIndex < questions.length - 1 ? "right" : null);
-      setQuestionDrag((current) => ({ active: true, settled: current.settled, x: Math.round(x), y: Math.round(y), edge }));
-    };
-    const onUp = (upEvent) => {
-      window.removeEventListener("pointermove", onMove);
-      window.clearTimeout(settleTimer);
-      const rawX = upEvent.clientX - startX;
-      const target = (upEvent.clientX < 110 && qIndex > 0) || rawX < -180
-        ? qIndex - 1
-        : (upEvent.clientX > window.innerWidth - 110 && qIndex < questions.length - 1) || rawX > 180
-          ? qIndex + 1
-          : qIndex;
-      setQuestionDrag({ active: false, settled: false, x: 0, y: 0, edge: null });
-      if (target === qIndex || target < 0 || target >= questions.length) return;
-      // Let the held form smoothly grow back before the reordered question swaps into place.
-      window.setTimeout(() => {
-        markUnsaved((rows) => {
-          const next = [...rows];
-          [next[qIndex], next[target]] = [next[target], next[qIndex]];
-          return next.map((row, index) => ({ ...row, order: index }));
-        });
-        setNavDir(target < qIndex ? "prev" : "next");
-        setQIndex(target);
-        setNavTick((v) => v + 1);
-      }, 390);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
   }
 
   if (loadError) {
@@ -836,6 +941,35 @@ export default function QuizBuilder({ guestMode = false }) {
   const globalShowPromptImage = questions.length > 0 && questions.every((question) => !!question.config?.showPromptImage);
   const globalVoiceRecord = questions.length > 0 && questions.every((question) => !!question.config?.voiceRecord);
   const globalTextToSpeech = questions.length > 0 && questions.every((question) => !!question.config?.textToSpeech);
+  const truncatedQuizTitle = truncateBuilderTitle(quiz?.title || "Untitled quiz");
+  const fullQuizTitle = String(quiz?.title || "Untitled quiz");
+  const crosswordShowWordList = (questions[qIndex] || questions[0])?.config?.showWordList !== false;
+  const isCrossword = normalizeTemplateType(quiz?.template_type) === "THINK_SPELL";
+
+  const builderSettingsRows = [];
+  if (!guestMode) builderSettingsRows.push({ key: "randomize", label: isBatchTemplate ? "Randomize assigned batches" : "Randomize assigned question order", active: !!settings?.randomizeQuestions, onToggle: () => saveSettings({ randomizeQuestions: !settings.randomizeQuestions }) });
+  if (quiz?.template_type === "MATCHING") builderSettingsRows.push({ key: "shuffleA", label: "Shuffle Column A", active: !!settings?.shuffleAnswers, onToggle: () => saveSettings({ shuffleAnswers: !settings.shuffleAnswers }) });
+  if (quiz?.template_type === "MCQ") builderSettingsRows.push({ key: "shuffleMcq", label: "Shuffle answer choices", active: !!settings?.shuffleAnswers, onToggle: () => saveSettings({ shuffleAnswers: !settings.shuffleAnswers }) });
+  if (!isBasic) builderSettingsRows.push({ key: "qimage", label: "Question image", active: !!globalShowPromptImage, onToggle: () => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage }) });
+  builderSettingsRows.push({ key: "voice", label: "Voice record", active: !!globalVoiceRecord, onToggle: () => { const enabled = !globalVoiceRecord; applyConfigToAllQuestions({ voiceRecord: enabled, textToSpeech: enabled ? false : globalTextToSpeech }); } });
+  builderSettingsRows.push({ key: "tts", label: "Text to speech", active: !!globalTextToSpeech, onToggle: () => { const enabled = !globalTextToSpeech; applyConfigToAllQuestions({ textToSpeech: enabled, voiceRecord: enabled ? false : globalVoiceRecord }); } });
+  if (isMobile && isCrossword) builderSettingsRows.push({ key: "wordlist", label: "Show valid words during gameplay", active: crosswordShowWordList, onToggle: () => { const q = questions[qIndex] || questions[0]; if (!q) return; updateQ({ config: { ...(q.config || {}), showWordList: !crosswordShowWordList } }); } });
+
+  function openSettings() {
+    if (questionStripOpen) closeQuestionStrip();
+    setOverflowOpen(false);
+    setOverflowTitleEditing(false);
+    setQMenuOpen(false);
+    setSettingsOpen(true);
+  }
+  function openOverflow() {
+    if (questionStripOpen) closeQuestionStrip();
+    setSettingsOpen(false);
+    setQMenuOpen(false);
+    setOverflowTitleEditing(false);
+    setTitleDraft(quiz?.title || "");
+    setOverflowOpen(true);
+  }
 
   return (
     <>
@@ -854,14 +988,28 @@ export default function QuizBuilder({ guestMode = false }) {
 
       {!guestMode && bankOpen && <div style={ui.blurOverlay} />}
 
-      <div className={`tw-quiz-builder-page${questionDrag.active ? " is-question-dragging" : ""}${questionDrag.edge === "left" ? " is-drag-edge-left" : questionDrag.edge === "right" ? " is-drag-edge-right" : ""}`} style={{ ...ui.page, "--tw-template-tutorial-highlight": tutorialHighlightColor, "--tw-template-accent": builderTemplateAccent, "--tw-builder-action-face": builderActionFace, "--tw-builder-action-base": builderActionBase, "--tw-builder-action-border": builderActionBorder, "--tw-builder-question-solid": builderQuestionSolid }}>
-        <ThemeIconButton dark={dark} onClick={toggleTheme} size={22} className="tw-builder-floating-theme" aria-label={dark ? "Use light mode" : "Use dark mode"} />
-        {questionDrag.active && qIndex > 0 && <div className={`tw-builder-edge-drag-hint is-left${questionDrag.edge === "left" ? " is-near" : ""}`}><span>Drag here to<br/>move questions</span><small>Question {qIndex}<b>{questions[qIndex-1]?.prompt||"Previous question"}</b></small></div>}
-        {questionDrag.active && qIndex < questions.length - 1 && <div className={`tw-builder-edge-drag-hint is-right${questionDrag.edge === "right" ? " is-near" : ""}`}><span>Drag here to<br/>move questions</span><small>Question {qIndex+2}<b>{questions[qIndex+1]?.prompt||"Next question"}</b></small></div>}
-        <div style={ui.topBar}>
+      <div className={`tw-quiz-builder-page${isMobile ? " is-mobile" : ""}`} style={{ ...ui.page, "--tw-template-tutorial-highlight": tutorialHighlightColor, "--tw-template-accent": builderTemplateAccent, "--tw-builder-action-face": builderActionFace, "--tw-builder-action-base": builderActionBase, "--tw-builder-action-border": builderActionBorder, "--tw-builder-question-solid": builderQuestionSolid }}>
+        <div style={ui.stickyHead}>
+        <div style={isMobile ? { ...ui.topBar, flexWrap: "nowrap", gap: 8, padding: "10px 14px" } : ui.topBar} className={isMobile ? "tw-builder-mobile-topbar is-single-row" : undefined}>
+          {isMobile ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, flexWrap: "nowrap" }}>
+              <button type="button" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={26} /></button>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span className="tw-builder-title-button tw-builder-mobile-title" title={fullQuizTitle} style={{ color: "#fff" }}>
+                  {truncatedQuizTitle}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 0, alignItems: "center", flexShrink: 0, flexWrap: "nowrap" }}>
+              <button className={`tw-builder-settings-flat tw-builder-bare-icon${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => { if (settingsOpen) setSettingsOpen(false); else openSettings(); }}><TwIcon name="gear" size={26} /></button>
+              <button type="button" className={`tw-builder-settings-flat tw-builder-bare-icon${overflowOpen ? " is-active" : ""}`} title="More actions" aria-label="More actions" onClick={() => { if (overflowOpen) setOverflowOpen(false); else openOverflow(); }}><span className="tw-builder-ellipsis" aria-hidden="true">⋯</span></button>
+            </div>
+          </>
+          ) : (
+          <>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 280, flex: 1 }}>
-            <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.ghostBtn, borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}>Back</button>
-            <button className={`tw-builder-settings-flat${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => { const opening = !settingsOpen; if (opening && questionStripOpen) closeQuestionStrip(); setSettingsOpen(opening); }}><TwIcon name="gear" size={22} /></button>
+            <button type="button" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={28} /></button>
             <div style={{ minWidth: 220, flex: "0 1 540px" }}>
               {titleEditing ? (
                 <input
@@ -878,96 +1026,177 @@ export default function QuizBuilder({ guestMode = false }) {
                     }
                   }}
                   className="tw-builder-title-input"
-                  style={ui.titleInput}
+                  style={{ ...ui.titleInput, color: "#fff", borderBottomColor: "#fff" }}
                   placeholder="Quiz title"
                   aria-label="Quiz title"
                   disabled={titleSaving}
                 />
               ) : (
-                <button type="button" className="tw-builder-title-button" onClick={() => setTitleEditing(true)} title="Click to edit the quiz title" style={{ color: c.text }}>
-                  {quiz.title}
+                <button type="button" className="tw-builder-title-button" onClick={() => setTitleEditing(true)} title={fullQuizTitle} style={{ color: "#fff" }}>
+                  {truncatedQuizTitle}
                 </button>
               )}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <TeacherPressButton tone="red" data-tutorial="builder-delete-quiz" className="tw-builder-icon-press tw-builder-toolbar-action" style={{ "--builder-action-icon": "#fff" }} title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={20} /></TeacherPressButton>
-            {!guestMode && <TeacherPressButton tone="blue" data-tutorial="builder-add-bank" className="tw-builder-icon-press tw-builder-toolbar-action tw-builder-template-action" style={{ "--builder-action-icon": "#fff" }} title="Add from Bank" aria-label="Add from Bank" onClick={() => setBankOpen(true)}><TwIcon name="bank" size={20} /></TeacherPressButton>}
-            <TeacherPressButton tone="blue" data-tutorial="builder-add-question" className="tw-builder-template-action" onClick={addQuestion}>＋ {isBatchTemplate ? "Add Batch" : "Add Question"}</TeacherPressButton>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <div className="tw-builder-settings-anchor">
+              <button className={`tw-builder-settings-flat tw-builder-bare-icon no-hover-bg${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => { const opening = !settingsOpen; if (opening && questionStripOpen) closeQuestionStrip(); setOverflowOpen(false); setOverflowTitleEditing(false); setQMenuOpen(false); setSettingsOpen(opening); }}><TwIcon name="gear" size={28} /></button>
+              {settingsOpen && (
+                <>
+                  <div className="tw-builder-settings-catcher" onClick={() => setSettingsOpen(false)} />
+                  <div className="tw-builder-settings-popup" role="dialog" aria-label="Quiz settings">
+                    {builderSettingsRows.map((row) => (
+                      <button key={row.key} type="button" className="tw-builder-settings-row" onClick={row.onToggle}>
+                        <span className="tw-builder-settings-row-label">{row.label}</span>
+                        <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(row.active)}><span style={ui.switchThumb(row.active)} /></span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <button type="button" className="tw-builder-flat-btn is-bare is-icon-only tone-red no-hover-bg" data-tutorial="builder-delete-quiz" title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={26} /></button>
+            {!guestMode && <button type="button" className="tw-builder-flat-btn is-bare is-icon-only no-hover-bg" data-tutorial="builder-add-bank" title="Add from Bank" aria-label="Add from Bank" onClick={() => setBankOpen(true)}><TwIcon name="bank" size={26} /></button>}
+            <button type="button" className="tw-builder-flat-btn is-bare is-icon-only no-hover-bg" data-tutorial="builder-add-question" title={isBatchTemplate ? "Add Batch" : "Add Question"} aria-label={isBatchTemplate ? "Add Batch" : "Add Question"} onClick={addQuestion}><TwIcon name="plus" size={26} /></button>
             <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action tw-builder-template-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
             <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action tw-builder-template-action${publishLatched ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{publishLatched ? "Published" : "Publish"}</TeacherPressButton>
           </div>
+          </>
+          )}
         </div>
 
-        <div className={`collapsible-content ${settingsOpen ? "open" : ""}`} style={{ marginTop: settingsOpen ? 0 : 0 }}>
-          <div className="collapsible-inner">
-            <div style={ui.settingsPanel}>
-              <div style={ui.settingsPanelInner}>
-              {!guestMode && <button style={ui.toggleCard(settings.randomizeQuestions)} onClick={() => saveSettings({ randomizeQuestions: !settings.randomizeQuestions })}>
-                <div>
-                  <div style={ui.toggleTitle}>{isBatchTemplate ? "Randomize assigned batches" : "Randomize assigned question order"}</div>
-                  <div style={ui.toggleHint}>{isBatchTemplate ? "Assigned sessions only: each student gets the batches in a shuffled order. Live hosting keeps the builder order." : "Assigned sessions only: each student gets the questions in a shuffled order. Live hosting keeps the builder order."}</div>
-                </div>
-                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.randomizeQuestions)}><span style={ui.switchThumb(settings.randomizeQuestions)} /></span>
-              </button>}
-              {quiz.template_type === "MATCHING" && (
-                <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
-                  <div><div style={ui.toggleTitle}>Shuffle Column A</div><div style={ui.toggleHint}>Change the prompt-side card order independently for each participant.</div></div>
-                  <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
+        {isMobile ? (
+        <div className={`tw-builder-mobile-pager${questionStripOpen ? " has-question-strip" : ""}`}>
+          <button type="button" className="tw-builder-pill-badge" onClick={toggleQuestionStrip} aria-label="Open question list">
+            <span key={`${qIndex}-${navTick}-${totalQ}`} className="tw-builder-pill-badge-text" style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</span>
+          </button>
+        </div>
+        ) : (
+        <div style={ui.pagerBar} className={`tw-builder-pager-bar${questionStripOpen ? " has-question-strip" : ""}`}>
+          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goPrev} disabled={isFirst}>‹ Previous</button>
+          <button key={`${qIndex}-${navTick}-${totalQ}`} type="button" className="tw-builder-question-count tw-builder-question-count-animated" style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }} onClick={toggleQuestionStrip}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</button>
+          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goNext} disabled={isLast}>Next ›</button>
+        </div>
+        )}
+        </div>
+
+        {isMobile && settingsOpen && (
+          <div className="tw-builder-sheet-backdrop" onClick={() => setSettingsOpen(false)}>
+            <div className="tw-builder-bottom-sheet" role="dialog" aria-label="Quiz settings" onClick={(e) => e.stopPropagation()}>
+              <div className="tw-builder-sheet-handle" />
+              {builderSettingsRows.map((row) => (
+                <button key={row.key} type="button" className="tw-builder-settings-row" onClick={row.onToggle}>
+                  <span className="tw-builder-settings-row-label">{row.label}</span>
+                  <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(row.active)}><span style={ui.switchThumb(row.active)} /></span>
                 </button>
-              )}
-              {quiz.template_type === "MCQ" && (
-                <button style={ui.toggleCard(settings.shuffleAnswers)} onClick={() => saveSettings({ shuffleAnswers: !settings.shuffleAnswers })}>
-                  <div><div style={ui.toggleTitle}>Shuffle answer choices</div><div style={ui.toggleHint}>Give every student or guest their own shuffled option order while keeping the answer key intact.</div></div>
-                  <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(settings.shuffleAnswers)}><span style={ui.switchThumb(settings.shuffleAnswers)} /></span>
-                </button>
-              )}
-              {!isBasic && <button style={ui.toggleCard(globalShowPromptImage)} onClick={() => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage })}>
-                <div><div style={ui.toggleTitle}>Question image</div><div style={ui.toggleHint}>Show an optional image field after every prompt in this quiz.</div></div>
-                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalShowPromptImage)}><span style={ui.switchThumb(globalShowPromptImage)} /></span>
-              </button>}
-              <button style={ui.toggleCard(globalVoiceRecord)} onClick={() => {
-                const enabled = !globalVoiceRecord;
-                applyConfigToAllQuestions({ voiceRecord: enabled, textToSpeech: enabled ? false : globalTextToSpeech });
-              }}>
-                <div><div style={ui.toggleTitle}>Voice record</div><div style={ui.toggleHint}>Enable recording for every question and answer. Voice record and text to speech cannot be active together.</div></div>
-                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalVoiceRecord)}><span style={ui.switchThumb(globalVoiceRecord)} /></span>
-              </button>
-              <button style={ui.toggleCard(globalTextToSpeech)} onClick={() => {
-                const enabled = !globalTextToSpeech;
-                applyConfigToAllQuestions({ textToSpeech: enabled, voiceRecord: enabled ? false : globalVoiceRecord });
-              }}>
-                <div><div style={ui.toggleTitle}>Text to speech</div><div style={ui.toggleHint}>Read every prompt and visible answer aloud. Enabling this turns voice record off for the whole quiz.</div></div>
-                <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(globalTextToSpeech)}><span style={ui.switchThumb(globalTextToSpeech)} /></span>
-              </button>
-              </div>
+              ))}
             </div>
           </div>
-        </div>
-
-        <div className={`tw-builder-content-region${questionStripOpen ? " has-question-strip" : ""}`}>
-        <div style={ui.pagerBar}>
-          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, visibility: isFirst ? "hidden" : "visible", borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goPrev}>‹ Previous</button>
-          <button type="button" className="tw-builder-question-count" onClick={toggleQuestionStrip}>{`${isBatchTemplate ? "Batch" : "Question"} ${qIndex + 1} of ${totalQ}`}</button>
-          <button className="tw-builder-press tw-builder-template-nav" style={{ ...ui.pagerBtn, visibility: isLast ? "hidden" : "visible", borderColor: builderActionBorder, background: builderActionFace, color: "#fff" }} onClick={goNext}>Next ›</button>
-        </div>
-
-        <div className={`tw-builder-workspace${questionStripOpen ? " has-question-strip" : ""}`}>
-        <div style={ui.editorArea} data-tutorial="builder-editor-shell">
-          {currentQ && (
-            <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
-              <div style={{ ...ui.questionCard, "--tw-question-drag-x": `${questionDrag.x}px`, "--tw-question-drag-y": `${questionDrag.y}px` }} className={`tw-builder-question-form ${builderTemplateDragClass}${questionDrag.active ? " is-dragging" : ""}${questionDrag.settled ? " is-drag-settled" : ""}`}>
-                <button type="button" className="tw-builder-question-drag-handle" aria-label="Drag question" title="Hold and drag to reorder" onPointerDown={beginQuestionFormDrag}><span>•••</span></button>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!guestMode && <TeacherPressButton tone="blue" icon="bank" data-tutorial="builder-save-bank" className={`tw-builder-small-press tw-builder-toolbar-action tw-builder-save-bank-fixed${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff", "--tw-press-face": builderTemplateAccent, "--tw-press-base": builderActionBase, "--tw-press-border": builderActionBorder }} disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || validateQuestion(currentQ, quiz.template_type).length > 0} onClick={() => setModal("confirmBank")}>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved" : "Save to Bank"}</TeacherPressButton>}
-                    <TeacherPressButton tone="red" className="tw-builder-small-icon-press" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={20} /></TeacherPressButton>
+        )}
+        {isMobile && overflowOpen && (
+          <div className="tw-builder-sheet-backdrop" onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); }}>
+            <div className="tw-builder-bottom-sheet" role="dialog" aria-label="More actions" onClick={(e) => e.stopPropagation()}>
+              <div className="tw-builder-sheet-handle" />
+              {overflowTitleEditing ? (
+                <div className="tw-builder-overflow-title-edit">
+                  <input
+                    autoFocus
+                    value={titleDraft}
+                    maxLength={255}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { saveTitle(); setOverflowTitleEditing(false); }
+                      if (e.key === "Escape") { setTitleDraft(quiz.title || ""); setOverflowTitleEditing(false); }
+                    }}
+                    className="tw-builder-overflow-title-input"
+                    placeholder="Quiz title"
+                    aria-label="Quiz title"
+                    disabled={titleSaving}
+                  />
+                  <div className="tw-builder-overflow-title-edit-actions">
+                    <button type="button" className="tw-builder-overflow-edit-btn is-cancel" onClick={() => { setTitleDraft(quiz.title || ""); setOverflowTitleEditing(false); }}>Cancel</button>
+                    <button type="button" className="tw-builder-overflow-edit-btn is-save" disabled={titleSaving} onClick={async () => { await saveTitle(); setOverflowTitleEditing(false); }}>Save</button>
                   </div>
                 </div>
+              ) : (
+                <button type="button" className="tw-builder-overflow-title-row" onClick={() => { setTitleDraft(quiz?.title || ""); setOverflowTitleEditing(true); }}>
+                  <span className="tw-builder-overflow-title-text" title={fullQuizTitle}>{truncatedQuizTitle}</span>
+                  <TwIcon name="identification" size={18} />
+                </button>
+              )}
+              {!guestMode && <button type="button" className="tw-builder-overflow-row" onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); setBankOpen(true); }}><TwIcon name="bank" size={18} /><span>Add from bank</span></button>}
+              <button type="button" className="tw-builder-overflow-row" onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); requestSave(); }}><TwIcon name="check" size={18} /><span>Save</span></button>
+              <button type="button" className="tw-builder-overflow-row" onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); publish(); }}><TwIcon name="spark" size={18} /><span>Publish</span></button>
+              <button type="button" className="tw-builder-overflow-row is-danger" onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); setModal("confirmDelete"); }}><TwIcon name="trash" size={18} /><span>Delete</span></button>
+            </div>
+          </div>
+        )}
 
-                <div data-tutorial="builder-meta-grid" style={ui.metaGrid}>
+        <div
+          className={`tw-builder-content-region${questionStripOpen ? " has-question-strip" : ""}${isMobile ? " is-mobile" : ""}`}
+          onTouchStart={isMobile ? (e) => { const t = e.touches?.[0]; if (t) { touchStartXRef.current = t.clientX; touchStartYRef.current = t.clientY; } } : undefined}
+          onTouchEnd={isMobile ? (e) => {
+            const startX = touchStartXRef.current;
+            const startY = touchStartYRef.current;
+            touchStartXRef.current = null;
+            touchStartYRef.current = null;
+            if (startX === null || startX === undefined) return;
+            const t = e.changedTouches?.[0];
+            if (!t) return;
+            const dx = t.clientX - startX;
+            const dy = t.clientY - (startY ?? t.clientY);
+            if (Math.abs(dx) < 55 || Math.abs(dx) <= Math.abs(dy)) return;
+            if (dx < 0) goNext();
+            else goPrev();
+          } : undefined}
+        >
+        <div className={`tw-builder-workspace${questionStripOpen ? " has-question-strip" : ""}${isMobile ? " is-mobile" : ""}`}>
+        <div style={isMobile ? { ...ui.editorArea, maxWidth: "100%", padding: "16px 14px 90px" } : ui.editorArea} data-tutorial="builder-editor-shell" className={isMobile ? "tw-builder-mobile-shell" : undefined}>
+          {currentQ && (
+            <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
+              <div style={isMobile ? undefined : ui.questionCard} className={isMobile ? `tw-builder-mobile-question ${builderTemplateDragClass}` : `tw-builder-question-form ${builderTemplateDragClass}`}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 900, fontSize: 17, color: ui.templateAccent }}>{isBatchTemplate ? `Batch ${qIndex + 1}` : `Question ${qIndex + 1}`}</span>
+                  {isMobile ? (
+                    <div className="tw-builder-mobile-qactions">
+                      <button type="button" className="tw-builder-flat-icon-btn no-hover-bg" title="Move to previous position" aria-label="Move to previous position" onClick={() => { setQMenuOpen(false); moveQuestion(-1); }} disabled={isFirst}><TwIcon name="arrowLeft" size={20} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn no-hover-bg" title="Move to next position" aria-label="Move to next position" onClick={() => { setQMenuOpen(false); moveQuestion(1); }} disabled={isLast}><TwIcon name="arrowRight" size={20} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn no-hover-bg" title={isBatchTemplate ? "Add Batch" : "Add Question"} aria-label={isBatchTemplate ? "Add Batch" : "Add Question"} onClick={() => { setQMenuOpen(false); addQuestion(); }}><TwIcon name="plus" size={20} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn is-danger no-hover-bg" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={() => { setQMenuOpen(false); deleteCurrentQuestion(); }}><TwIcon name="trash" size={20} /></button>
+                      <div className="tw-builder-qmenu-anchor">
+                        <button type="button" className={`tw-builder-flat-icon-btn no-hover-bg${qMenuOpen ? " is-active" : ""}`} title="More question actions" aria-label="More question actions" onClick={() => setQMenuOpen((v) => !v)}><span className="tw-builder-ellipsis is-small" aria-hidden="true">⋯</span></button>
+                        {qMenuOpen && (
+                          <>
+                            <div className="tw-builder-qmenu-catcher" onClick={() => setQMenuOpen(false)} />
+                            <div className="tw-builder-qmenu-popup" role="menu" aria-label="More question actions">
+                              <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); toggleLock(); }}><TwIcon name={currentQ?.config?.locked ? "lock" : "unlock"} size={17} /><span>{currentQ?.config?.locked ? "Unlock" : "Lock"}</span></button>
+                              <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); redo(); }} disabled={!canRedo}><TwIcon name="redo" size={17} /><span>Redo</span></button>
+                              <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); undo(); }} disabled={!canUndo}><TwIcon name="undo" size={17} /><span>Undo</span></button>
+                              <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); duplicateCurrentQuestion(); }}><TwIcon name="duplicate" size={17} /><span>Duplicate</span></button>
+                              {!guestMode && <button type="button" data-tutorial="builder-save-bank" className="tw-builder-qmenu-row" disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || (builderTutorialStage !== "bank" && validateQuestion(currentQ, quiz.template_type).length > 0)} onClick={() => { setQMenuOpen(false); setModal("confirmBank"); }}><TwIcon name="bank" size={17} /><span>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved to bank" : "Save to bank"}</span></button>}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="tw-builder-toolbar-icons">
+                      <button type="button" className="tw-builder-flat-icon-btn" title="Move to previous position" aria-label="Move to previous position" onClick={() => moveQuestion(-1)} disabled={isFirst}><TwIcon name="arrowLeft" size={18} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn" title="Move to next position" aria-label="Move to next position" onClick={() => moveQuestion(1)} disabled={isLast}><TwIcon name="arrowRight" size={18} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn" title="Undo" aria-label="Undo" onClick={undo} disabled={!canUndo}><TwIcon name="undo" size={18} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn" title="Redo" aria-label="Redo" onClick={redo} disabled={!canRedo}><TwIcon name="redo" size={18} /></button>
+                      <button type="button" className="tw-builder-flat-icon-btn" title="Duplicate question" aria-label="Duplicate question" onClick={duplicateCurrentQuestion}><TwIcon name="duplicate" size={18} /></button>
+                      <button type="button" className={`tw-builder-flat-icon-btn${currentQ?.config?.locked ? " is-locked" : ""}`} title={currentQ?.config?.locked ? "Unlock question" : "Lock question"} aria-label={currentQ?.config?.locked ? "Unlock question" : "Lock question"} onClick={toggleLock}><TwIcon name={currentQ?.config?.locked ? "lock" : "unlock"} size={18} /></button>
+                      {!guestMode && <button type="button" data-tutorial="builder-save-bank" className={`tw-builder-flat-icon-btn${bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? " is-latched" : ""}`} title={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved to bank" : "Save to bank"} aria-label="Save to bank" disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || (builderTutorialStage !== "bank" && validateQuestion(currentQ, quiz.template_type).length > 0)} onClick={() => setModal("confirmBank")}><TwIcon name="bank" size={18} /></button>}
+                      <button type="button" className="tw-builder-flat-icon-btn is-danger" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion}><TwIcon name="trash" size={18} /></button>
+                    </div>
+                  )}
+                </div>
+
+                {currentQ?.config?.locked && <div className="tw-builder-locked-banner"><TwIcon name="lock" size={14} /> This question is locked. Unlock it to make changes.</div>}
+                <div className={currentQ?.config?.locked ? "tw-builder-lockable is-locked" : "tw-builder-lockable"}>
+                <div data-tutorial="builder-meta-grid" style={isMobile ? { ...ui.metaGrid, gridTemplateColumns: "1fr 1fr" } : ui.metaGrid} className={isMobile ? "tw-builder-meta-sidebyside" : undefined}>
                   <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
                     <div style={ui.metaLabel}>⏱ Time limit</div>
                     <div style={ui.metaRow}>
@@ -1017,7 +1246,8 @@ export default function QuizBuilder({ guestMode = false }) {
                 </div>}
 
 
-                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} isBasic={isBasic} />
+                <TemplateEditor templateType={quiz.template_type} category={quiz.category} q={currentQ} onChange={updateQ} ui={ui} c={c} isBasic={isBasic} isMobile={isMobile} />
+                </div>
               </div>
             </div>
           )}
@@ -1045,22 +1275,6 @@ export default function QuizBuilder({ guestMode = false }) {
                     setNavTick((v) => v + 1);
                   }}
                   onDragStart={(event) => {
-                    const source = event.currentTarget;
-                    const rect = source.getBoundingClientRect();
-                    const clone = source.cloneNode(true);
-                    clone.classList.remove("is-drag-source");
-                    clone.classList.add("tw-builder-question-mini-drag-image");
-                    clone.style.setProperty("--tw-template-accent", builderTemplateAccent);
-                    clone.style.setProperty("--tw-builder-card", c.cardBg);
-                    clone.style.position = "fixed";
-                    clone.style.left = "-10000px";
-                    clone.style.top = "-10000px";
-                    clone.style.width = `${rect.width}px`;
-                    clone.style.opacity = "1";
-                    clone.style.transform = "rotate(1.5deg) scale(1.035) translateY(-5px)";
-                    document.body.appendChild(clone);
-                    event.dataTransfer.setDragImage(clone, Math.min(rect.width - 24, rect.width * .72), Math.min(30, rect.height / 2));
-                    window.setTimeout(() => clone.remove(), 0);
                     setStripDrag({ from: index, to: index, mode: "swap" });
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", String(index));
@@ -1089,6 +1303,26 @@ export default function QuizBuilder({ guestMode = false }) {
             })}
           </div>
         </aside>}
+        {isMobile && (
+          <div className="tw-builder-mobile-dots" role="tablist" aria-label="Questions">
+            {questions.map((_, index) => (
+              <button
+                key={index}
+                type="button"
+                role="tab"
+                aria-selected={index === qIndex}
+                aria-label={`Go to ${isBatchTemplate ? "batch" : "question"} ${index + 1}`}
+                className={`tw-builder-mobile-dot${index === qIndex ? " is-active" : ""}`}
+                onClick={() => {
+                  if (index === qIndex) return;
+                  setNavDir(index > qIndex ? "next" : "prev");
+                  setQIndex(index);
+                  setNavTick((v) => v + 1);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
       </div>
 

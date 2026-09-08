@@ -74,6 +74,14 @@ export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
   const pendingKickTimers = new Map();
   const studentDisconnectTimers = new Map();
+  // A student can hold more than one live socket at once (a second device, a
+  // second tab) - reconnectKey maps every one of them to the same
+  // session_participants row. Without this, a disconnect on ANY one of those
+  // sockets schedules the "mark offline" timer below with no idea another
+  // socket for the same participant is still fully connected, so the grace
+  // window still ends with them wrongly shown (and counted) offline even
+  // though they never really left.
+  const participantConnectionCounts = new Map();
 
   io.on("connection", (socket) => {
     const actionTimes = new Map();
@@ -272,7 +280,7 @@ export function registerSessionSockets(io) {
 
     // Student connection flow supports both first join and reconnect.
     socket.on("student:connect", async ({ sessionId, reconnectKey }) => {
-      if (!allowAction("student:connect", 8, 60_000)) return socket.emit("student:error", { message: "Too many connection attempts." });
+      if (!allowAction("student:connect", 20, 60_000)) return socket.emit("student:error", { message: "Too many connection attempts." });
       const [[p]] = await pool.query(
         `SELECT * FROM session_participants WHERE session_id=:sid AND reconnect_key=:rk`,
         { sid: sessionId, rk: reconnectKey }
@@ -289,6 +297,7 @@ export function registerSessionSockets(io) {
       // this participant never gets broadcast as having gone offline at all.
       const pendingDisconnect = studentDisconnectTimers.get(p.id);
       if (pendingDisconnect) { clearTimeout(pendingDisconnect); studentDisconnectTimers.delete(p.id); }
+      participantConnectionCounts.set(p.id, (participantConnectionCounts.get(p.id) || 0) + 1);
 
       socket.data.role = "STUDENT";
       socket.data.sessionId = sessionId;
@@ -300,7 +309,16 @@ export function registerSessionSockets(io) {
       await pool.query(`UPDATE session_participants SET connected=1, left_at=NULL WHERE id=:pid`, { pid: p.id });
 
       const [[groupRow]] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: p.id });
-      if (groupRow?.group_id) socket.join(roomGroup(sessionId, groupRow.group_id));
+      if (groupRow?.group_id) {
+        socket.join(roomGroup(sessionId, groupRow.group_id));
+        // A group answer proposed while this participant was away otherwise
+        // never reaches them - they'd see nothing to vote on until it resolves.
+        const [[pendingProposal]] = await pool.query(
+          `SELECT id FROM group_answer_proposals WHERE session_id=:sid AND group_id=:gid AND status='PENDING' ORDER BY id DESC LIMIT 1`,
+          { sid: sessionId, gid: groupRow.group_id }
+        );
+        if (pendingProposal) await emitGroupProposal(io, sessionId, groupRow.group_id, pendingProposal.id);
+      }
 
       // Whether this participant already has a response on file for whatever
       // question is currently live is server-authoritative and always
@@ -328,6 +346,9 @@ export function registerSessionSockets(io) {
 
       socket.emit("student:connected", { participantId: p.id, alreadyAnsweredQuestionId });
       await broadcastRoster(io, sessionId);
+      // broadcastState calls broadcastScores internally, which re-sends this
+      // participant their leaderboard:update - safe to rely on since the
+      // roomParticipant(p.id) join above already happened.
       await broadcastState(io, sessionId);
       await broadcastGroups(io, sessionId);
     });
@@ -471,6 +492,18 @@ export function registerSessionSockets(io) {
       );
       if (!session || session.status !== "LIVE") return;
 
+      // A student who was disconnected (or just slow) can still have a stale
+      // client pointed at whatever question was live when they last saw it.
+      // Nothing upstream checked this before - the round could move on to
+      // question 4 while a reconnecting student's answer for question 2
+      // still landed here, got scored, and silently padded that old
+      // question's response count after the host had already moved past it.
+      const liveSnapshot = safeJson(session.questions_snapshot_json) || [];
+      const liveCurrentQuestion = liveSnapshot[Number(session.current_question_index || 0)];
+      if (!liveCurrentQuestion || Number(liveCurrentQuestion.id) !== Number(questionId)) {
+        return socket.emit("answer:ack", { isCorrect: null, points: 0, locked: true, message: "This question is no longer active." });
+      }
+
       if (session.join_mode === "GROUP") {
         const [[membership]] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: participantId });
         if (!membership?.group_id) {
@@ -566,6 +599,9 @@ export function registerSessionSockets(io) {
       if (!sessionId) return;
 
       if (role === "STUDENT" && participantId) {
+        const remaining = Math.max(0, (participantConnectionCounts.get(participantId) || 1) - 1);
+        if (remaining > 0) { participantConnectionCounts.set(participantId, remaining); return; }
+        participantConnectionCounts.delete(participantId);
         const existingTimer = studentDisconnectTimers.get(participantId);
         if (existingTimer) clearTimeout(existingTimer);
         const timer = setTimeout(async () => {

@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { TwIcon } from "./TwUI";
 
-export function MobileTopHeader({ c, name, email, avatarSrc, onSettings, onLogout }) {
+export function MobileTopHeader({ c, name, email, avatarSrc, dark, toggleTheme, onSettings, onLogout }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -44,6 +44,9 @@ export function MobileTopHeader({ c, name, email, avatarSrc, onSettings, onLogou
           <button type="button" className="tw-mobile-drawer-row" style={{ color: c.text }} onClick={() => { setOpen(false); onSettings?.(); }}>
             <TwIcon name="user" size={17} /><span>Settings</span>
           </button>
+          {toggleTheme && <button type="button" className="tw-mobile-drawer-row" style={{ color: c.text }} onClick={() => toggleTheme()}>
+            <span key={dark ? "sun" : "moon"} className="tw-theme-icon-swap"><TwIcon name={dark ? "sun" : "moon"} size={17} /></span><span>{dark ? "Light mode" : "Dark mode"}</span>
+          </button>}
           <button type="button" className="tw-mobile-drawer-row is-danger" onClick={() => { setOpen(false); onLogout?.(); }}>
             <TwIcon name="logout" size={17} /><span>Log out</span>
           </button>
@@ -73,15 +76,22 @@ export function MobileTabBar({ c, items, secondaryItems = [], activeId, onSelect
     setPage(inPrimary ? 0 : 1);
   }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function onTouchStart(event) {
-    touchRef.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  // Pointer Events cover touch, mouse, and pen with one code path - a real
+  // phone already swiped fine with touch-only handlers, but a mouse (desktop
+  // browser narrowed under the mobile breakpoint, or automated testing that
+  // drags with the mouse instead of touch) never fired them, so the bar
+  // looked unswipeable outside of an actual touchscreen.
+  function onPointerDown(event) {
+    if (!hasSecondary) return;
+    touchRef.current = { x: event.clientX, y: event.clientY };
     setIsDragging(true);
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* no active pointer to capture - safe to ignore */ }
   }
-  function onTouchMove(event) {
+  function onPointerMove(event) {
     const start = touchRef.current;
     if (!start || !hasSecondary) return;
-    const dx = event.touches[0].clientX - start.x;
-    const dy = event.touches[0].clientY - start.y;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
     if (Math.abs(dy) > Math.abs(dx) * 1.4) return;
     const width = trackWrapRef.current?.offsetWidth || 1;
     let pct = (dx / width) * 100;
@@ -91,14 +101,14 @@ export function MobileTabBar({ c, items, secondaryItems = [], activeId, onSelect
     if (page === 1 && pct < 0) pct *= 0.35;
     setDragPct(pct);
   }
-  function onTouchEnd(event) {
+  function onPointerUp(event) {
     const start = touchRef.current;
     touchRef.current = null;
     setIsDragging(false);
     setDragPct(0);
     if (!start || !hasSecondary) return;
-    const dx = event.changedTouches[0].clientX - start.x;
-    const dy = event.changedTouches[0].clientY - start.y;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
     if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
     if (dx < 0 && page === 0) setPage(1);
     else if (dx > 0 && page === 1) setPage(0);
@@ -109,10 +119,11 @@ export function MobileTabBar({ c, items, secondaryItems = [], activeId, onSelect
       <div
         className="tw-mobile-tabbar"
         ref={trackWrapRef}
-        style={{ background: c.sidebarBg, borderColor: c.sidebarBorder }}
-        onTouchStart={hasSecondary ? onTouchStart : undefined}
-        onTouchMove={hasSecondary ? onTouchMove : undefined}
-        onTouchEnd={hasSecondary ? onTouchEnd : undefined}
+        style={{ background: c.sidebarBg, borderColor: c.sidebarBorder, touchAction: hasSecondary ? "pan-y" : undefined }}
+        onPointerDown={hasSecondary ? onPointerDown : undefined}
+        onPointerMove={hasSecondary ? onPointerMove : undefined}
+        onPointerUp={hasSecondary ? onPointerUp : undefined}
+        onPointerCancel={hasSecondary ? onPointerUp : undefined}
       >
         <div
           className="tw-mobile-tabbar-track"
@@ -143,8 +154,8 @@ export function MobileTabBar({ c, items, secondaryItems = [], activeId, onSelect
       </div>
       {hasSecondary && (
         <div className="tw-mobile-tabbar-dots">
-          <button type="button" aria-label="Show main tabs" className={`tw-mobile-tabbar-dot${page === 0 ? " is-active" : ""}`} style={{ background: page === 0 ? c.accent : c.sidebarBorder }} onClick={() => setPage(0)} />
-          <button type="button" aria-label="Show more tabs" className={`tw-mobile-tabbar-dot${page === 1 ? " is-active" : ""}`} style={{ background: page === 1 ? c.accent : c.sidebarBorder }} onClick={() => setPage(1)} />
+          <button type="button" aria-label="Show main tabs" className={`tw-mobile-tabbar-dot${page === 0 ? " is-active" : ""}`} style={{ backgroundColor: page === 0 ? c.accent : c.sidebarBorder, backgroundClip: "content-box" }} onClick={() => setPage(0)} />
+          <button type="button" aria-label="Show more tabs" className={`tw-mobile-tabbar-dot${page === 1 ? " is-active" : ""}`} style={{ backgroundColor: page === 1 ? c.accent : c.sidebarBorder, backgroundClip: "content-box" }} onClick={() => setPage(1)} />
         </div>
       )}
     </nav>
