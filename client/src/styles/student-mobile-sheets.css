@@ -559,7 +559,12 @@ body.dark-mode .tw-auth-form-shell input:-moz-autofill{
 /* Icons-only pill tab bar: the pill hugs its tab count (fixed-width icon
    buttons) instead of stretching full-width, with slightly bigger icons. */
 .tw-mobile-tabbar{width:auto!important;max-width:100%!important}
-.tw-mobile-tabbar-btn.is-icon-only{flex:0 0 auto!important;min-width:60px!important;padding:8px 0!important}
+/* 60px + 6px margins x 6 teacher tabs = 396px, wider than the 362px pill a
+   390px phone leaves after the wrapper padding, so the last tab (History) was
+   always half off-screen (DEF-04). 48px keeps a >=44px tap target and fits six
+   tabs on a 360px phone; the page flexes so the pill fills its width evenly. */
+.tw-mobile-tabbar-btn.is-icon-only{flex:1 1 48px!important;min-width:48px!important;padding:8px 0!important}
+.tw-mobile-tabbar-single .tw-mobile-tabbar-page-single{flex:1 1 auto!important;width:100%!important}
 .tw-mobile-tabbar-btn.is-icon-only.is-active{border-radius:999px!important}
 
 /* Teacher/student/guest sidebar tabs get the same hover nudge as the

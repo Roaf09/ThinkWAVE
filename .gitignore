@@ -28,3 +28,7 @@ npm-debug.log*
 coverage/
 .DS_Store
 Thumbs.db
+
+# Local backups of real env files (contain secrets)
+server/.env.bak*
+deploy-handoff/

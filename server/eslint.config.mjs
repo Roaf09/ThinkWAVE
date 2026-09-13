@@ -17,6 +17,11 @@ export default [
       "no-unused-vars": ["error", { argsIgnorePattern: "^_", caughtErrors: "none", ignoreRestSiblings: true }],
       "no-var": "error",
       "prefer-const": "error",
+      // Same-scope use-before-define is a runtime ReferenceError with const/let
+      // (the V15 HostLive.jsx crash: a useEffect dependency array read a state
+      // variable declared 58 lines lower). variables:false keeps the common
+      // "style object defined below the component" pattern allowed.
+      "no-use-before-define": ["error", { functions: false, classes: false, variables: false }],
     },
   },
 ];

@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import { pool } from "../../db.js";
+import { pool, queryRetryingDeadlock } from "../../db.js";
 import { makeJoinCode, makeReconnectKey } from "../../utils/codes.js";
 import { resolveThinkSpellWordBank } from "../quizzes/templates/thinkspell/thinkSpell.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
@@ -12,7 +12,7 @@ import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { attachCompetitiveTotals, sortCompetitiveRows } from "./leaderboard.js";
-import { getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
+import { SESSION_BACKGROUND_KEY_PATTERN, getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -95,7 +95,7 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
   const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null } = req.body;
-  const hasRequestedBackground = /^background-(?:0[1-9]|1[0-9]|2[0-2])$/.test(String(backgroundKey || ""));
+  const hasRequestedBackground = SESSION_BACKGROUND_KEY_PATTERN.test(String(backgroundKey || ""));
   const safeBackgroundKey = normalizeSessionBackgroundKey(backgroundKey);
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC" && joinMode === "GROUP") {
@@ -572,7 +572,7 @@ export async function joinSession(req, res) {
   // race) nor falsely reject. Distinct placeholder names because mysql2 does
   // not reliably reuse a named placeholder twice in one statement.
   const reconnectKey = makeReconnectKey();
-  const [claimed] = await pool.query(
+  const [claimed] = await queryRetryingDeadlock(
     `INSERT INTO session_participants
        (session_id, first_name, last_name, reconnect_key, connected, join_type, group_name)
      SELECT :sid, :fn, :ln, :rk, 1, :jt, NULL

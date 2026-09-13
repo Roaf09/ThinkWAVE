@@ -11,6 +11,7 @@ import { z } from "zod";
 import { optionalAuth, requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
+import { SESSION_BACKGROUND_KEY_PATTERN } from "./sessionBackground.runtime.js";
 import {
   createSession,
   listActiveSessions,
@@ -34,7 +35,7 @@ const CreateSchema = z.object({
   quizId: z.coerce.number().int().positive(),
   joinMode: z.enum(["SOLO", "GROUP"]).default("SOLO"),
   classId: z.coerce.number().int().positive().optional().nullable(),
-  backgroundKey: z.string().regex(/^background-(?:0[1-9]|1[0-9]|2[0-2])$/).optional().nullable(),
+  backgroundKey: z.string().regex(SESSION_BACKGROUND_KEY_PATTERN).optional().nullable(),
   tutorialDemo: z.boolean().optional().default(false),
 });
 

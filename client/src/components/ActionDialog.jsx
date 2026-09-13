@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "./TwUI";
@@ -84,6 +84,11 @@ export default function ActionDialog({
     return () => { document.body.style.overflow = prevOverflow; };
   }, [open]);
 
+  // Announce the dialog to assistive tech (DEF-06): without role/aria-modal a
+  // screen reader reads "Save Quiz?" as loose page text and does not trap
+  // focus context. The title, when present, labels the dialog.
+  const titleId = useId();
+
   if (!open) return null;
 
   const dismiss = () => {
@@ -106,6 +111,9 @@ export default function ActionDialog({
       />
       <div className="fixed inset-0 z-[4201] flex items-center justify-center p-5 pointer-events-none">
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={title ? titleId : undefined}
           className="rounded-[20px] overflow-hidden"
           style={{
             width,
@@ -122,7 +130,7 @@ export default function ActionDialog({
             <div className="w-[76px] h-[76px] flex items-center justify-center mb-4" style={{ borderRadius: plainIcon ? 0 : 18, background: plainIcon ? "transparent" : toneConfig.bg, color: plainIcon ? (dark ? "#fff" : "#0f172a") : toneConfig.fg, border: plainIcon ? "none" : `1px solid ${toneConfig.border}`, boxShadow: "none" }}>
               <DialogIcon icon={icon} fallback={toneConfig.icon} />
             </div>
-            {title && <h3 className="m-0 text-2xl font-black tracking-[-0.02em]" style={{ color: c.text }}>{title}</h3>}
+            {title && <h3 id={titleId} className="m-0 text-2xl font-black tracking-[-0.02em]" style={{ color: c.text }}>{title}</h3>}
             {message !== undefined && (
               <div className="mt-3 text-sm leading-[1.7]" style={{ color: c.textMuted }}>
                 {typeof message === "string" ? <p className="m-0">{message}</p> : message}

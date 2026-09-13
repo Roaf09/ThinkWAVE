@@ -18,7 +18,7 @@ const TEMPLATE_IMAGES = {
 
 // Extracted verbatim from LiveSessionsTab.jsx (no behavior change).
 // normalizeLiveTemplate is now the shared normalizeBankTemplate (identical mapping).
-export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = false, c, dark, onClose, onStart, tutorialStage, onTutorialStage, onTutorialFinish }) {
+export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = false, c, dark, onClose, onStart, tutorialStage, onTutorialStage, onTutorialFinish, launchError = "" }) {
   const [joinMode, setJoinMode] = useState("SOLO");
   const [classId, setClassId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -47,6 +47,7 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
         <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} title="Host a solo session" onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
         <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan && !guestMode} title={institutionPlan || guestMode ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => (institutionPlan || guestMode) && setJoinMode("GROUP")}><span>Group</span></button>
       </div>
+      {launchError && <div role="alert" className="tw-host-launch-error" style={{ background: c.redBg, color: c.redFg, border: `1px solid ${c.redBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 800 }}>{launchError}</div>}
       <div className="tw-host-launch-controls" style={guestMode ? { gridTemplateColumns: "1fr auto" } : undefined}>
         {!guestMode && <button data-tutorial="host-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>}
         <TeacherPressButton data-tutorial="host-start" tone="blue" disabled={!guestMode && !classId} onClick={() => { if (tutorialStage === "host_start") onTutorialFinish?.(); onStart(quiz, joinMode, guestMode ? null : classId, backgroundKey); }}>Start</TeacherPressButton>

@@ -32,6 +32,10 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   const [assignQuiz, setAssignQuiz] = useState(null);
   const [hostSetupQuiz, setHostSetupQuiz] = useState(null);
   const [flash, setFlash] = useState(null);
+  // Launch failures used to go only to the tab-level flash banner, which sits
+  // behind the still-open launch modal, so the teacher saw nothing happen
+  // (DEF-02). Keep the message in state and render it inside the modal too.
+  const [hostLaunchError, setHostLaunchError] = useState("");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [templateFilter, setTemplateFilter] = useState("ALL");
@@ -91,6 +95,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
 
   function openHostSetup(selectedQuiz) {
     setHostSetupQuiz(selectedQuiz);
+    setHostLaunchError("");
     closeMainTutorialBranch();
     if (tutorial?.userId && !readTutorialState(tutorial.userId).hostSetupSeen) setSetupTutorialStage("host_class");
   }
@@ -183,7 +188,9 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
         : "Session created. Opening the host panel…");
       if (data?.id) navigate(guestMode ? `/guest/sessions/${data.id}/live` : `/teacher/sessions/${data.id}/live`);
     } catch (error) {
-      showFlash(error?.response?.data?.message || "Failed to create session.", "error");
+      const message = error?.response?.data?.message || "Failed to create session.";
+      setHostLaunchError(message);
+      showFlash(message, "error");
     }
   }
 
@@ -260,7 +267,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       {!guestMode && assignmentNotice && <ThinkBotTutorial placement="screen-right" dialogWidth={430} blockInteraction={false} highlight={false} className="tw-assignment-live-notice" clickAnywhere onClickAnywhere={() => setAssignmentNotice(null)}><p><strong>Your assignment is live!</strong></p><p>Students in <strong>{assignmentNotice.className}</strong> can access it according to the schedule you selected.</p></ThinkBotTutorial>}
     </div>
 
-    {hostSetupQuiz && <HostLaunchModal quiz={hostSetupQuiz} folders={folderOptions} institutionPlan={guestMode ? true : institutionPlan} guestMode={guestMode} c={c} dark={dark} onClose={() => { setHostSetupQuiz(null); setSetupTutorialStage(null); }} onStart={createLiveSession} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("hostSetupSeen")} />}
+    {hostSetupQuiz && <HostLaunchModal quiz={hostSetupQuiz} folders={folderOptions} institutionPlan={guestMode ? true : institutionPlan} guestMode={guestMode} c={c} dark={dark} onClose={() => { setHostSetupQuiz(null); setHostLaunchError(""); setSetupTutorialStage(null); }} onStart={createLiveSession} launchError={hostLaunchError} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("hostSetupSeen")} />}
     {!guestMode && assignQuiz && <AssignModal quiz={assignQuiz} folders={folderOptions} c={c} dark={dark} onClose={() => { setAssignQuiz(null); setSetupTutorialStage(null); }} onSubmit={createAssignment} tutorialStage={setupTutorialStage} onTutorialStage={setSetupTutorialStage} onTutorialFinish={() => finishSetupTutorial("assignmentSetupSeen")} />}
     {!guestMode && tutorial?.stage === "sessions_intro" && (
       <ThinkBotTutorial target='[data-tutorial="session-card"]' placement="below" dialogWidth={430} dragKey="sessions-share-dialog" clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => tutorial.setStage?.("sessions_host_info")}>

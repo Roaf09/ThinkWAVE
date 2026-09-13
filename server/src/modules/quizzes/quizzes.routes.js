@@ -10,6 +10,7 @@ import { z } from "zod";
 import { requireAuth }  from "../../middleware/auth.js";
 import { requireRole }  from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
+import { SESSION_BACKGROUND_KEY_PATTERN } from "../sessions/sessionBackground.runtime.js";
 import {
   listQuizzes, createQuiz, getQuiz,
   upsertQuestions, publishQuiz,
@@ -67,7 +68,7 @@ const AssignSchema = z.object({
   classId: z.coerce.number().int().positive(),
   availableFrom: z.string().min(1),
   availableUntil: z.string().min(1),
-  backgroundKey: z.string().regex(/^background-(?:0[1-9]|1[0-9]|2[0-2])$/).optional().nullable(),
+  backgroundKey: z.string().regex(SESSION_BACKGROUND_KEY_PATTERN).optional().nullable(),
 });
 
 quizzesRouter.get("/",    requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listQuizzes));

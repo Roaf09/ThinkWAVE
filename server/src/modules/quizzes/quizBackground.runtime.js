@@ -1,5 +1,7 @@
+import { SESSION_BACKGROUND_KEY_PATTERN } from "../sessions/sessionBackground.runtime.js";
+
 const quizBackgrounds = new Map();
-const VALID_BACKGROUND = /^background-(?:0[1-9]|1[0-9]|2[0-2])$/;
+const VALID_BACKGROUND = SESSION_BACKGROUND_KEY_PATTERN;
 
 export function normalizeQuizBackgroundKey(value, fallback = "background-01") {
   const key = String(value || "").trim();

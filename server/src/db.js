@@ -45,6 +45,20 @@ if (env.DB_SSL) {
 
 export const pool = mysql.createPool(poolConfig);
 
+// The driver option above only tells mysql2 how to *interpret* the digits it
+// receives; MySQL itself renders TIMESTAMP columns and NOW() in the session
+// time_zone, which defaults to the server's global setting — SYSTEM (+08:00)
+// on a Manila developer machine but UTC on Aiven. Reading "12:16" (UTC) as
+// "12:16 +08:00" put every session, export and analytics timestamp exactly
+// eight hours early in production while local runs looked correct (DEF-17,
+// the reported "8:13 PM session shows 04:13 AM"). Pin every pooled connection
+// to the same offset the driver assumes so both sides agree everywhere.
+pool.on("connection", (connection) => {
+  connection.query(`SET time_zone = '${poolConfig.timezone}'`, (error) => {
+    if (error) console.error("[db] could not set session time_zone:", error?.message || error);
+  });
+});
+
 // Transient network blips (ECONNRESET / PROTOCOL_CONNECTION_LOST) idle-timeout
 // a pooled connection between requests. Retrying once on a fresh connection
 // avoids surfacing a 500 for a single dropped socket.
@@ -61,3 +75,22 @@ pool.query = async (...args) => {
     throw err;
   }
 };
+
+// A single autocommit statement chosen as an InnoDB deadlock victim
+// (ER_LOCK_DEADLOCK 1213, "try restarting transaction") is rolled back in
+// full, so re-issuing it is safe. The seat-claim INSERT ... SELECT in
+// joinSession / joinStudentLiveSession takes shared locks on
+// session_participants for its COUNT(*) and then an insert lock; under a
+// classroom-sized join burst two of those collide constantly and MySQL kills
+// one, which used to surface as a 500 and capped a 45-seat session at ~20
+// students (DEF-16). Bounded retries with jitter let every claimant through.
+export async function queryRetryingDeadlock(sql, params, { attempts = 8 } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await pool.query(sql, params);
+    } catch (err) {
+      if (err?.code !== "ER_LOCK_DEADLOCK" || attempt >= attempts) throw err;
+      await new Promise((r) => setTimeout(r, 15 + Math.floor(Math.random() * 60 * attempt)));
+    }
+  }
+}

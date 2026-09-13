@@ -2,7 +2,7 @@
  * server/src/modules/student/student.controller.js
  */
 
-import { pool } from "../../db.js";
+import { pool, queryRetryingDeadlock } from "../../db.js";
 import { scoreAnswer, normalizeTemplateType } from "../quizzes/templates.js";
 import { makeReconnectKey } from "../../utils/codes.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
@@ -553,7 +553,7 @@ export async function joinStudentLiveSession(req, res) {
   // burst of concurrent joins can neither overshoot the cap nor falsely
   // reject on phantom rows.
   const reconnectKey = makeReconnectKey();
-  const [claimed] = await pool.query(
+  const [claimed] = await queryRetryingDeadlock(
     `INSERT INTO session_participants(session_id,first_name,last_name,reconnect_key,student_user_id,connected,join_type,group_name)
      SELECT :sid,:fn,:ln,:rk,:uid,1,:jt,NULL
      FROM sessions s

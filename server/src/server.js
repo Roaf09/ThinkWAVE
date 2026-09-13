@@ -83,6 +83,11 @@ const orphanSweep = setInterval(() => { closeOrphanedSessions().catch((error) =>
 
 httpServer.listen(env.PORT, () => {
   console.log(`API listening on http://localhost:${env.PORT}`);
+  // Resolved runtime config, so a misconfigured deploy (wrong DB, wrong
+  // origin, wrong mode) is visible in the first lines of the log instead of
+  // surfacing later as a CORS 403 or a silent connection to the wrong
+  // database. Never log secrets here.
+  console.log(`[boot] NODE_ENV=${env.NODE_ENV} DB_HOST=${env.DB_HOST}:${env.DB_PORT} DB_NAME=${env.DB_NAME} DB_SSL=${env.DB_SSL} CLIENT_ORIGINS=${(env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN]).join(",")} MAIL=${env.MAILGUN_API_KEY && env.MAILGUN_DOMAIN ? "mailgun" : "not configured"}`);
 });
 
 // Render (and Docker/K8s) send SIGTERM before stopping the process. Without
