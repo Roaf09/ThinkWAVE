@@ -4,13 +4,18 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { useColors, useTheme } from "../context/ThemeContext";
+import { useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
 import ThemeIconButton from "../components/ThemeIconButton";
+
+// Auth pilot: colors via @theme tokens + `dark:` variant (see styles/tailwind.css).
+// Legacy `tw-auth-*` / `tw-pw-*` hooks stay for layout/animations only.
+// `useColors` is gone here — do not reintroduce `style={s.*(c)}`. Inputs use
+// trailing `!` so utilities beat the unlayered `input` rule in styles/base.css.
 
 function passwordChecks(p) {
   return {
@@ -32,6 +37,9 @@ const REQ_LABELS = {
   special: "At least 1 special character",
 };
 
+const INPUT = "px-4 py-3 rounded-xl text-sm w-full box-border outline-none transition-[border-color] duration-150 ease-[ease] border bg-auth-input! dark:bg-auth-input-dark! border-auth-input-border! dark:border-auth-input-border-dark! text-auth-text! dark:text-auth-text-dark!";
+const LABEL = "text-[13px] font-semibold text-auth-text dark:text-auth-text-dark";
+
 export default function Register() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -39,7 +47,6 @@ export default function Register() {
   const adminInviteToken = searchParams.get("adminInvite") || "";
   const isAdminReg = !!adminInviteToken;
   const { dark, toggleTheme } = useTheme();
-  const c = useColors();
 
   const [form, setForm] = useState({
     firstName: "", lastName: "",
@@ -68,8 +75,6 @@ export default function Register() {
   }, [adminInviteToken, isAdminReg]);
 
   const checks = useMemo(() => passwordChecks(form.password), [form.password]);
-  const okDot = dark ? "#22c55e" : "#16a34a";
-  const okText = dark ? "#86efac" : "#166534";
   const isStrong = Object.values(checks).every(Boolean);
   const matches = form.password && form.password === form.confirmPassword;
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -101,133 +106,135 @@ export default function Register() {
 
   const strengthCount = Object.values(checks).filter(Boolean).length;
   const isSuccess = error.startsWith("✓");
-  const feedbackTone = isSuccess
-    ? { bg: dark ? "rgba(34,197,94,0.10)" : c.greenBg, border: dark ? "rgba(34,197,94,0.35)" : c.greenBorder, title: dark ? "#86efac" : "#166534", body: dark ? "#bbf7d0" : "#166534" }
-    : { bg: dark ? "rgba(239,68,68,0.12)" : c.redBg, border: dark ? "rgba(248,113,113,0.35)" : c.redBorder, title: dark ? "#f87171" : "#b91c1c", body: dark ? "#fecaca" : "#7f1d1d" };
 
   if (isAdminReg && inviteState !== "valid") return (
-    <div className="tw-starry-page" style={s.page(c)}><div style={s.glow}/><PublicHeader compact hideSuper hideTheme/><main style={s.main}><div className={`tw-auth-form-shell ${exitClass || enterClass}`} style={s.card(c, dark)}><div style={s.cardTop}><h1 style={s.title(c)}>{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p style={s.subtitle(c)}>{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main><ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} /></div>
+    <div className="tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}><PublicHeader compact hideSuper hideTheme/><main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9"><div className={`tw-auth-form-shell ${exitClass || enterClass} my-auto rounded-[20px] px-6 sm:px-[44px] pt-10 pb-9 w-full max-w-[800px] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-[16px] border border-solid bg-auth-card dark:bg-auth-card-dark border-auth-border dark:border-auth-border-dark`}><div className="mb-7 text-center"><h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main><ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} /></div>
   );
 
   return (
-    <div className="tw-starry-page" style={s.page(c)}>
-      <div style={s.glow} />
+    <div className="tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <PublicHeader compact hideSuper hideTheme />
 
-      <main style={s.main}>
-        <div className={`tw-auth-form-shell tw-auth-register-shell ${exitClass || enterClass}`} style={s.card(c, dark)}>
-          <div style={s.cardTop}>
-            <h1 style={s.title(c)}>{isAdminReg ? "Create your admin account" : "Create your account"}</h1>
-            <p style={s.subtitle(c)}>
+      <main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9">
+        <div className={`tw-auth-form-shell tw-auth-register-shell ${exitClass || enterClass} my-auto rounded-[20px] px-6 sm:px-[44px] pt-10 pb-9 w-full max-w-[800px] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-[16px] border border-solid bg-auth-card dark:bg-auth-card-dark border-auth-border dark:border-auth-border-dark`}>
+          <div className="mb-7 text-center">
+            <h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{isAdminReg ? "Create your admin account" : "Create your teacher account"}</h1>
+            <p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">
               {isAdminReg ? "Register an admin account for your institution." : "Register a teacher account for ThinkWAVE."}
             </p>
           </div>
 
-          <div className="tw-auth-columns" style={s.columns}>
-          <form onSubmit={submit} style={s.form}>
-            <div style={s.row}>
-              <div style={s.field}>
-                <label style={s.label(c)}>First name</label>
-                <input style={s.input(c)} value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required />
+          <div className="tw-auth-columns flex gap-8 items-start">
+          <form onSubmit={submit} className="flex-[1.2] flex flex-col gap-[18px]">
+            <div className="flex gap-3">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className={LABEL}>First name</label>
+                <input className={INPUT} value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required />
               </div>
-              <div style={s.field}>
-                <label style={s.label(c)}>Last name</label>
-                <input style={s.input(c)} value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required />
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className={LABEL}>Last name</label>
+                <input className={INPUT} value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required />
               </div>
             </div>
 
-            <div style={s.field}>
-              <label style={s.label(c)}>Email address</label>
-              <input type="email" style={{...s.input(c),opacity:isAdminReg?0.82:1}} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly={isAdminReg} required />
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className={LABEL}>Email address</label>
+              <input type="email" className={`${INPUT} ${isAdminReg ? "opacity-80" : "opacity-100"}`} value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly={isAdminReg} required />
             </div>
 
-            <div style={s.field}>
-              <div style={s.labelRow}>
-                <label style={s.label(c)}>Password</label>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <div className="flex items-center justify-between">
+                <label className={LABEL}>Password</label>
                 <button type="button" className="tw-pw-help-btn" aria-label="Password requirements" onClick={() => setShowPwHelp(true)}><TwIcon name="help" size={16} /></button>
               </div>
-              <div style={s.passwordWrap}>
-                <input type={showPw ? "text" : "password"} style={{ ...s.input(c), paddingRight: isStrong ? 76 : 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
+              <div className="relative">
+                <input type={showPw ? "text" : "password"} className={`${INPUT} ${isStrong ? "pr-[76px]" : "pr-12"}`} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
                 {isStrong && <span className="tw-pw-strong-check" aria-label="Password meets all requirements"><TwIcon name="check" size={16} /></span>}
-                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
+                <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
             </div>
 
-            <div style={s.field}>
-              <label style={s.label(c)}>Confirm password</label>
-              <div style={s.passwordWrap}>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className={LABEL}>Confirm password</label>
+              <div className="relative">
                 <input
                   type={showConfPw ? "text" : "password"}
-                  style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }}
+                  className={`${INPUT} pr-12 ${!form.confirmPassword ? "" : matches ? "border-[#22c55e]! dark:border-[#22c55e]!" : "border-[#ef4444]! dark:border-[#ef4444]!"}`}
                   value={form.confirmPassword}
                   onChange={(e) => set({ confirmPassword: e.target.value })}
                   placeholder="••••••••"
                   required
                 />
-                <button type="button" style={s.showBtn} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
+                <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
               {form.confirmPassword && (
-                <span style={{ fontSize: 12, marginTop: 4, color: matches ? "#22c55e" : "#f87171" }}>
+                <span className={`text-xs mt-1 ${matches ? "text-[#22c55e]" : "text-[#f87171]"}`}>
                   {matches ? "✓ Passwords match" : "✗ Passwords do not match"}
                 </span>
               )}
             </div>
 
             {error && (
-              <div style={s.feedbackBox(feedbackTone)}>
-                <div style={s.errorHeader}>
-                  <span style={s.errorTitle(feedbackTone)}>
+              <div className={isSuccess
+                ? "rounded-[10px] p-3 px-[14px] border border-solid shadow-[0_10px_24px_rgba(15,23,42,0.06)] bg-auth-success-bg dark:bg-auth-success-bg-dark border-auth-success-border dark:border-auth-success-border-dark"
+                : "rounded-[10px] p-3 px-[14px] border border-solid shadow-[0_10px_24px_rgba(15,23,42,0.06)] bg-auth-error-bg dark:bg-auth-error-bg-dark border-auth-error-border dark:border-auth-error-border-dark"}>
+                <div className="flex justify-between items-start">
+                  <span className={isSuccess
+                    ? "text-sm font-extrabold text-auth-success-title dark:text-auth-success-title-dark"
+                    : "text-sm font-extrabold text-auth-error-title dark:text-auth-error-title-dark"}>
                     {isSuccess ? "Success!" : "Need help?"}
                   </span>
-                  {!isSuccess && <button type="button" style={s.errorClose(feedbackTone)} onClick={() => setError("")}>×</button>}
+                  {!isSuccess && <button type="button" className="bg-none border-0 text-[18px] font-bold cursor-pointer p-0 leading-none text-auth-error-title dark:text-auth-error-title-dark" onClick={() => setError("")}>×</button>}
                 </div>
-                <p style={s.errorMsg(feedbackTone)}>{error}</p>
+                <p className={isSuccess
+                  ? "m-[6px_0_0] text-[13px] leading-[1.5] text-auth-success-body dark:text-auth-success-body-dark"
+                  : "m-[6px_0_0] text-[13px] leading-[1.5] text-auth-error-body dark:text-auth-error-body-dark"}>{error}</p>
               </div>
             )}
 
-            <div style={s.btnWrap}>
-              <button type="submit" className="tw-auth-primary" style={s.submitBtn}>{isAdminReg ? "Create Admin Account" : "Create Teacher Account"}</button>
+            <div className="flex justify-center mt-1">
+              <button type="submit" className="tw-auth-primary px-[56px] py-[14px] rounded-xl border-[3px] border-brand dark:border-brand-dark bg-brand dark:bg-brand-dark text-white text-base font-extrabold cursor-pointer shadow-[0_10px_24px_rgba(43,108,255,0.25)]">{isAdminReg ? "Create Admin Account" : "Create Teacher Account"}</button>
             </div>
 
-            {!isAdminReg && <p style={s.loginPrompt(c)}>
-              Already have an account? <button type="button" onClick={moveToLogin} style={{...s.loginLink,background:"none",border:0,cursor:"pointer",padding:0}}>Log in here</button>
+            {!isAdminReg && <p className="text-center text-[13px] m-0 text-auth-muted dark:text-auth-muted-dark">
+              Already have an account? <button type="button" onClick={moveToLogin} className="text-brand! dark:text-brand-dark! font-bold underline underline-offset-2 border-0 bg-transparent! cursor-pointer p-0">Log in here</button>
             </p>}
           </form>
 
-          <div className="tw-password-requirements-panel" style={s.reqPanel(c)}>
-            <div style={s.reqTitle(c)}>Password requirements</div>
-            <div style={s.reqList}>
+          <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid bg-auth-panel dark:bg-auth-panel-dark border-auth-border dark:border-auth-border-dark">
+            <div className="text-[13px] font-bold text-auth-text dark:text-auth-text-dark">Password requirements</div>
+            <div className="flex flex-col gap-2.5">
               {Object.entries(REQ_LABELS).map(([key, label]) => (
-                <div key={key} style={s.reqItem}>
-                  <span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} />
-                  <span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span>
+                <div key={key} className="flex items-center gap-2.5">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 transition-[background,box-shadow] duration-200 ease-[ease] ${checks[key] ? "bg-[#16a34a] dark:bg-[#22c55e] shadow-[0_0_6px_rgba(34,197,94,0.35)]" : "bg-auth-border dark:bg-auth-border-dark shadow-none"}`} />
+                  <span className={`text-[13px] ${checks[key] ? "text-[#166534] dark:text-[#86efac]" : "text-auth-muted dark:text-auth-muted-dark"}`}>{label}</span>
                 </div>
               ))}
             </div>
-            <div style={s.strengthBar(c)}>
-              <div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} />
+            <div className="h-[5px] rounded-full overflow-hidden mt-1.5 bg-auth-border dark:bg-auth-border-dark">
+              <div className={`h-full rounded-full transition-[width,background] duration-300 ease-[ease] ${isStrong ? "bg-[#22c55e]" : strengthCount >= 3 ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`} style={{ width: `${(strengthCount / 5) * 100}%` }} />
             </div>
-            <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>
+            <div className={`text-xs text-center mt-1 ${isStrong ? "text-[#22c55e]" : strengthCount >= 3 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
               {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
             </div>
           </div>
           </div>
 
           {showPwHelp && <div className="tw-pw-help-backdrop" onClick={() => setShowPwHelp(false)}>
-            <div className="tw-pw-help-modal" style={{ background: c.cardBg3, border: `1px solid ${c.border}`, color: c.text }} onClick={(e) => e.stopPropagation()}>
-              <div style={s.reqTitle(c)}>Password requirements</div>
-              <div style={s.reqList}>
-                {Object.entries(REQ_LABELS).map(([key, label]) => (
-                  <div key={key} style={s.reqItem}>
-                    <span style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} />
-                    <span style={{ fontSize: 13, color: checks[key] ? okText : c.textMuted }}>{label}</span>
+            <div className="tw-pw-help-modal bg-auth-card dark:bg-auth-card-dark border border-solid border-auth-border dark:border-auth-border-dark text-auth-text dark:text-auth-text-dark" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[13px] font-bold text-auth-text dark:text-auth-text-dark">Password requirements</div>
+            <div className="flex flex-col gap-2.5">
+              {Object.entries(REQ_LABELS).map(([key, label]) => (
+                <div key={key} className="flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${checks[key] ? "bg-[#16a34a] dark:bg-[#22c55e] shadow-[0_0_6px_rgba(34,197,94,0.35)]" : "bg-auth-border dark:bg-auth-border-dark shadow-none"}`} />
+                    <span className={`text-[13px] ${checks[key] ? "text-[#166534] dark:text-[#86efac]" : "text-auth-muted dark:text-auth-muted-dark"}`}>{label}</span>
                   </div>
                 ))}
               </div>
-              <div style={s.strengthBar(c)}>
-                <div style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} />
+              <div className="h-[5px] rounded-full overflow-hidden mt-1.5 bg-auth-border dark:bg-auth-border-dark">
+                <div className={`h-full rounded-full ${isStrong ? "bg-[#22c55e]" : strengthCount >= 3 ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`} style={{ width: `${(strengthCount / 5) * 100}%` }} />
               </div>
-              <div style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>
+              <div className={`text-xs text-center mt-1 ${isStrong ? "text-[#22c55e]" : strengthCount >= 3 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
                 {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
               </div>
             </div>
@@ -238,46 +245,3 @@ export default function Register() {
     </div>
   );
 }
-
-const s = {
-  page: (c) => ({ minHeight: "100vh", background: c.pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", color: c.text, position: "relative", overflow: "hidden" }),
-  glow: { position: "absolute", top: -200, left: "50%", transform: "translateX(-50%)", width: 600, height: 600, background: "radial-gradient(circle,rgba(43,108,255,0.10) 0%,transparent 70%)", pointerEvents: "none", zIndex: 0 },
-  header: (c) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 40px", zIndex: 1, borderBottom: `1px solid ${c.border}` }),
-  logo: { display: "flex", alignItems: "baseline", textDecoration: "none" },
-  logoThink: (c) => ({ fontSize: 20, fontWeight: 900, color: c.text }),
-  logoWave: { fontSize: 20, fontWeight: 900, color: "#2b6cff" },
-  headerRight: { display: "flex", alignItems: "center", gap: 10 },
-  themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
-  headerBtn: (c) => ({ padding: "8px 20px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, color: c.text, fontSize: 13, fontWeight: 700, textDecoration: "none" }),
-  main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "36px 20px", zIndex: 1 },
-  card: (c, dark) => ({ background: dark ? "#17243d" : c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "40px 44px 36px", width: "min(100%,800px)", boxShadow: "0 24px 80px rgba(0,0,0,0.32)" }),
-  cardTop: { marginBottom: 28, textAlign: "center" },
-  title: (c) => ({ margin: "0 0 8px", fontSize: 26, fontWeight: 900, letterSpacing: "-0.5px", color: c.text }),
-  subtitle: (c) => ({ margin: 0, fontSize: 14, color: c.textMuted, lineHeight: 1.6 }),
-  columns: { display: "flex", gap: 32, alignItems: "flex-start" },
-  form: { flex: 1.2, display: "flex", flexDirection: "column", gap: 18 },
-  row: { display: "flex", gap: 12 },
-  field: { display: "flex", flexDirection: "column", gap: 6, flex: 1 },
-  label: (c) => ({ fontSize: 13, fontWeight: 600, color: c.text }),
-  labelRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  input: (c) => ({ padding: "12px 16px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none", transition: "border-color 0.15s" }),
-  passwordWrap: { position: "relative" },
-  showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#2b6cff", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
-  feedbackBox: (tone) => ({ background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: 10, padding: "12px 14px", boxShadow: "0 10px 24px rgba(15,23,42,0.06)" }),
-  errorHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  errorTitle: (tone) => ({ fontSize: 14, fontWeight: 800, color: tone.title }),
-  errorClose: (tone) => ({ background: "none", border: "none", color: tone.title, fontSize: 18, fontWeight: 700, cursor: "pointer", padding: 0, lineHeight: 1 }),
-  errorMsg: (tone) => ({ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: tone.body }),
-  btnWrap: { display: "flex", justifyContent: "center", marginTop: 4 },
-  submitBtn: { padding: "14px 56px", borderRadius: 12, border: "none", background: "#2b6cff", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(43,108,255,0.40)" },
-  loginPrompt: (c) => ({ textAlign: "center", fontSize: 13, color: c.textMuted, margin: 0 }),
-  loginLink: { color: "#2b6cff", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 },
-  reqPanel: (c) => ({ flex: 1, background: c.cardBg2, border: `1px solid ${c.border}`, borderRadius: 14, padding: "20px", display: "flex", flexDirection: "column", gap: 12, alignSelf: "stretch", justifyContent: "center" }),
-  reqTitle: (c) => ({ fontSize: 13, fontWeight: 700, color: c.text }),
-  reqList: { display: "flex", flexDirection: "column", gap: 10 },
-  reqItem: { display: "flex", alignItems: "center", gap: 10 },
-  reqDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0, transition: "background 0.2s, box-shadow 0.2s" },
-  strengthBar: (c) => ({ height: 5, background: c.border, borderRadius: 99, overflow: "hidden", marginTop: 6 }),
-  strengthFill: { height: "100%", borderRadius: 99, transition: "width 0.3s, background 0.3s" },
-  strengthText: (c) => ({ fontSize: 12, color: c.textMuted, textAlign: "center", marginTop: 4 }),
-};

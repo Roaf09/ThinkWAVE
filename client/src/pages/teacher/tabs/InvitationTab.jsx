@@ -4,7 +4,7 @@
  * Tip: This page now has two clear states: not joined yet vs already linked to an institution.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
@@ -63,40 +63,41 @@ export default function InvitationTab() {
   }
 
   return (
-    <div className="container" style={{ display: "grid", gap: 18 }}>
+    <div className="container grid gap-[18px]">
       <section>
-        <h2 style={{ marginBottom: 4, color: c.text }}>Invitation</h2>
+        <h2 className="mb-[4px]" style={{ color: c.text }}>Invitation</h2>
 
       </section>
 
       {!joinedInfo ? (
-        <section style={card(c, { maxWidth: 520 })}>
-          <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+        <section className="max-w-[520px]" style={card(c)}>
+          <form onSubmit={handleSubmit} className="grid gap-[14px]">
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18, color: c.text, marginBottom: 6 }}>Enter Invitation Code</div>
-              <div style={{ color: c.textMuted, fontSize: 13, lineHeight: 1.6 }}>Once accepted, your teacher account will be linked to the institution that owns the code.</div>
+              <div className="font-[900] text-[18px] mb-[6px]" style={{ color: c.text }}>Enter Invitation Code</div>
+              <div className="text-[13px] leading-[1.6]" style={{ color: c.textMuted }}>Once accepted, your teacher account will be linked to the institution that owns the code.</div>
             </div>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="e.g. ABCD1234"
               maxLength={12}
-              style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 22, fontWeight: 800, textAlign: "center", letterSpacing: "0.15em" }}
+              className="w-full box-border px-[16px] py-[14px] rounded-[14px] text-[22px] font-[800] text-center tracking-[0.15em]"
+              style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}
             />
-            {msg && <div style={{ padding: "10px 12px", borderRadius: 12, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-            <button type="submit" disabled={status === "loading" || !code.trim()} style={{ padding: "13px 16px", borderRadius: 14, border: "none", background: c.accent, color: "#fff", fontWeight: 900, cursor: status === "loading" ? "wait" : "pointer", opacity: !code.trim() ? 0.7 : 1 }}>
+            {msg && <div className="px-[12px] py-[10px] rounded-[12px] text-[13px]" style={{ background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg }}>{msg}</div>}
+            <button type="submit" disabled={status === "loading" || !code.trim()} className="px-[16px] py-[13px] rounded-[14px] font-[900]" style={{ border: "none", background: c.accent, color: "#fff", cursor: status === "loading" ? "wait" : "pointer", opacity: !code.trim() ? 0.7 : 1 }}>
               {status === "loading" ? "Joining…" : "Join Institution"}
             </button>
           </form>
         </section>
       ) : (
-        <section style={card(c, { maxWidth: 720 })}>
-          <div style={{ display: "grid", gap: 16 }}>
+        <section className="max-w-[720px]" style={card(c)}>
+          <div className="grid gap-[16px]">
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18, color: c.text }}>Institution Overview</div>
-              <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>Your teacher account is already linked. This tab now works as a simple membership snapshot.</div>
+              <div className="font-[900] text-[18px]" style={{ color: c.text }}>Institution Overview</div>
+              <div className="text-[13px] mt-[6px]" style={{ color: c.textMuted }}>Your teacher account is already linked. This tab now works as a simple membership snapshot.</div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-[12px]">
               <InfoCard c={c} label="Institution" value={joinedInfo.institutionName} />
               <InfoCard c={c} label="Role" value={joinedInfo.role} />
               <InfoCard c={c} label="Joined" value={joinedInfo.joinedDate} />
@@ -112,9 +113,9 @@ export default function InvitationTab() {
 
 function InfoCard({ c, label, value }) {
   return (
-    <div style={{ padding: 14, borderRadius: 16, background: c.cardBg2, border: `1px solid ${c.border}` }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub }}>{label}</div>
-      <div style={{ marginTop: 8, fontWeight: 800, color: c.text, lineHeight: 1.5 }}>{value}</div>
+    <div className="p-[14px] rounded-[16px]" style={{ background: c.cardBg2, border: `1px solid ${c.border}` }}>
+      <div className="text-[11px] uppercase tracking-[0.08em] font-[800]" style={{ color: c.textSub }}>{label}</div>
+      <div className="mt-[8px] font-[800] leading-[1.5]" style={{ color: c.text }}>{value}</div>
     </div>
   );
 }

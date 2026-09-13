@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 function seededOrder(length, enabled, seedText) {
   const values = Array.from({ length }, (_, index) => index);
@@ -22,7 +22,7 @@ function textOf(item, fallback) {
   return value || (!item?.image ? fallback : "");
 }
 
-function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled = false, questionKey = "matching" }) {
+function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled = false, questionKey = "matching", participantSeed = 0 }) {
   const colA = Array.isArray(config.colA) ? config.colA : [];
   const rawB = Array.isArray(config.colB) ? config.colB : [];
   const dummyB = Array.isArray(config.dummyB) ? config.dummyB : [];
@@ -41,8 +41,8 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
     return true;
   });
   const colB = [...pairedB, ...uniqueDummyB];
-  const orderA = useMemo(() => seededOrder(colA.length, !!config.shuffleColA, `${questionKey}-a`), [colA.length, config.shuffleColA, questionKey]);
-  const orderB = useMemo(() => seededOrder(colB.length, true, `${questionKey}-b`), [colB.length, questionKey]);
+  const orderA = useMemo(() => seededOrder(colA.length, !!config.shuffleColA, `${questionKey}-a-p${participantSeed || 0}`), [colA.length, config.shuffleColA, questionKey, participantSeed]);
+  const orderB = useMemo(() => seededOrder(colB.length, true, `${questionKey}-b-p${participantSeed || 0}`), [colB.length, questionKey, participantSeed]);
   const wrapperRef = useRef(null);
   const endpointRefs = useRef(new Map());
   const [active, setActive] = useState(null);
@@ -139,12 +139,39 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
   function handlePointerMove(event) {
     if (!active || !wrapperRef.current) return;
     const rect = wrapperRef.current.getBoundingClientRect();
-    pendingCursorRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const cx = event.clientX ?? event.touches?.[0]?.clientX;
+    const cy = event.clientY ?? event.touches?.[0]?.clientY;
+    if (cx == null || cy == null) return;
+    pendingCursorRef.current = { x: cx - rect.left, y: cy - rect.top };
     if (moveFrameRef.current) return;
     moveFrameRef.current = requestAnimationFrame(() => {
       moveFrameRef.current = 0;
       if (pendingCursorRef.current) setCursor(pendingCursorRef.current);
     });
+  }
+
+  function handleDropAt(clientX, clientY) {
+    if (!active || disabled) return false;
+    const el = typeof document !== "undefined" ? document.elementFromPoint(clientX, clientY) : null;
+    const target = el?.closest?.("[data-match-side]");
+    if (!target) return false;
+    const side = target.getAttribute("data-match-side");
+    const index = Number(target.getAttribute("data-match-index"));
+    if (!side || !Number.isFinite(index) || side === active.side) return false;
+    const aIndex = side === "A" ? index : active.index;
+    const bIndex = side === "B" ? index : active.index;
+    connect(aIndex, bIndex);
+    setActive(null);
+    setCursor(null);
+    return true;
+  }
+
+  function handlePointerUp(event) {
+    if (!active) return;
+    const cx = event.clientX ?? event.changedTouches?.[0]?.clientX;
+    const cy = event.clientY ?? event.changedTouches?.[0]?.clientY;
+    if (cx == null || cy == null) return;
+    handleDropAt(cx, cy);
   }
 
   const lines = Object.entries(valueMap || {}).map(([aIndex, bIndex]) => {
@@ -156,7 +183,16 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
   void lineVersion;
 
   return (
-    <div className="match-connect" ref={wrapperRef} onPointerMove={handlePointerMove}>
+    <div
+      className="match-connect"
+      ref={wrapperRef}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={() => { setActive(null); setCursor(null); }}
+      onTouchMove={(e) => { const t = e.touches?.[0]; if (t) handlePointerMove(t); }}
+      onTouchEnd={(e) => { const t = e.changedTouches?.[0]; if (t) handlePointerUp(t); }}
+      style={{ touchAction: "none" }}
+    >
       <svg className="match-connect-lines" aria-hidden="true">
         {lines.map(({ key, start, end }) => <line key={key} x1={start.x} y1={start.y} x2={end.x} y2={end.y} />)}
         {activeStart && cursor ? <line className="is-active" x1={activeStart.x} y1={activeStart.y} x2={cursor.x} y2={cursor.y} /> : null}
@@ -167,12 +203,12 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderA.map((index) => {
             const item = colA[index] || {};
             const paired = valueMap?.[index] !== undefined;
-            return <div key={`a-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("A", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }}>
+            return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("A", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "none" }}>
               <div className="match-connect-content">
                 {textOf(item, `Item ${index + 1}`) ? <span>{textOf(item, `Item ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" /> : null}
               </div>
-              <button type="button" className="match-connect-dot is-right" ref={(node) => node ? endpointRefs.current.set(`A-${index}`, node) : endpointRefs.current.delete(`A-${index}`)} onClick={() => handleEndpoint("A", index)} disabled={disabled} aria-label={`Connect Column A item ${index + 1}`} />
+              <button type="button" data-match-side="A" data-match-index={index} className="match-connect-dot is-right" ref={(node) => node ? endpointRefs.current.set(`A-${index}`, node) : endpointRefs.current.delete(`A-${index}`)} onClick={() => handleEndpoint("A", index)} disabled={disabled} aria-label={`Connect Column A item ${index + 1}`} style={{ touchAction: "none" }} />
             </div>;
           })}
         </div>
@@ -183,8 +219,8 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderB.map((index) => {
             const item = colB[index] || {};
             const paired = usedB.has(index);
-            return <div key={`b-${index}`} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("B", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }}>
-              <button type="button" className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onClick={() => handleEndpoint("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} />
+            return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("B", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "none" }}>
+              <button type="button" data-match-side="B" data-match-index={index} className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onClick={() => handleEndpoint("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} style={{ touchAction: "none" }} />
               <div className="match-connect-content">
                 {textOf(item, `Answer ${index + 1}`) ? <span>{textOf(item, `Answer ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" /> : null}

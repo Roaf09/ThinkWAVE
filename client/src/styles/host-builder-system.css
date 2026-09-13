@@ -1,0 +1,336 @@
+/* ThinkWAVE styles — host-builder-system.css (source styles.css lines 4673-5007). Import order in main.jsx must not change. */
+/* Revision 10.21 --------------------------------------------------------- */
+/* Analytics header: quiz title comes first and shares the row with Back. */
+.tw-analytics-title-row{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:8px
+}
+.tw-analytics-quiz-title{
+  margin:0!important;min-width:0;font-size:clamp(24px,3vw,34px);font-weight:950;overflow:hidden;text-overflow:ellipsis
+}
+.tw-analytics-badges-row{margin-top:1px}
+.tw-analytics-advanced-layout.has-expanded-student{grid-template-columns:minmax(390px,470px) minmax(0,1fr)!important}
+.tw-analytics-scoreboard.has-expanded-student{width:100%!important;max-width:none!important}
+.tw-analytics-theme,
+.tw-host-floating-theme{
+  width:44px!important;height:44px!important;border-radius:12px!important;display:grid!important;place-items:center!important;
+  box-shadow:0 8px 20px rgba(15,23,42,.14)!important;backdrop-filter:blur(10px)!important
+}
+body:not(.dark-mode) .tw-analytics-theme,
+body:not(.dark-mode) .tw-host-floating-theme{
+  background:rgba(255,255,255,.9)!important;color:var(--tw-ink)!important;border:3px solid var(--tw-on-brand)!important
+}
+body.dark-mode .tw-analytics-theme,
+body.dark-mode .tw-host-floating-theme{
+  background:rgba(7,17,36,.9)!important;color:var(--tw-on-brand)!important;border:3px solid var(--tw-abyss)!important
+}
+.tw-analytics-theme svg,.tw-host-floating-theme svg{width:23px!important;height:23px!important}
+
+/* Teacher cards use the same solid raised-surface language as Create templates. */
+.tw-session-card,.tw-live-session-card,.tw-history-session-card,.tw-bank-content-card{
+  border-width:4px!important;transition:transform .18s ease,filter .18s ease,box-shadow .18s ease!important
+}
+.tw-session-card:hover,.tw-live-session-card:hover,.tw-history-session-card:hover,.tw-bank-content-card:hover{
+  transform:translateY(-2px);filter:brightness(.98)
+}
+
+/* Keep Crossword bank content long, while pulling the word side slightly toward the grid. */
+.tw-bank-answer-summary.is-think-spell{width:min(100%,720px)!important}
+.tw-bank-crossword-expanded{grid-template-columns:minmax(300px,1.05fr) minmax(300px,.95fr)!important;gap:16px!important}
+.tw-bank-crossword-word-list{width:100%!important;max-width:600px!important;transform:translateX(-12px)}
+.tw-bank-crossword-word{border-width:2px!important}
+@media(max-width:760px){.tw-bank-crossword-word-list{transform:none}.tw-analytics-title-row{align-items:flex-start}.tw-analytics-title-row .tw-analytics-back-press{margin-left:auto}}
+
+/* Guest join call-to-action now rises/presses like Get Started. */
+.tw-guest-join-primary{transition:transform .16s ease,filter .16s ease,box-shadow .16s ease!important}
+.tw-guest-join-primary:hover:not(:disabled){transform:translateY(-3px)!important;filter:brightness(.95)!important;box-shadow:0 14px 28px rgba(43,108,255,.30)!important}
+.tw-guest-join-primary:active:not(:disabled){transform:translateY(3px)!important;box-shadow:0 5px 12px rgba(43,108,255,.20)!important}
+
+/* Host template-colored question area, timer, progress, and analytics action. */
+.tw-host-pixel-timer{
+  --host-accent:var(--tw-brand);display:inline-flex;align-items:center;gap:8px;min-height:43px;padding:7px 12px;border-radius:10px;
+  border:3px solid color-mix(in srgb,var(--host-accent) 74%,var(--tw-on-brand));background:color-mix(in srgb,var(--host-accent) 84%,var(--tw-ink));
+  color:var(--tw-on-brand);font-family:"Courier New",monospace;font-size:18px;font-weight:1000;letter-spacing:.08em;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent) 52%,var(--tw-abyss)),0 0 22px color-mix(in srgb,var(--host-accent) 56%,transparent);
+  transition:background .6s ease,border-color .6s ease,box-shadow .6s ease
+}
+.tw-host-pixel-timer.is-warning{filter:saturate(1.18)}
+.tw-host-pixel-timer.is-danger{--host-accent:var(--tw-danger-accent)}
+.tw-host-pixel-progress{
+  --host-accent:var(--tw-brand);height:13px!important;border:3px solid color-mix(in srgb,var(--host-accent) 70%,var(--tw-abyss))!important;border-radius:6px;overflow:hidden;
+  background:color-mix(in srgb,var(--host-accent) 35%,var(--tw-abyss))!important;box-shadow:inset 0 2px 5px rgba(0,0,0,.24),0 0 18px color-mix(in srgb,var(--host-accent) 30%,transparent)
+}
+.tw-host-pixel-progress>div{
+  height:100%;background-color:var(--host-accent)!important;
+  background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.24) 0 5px,transparent 5px 10px)!important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--host-accent) 70%,transparent);transition:width .2s linear,background-color .6s ease
+}
+.tw-host-pixel-progress.is-danger{--host-accent:var(--tw-danger-accent)}
+.tw-host-open-analytics{
+  --tw-press-face:var(--host-accent,var(--tw-brand))!important;
+  --tw-press-base:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 68%,var(--tw-abyss))!important;
+  --tw-press-border:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 60%,var(--tw-on-brand))!important
+}
+
+
+/* Revision 10.22 --------------------------------------------------------- */
+/* Dark mode hierarchy: dashboard section surfaces sit lighter than the page background. */
+body.dark-mode .tw-class-folders-shell,
+body.dark-mode .tw-class-report-panel,
+body.dark-mode .tw-teacher-bank-toggle,
+body.dark-mode .tw-live-sessions-page section,
+body.dark-mode .tw-bank-page section,
+body.dark-mode .tw-home-overview-shell,
+body.dark-mode .tw-home-recent-shell,
+body.dark-mode .tw-home-performance-shell{background:var(--tw-surface-dark)!important}
+body.dark-mode .tw-class-folders-shell,
+body.dark-mode .tw-class-report-panel{box-shadow:0 18px 38px rgba(0,0,0,.24)!important}
+
+/* Class report cards mirror Home Recent Sessions sizing and scrolling. */
+.tw-class-report-panel{min-height:0!important}
+.tw-class-report-list{display:grid!important;gap:12px!important;max-height:520px!important;overflow-y:auto!important;padding-right:7px!important}
+.tw-class-home-session-card{min-height:148px!important;box-sizing:border-box!important;padding:16px 18px!important;border-radius:18px!important}
+.tw-class-home-session-card:hover,.tw-teacher-shortcut-card:hover,.tw-bank-content-card:hover{transform:translateY(-3px)!important;filter:brightness(.97)!important;box-shadow:0 15px 0 -8px rgba(15,23,42,.28),0 20px 35px rgba(15,23,42,.16)!important}
+
+/* Create category selected state is intentionally heavier. */
+.tw-create-category-tutorial-target button{transition:border-width .14s ease,transform .16s ease,box-shadow .16s ease}
+.tw-create-category-tutorial-target button:hover{transform:translateY(-1px)}
+
+/* One consistent theme-aware scrollbar for the whole application. */
+*{scrollbar-width:thin;scrollbar-color:rgba(43,108,255,.62) rgba(148,163,184,.12)}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-track{background:rgba(148,163,184,.12);border-radius:999px}
+*::-webkit-scrollbar-thumb{background:rgba(43,108,255,.62);border:2px solid transparent;background-clip:padding-box;border-radius:999px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(43,108,255,.8);background-clip:padding-box}
+body.dark-mode *{scrollbar-color:rgba(147,197,253,.70) rgba(7,16,36,.55)}
+body.dark-mode *::-webkit-scrollbar-track{background:rgba(7,16,36,.55)}
+body.dark-mode *::-webkit-scrollbar-thumb{background:rgba(147,197,253,.70);border:2px solid transparent;background-clip:padding-box}
+
+/* Preview close is a blue 3D press button in every theme. */
+.tw-preview-close-press{--face:var(--tw-brand);--base:#173e9c;appearance:none;border:3px solid #102e7d;background:var(--base);border-radius:12px;padding:0;cursor:pointer;box-shadow:0 5px 0 #0f2d73,0 9px 18px rgba(43,108,255,.28)}
+.tw-preview-close-press span{display:block;padding:9px 17px;border-radius:9px;background:var(--face);color:var(--tw-on-brand);font-weight:950;transform:translateY(-4px);transition:transform .12s ease,filter .16s ease}
+.tw-preview-close-press:hover span{transform:translateY(-5px);filter:brightness(1.06)}
+.tw-preview-close-press:active span{transform:translateY(0)}
+
+/* Saved bank cards for Crossword, Guess Word and Matching are permanently open. */
+.tw-bank-expanded-preview.is-default-open{display:block!important;margin-top:14px!important;padding:16px!important;border:2px solid!important;border-radius:16px!important}
+.tw-bank-guess-expanded{grid-template-columns:minmax(220px,320px) minmax(180px,1fr)!important;align-items:center!important;justify-items:stretch!important;gap:20px!important}
+.tw-bank-guess-images{width:100%!important;max-width:320px!important}
+.tw-bank-guess-images>div{border-width:3px!important}
+.tw-bank-guess-answer{width:100%!important;max-width:none!important;min-height:72px!important;font-size:18px!important}
+.tw-bank-matching-preview{display:grid!important;gap:10px!important}
+.tw-bank-matching-row{display:grid!important;grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr)!important;align-items:center!important;gap:10px!important}
+.tw-bank-matching-arrow{font-size:22px;font-weight:1000;text-align:center}
+@media(max-width:720px){.tw-bank-guess-expanded{grid-template-columns:1fr!important}.tw-bank-matching-row{grid-template-columns:1fr!important}.tw-bank-matching-arrow{transform:rotate(90deg)}}
+
+/* Quiz builder 10.22 visual system. */
+.tw-builder-title-button{font:inherit!important;font-size:clamp(20px,2.1vw,30px)!important;line-height:1.2!important;font-weight:950!important;letter-spacing:normal!important}
+.tw-builder-question-count{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-size:15px;font-weight:900;cursor:pointer;padding:8px 14px;border-radius:12px;transition:background .18s ease,transform .18s ease}
+.tw-builder-question-count:hover{background:rgba(43,108,255,.10);transform:translateY(-1px)}
+.tw-builder-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start;padding-inline:0;transition:grid-template-columns .28s ease}
+.tw-builder-workspace.has-question-strip{grid-template-columns:minmax(0,1fr) minmax(250px,320px)}
+.tw-builder-question-strip{position:sticky;top:116px;max-height:calc(100vh - 138px);overflow:hidden;border:4px solid rgba(43,108,255,.38);border-radius:20px;background:var(--tw-builder-strip-bg,var(--tw-on-brand));box-shadow:0 20px 45px rgba(15,23,42,.16);display:flex;flex-direction:column;margin-right:20px}
+body.dark-mode .tw-builder-question-strip{--tw-builder-strip-bg:var(--tw-surface-dark)}
+.tw-builder-question-strip-head{display:flex;justify-content:space-between;align-items:center;padding:14px 15px;border-bottom:2px solid rgba(127,127,127,.18)}
+.tw-builder-question-strip-head button{border:0;background:transparent;color:var(--tw-brand);font-weight:900;cursor:pointer}
+.tw-builder-question-strip-list{display:grid;gap:10px;padding:12px;overflow:auto}
+.tw-builder-question-mini{display:grid;grid-template-columns:30px minmax(0,1fr);gap:3px 8px;text-align:left;border:3px solid rgba(127,127,127,.18);border-radius:14px;padding:10px;background:rgba(127,127,127,.06);color:inherit;cursor:grab}
+.tw-builder-question-mini strong{grid-row:1/3;width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:var(--tw-brand);color:var(--tw-on-brand)}.tw-builder-question-mini span{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tw-builder-question-mini small{opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tw-builder-question-mini.is-active{border-color:var(--tw-brand);box-shadow:0 0 0 3px rgba(43,108,255,.14)}
+.tw-builder-question-form{position:relative!important}
+@media(max-width:920px){.tw-builder-workspace.has-question-strip{grid-template-columns:1fr}.tw-builder-question-strip{position:relative;top:auto;max-height:360px;margin:0 14px 18px}}
+
+/* Revision 10.22 builder header contrast. */
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-press-neutral,
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-settings-flat,
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-title-button{color:var(--tw-on-brand)!important}
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-title-button{background:transparent!important}
+.tw-quiz-builder-page > div[style*="position: sticky"] .tw-builder-press-neutral{background:var(--tw-on-brand)!important;color:#1d4ed8!important;border-color:var(--tw-on-brand)!important}
+body.dark-mode .tw-bank-switch-shell,body.dark-mode .tw-bank-search-shell{background:var(--tw-surface-dark)!important}
+
+
+/* Revision 10.23 --------------------------------------------------------- */
+/* Home-style hover: lift only; preserve each card's original face/base colors and shadow. */
+.tw-live-session-card:hover,
+.tw-bank-content-card:hover,
+.tw-class-home-session-card:hover,
+.tw-teacher-shortcut-card:hover{
+  transform:translateY(-3px)!important;
+  filter:none!important;
+}
+/* Preserve the exact resting 3D base while hovering. */
+.tw-live-session-card:hover,
+.tw-bank-content-card:hover,
+.tw-class-home-session-card:hover{
+  box-shadow:var(--tw-template-card-shadow)!important;
+}
+
+/* Recent template shortcut content gets more breathing room from the left edge. */
+.tw-teacher-shortcut-card{padding-left:24px!important;padding-right:20px!important}
+
+/* History search sits visibly above the dark page surface. */
+body.dark-mode .tw-history-search-field{background:#183253!important;border-color:#35557e!important}
+
+/* Host setup preview rainbow frame is thicker. Enlarged previews have no inner white rim. */
+.tw-host-preview-desktop,
+.tw-host-preview-mobile{border-width:5px!important}
+.tw-host-preview-zoom-card{
+  padding:0!important;
+  border:6px solid transparent!important;
+  background:conic-gradient(from 0deg,var(--tw-danger-accent),var(--tw-warn),var(--tw-rainbow-yellow),var(--tw-success),var(--tw-rainbow-teal),var(--tw-rainbow-blue),var(--tw-rainbow-purple),var(--tw-rainbow-pink),var(--tw-danger-accent)) border-box!important;
+  overflow:hidden!important;
+}
+body.dark-mode .tw-host-preview-zoom-card{
+  background:conic-gradient(from 0deg,var(--tw-danger-accent),var(--tw-warn),var(--tw-rainbow-yellow),var(--tw-success),var(--tw-rainbow-teal),var(--tw-rainbow-blue),var(--tw-rainbow-purple),var(--tw-rainbow-pink),var(--tw-danger-accent)) border-box!important;
+}
+.tw-host-preview-zoom-card img{border-radius:14px!important}
+
+/* Guess Word bank answer matches the normal answer-card proportions instead of stretching. */
+.tw-bank-guess-answer{
+  min-height:58px!important;
+  width:min(100%,320px)!important;
+  max-width:320px!important;
+  justify-self:center!important;
+  padding:10px 14px!important;
+  box-sizing:border-box!important;
+}
+
+/* Quiz-builder header actions use a darker shade of the current template color. */
+.tw-builder-template-action,
+.tw-builder-template-action.tw-admin-press-blue{
+  --tw-press-face:var(--tw-builder-action-face,#173f9b)!important;
+  --tw-press-base:var(--tw-builder-action-base,#0f2d73)!important;
+  --tw-press-border:var(--tw-builder-action-border,#102e7d)!important;
+  color:var(--tw-on-brand)!important;
+}
+.tw-builder-template-action>span{color:var(--tw-on-brand)!important}
+.tw-builder-template-action svg{color:var(--tw-on-brand)!important}
+.tw-builder-template-nav{
+  border-color:var(--tw-builder-action-border,#102e7d)!important;
+  background:var(--tw-builder-action-face,#173f9b)!important;
+  color:var(--tw-on-brand)!important;
+  box-shadow:0 5px 0 var(--tw-builder-action-base,#0f2d73),0 10px 20px rgba(15,23,42,.16)!important;
+}
+.tw-builder-template-nav:hover:not(:disabled){transform:translateY(-1px)!important;filter:brightness(.97)!important}
+.tw-builder-template-nav:active:not(:disabled){transform:translateY(4px)!important;box-shadow:0 1px 0 var(--tw-builder-action-base,#0f2d73)!important}
+
+/* Settings toggles keep the current template hue even while off in dark mode. */
+body.dark-mode .tw-quiz-builder-page .tw-builder-settings-toggle-track{
+  background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 42%,var(--tw-navy-deep))!important;
+  border-color:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 72%,var(--tw-navy-deep))!important;
+}
+
+/* Question pager + fixed sidebar smoothly give each other room. */
+.tw-builder-content-region{
+  --tw-builder-strip-space:0px;
+  position:relative;
+  z-index:1;
+  transition:padding-right .34s cubic-bezier(.22,1,.36,1);
+}
+.tw-builder-content-region.has-question-strip{--tw-builder-strip-space:340px;padding-right:var(--tw-builder-strip-space)}
+.tw-builder-workspace{display:block!important;transition:none!important}
+.tw-builder-workspace.has-question-strip{grid-template-columns:none!important}
+.tw-builder-question-strip{
+  position:fixed!important;
+  right:20px!important;
+  top:94px!important;
+  width:min(310px,calc(100vw - 40px))!important;
+  max-height:calc(100dvh - 116px)!important;
+  margin:0!important;
+  z-index:1200!important;
+  border-left-width:5px!important;
+  animation:twBuilderStripIn .34s cubic-bezier(.22,1,.36,1) both!important;
+}
+@keyframes twBuilderStripIn{from{opacity:0;transform:translateX(48px)}to{opacity:1;transform:translateX(0)}}
+.tw-builder-question-strip.is-closing{animation:twBuilderStripOut .28s ease both!important}
+@keyframes twBuilderStripOut{to{opacity:0;transform:translateX(54px)}}
+.tw-builder-question-strip-head{justify-content:flex-end!important;min-height:46px!important}
+.tw-builder-question-strip-head b{display:none!important}
+.tw-builder-question-strip-close{
+  width:34px;height:34px;border:2px solid currentColor!important;border-radius:10px!important;
+  display:grid;place-items:center;padding:0!important;font-size:19px!important;line-height:1!important;
+  background:transparent!important;color:inherit!important;
+}
+.tw-builder-question-strip-close:hover{transform:none!important;background:rgba(127,127,127,.10)!important}
+.tw-builder-question-mini{
+  position:relative;display:grid!important;grid-template-columns:32px minmax(0,1fr)!important;
+  grid-template-rows:auto auto!important;gap:7px 9px!important;min-height:86px!important;
+  transition:transform .24s cubic-bezier(.22,1,.36,1),opacity .18s ease,box-shadow .2s ease,border-color .2s ease!important;
+}
+.tw-builder-question-mini:hover{transform:translateY(-2px)!important}
+.tw-builder-question-mini.is-drag-source>*{visibility:hidden!important}
+.tw-builder-question-mini.is-drag-source{opacity:.36!important;border-style:dashed!important;background:rgba(127,127,127,.08)!important}
+.tw-builder-question-mini.is-drop-before{transform:translateY(8px)!important}
+.tw-builder-question-mini.is-drop-after{transform:translateY(-8px)!important}
+.tw-builder-question-mini.is-drop-swap{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 32%,transparent)!important;border-color:var(--tw-template-accent,var(--tw-brand))!important}
+.tw-builder-question-mini .tw-mini-question-prompt{font-weight:900;white-space:normal;line-height:1.25;max-height:2.5em;overflow:hidden}
+.tw-builder-question-mini .tw-mini-question-answer{font-size:11px;opacity:.74;white-space:normal;line-height:1.25;max-height:2.5em;overflow:hidden}
+@media(max-width:1050px){
+  .tw-builder-content-region.has-question-strip{padding-right:0!important}
+  .tw-builder-question-strip{top:84px!important;right:12px!important;width:min(320px,calc(100vw - 24px))!important}
+}
+
+/* Question form dragging: the whole card floats/scales, while the website edges indicate reorder targets. */
+.tw-builder-question-form{will-change:transform;transform-origin:center center}
+.tw-builder-question-form.is-dragging{
+  z-index:1450!important;
+  transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.91)!important;
+  box-shadow:0 28px 70px rgba(0,0,0,.28),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 28%,transparent)!important;
+  cursor:grabbing!important;
+  pointer-events:none;
+}
+.tw-builder-question-drag-handle{transition:none!important}
+.tw-builder-question-drag-handle:hover,
+.tw-builder-question-drag-handle:focus,
+.tw-builder-question-drag-handle:active{transform:translateX(-50%)!important;filter:none!important;background:rgba(127,127,127,.10)!important;box-shadow:none!important}
+.tw-quiz-builder-page::before,
+.tw-quiz-builder-page::after{
+  content:"";position:fixed;top:0;bottom:0;width:18px;z-index:1400;pointer-events:none;opacity:0;
+  transition:opacity .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.tw-quiz-builder-page::before{left:0}.tw-quiz-builder-page::after{right:0}
+.tw-quiz-builder-page.is-drag-edge-left::before,
+.tw-quiz-builder-page.is-drag-edge-right::after{
+  opacity:1;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 42%,transparent);
+  box-shadow:0 0 34px 16px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 58%,transparent);
+}
+
+/* More solid template-coded question form and raised timing/points cards. */
+.tw-builder-question-form{background:var(--tw-builder-question-solid)!important}
+.tw-builder-meta-card-3d{
+  border-width:3px!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 52%,rgba(15,23,42,.42)),0 12px 24px rgba(15,23,42,.14)!important;
+}
+/* MCQ mini-controls are always white; selection is shown by the template-colored outline only. */
+.tw-builder-mini-white{
+  background:var(--tw-on-brand)!important;color:var(--tw-on-white)!important;border:3px solid var(--tw-line)!important;
+  box-shadow:0 4px 0 var(--tw-shadow-gray),0 9px 16px rgba(15,23,42,.13)!important;
+}
+.tw-builder-mini-white.is-selected{border-color:var(--tw-template-accent,var(--tw-brand))!important;box-shadow:0 4px 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 60%,var(--tw-muted)),0 0 0 3px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 16%,transparent)!important;transform:none!important;filter:none!important}
+.tw-builder-mini-white:hover:not(:disabled){background:var(--tw-on-brand)!important;color:var(--tw-on-white)!important;filter:none!important;transform:translateY(-1px)!important}
+.tw-builder-mini-white:disabled{background:var(--tw-on-brand)!important;color:var(--tw-muted)!important}
+
+/* MCQ correct selector now combines the letter and selection circle. */
+.tw-mcq-correct-dot.tw-mcq-letter-selector{width:34px!important;height:34px!important;font-size:14px!important;font-weight:1000!important;border-width:3px!important;flex:0 0 34px!important}
+.tw-mcq-choice-drag-handle{
+  width:34px;height:42px;flex:0 0 34px;border:0;background:transparent;color:var(--tw-muted);cursor:grab;
+  display:grid;place-items:center;font-size:21px;font-weight:1000;line-height:1;border-radius:9px;
+}
+.tw-mcq-choice-drag-handle:hover{transform:none!important;background:rgba(127,127,127,.09)!important;color:inherit!important}
+.tw-mcq-normal-choice.is-drag-source>*{visibility:hidden!important}
+.tw-mcq-normal-choice.is-drag-source{opacity:.34!important;border-style:dashed!important;background:rgba(127,127,127,.08)!important}
+.tw-mcq-normal-choice.is-drag-over{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 22%,transparent)!important;transform:translateY(-2px)!important}
+.tw-mcq-normal-choice{transition:transform .22s cubic-bezier(.22,1,.36,1),border-color .18s ease,background .18s ease,box-shadow .18s ease!important}
+
+/* True/False state icon softly appears after the selected circle fills. */
+.tw-tf-state-dot{position:relative;width:22px;height:22px;border-radius:999px;border:3px solid currentColor;display:grid;place-items:center;transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+.tw-tf-state-dot::after{content:"";font-size:15px;font-weight:1000;color:var(--tw-on-brand);opacity:0;transform:scale(.55) rotate(-14deg);transition:opacity .18s ease .12s,transform .2s cubic-bezier(.22,1,.36,1) .12s}
+.tw-tf-state-dot.is-active{background:currentColor}
+.tw-tf-state-dot.is-true::after{content:"✓"}.tw-tf-state-dot.is-false::after{content:"×";font-size:18px}
+.tw-tf-state-dot.is-active::after{opacity:1;transform:scale(1) rotate(0)}
+
+/* Matching builder wording/control polish. */
+.tw-matching-white-action{background:var(--tw-on-brand)!important;color:var(--tw-on-white)!important;border:3px solid var(--tw-line)!important;box-shadow:0 4px 0 var(--tw-shadow-gray),0 9px 16px rgba(15,23,42,.13)!important}
+.tw-matching-white-action:hover:not(:disabled){background:var(--tw-on-brand)!important;color:var(--tw-on-white)!important;filter:none!important}
+.tw-matching-arrow{border-width:4px!important}
+.tw-matching-delete-minus{min-width:40px!important;padding-inline:12px!important}
+.tw-matching-distractor-input{min-height:78px!important;resize:vertical!important;line-height:1.45!important}
+

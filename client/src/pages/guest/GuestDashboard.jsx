@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { getToken, setRole, setToken, clearRole, clearToken } from "../../lib/auth";
 import { useTheme, useColors } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
+import { sidebarStyle as sidebar, dashboardNavButtonStyle as navButton } from "../../components/DashboardShell";
 import ThemeIconButton from "../../components/ThemeIconButton";
+import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import GuestCreateTab from "./GuestCreateTab";
 import LiveSessionsTab from "../teacher/tabs/LiveSessionsTab";
 import SessionHistoryTab from "../teacher/tabs/SessionHistoryTab";
@@ -110,7 +112,16 @@ export default function GuestDashboard() {
   }
 
   return <div className={`tw-responsive-dashboard${activeTab === "live" ? " tw-sessions-dashboard" : ""}`} style={{ display: "flex", minHeight: "100vh", background: c.pageBg, transition: "background .3s ease" }}>
-    <aside data-sidebar="true" className="tw-responsive-sidebar tw-guest-sidebar" style={sidebar(c)}>
+    <MobileTopHeader
+      c={c}
+      name="Guest Host"
+      email="Guest mode"
+      avatarSrc=""
+      dark={dark}
+      toggleTheme={toggleTheme}
+      onLogout={() => setShowExit(true)}
+    />
+    <aside data-sidebar="true" className="tw-responsive-sidebar tw-guest-sidebar" style={{ ...sidebar(c), boxSizing: "border-box" }}>
       <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline" }}>
           <span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span>
@@ -118,7 +129,7 @@ export default function GuestDashboard() {
         </div>
       </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
-        {NAV.map((item) => <button key={item.id} onClick={() => setActiveTab(item.id)} style={navButton(c, activeTab === item.id)}>
+        {NAV.map((item) => <button key={item.id} className="tw-side-nav-btn" onClick={() => setActiveTab(item.id)} style={navButton(c, activeTab === item.id)}>
           <span style={{ width: 20, display: "inline-flex", justifyContent: "center" }}><TwIcon name={item.icon} size={18} /></span><span>{item.label}</span>
         </button>)}
       </nav>
@@ -130,10 +141,9 @@ export default function GuestDashboard() {
     <main className={`tw-responsive-dashboard-main${activeTab === "live" ? " tw-sessions-main" : ""}`} style={{ marginLeft: 220, width: "calc(100% - 220px)", flex: 1, minHeight: "100vh", overflowY: "visible", overflowX: "hidden", boxSizing: "border-box" }}>
       <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
     </main>
+    <MobileTabBar c={c} items={NAV} activeId={activeTab} onSelect={setActiveTab} iconsOnly />
     {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}
   </div>;
 }
 
-function sidebar(c) { return { width: 220, minWidth: 220, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}`, display: "flex", flexDirection: "column", padding: "0 0 24px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100, boxSizing: "border-box", transition: "background .3s,border-color .3s" }; }
-function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? "linear-gradient(135deg,#2b6cff,#5b7cff)" : "transparent", boxShadow: active ? "0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18)" : "none", transform: active ? "translateY(-1px)" : "none", color: active ? "#fff" : c.navColor, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s" }; }
 function sideAction(c) { return { display: "flex", alignItems: "center", gap: 9, minHeight: 40, padding: "9px 12px", borderRadius: 12, border: `1px solid ${c.sidebarBorder}`, background: "transparent", color: c.navColor, fontWeight: 700, cursor: "pointer" }; }

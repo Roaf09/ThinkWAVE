@@ -1,4 +1,4 @@
-Replace any SVG in landing/ or templates/ with your own image while keeping the same filename, or edit the image path arrays near the top of client/src/pages/Landing.jsx. PNG, JPG, WEBP, and SVG are supported.
+Replace any image in landing/ or templates/ with your own image while keeping the same filename, or edit the image path arrays near the top of client/src/pages/Landing.jsx. PNG, JPG, WEBP, and SVG are supported (WEBP preferred - it is what the app references).
 
 Revision 25.1 template preview images:
 - The regular filenames (for example multiple-choice.svg) are the landscape previews.

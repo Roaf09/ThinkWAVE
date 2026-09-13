@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 
 import Landing             from "./pages/Landing.jsx";
@@ -29,6 +29,7 @@ import StudentDashboard    from "./pages/student/StudentDashboard.jsx";
 import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
 
 import { getRole, getToken, getTabToken, clearToken, clearRole } from "./lib/auth";
+import { saveLastRoute, clearLastRoute } from "./lib/lastRoute";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
 import StarField from "./components/StarField.jsx";
@@ -55,8 +56,21 @@ function WelcomeToast({ name, firstLogin = false, onDone }) {
   );
 }
 
+function ScrollToTop() {
+  const loc = useLocation();
+  useEffect(() => {
+    try { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); } catch { window.scrollTo(0, 0); }
+  }, [loc.pathname]);
+  return null;
+}
+
 function Shell({ children, toast, setToast }) {
   const loc = useLocation();
+  // Remember the last in-app page so the next login can resume where the
+  // user left off (see lib/lastRoute.js). Auth/public pages are skipped.
+  useEffect(() => {
+    saveLastRoute(`${loc.pathname}${loc.search || ""}`);
+  }, [loc]);
   const hideHeader =
     loc.pathname === "/" ||
     loc.pathname === "/plan" ||
@@ -76,6 +90,7 @@ function Shell({ children, toast, setToast }) {
     loc.pathname.startsWith("/play");
   return (
     <div>
+      <ScrollToTop />
       <StarField />
       {toast && <WelcomeToast name={toast.name} firstLogin={toast.firstLogin} onDone={() => setToast(null)} />}
       {!hideHeader && (
@@ -120,6 +135,7 @@ export default function App() {
       if (!tabToken || event.newValue === tabToken) return;
       clearToken();
       clearRole();
+      clearLastRoute();
       window.alert("You were signed out because a different account signed in from another tab in this browser.");
       window.location.href = "/";
     }

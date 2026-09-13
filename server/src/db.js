@@ -9,9 +9,12 @@ const poolConfig = {
   password: env.DB_PASS,
   database: env.DB_NAME,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: Math.max(1, Math.floor(env.DB_POOL_LIMIT || 10)),
   namedPlaceholders: true,
   decimalNumbers: true,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  connectTimeout: 10000,
   // Stored DATETIME values (available_from/available_until, etc.) are naive
   // wall-clock timestamps entered in Asia/Manila local time (see
   // toMysqlDateTime in quizzes.controller.js, which stores the picker value
@@ -41,3 +44,20 @@ if (env.DB_SSL) {
 }
 
 export const pool = mysql.createPool(poolConfig);
+
+// Transient network blips (ECONNRESET / PROTOCOL_CONNECTION_LOST) idle-timeout
+// a pooled connection between requests. Retrying once on a fresh connection
+// avoids surfacing a 500 for a single dropped socket.
+const TRANSIENT_CODES = new Set(["ECONNRESET", "PROTOCOL_CONNECTION_LOST", "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR", "ETIMEDOUT"]);
+const rawQuery = pool.query.bind(pool);
+pool.query = async (...args) => {
+  try {
+    return await rawQuery(...args);
+  } catch (err) {
+    if (err && TRANSIENT_CODES.has(err.code)) {
+      await new Promise((r) => setTimeout(r, 150));
+      return await rawQuery(...args);
+    }
+    throw err;
+  }
+};

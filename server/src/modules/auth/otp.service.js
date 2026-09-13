@@ -61,7 +61,10 @@ export async function sendOtpForUser(userId, email, { purpose = "ACCOUNT_VERIFIC
   if (env.NODE_ENV !== "production") {
     console.info(`[ThinkWAVE OTP:${purpose}] ${email}: ${code}`);
   }
-  return { code, delivery: delivery || { sent: false, reason: "UNKNOWN" } };
+  // Deliberately no `code` in the return value: every caller only needs
+  // `delivery`, and returning the plaintext code invites a future
+  // `res.json(otpResult)` that would hand codes to the network.
+  return { delivery: delivery || { sent: false, reason: "UNKNOWN" } };
 }
 
 export async function verifyOtpCode(userId, code) {

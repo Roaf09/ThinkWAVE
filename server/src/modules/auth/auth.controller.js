@@ -18,8 +18,8 @@ function otpClientPayload(otpResult) {
   const sent = !!otpResult?.delivery?.sent;
   const payload = { emailSent: sent };
   if (!sent) {
-    payload.deliveryWarning = otpResult?.delivery?.reason === "EMAIL_NOT_CONFIGURED"
-      ? "Email delivery is not configured. Add your SMTP settings to server/.env for localhost."
+    payload.deliveryWarning = String(otpResult?.delivery?.reason || "").includes("NOT_CONFIGURED")
+      ? "Email delivery is not configured. Add your Mailgun settings to server/.env for localhost."
       : "The OTP email could not be sent. Check the server email settings and logs.";
   }
   return payload;
@@ -230,7 +230,7 @@ export async function login(req, res) {
 
   const firstLogin = !u.last_active_at;
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
-  const token = jwt.sign({ sub: u.id, role: u.role, ver: Number(u.token_version || 0) }, env.JWT_SECRET, { expiresIn: "8h" });
+  const token = jwt.sign({ sub: u.id, role: u.role, ver: Number(u.token_version || 0) }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN });
   res.json({ token, role: u.role, firstLogin });
 }
 
@@ -256,7 +256,7 @@ export async function requestPasswordReset(req, res) {
   if (rows.length) {
     const otpResult = await sendOtpForUser(rows[0].id, cleanEmail, { purpose: "PASSWORD_RESET" });
     return res.json({
-      message: "If the email exists, an OTP request has been processed.",
+      message: "If the email exists, an OTP has been sent.",
       ...otpClientPayload(otpResult),
     });
   }
@@ -287,7 +287,8 @@ export async function confirmPasswordReset(req, res) {
 export async function me(req, res) {
   const [rows] = await pool.query(
     `SELECT id, role, email, first_name, last_name, is_verified, is_active,
-            approval_status, institution_name, contact_number, profile_image
+            approval_status, institution_name, contact_number, profile_image,
+            created_at
      FROM users WHERE id=:id`,
     { id: req.user.sub }
   );

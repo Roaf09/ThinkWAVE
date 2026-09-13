@@ -82,6 +82,6 @@ quizzesRouter.post("/:id/publish",      requireAuth, requireRole("TEACHER", "GUE
 quizzesRouter.post("/:id/copy-to-bank", requireAuth, requireRole("TEACHER"), asyncHandler(copyQuizToBank));
 quizzesRouter.post("/:id/duplicate",    requireAuth, requireRole("TEACHER"), asyncHandler(duplicateQuiz));
 quizzesRouter.post("/:id/assign",       requireAuth, requireRole("TEACHER"), validateBody(AssignSchema), asyncHandler(assignQuiz));
-quizzesRouter.post("/:id/reuse",        requireAuth, requireRole("TEACHER"), validateBody(ReuseSchema), asyncHandler(reuseQuiz));
+quizzesRouter.post("/:id/reuse",        requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(ReuseSchema), asyncHandler(reuseQuiz));
 quizzesRouter.delete("/:id",            requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(softDeleteQuiz));
 quizzesRouter.post("/:id/restore",      requireAuth, requireRole("TEACHER","ADMIN"), asyncHandler(restoreQuiz));

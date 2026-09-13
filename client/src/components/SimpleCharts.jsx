@@ -1,4 +1,3 @@
-import React from "react";
 import { useColors } from "../context/ThemeContext";
 
 export function LineChart({ values=[], labels=[], height=190 }){

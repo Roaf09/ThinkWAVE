@@ -1,0 +1,370 @@
+/* ThinkWAVE styles — builder-host-analytics.css (source styles.css lines 2835-3399). Import order in main.jsx must not change. */
+/* Revision 9.9.4 — class reports, builder states, host preview/podium, and assignment polish. */
+/* Class reports must grow with their content instead of overlapping adjacent cards. */
+.tw-class-report-list{
+  display:grid!important;
+  grid-auto-rows:auto!important;
+  align-content:start!important;
+  gap:12px!important;
+}
+/* Revision 9.9.5 corrected — report visibility, builder controls, host feedback, and shared scrollbars. */
+/* Revision 9.9.6 final interface refinements */
+.tw-class-report-item.tw-class-report-item-v254{position:relative!important;height:auto!important;min-height:188px!important;padding:16px!important;display:grid!important;grid-template-rows:auto auto!important;align-content:space-between!important;overflow:visible!important;box-sizing:border-box!important;border-width:3px!important}
+.tw-class-report-copy{min-width:0!important;display:grid!important;gap:8px!important}
+.tw-class-report-actions{position:static!important;width:100%!important;display:flex!important;justify-content:flex-start!important;align-items:center!important;margin-top:auto!important;padding:0!important;min-height:24px!important;overflow:visible!important;left:14px!important;right:auto!important}
+/* Matching dummy answer: text field with optional image uploader at its right. */
+.tw-matching-dummy-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(112px,150px);gap:12px;align-items:start!important}
+.tw-matching-dummy-fields>input{min-width:0}
+.tw-matching-dummy-fields>div{height:100%;min-height:82px}
+@media(max-width:640px){.tw-matching-dummy-fields{grid-template-columns:1fr}}
+/* Saved/Published controls stay pressed, disabled, and visibly darker until editable again. */
+.tw-builder-toolbar-action.is-latched,
+.tw-builder-toolbar-action.is-latched:disabled{
+  opacity:.72!important;
+  filter:brightness(.72) saturate(.78)!important;
+  cursor:not-allowed!important;
+  box-shadow:none!important;
+}
+.tw-builder-toolbar-action.is-latched>span,
+.tw-builder-toolbar-action.is-latched:hover>span,
+.tw-builder-toolbar-action.is-latched:active>span{
+  transform:none!important;
+  filter:none!important;
+}
+/* Keep the Host Live preview layout unchanged except for matching preview heights. */
+.tw-host-preview-dual{align-items:stretch!important}
+.tw-host-preview-mobile{
+  height:auto!important;
+  max-height:none!important;
+  align-self:stretch!important;
+}
+/* Host scoreboard hierarchy and podium proportions. */
+.tw-host-scoreboard .tw-host-section-title h3>svg{width:28px!important;height:28px!important;min-width:28px!important}
+/* Revision 9.9.5 — host-panel scoreboard and question presentation. */
+.tw-host-trophy::after{left:18px!important;top:7px!important;width:13px!important;height:13px!important;border-radius:999px!important;background:rgba(255,255,255,.78)!important;transform:none!important;display:none!important}
+.tw-host-trophy span{top:4px!important}
+.tw-host-podium-place.place-1 .tw-host-trophy{width:72px!important;height:66px!important;transform:scale(1.08)!important}
+.tw-host-podium-place.place-1 .tw-host-trophy svg{width:66px!important;height:66px!important}
+.tw-host-podium-place.place-2 .tw-host-trophy{width:60px!important;height:55px!important;transform:scale(.94)!important}
+.tw-host-podium-place.place-2 .tw-host-trophy svg{width:54px!important;height:54px!important}
+.tw-host-podium-place.place-3 .tw-host-trophy{width:52px!important;height:48px!important;transform:translateY(7px) scale(.86)!important}
+.tw-host-podium-place.place-3 .tw-host-trophy svg{width:47px!important;height:47px!important}
+.tw-host-podium-platform{
+  width:min(170px,94%)!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:4px!important;
+  padding:8px 12px!important;
+}
+.tw-host-podium-place.place-1 .tw-host-podium-platform{min-height:78px!important;height:78px!important;border-color:color-mix(in srgb,var(--host-accent) 45%,#020617)!important}
+.tw-host-podium-place.place-2 .tw-host-podium-platform{min-height:66px!important;height:66px!important}
+.tw-host-podium-place.place-3 .tw-host-podium-platform{min-height:57px!important;height:57px!important;margin-top:8px!important;background:color-mix(in srgb,var(--host-accent) 58%,var(--tw-on-brand) 42%)!important}
+.tw-host-podium-platform .tw-host-podium-points{display:block!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:var(--tw-on-brand)!important;font-size:16px!important;line-height:1!important;text-shadow:0 1px 2px rgba(0,0,0,.42)!important}
+.tw-host-question-head h2{font-weight:1000!important}
+.tw-host-question-count{font-size:clamp(15px,1.35vw,19px)!important;font-weight:650!important;opacity:.78!important}
+/* Host question previews mirror the fixed rectangular student answer layout. */
+.tw-host-options{width:min(100%,920px)!important;justify-self:stretch!important;margin-inline:auto!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch!important;grid-template-columns:1fr!important;width:min(100%,860px)!important;gap:12px!important}
+.tw-host-options>div{
+  width:100%!important;
+  height:92px!important;
+  min-height:92px!important;
+  max-height:92px!important;
+  min-width:0!important;
+  border-radius:16px!important;
+  box-sizing:border-box!important;
+  padding:12px 22px!important;
+}
+.tw-host-options>div.is-odd-last{
+  grid-column:1/-1!important;
+  width:calc(50% - 8px)!important;
+  justify-self:center!important;
+}
+.tw-host-options>div b{flex:1!important;min-width:0;text-align:left!important}
+.tw-host-identification-answer{width:min(100%,620px);min-height:76px!important;border:3px solid;border-radius:16px;padding:18px 24px;display:grid;place-items:center;box-sizing:border-box;width:min(100%,860px)!important}
+.tw-host-matching-preview{align-items:stretch!important}
+.tw-host-matching-preview>div{align-content:start!important}
+.tw-host-media-choice{align-items:center!important;justify-content:space-between!important}
+.tw-host-media-choice img{align-self:center!important;margin-block:auto!important}
+/* Assigned-session intro uses a plain theme-aware icon and a true pressed Start button. */
+.sp-assignment-intro-icon{
+  width:auto!important;
+  height:auto!important;
+  margin:0 auto 10px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--tw-ink)!important;
+}
+.quiz-shell-new.theme-dark .sp-assignment-intro-icon{color:var(--tw-on-brand)!important}
+.sp-assignment-start{
+  display:block!important;
+  width:min(100%,240px)!important;
+  margin:0 auto!important;
+  padding:0 0 6px!important;
+  border:0!important;
+  background:var(--tw-blue-deep)!important;
+  box-shadow:0 12px 26px rgba(43,108,255,.28)!important;
+}
+.sp-assignment-start>span{min-height:54px!important}
+/* The final Dashboard action is intentionally flat. */
+.sp-dashboard-return{padding:0 0 6px!important;background:var(--tw-brand)!important;box-shadow:0 12px 26px rgba(43,108,255,.28)!important;border:0!important;border-radius:14px!important;background:var(--tw-blue-deep)!important}
+.sp-dashboard-return>span{min-height:50px!important;border:0!important;background:transparent!important;transform:translateY(0)!important;border:2px solid var(--tw-blue-edge-light)!important;background:var(--tw-brand)!important}
+.sp-dashboard-return:hover>span{filter:brightness(.92)!important}
+.sp-dashboard-return:active>span{transform:translateY(6px)!important;filter:brightness(.84)!important}
+body.dark-mode .sp-assignment-intro-icon{color:var(--tw-on-brand)!important}
+/* Revision 9.9.5 — visible class analytics links and clean host-mode surfaces. */
+.tw-class-report-actions .tw-analytics-text-link{display:inline-flex!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:2!important;color:var(--tw-brand)!important;background:transparent!important;border:0!important;padding:4px 0!important;font-size:14px!important;font-weight:850!important;cursor:pointer!important}
+.tw-class-report-actions .tw-analytics-text-link::after{content:"";position:absolute;left:0;right:auto;bottom:0;width:0;height:2px;background:currentColor;transition:width .2s ease}
+.tw-class-report-actions .tw-analytics-text-link:hover::after{width:100%}
+/* Host launch buttons use one visible raised surface in both states. */
+.tw-host-mode-row .tw-host-mode-press, .tw-host-mode-row .tw-host-mode-press.is-selected{height:66px!important;min-height:66px!important;max-height:58px!important;padding:0 0 7px!important;background:#164fb7!important;box-shadow:none!important;border:0!important;border-radius:14px!important;overflow:visible!important}
+.tw-host-mode-row .tw-host-mode-press>span{height:59px!important;min-height:59px!important;width:100%!important;border:1px solid rgba(255,255,255,.28)!important;border-radius:14px!important;background:var(--tw-brand)!important;box-shadow:0 7px 0 var(--tw-blue-deep)!important;transform:none!important;transition:transform .14s ease,box-shadow .14s ease,filter .16s ease!important;display:grid!important;place-items:center!important;background:#2f6ff3!important;color:var(--tw-on-brand)!important;box-shadow:none!important}
+.tw-host-mode-row .tw-host-mode-press:hover:not(:disabled)>span{filter:brightness(.92)!important}
+.tw-host-mode-row .tw-host-mode-press:active:not(:disabled)>span,
+.tw-host-mode-row .tw-host-mode-press.is-selected>span{
+  transform:translateY(7px)!important;box-shadow:0 0 0 var(--tw-blue-deep)!important;filter:brightness(.86)!important;
+}
+.tw-host-podium-place.place-1 .tw-host-trophy span{top:8px!important}
+body:not(.dark-mode) .tw-host-podium-platform .tw-host-podium-points{color:var(--tw-ink)!important;text-shadow:none!important;background:transparent!important}
+.tw-host-prompt{
+  background:color-mix(in srgb,var(--host-accent) 10%,rgba(255,255,255,.72))!important;
+  border:3px solid color-mix(in srgb,var(--host-accent) 45%,transparent)!important;
+  backdrop-filter:blur(8px)!important;
+  -webkit-backdrop-filter:blur(8px)!important;
+}
+body.dark-mode .tw-host-prompt{background:rgba(255,255,255,.11)!important;border-color:color-mix(in srgb,var(--host-accent) 70%,var(--tw-on-brand) 10%)!important}
+.tw-host-options>div,
+.tw-host-options>div.is-odd-last{
+  grid-column:auto!important;width:100%!important;justify-self:stretch!important;
+  height:76px!important;min-height:76px!important;max-height:76px!important;
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;
+}
+.tw-host-question-meta>span:nth-of-type(3){background:#16a34a22!important;color:#16a34a!important;border-color:#22c55e66!important;font-weight:950!important;box-shadow:0 0 14px rgba(34,197,94,.3)!important}
+/* Restore compact square submit controls and Guess Word visibility. */
+.quiz-shell-new .submit-btn{padding:13px 24px!important;background:var(--tw-blue-deep)!important;box-shadow:0 12px 26px rgba(43,108,255,.28)!important;border-radius:13px!important;min-width:150px!important;border:2px solid var(--tw-blue-edge-light)!important;background:var(--tw-brand)!important;box-shadow:0 6px 0 var(--tw-blue-deep),0 12px 26px rgba(43,108,255,.28)!important;transition:transform .14s ease,filter .16s ease,box-shadow .14s ease!important}
+.quiz-shell-new .submit-btn::before{content:"";display:block}
+.quiz-shell-new .submit-btn:hover:not(:disabled){filter:brightness(.92)!important;transform:translateY(-1px)}
+.quiz-shell-new .submit-btn:active:not(:disabled){transform:translateY(6px)!important;box-shadow:0 0 0 var(--tw-blue-deep)!important;filter:brightness(.84)!important}
+body:not(.dark-mode) .tw-host-prompt{background:rgba(15,23,42,.16)!important;border-color:color-mix(in srgb,var(--host-accent) 58%,var(--tw-ink) 18%)!important}
+.tw-class-report-meta>span{line-height:1.15!important}
+.tw-mcq-image-choice>.tw-mcq-correct-dot.tw-mcq-image-correct-letter{
+  left:20px!important;top:20px!important;width:34px!important;height:34px!important;
+  font-size:15px!important;font-weight:1000!important;box-shadow:0 4px 12px rgba(15,23,42,.18)!important;
+}
+.tw-mcq-image-letter{display:none!important}
+.tw-matching-dummy-input{text-align:left!important;align-self:start!important;padding-top:12px!important}
+.tw-class-picker-name{
+  display:-webkit-box!important;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden;overflow-wrap:anywhere;word-break:break-word;line-height:1.16;
+  font-size:clamp(12px,1.45vw,18px);max-width:100%;
+}
+.tw-dialog-text-cancel{
+  border:0!important;background:transparent!important;color:var(--tw-brand)!important;
+  padding:10px 8px!important;font:inherit;font-weight:900!important;cursor:pointer!important;
+}
+.tw-dialog-press{border:0;background:transparent;padding:0 0 7px;border-radius:12px;cursor:pointer;box-shadow:0 7px 0 var(--tw-blue-deep)}
+.tw-dialog-press>span{display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:12px;color:var(--tw-on-brand);font-weight:950}
+.tw-dialog-press.is-blue>span{background:var(--tw-brand)}
+.tw-dialog-press.is-red{box-shadow:0 7px 0 #991b1b}
+.tw-dialog-press.is-red>span{background:#dc2626}
+.tw-dialog-press:hover>span{filter:brightness(.92)}
+.tw-dialog-press:active{transform:translateY(7px);box-shadow:none}
+body.dark-mode .tw-host-podium-place.place-3 .tw-host-podium-platform{background:color-mix(in srgb,var(--host-accent) 62%,#6b7280 38%)!important}
+.tw-host-choice-count{margin-left:auto;min-width:22px!important;height:30px;padding:0 4px!important;border-radius:0!important;display:grid;place-items:center;background:color-mix(in srgb,var(--host-accent) 18%,transparent);border:2px solid color-mix(in srgb,var(--host-accent) 52%,transparent);color:var(--host-accent);font-style:normal;font-weight:1000;font-size:13px;border:0!important;background:transparent!important;box-shadow:none!important}
+.pics4-answer-shell{
+  border:3px solid rgba(43,108,255,.42)!important;border-radius:20px!important;padding:18px!important;
+  background:rgba(15,23,42,.48)!important;color:var(--tw-on-brand)!important;backdrop-filter:blur(3px);
+}
+.quiz-shell-new.theme-light .pics4-answer-shell{background:rgba(255,255,255,.82)!important;color:var(--tw-on-brand)!important;color:var(--tw-ink)!important;border-color:rgba(15,23,42,.35)!important}
+.quiz-shell-new.theme-dark .pics4-answer-shell{background:rgba(5,18,48,.72)!important;color:var(--tw-on-brand)!important;border-color:rgba(255,255,255,.32)!important}
+.pics4-answer-shell .pics4-answer-label,.pics4-answer-shell .spell-ctrl{color:inherit!important}
+.sp-feedback-card.is-almost .sp-feedback-subtitle{color:inherit!important;opacity:.92!important}
+.tw-student-class-analytics-list.is-scrollable{
+  scrollbar-width:thin;scrollbar-color:rgba(100,116,139,.5) transparent;
+}
+.tw-student-class-analytics-list.is-scrollable::-webkit-scrollbar{width:7px}
+.tw-student-class-analytics-list.is-scrollable::-webkit-scrollbar-track{background:transparent}
+.tw-student-class-analytics-list.is-scrollable::-webkit-scrollbar-thumb{background:rgba(100,116,139,.48);border-radius:999px}
+/* Revision 9.9.6 */
+/* Keep the landing theme control attached to the viewport and clearly visible. */
+.tw-landing-fixed-theme{position:fixed!important;left:18px!important;bottom:18px!important;z-index:10000!important;border:0!important;box-shadow:none!important;background:transparent!important;color:inherit!important;width:42px!important;height:42px!important;display:grid!important;place-items:center!important}
+.tw-plan-grid-three{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.tw-plan-price{display:grid;justify-items:end;gap:2px;text-align:right}
+.tw-plan-price small{font-size:11px;font-weight:700;max-width:150px}
+.tw-plan-qr-shell{height:220px;border:2px dashed;border-radius:18px;display:grid;place-items:center;padding:15px}
+.tw-plan-qr-shell img{width:min(100%,170px);height:min(100%,170px);object-fit:contain;border-radius:12px}
+@media(max-width:980px){.tw-plan-grid-three{grid-template-columns:1fr!important}}
+.tw-host-mode-row .tw-host-mode-press.is-selected>span{transform:translateY(7px)!important;filter:brightness(.88)!important}
+.tw-host-mode-row .tw-host-mode-press:disabled{opacity:.46!important}
+/* Host panel controls and score readability. */
+.tw-host-podium-platform .tw-host-podium-points,body:not(.dark-mode) .tw-host-podium-platform .tw-host-podium-points{color:var(--tw-on-brand)!important;background:transparent!important;border:0!important;text-shadow:0 1px 2px rgba(0,0,0,.55)!important}
+.tw-host-action-button,.tw-host-action-button>span{opacity:1!important;filter:none!important}
+.tw-host-action-button:not(:disabled)>span{background:var(--tw-press-face)!important}
+/* Sticky student header through the timer/progress area. */
+.quiz-shell-new .qn-header{position:sticky!important;top:0!important;z-index:80!important}
+.quiz-shell-new .qn-question-progress{position:sticky!important;top:68px!important;z-index:79!important}
+.quiz-shell-new .qn-timer-progress{position:sticky!important;top:76px!important;z-index:79!important}
+.theme-light .pics4-answer-shell,.theme-light .pics4-answer-shell .spell-char,.theme-light .pics4-answer-shell .spell-tile{color:var(--tw-ink)!important}
+.spell-controls .spell-ctrl{position:relative!important;border:0!important;border-radius:10px!important;padding:10px 16px!important;font-weight:900!important;box-shadow:0 6px 0 color-mix(in srgb,var(--tw-brand) 72%,#071b4f)!important;background:var(--tw-brand)!important;color:var(--tw-on-brand)!important;transform:translateY(-2px)!important}
+.spell-controls .spell-ctrl:active{transform:translateY(4px)!important;box-shadow:0 0 0 transparent!important}
+/* Paid plan application cards. */
+.tw-plan-card{min-width:0}
+.tw-plan-grid-three .tw-plan-card{min-height:545px}
+.tw-plan-grid-three .tw-plan-card button{margin-top:auto}
+.tw-bank-card-title{font-size:clamp(19px,1.8vw,25px)!important}
+/* Warning icon is unboxed and the confirmation has the raised press interaction. */
+.sp-anticheat-card .sp-anticheat-icon{width:auto!important;height:auto!important;border:0!important;border-radius:0!important;background:transparent!important;color:var(--tw-ink)!important;margin-bottom:15px!important}
+body.dark-mode .sp-anticheat-card .sp-anticheat-icon{color:var(--tw-on-brand)!important}
+.sp-anticheat-card>button{border-radius:10px!important;background:var(--tw-blue-deep)!important;padding:0 0 6px!important;box-shadow:0 12px 24px rgba(43,108,255,.24)!important;min-width:130px!important;color:var(--tw-on-brand)!important}
+.sp-anticheat-card>button::before{content:"";display:none}
+.sp-anticheat-card>button:not(:disabled){background:var(--tw-blue-deep)!important;border:0!important;box-shadow:0 10px 22px rgba(43,108,255,.24)!important;transform:none!important}
+/* Host control buttons keep one clean raised face. */
+.tw-host-actions .tw-admin-press{overflow:visible!important;opacity:1!important}
+.tw-host-actions .tw-admin-press>span{transform:translateY(-5px)!important;opacity:1!important}
+.tw-host-actions .tw-admin-press:active>span{transform:translateY(0)!important}
+.tw-host-actions .tw-admin-press:disabled>span{transform:translateY(-5px)!important}
+/* Revision 10 supplied carousel and template screenshots. */
+.tw-carousel-stage img{object-fit:cover!important}
+.tw-template-preview-dual img,
+.tw-host-preview-desktop img,
+.tw-host-preview-mobile img{object-fit:contain!important;background:var(--tw-on-brand)}
+body:not(.dark-mode) .tw-landing-fixed-theme{color:var(--tw-ink)!important}
+body.dark-mode .tw-landing-fixed-theme{color:var(--tw-on-brand)!important}
+.tw-landing-fixed-theme svg{display:block!important;opacity:1!important;visibility:visible!important}
+/* Revision 10.1 landing and verification refinements. */
+.tw-landing-carousel{
+  border-width:3px!important;
+  outline:2px solid color-mix(in srgb,currentColor 12%,transparent);
+  outline-offset:3px;
+}
+.tw-template-preview-modal h2{color:var(--tw-template-accent,var(--tw-brand))!important}
+.tw-template-preview-dual .tw-template-preview-landscape{
+  width:100%;
+  aspect-ratio:16/9;
+  overflow:hidden;
+  border-radius:16px;
+}
+.tw-template-preview-dual .tw-template-preview-landscape img{
+  width:100%!important;
+  height:100%!important;
+  aspect-ratio:16/9!important;
+  object-fit:contain!important;
+}
+.tw-plan-top strong{font-size:36px!important;line-height:1!important}
+@media(max-width:620px){.tw-plan-top strong{font-size:32px!important}}
+/* Keep the OTP verification screen inside one viewport with no page/card scrolling. */
+.tw-otp-page{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+.tw-otp-main{min-height:0!important;overflow:hidden!important;padding:20px!important}
+.tw-otp-card{max-height:calc(100dvh - 112px);overflow:hidden!important;box-sizing:border-box}
+@media(max-height:760px){.tw-otp-main{padding:12px 18px!important}.tw-otp-card{padding:24px 28px!important}.tw-otp-card h2{font-size:24px!important}}
+@media(max-height:650px){.tw-otp-card{padding:18px 24px!important}.tw-otp-card .tw-otp-icon-wrap{margin-bottom:8px!important}.tw-otp-card .tw-otp-intro{margin-bottom:16px!important;line-height:1.45!important}.tw-otp-digits{margin-bottom:12px!important}.tw-otp-digits input{height:52px!important;font-size:24px!important}}
+@media(max-width:430px){.tw-otp-card{padding-left:18px!important;padding-right:18px!important}.tw-otp-digits{gap:6px!important}.tw-otp-digits input{width:42px!important;height:56px!important}}
+/* Revision 10.3 — advanced analytics and class/student analytics. */
+.tw-analytics-theme-button{
+  border:0!important;
+  outline:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+  border-radius:0!important;
+}
+.tw-analytics-metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tw-analytics-scoreboard{display:grid;gap:8px}
+.tw-analytics-student-row{width:100%;border:0;background:transparent;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;border-radius:12px;cursor:pointer}
+.tw-analytics-student-row:hover{background:rgba(127,127,127,.08)}
+.tw-analytics-question-list{display:grid;gap:10px}
+/* Revision 10.3 analytics detail transitions and student-result states. */
+.tw-analytics-question-card{width:100%;border:1px solid;border-radius:15px;padding:0;text-align:left;cursor:pointer;overflow:hidden;transition:opacity .22s ease,transform .22s ease,box-shadow .22s ease,max-height .28s ease,padding .28s ease,margin .28s ease,border-width .28s ease;max-height:2400px;margin:0}
+.tw-analytics-question-card:hover{transform:translateY(-1px)}
+.tw-analytics-question-card.is-expanded{cursor:default;animation:tw-analytics-expand .24s ease both}
+@keyframes tw-analytics-expand{from{opacity:.35;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
+.tw-analytics-question-summary{display:grid;grid-template-columns:minmax(46px,auto) minmax(0,1fr) minmax(94px,auto);gap:10px;align-items:center;padding:12px}
+.tw-analytics-question-prompt{font-weight:780;white-space:normal;overflow-wrap:break-word}
+.tw-analytics-expanded-detail{display:grid;gap:14px;padding:16px}
+.tw-analytics-expanded-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tw-analytics-close{border:0;background:transparent;padding:6px;display:grid;place-items:center;cursor:pointer;border-radius:8px}
+.tw-analytics-full-prompt{font-size:17px;font-weight:850;line-height:1.5}
+.tw-analytics-choice-grid{display:grid;gap:9px}
+.tw-analytics-choice-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid transparent}
+.tw-analytics-choice-row.is-correct{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.42)}
+.tw-analytics-choice-row.is-wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.34)}
+.tw-analytics-choice-row.is-student-choice{background:rgba(43,108,255,.14);border-color:rgba(43,108,255,.5)}
+.tw-analytics-choice-row.is-neutral{background:rgba(127,127,127,.06);border-color:rgba(127,127,127,.18)}
+.tw-analytics-choice-letter{width:30px;height:30px;display:grid;place-items:center;border-radius:999px;font-weight:950;background:rgba(127,127,127,.12)}
+.tw-analytics-choice-content{display:flex;align-items:center;gap:10px;min-width:0;line-height:1.35}
+.tw-analytics-choice-content img{width:76px;height:76px;object-fit:cover;border-radius:10px;flex:0 0 auto}
+.tw-analytics-choice-stat{border:0;background:transparent;font:inherit;font-weight:900;cursor:pointer;padding:7px 8px;border-radius:9px;white-space:nowrap}
+.tw-analytics-batch-detail{display:grid;gap:14px}
+.tw-analytics-pair-list,.tw-analytics-word-list{display:grid;gap:8px;margin-left:12px;padding-left:12px;border-left:3px solid rgba(127,127,127,.2)}
+.tw-analytics-pair-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.05em;opacity:.72;padding:0 10px}
+.tw-analytics-pair-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:10px;border-radius:12px;background:rgba(127,127,127,.06)}
+.tw-analytics-result-pair{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr);align-items:center;gap:7px;padding:10px;border-radius:12px;border:1px solid transparent}
+.tw-analytics-result-pair.is-correct{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.42)}
+.tw-analytics-result-pair.is-wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.34)}
+.tw-analytics-word-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:10px;border-radius:12px;background:rgba(127,127,127,.06)}
+.tw-analytics-word-row.is-found{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.42)}
+.tw-analytics-word-row.is-missed{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.34)}
+.tw-analytics-answer-only{display:grid;gap:4px;border:1px solid;padding:11px 12px;border-radius:12px}
+.tw-analytics-image-strip{display:flex;gap:8px;flex-wrap:wrap}
+.tw-analytics-image-strip img{width:92px;height:92px;object-fit:cover;border-radius:11px}
+.tw-analytics-media{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.tw-analytics-media img{width:54px;height:54px;object-fit:cover;border-radius:8px;flex:0 0 auto}
+.tw-analytics-arrow{width:36px;height:36px;border:1px solid;border-radius:10px;display:grid;place-items:center;cursor:pointer}
+.tw-analytics-arrow:disabled{opacity:.35;cursor:not-allowed}
+.tw-student-analytics-detail{display:grid;gap:12px;padding:0 12px 14px 50px}
+.tw-student-analytics-nav{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tw-student-answer-tag{font-size:12px;font-weight:950;padding:4px 8px;border-radius:999px;background:rgba(127,127,127,.1)}
+.tw-class-student-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.tw-class-student-search{display:flex;align-items:center;gap:7px;border:1px solid;border-radius:11px;padding:8px 10px;min-width:min(100%,250px)}
+.tw-class-student-search input{border:0;outline:0;background:transparent;width:100%;font:inherit;min-width:0}
+.tw-class-student-clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.tw-class-student-clickable:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.tw-class-modal-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.tw-class-analytics-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.tw-class-analytics-stats>div,.tw-student-stat-grid>div{display:grid;gap:6px;padding:13px;border-radius:13px}
+.tw-class-analytics-stats b,.tw-student-stat-grid b{font-size:22px}
+.tw-class-analytics-filter{display:flex;gap:8px;margin-bottom:16px}
+.tw-class-analytics-filter button{border:1px solid rgba(127,127,127,.25);background:transparent;border-radius:999px;padding:8px 14px;font-weight:900;cursor:pointer;color:inherit}
+.tw-class-analytics-filter button.is-active{background:var(--tw-brand);color:var(--tw-on-brand);border-color:var(--tw-brand)}
+.tw-class-trend-scroll{overflow-x:auto;overflow-y:hidden;border:1px solid;border-radius:14px;padding:14px;overscroll-behavior-inline:contain;touch-action:pan-x;scrollbar-width:thin}
+.tw-class-trend-chart{display:flex;align-items:flex-end;gap:16px;min-width:max-content;height:280px;padding-top:28px}
+.tw-class-trend-item{width:100px;height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:6px;text-align:center;align-items:end}
+.tw-class-trend-bar-zone{height:200px;display:flex;align-items:flex-end;justify-content:center;position:relative;border-bottom:1px solid rgba(127,127,127,.28)}
+.tw-class-trend-bar{width:54px;min-height:3px;border-radius:9px 9px 2px 2px;transition:height .25s ease}
+.tw-class-trend-value{position:absolute;top:-22px;font-size:12px;font-weight:950}
+.tw-class-trend-item b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.tw-class-trend-item small{font-size:10px;opacity:.72;min-height:26px}
+.tw-student-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tw-student-progress-list{display:grid;gap:14px;margin-top:18px}
+.tw-student-progress-label{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:13px}
+.tw-student-progress-track{height:10px;border-radius:999px;overflow:hidden}
+.tw-student-progress-track span{display:block;height:100%;border-radius:inherit}
+@media(max-width:1100px){.tw-analytics-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.tw-analytics-question-summary{grid-template-columns:auto minmax(0,1fr);}.tw-analytics-question-summary>*:last-child{grid-column:1/-1;justify-self:start}.tw-analytics-choice-row{grid-template-columns:32px minmax(0,1fr)}.tw-analytics-choice-stat{grid-column:2;justify-self:start}.tw-analytics-pair-head{display:none}.tw-analytics-pair-row{grid-template-columns:1fr}.tw-analytics-word-row{grid-template-columns:minmax(0,1fr) auto}.tw-analytics-word-row>*:last-child{grid-column:1/-1;justify-self:start}.tw-student-analytics-detail{padding-left:12px}.tw-class-analytics-stats,.tw-student-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:470px){.tw-analytics-metrics-grid{grid-template-columns:1fr 1fr}.tw-class-analytics-stats,.tw-student-stat-grid{grid-template-columns:1fr}.tw-analytics-image-strip img{width:76px;height:76px}}
+.tw-history-advanced-insights{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(127,127,127,.18)}
+.tw-analytics-question-card.is-hidden{
+  opacity:0;
+  transform:scale(.985);
+  max-height:0;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border-width:0!important;
+  pointer-events:none;
+}
+.tw-analytics-question-list.has-expanded{gap:0}
+.tw-student-pair.is-correct,
+.tw-analytics-word-row.is-correct{
+  background:rgba(16,185,129,.12);
+  border:1px solid rgba(16,185,129,.42);
+}
+.tw-student-pair.is-wrong,
+.tw-analytics-word-row.is-wrong{
+  background:rgba(239,68,68,.10);
+  border:1px solid rgba(239,68,68,.34);
+}
+.tw-analytics-choice-row.no-letter{grid-template-columns:minmax(0,1fr) auto}
+@media(max-width:720px){.tw-analytics-choice-row.no-letter{grid-template-columns:minmax(0,1fr)}.tw-analytics-choice-row.no-letter .tw-analytics-choice-stat{grid-column:1;justify-self:start}}

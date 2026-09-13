@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { normalizeTemplateType } from "../lib/templateTypes";
 import { templateTone } from "../lib/templatePalette";
-import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature, resolveThinkSpellWordBank } from "../templates/thinkspell/thinkSpell";
+import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature, resolveThinkSpellWordBank } from "../lib/thinkSpell";
 
 function safeJson(v) {
   if (!v) return {};
@@ -87,7 +87,7 @@ export default function QuizPreviewModal({ quiz, onClose }) {
   );
 }
 
-function PreviewBody({ templateType, cfg, correct, c, tone, questionId }) {
+function PreviewBody({ templateType, cfg, correct, c, tone }) {
   const tt = normalizeTemplateType(templateType);
   const options = (Array.isArray(cfg.options) ? cfg.options : tt === "TRUE_FALSE" ? ["True", "False"] : []).map(normalizeOption);
   const labels = "ABCDEFGHIJ".split("");

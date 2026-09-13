@@ -1,0 +1,472 @@
+/* ThinkWAVE styles — plans-admin-teacher.css (source styles.css lines 1147-1686). Import order in main.jsx must not change. */
+/* Revision 8.2 public navigation and plan refinements */
+.tw-public-nav button,.tw-footer-links button{font-weight:400}
+.tw-super-dot{width:18px;height:18px;min-width:18px;padding:0;border-radius:50%;font-size:0}
+.tw-super-dot span{font-size:0}
+.tw-plan-page{height:100vh;min-height:0;overflow:hidden}
+.tw-plan-page-main{height:calc(100vh - 78px);box-sizing:border-box;padding:10px 0 14px!important;align-items:start;overflow:hidden;gap:clamp(22px,4vw,52px)!important}
+.tw-plan-page-copy,.tw-plan-application{align-self:start}
+.tw-plan-top-label{display:block;margin-top:8px}
+/* Keep the desktop plan form fully visible without making the form itself scroll. */
+.tw-plan-application{max-height:none!important;overflow:visible!important;padding:16px 22px!important}
+@media(max-width:900px),(max-height:760px){.tw-plan-page{height:auto;min-height:100vh;overflow:auto}.tw-plan-page-main{height:auto;overflow:visible}.tw-plan-application{max-height:none;overflow:visible}}
+.tw-filter-select{min-width:190px;padding:11px 38px 11px 13px;border:1px solid;border-radius:12px;font:inherit;cursor:pointer;appearance:auto;color-scheme:light dark;width:100%!important;max-width:none!important;height:48px!important;position:relative!important;z-index:2!important}
+.tw-filter-select option{background:var(--tw-on-brand);color:var(--tw-on-white)}
+[data-theme="dark"] .tw-filter-select option{background:var(--tw-on-white);color:#f9fafb}
+/* Revision 8.3 visual refinements */
+/* Revision 8.4.1 public-page layering and layout fixes */
+.tw-starry-page{position:relative;isolation:isolate}
+[data-theme="dark"] .tw-starry-page::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:var(--tw-star-opacity,1);transition:opacity .18s linear;background-image:radial-gradient(circle,var(--tw-on-brand) 0 1px,transparent 1.5px),radial-gradient(circle,rgba(255,255,255,.8) 0 1.2px,transparent 1.7px),radial-gradient(circle,rgba(255,255,255,.55) 0 .8px,transparent 1.3px);background-size:73px 73px,121px 121px,49px 49px;background-position:8px 13px,33px 57px,21px 4px;display:none!important}
+.tw-plan-card.featured{position:relative;border:4px solid transparent!important;background:linear-gradient(var(--tw-card-bg,var(--tw-on-brand)),var(--tw-card-bg,var(--tw-on-brand))) padding-box,linear-gradient(120deg,var(--tw-rainbow-coral),#ffb703,#7bd389,#35a7ff,#9b5de5,var(--tw-rainbow-coral)) border-box!important;box-shadow:0 26px 70px rgba(88,80,190,.20),inset 0 1px 0 rgba(255,255,255,.7)!important;overflow:hidden}
+/* Revision 8.4 finishing fixes */
+.tw-plan-card.featured::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(125deg,rgba(255,255,255,.40),transparent 30%,rgba(255,255,255,.14) 52%,transparent 72%);mix-blend-mode:screen;opacity:.16!important}
+[data-theme="dark"] .tw-plan-card.featured{--tw-card-bg:rgba(7,20,43,.94)}
+[data-theme="light"] .tw-plan-card.featured{--tw-card-bg:rgba(255,252,244,.95)}
+.tw-back-top-wrap{display:flex;justify-content:center;padding:24px 0 38px}
+.tw-back-top{transition:opacity .35s ease,transform .35s ease;opacity:0;transform:translateY(8px) scale(.94);pointer-events:none}
+.tw-back-top:hover{transform:translateY(-3px)}
+[data-theme="dark"] .tw-footer-links button{color:var(--tw-on-brand)!important}
+.tw-show-icon{width:34px;height:34px;display:grid;place-items:center}
+.tw-plan-page-copy>div[style*="height: 300"] img{max-width:210px!important;max-height:210px!important}
+.tw-donut-layout{justify-content:center!important;align-items:center!important}
+.tw-donut-layout .tw-donut{margin-inline:auto}
+.tw-filter-row{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(190px,260px)!important;align-items:center!important;overflow:visible!important}
+.tw-search-input{min-width:0!important}
+.tw-search-input input{height:48px!important}
+.tw-overview-layout{grid-template-columns:240px minmax(0,1fr)!important;align-items:stretch!important}
+.tw-overview-metrics{grid-template-rows:repeat(4,1fr)!important;height:100%!important}
+.tw-overview-metrics>.tw-super-card{height:100%;box-sizing:border-box}
+.tw-overview-charts{grid-template-columns:minmax(0,1fr) minmax(280px,.62fr)!important;grid-template-rows:1fr 1fr!important}
+.tw-overview-charts>section:nth-child(1){grid-column:1;grid-row:1}
+.tw-overview-charts>section:nth-child(2){grid-column:2;grid-row:1/3}
+.tw-overview-charts>section:nth-child(3){grid-column:1;grid-row:2}
+.tw-overview-charts>section{min-height:280px;box-sizing:border-box;box-shadow:0 18px 42px rgba(15,23,42,.16)!important}
+.tw-health-status-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.tw-health-grid>section{min-height:360px!important}
+@media(max-width:1050px){.tw-overview-layout{grid-template-columns:1fr!important}.tw-overview-metrics{grid-template-columns:repeat(4,1fr)!important;grid-template-rows:none!important}.tw-overview-charts{grid-template-columns:1fr 1fr!important;grid-template-rows:auto!important}.tw-overview-charts>section:nth-child(n){grid-column:auto;grid-row:auto}.tw-overview-charts>section:nth-child(2){grid-row:1/3;grid-column:2}.tw-filter-row{grid-template-columns:minmax(0,1fr) 230px!important}}
+@media(max-width:760px){.tw-overview-metrics{grid-template-columns:repeat(2,1fr)!important}.tw-overview-charts,.tw-filter-row,.tw-health-status-row{grid-template-columns:1fr!important}.tw-overview-charts>section:nth-child(2){grid-row:auto;grid-column:auto}}
+.tw-starry-page::before{z-index:0!important}
+/* The public header keeps its own sticky positioning (it must stay pinned to
+   the top). Letting this rule stomp it to position:relative unpins it, which
+   is why auth-page headers scrolled away with the content. */
+.tw-starry-page>*:not(.tw-public-header){position:relative;z-index:1}
+/* Revision 8.4 atmospheric stars and public-page transitions */
+.tw-star-field{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:var(--star-fade,1);transition:opacity .35s ease}
+.tw-star-field i{position:absolute;display:block;border-radius:50%;background:var(--tw-on-brand);box-shadow:0 0 5px rgba(255,255,255,.72);opacity:.18;will-change:transform,opacity;animation:twStarTwinkle var(--duration) ease-in-out var(--delay) infinite alternate;transition:transform .18s linear}
+[data-theme="light"] .tw-star-field{display:none}
+@keyframes twStarTwinkle{0%{opacity:.08;scale:.65}38%{opacity:.92;scale:1.12}72%{opacity:.3;scale:.82}100%{opacity:.75;scale:1}}
+.tw-route-transition{position:relative;z-index:1;animation:twRouteEnter .38s cubic-bezier(.22,.8,.22,1)}
+@keyframes twRouteEnter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Stronger template boundaries and reliable preview interaction. */
+.tw-template-landing-card{border-width:4px!important;cursor:pointer;position:relative;z-index:1}
+.tw-plan-card-highlighted::after{opacity:.18!important}
+.tw-plan-grid .tw-plan-card-highlighted .tw-cta-primary{transition:transform .2s ease,box-shadow .2s ease,filter .2s ease}
+.tw-plan-grid .tw-plan-card-highlighted .tw-cta-primary:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(43,108,255,.24);filter:brightness(1.06)}
+.tw-back-top.visible{opacity:1;transform:none;pointer-events:auto}
+.tw-plan-phone-wrap{display:flex;border:1px solid;border-radius:13px;overflow:hidden;min-height:38px!important}
+.tw-plan-phone-wrap span{display:grid;place-items:center;padding:0 9px!important;font-weight:800;border-right:1px solid}
+.tw-plan-phone-wrap input{border:0!important;border-radius:0!important;min-height:36px!important}
+.tw-plan-application h2{margin:0 0 10px!important;font-size:24px!important}
+.tw-plan-form-grid{gap:7px 11px!important}
+.tw-plan-form-grid input,.tw-plan-form-grid select{padding:8px 10px!important;min-height:38px!important;border-radius:10px!important;font-size:13px!important}
+.tw-plan-submit{margin-top:9px!important;padding:10px 18px!important}
+.tw-plan-page-copy h1{font-size:clamp(34px,4.5vw,58px)!important;margin:10px 0 14px!important}
+.tw-plan-benefits{gap:10px!important;margin-top:18px!important}
+.tw-plan-success-backdrop{position:fixed!important;inset:0!important;display:grid!important;place-items:center!important;z-index:5200!important}
+@media(min-width:760px){.tw-starry-page[style*="min-height"]{height:100vh;overflow:hidden}.tw-starry-page main[style]{min-height:0!important;flex:1}.tw-plan-page{height:100vh!important;overflow:hidden!important}.tw-plan-page-main{height:calc(100vh - 78px)!important;overflow:hidden!important;align-items:start!important}}
+.tw-plan-card.featured>button{transition:transform .22s ease,box-shadow .22s ease,filter .22s ease}
+.tw-plan-card.featured>button:hover{transform:translateY(-3px);box-shadow:0 15px 30px rgba(43,108,255,.30);filter:brightness(1.07)}
+.tw-plan-card>button{position:relative;z-index:2}
+.tw-template-preview-backdrop{z-index:5100!important}
+@media(min-width:760px){.tw-starry-page>main{overflow:hidden!important}}
+@media(max-height:720px){.tw-plan-page-main{overflow:auto!important}.tw-plan-application{max-height:calc(100vh - 92px)!important}}
+.tw-starry-page>.tw-star-field{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:var(--star-fade,1);transition:opacity .55s ease}
+.tw-starry-page>.tw-star-field i{position:absolute;display:block;border-radius:50%;background:var(--tw-on-brand);box-shadow:0 0 4px rgba(255,255,255,.92),0 0 10px rgba(112,166,255,.3);opacity:.2;will-change:transform,opacity;animation:twStarDepth var(--duration) ease-in-out var(--delay) infinite alternate}
+.tw-starry-page>*:not(.tw-star-field){position:relative;z-index:1}
+@keyframes twStarDepth{0%{opacity:.08;transform:translate3d(0,var(--parallax),0) scale(.65)}35%{opacity:.96;transform:translate3d(calc(var(--drift-x)*.35),calc(var(--parallax) + var(--drift-y)*.25),0) scale(1.08)}70%{opacity:.22;transform:translate3d(calc(var(--drift-x)*.7),calc(var(--parallax) + var(--drift-y)*.65),0) scale(.82)}100%{opacity:.72;transform:translate3d(var(--drift-x),calc(var(--parallax) + var(--drift-y)),0) scale(1)}}
+/* Portalled overlays stay centred regardless of page height, route animation, or star layers. */
+.tw-modal-backdrop,.tw-start-modal,.tw-template-preview-backdrop,.tw-plan-success-backdrop{position:fixed!important}
+.tw-modal-backdrop{z-index:5000!important}
+.tw-start-modal{z-index:5001!important;top:50dvh!important;left:50vw!important;margin:0!important;width:min(92vw,680px)!important;height:min(76vh,520px)!important;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-start}
+.tw-template-landing-card:hover{z-index:2}
+/* Institution action gets the same expanding translucent halo as Get Started. */
+.tw-plan-contact-action{position:relative;isolation:isolate;overflow:visible!important;transition:transform .28s ease,box-shadow .28s ease,filter .28s ease!important}
+.tw-plan-contact-action::after{content:"";position:absolute;inset:-7px!important;border-radius:20px;background:rgba(43,108,255,.18);opacity:0;transform:scale(.96)!important;z-index:-1;transition:opacity .28s ease,transform .28s ease}
+.tw-plan-contact-action:hover{transform:translateY(-3px);box-shadow:0 18px 38px rgba(43,108,255,.28);filter:brightness(1.04)}
+.tw-plan-contact-action:hover::after{opacity:1;transform:scale(1)!important}
+.tw-plan-form-grid label{gap:4px!important;font-size:11px!important}
+.tw-plan-form-status{margin-top:8px!important;padding:8px 10px!important}
+@media(min-width:901px){.tw-plan-page-main{height:calc(100dvh - 78px)!important;overflow:hidden!important;padding:8px 0 10px!important;align-items:start!important}.tw-plan-application{align-self:start!important}.tw-plan-page-copy h1{font-size:clamp(32px,4vw,52px)!important}.tw-plan-benefits{margin-top:12px!important;gap:7px!important}.tw-plan-benefits p{font-size:13px!important}.tw-plan-page-copy>p{font-size:14px!important}.tw-plan-page-copy>div[style*="height: 300"]{height:220px!important}.tw-plan-page-copy>div[style*="height: 300"] img{max-width:170px!important;max-height:170px!important}}
+@media(max-width:900px){.tw-plan-application{overflow:visible!important}.tw-plan-page{overflow:auto!important}}
+/* Password requirements stop at the confirm-password area, not the login prompt. */
+.tw-pw-help-btn{display:none;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:1.5px solid currentColor;background:transparent;color:inherit;opacity:.55;cursor:pointer;padding:0;transition:opacity .15s ease,background .15s ease}
+.tw-pw-help-btn:hover{opacity:1;background:rgba(120,130,150,.12)}
+.tw-pw-help-backdrop{position:fixed;inset:0;background:rgba(10,14,24,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;animation:twPwHelpFadeIn .15s ease}
+.tw-pw-help-modal{width:min(100%,340px);border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:twPwHelpPopIn .18s ease}
+.tw-pw-strong-check{position:absolute;right:44px;top:50%;transform:translateY(-50%);color:var(--tw-success);display:flex;align-items:center;justify-content:center;pointer-events:none}
+/* Desktop keeps the always-visible requirements side panel; mobile swaps
+   to a single-column form with the "?" icon opening the modal instead,
+   since there's no room for the side panel on a small screen. */
+@media(max-width:760px){.tw-pw-help-btn{display:inline-flex}.tw-password-requirements-panel{display:none!important}.tw-auth-register-shell{width:min(100%,460px)!important}}
+@keyframes twPwHelpFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes twPwHelpPopIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.tw-plan-field.wide button[aria-label="Choose GCash"]{min-height:58px!important;height:58px!important;width:150px!important;padding:5px!important}
+.tw-plan-field.wide button[aria-label="Choose GCash"] img{height:44px!important}
+/* Revision 8.5 */
+.tw-theme-switching *, .tw-theme-switching *::before, .tw-theme-switching *::after{
+  transition-property:background-color,background,border-color,color,box-shadow,fill,stroke!important;
+  transition-duration:180ms!important;
+  transition-timing-function:ease!important;
+}
+.tw-header-login,.tw-header-signup{transition:transform .18s ease,box-shadow .18s ease,background .18s ease,color .18s ease,filter .18s ease}
+.tw-header-login:hover{transform:translateY(-2px);background:rgba(43,108,255,.10);border-color:var(--tw-brand)!important;color:var(--tw-brand)!important;box-shadow:0 8px 20px rgba(43,108,255,.15)}
+.tw-header-signup:hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 12px 30px rgba(43,108,255,.38)}
+.tw-auth-route{position:relative;z-index:1}
+.tw-auth-form-shell{animation:twAuthFormEnter .26s cubic-bezier(.22,.8,.22,1) both}
+.tw-auth-form-shell.from-right{--tw-auth-x:42px}
+.tw-auth-form-shell.from-left{--tw-auth-x:-42px}
+.tw-auth-form-shell.exit-left{animation:twAuthExitLeft .22s ease both}
+.tw-auth-form-shell.exit-right{animation:twAuthExitRight .22s ease both}
+@keyframes twAuthFormEnter{from{opacity:0;transform:translateX(var(--tw-auth-x,0))}to{opacity:1;transform:translateX(0)}}
+@keyframes twAuthExitLeft{to{opacity:0;transform:translateX(-42px)}}
+@keyframes twAuthExitRight{to{opacity:0;transform:translateX(42px)}}
+.tw-auth-primary{position:relative;isolation:isolate;transition:transform .2s ease,box-shadow .2s ease,filter .2s ease!important}
+.tw-auth-primary:hover{transform:translateY(-3px);filter:brightness(1.05);box-shadow:0 0 0 8px rgba(43,108,255,.12),0 18px 38px rgba(43,108,255,.28)!important}
+.tw-start-modal h2{margin-top:28px}
+.tw-start-modal>.tw-modal-options,.tw-start-modal>.tw-code-form{margin-top:auto;margin-bottom:auto;width:100%}
+.tw-modal-back{position:absolute;left:28px;top:24px}
+.tw-modal-options>button{position:relative;min-height:142px;border:1px solid rgba(100,130,210,.38)!important;background:linear-gradient(180deg,rgba(70,115,220,.16),rgba(25,55,120,.10))!important;box-shadow:0 7px 0 rgba(15,40,95,.34),0 13px 24px rgba(5,15,40,.18),inset 0 1px 0 rgba(255,255,255,.18);transform:translateY(0);transition:transform .14s ease,box-shadow .14s ease,background .18s ease,filter .18s ease!important}
+.tw-modal-options>button:hover{background:linear-gradient(180deg,rgba(55,96,195,.23),rgba(19,44,105,.17))!important;filter:brightness(.96);transform:translateY(-2px);box-shadow:0 9px 0 rgba(15,40,95,.34),0 16px 28px rgba(5,15,40,.22),inset 0 1px 0 rgba(255,255,255,.18)}
+.tw-modal-options>button:active{transform:translateY(6px);box-shadow:0 1px 0 rgba(15,40,95,.4),0 5px 10px rgba(5,15,40,.16),inset 0 2px 5px rgba(0,0,0,.12)}
+@media(max-width:620px){.tw-start-modal{height:min(84vh,600px)!important}.tw-modal-options>button{min-height:104px}}
+/* Revision 8.6 */
+.tw-standard-sidebar nav button.active{background:linear-gradient(135deg,var(--tw-brand),#5b7cff)!important;box-shadow:0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18);transform:translateY(-1px)}
+.tw-theme-icon-button svg{display:block!important;opacity:1!important;visibility:visible!important}
+.tw-superadmin-primary{border:3px solid var(--tw-danger)!important;box-shadow:0 10px 24px rgba(220,38,38,.28)!important;transition:.18s ease!important}
+.tw-superadmin-primary:hover{transform:translateY(-3px);box-shadow:0 0 0 8px rgba(220,38,38,.14),0 18px 38px rgba(220,38,38,.3)!important}
+.tw-reset-page{min-height:100vh}
+.tw-reset-main{min-height:calc(100vh - 72px);display:grid;place-items:center;padding:24px;position:relative;z-index:2}
+.tw-reset-card{width:min(440px,calc(100vw - 32px));background:var(--tw-card,var(--tw-on-brand));border:1px solid rgba(100,130,190,.25);border-radius:20px;padding:34px;box-shadow:0 24px 70px rgba(0,0,0,.24);box-sizing:border-box}
+.tw-reset-card.wide{width:min(780px,calc(100vw - 32px));display:grid;grid-template-columns:1fr 280px;gap:28px}
+.tw-reset-card h1{margin:0 0 6px}
+.tw-reset-card form{display:grid;gap:12px}
+.tw-reset-card input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid rgba(100,130,190,.35);background:rgba(255,255,255,.07);color:inherit}
+.tw-otp-inline,.tw-password-row{display:flex;gap:8px}
+.tw-otp-inline button,.tw-password-row button{border:1px solid rgba(100,130,190,.35);border-radius:12px;padding:0 14px;background:transparent;color:inherit;font-weight:800}
+.tw-otp-inline button:disabled{opacity:.5}
+.tw-reset-requirements{display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:16px;background:rgba(43,108,255,.08);align-self:stretch;justify-content:center}
+.tw-reset-requirements span.ok{color:var(--tw-success)}
+.tw-reset-success,.tw-reset-error{padding:10px 12px;border-radius:10px;margin:12px 0}
+.tw-reset-success{background:rgba(34,197,94,.12);color:var(--tw-success)}
+.tw-reset-error{background:rgba(239,68,68,.12);color:#ef4444}
+.tw-reset-back{text-align:center}
+.tw-reset-back a{color:var(--tw-brand);font-weight:800}
+@media(max-width:700px){.tw-reset-card.wide{grid-template-columns:1fr}.tw-reset-requirements{order:2}}
+/* Revision 8.6.1 */
+.tw-reset-card p{line-height:1.5}
+.tw-reset-card label{font-size:13px;font-weight:700;color:inherit}
+.tw-otp-inline{align-items:stretch}
+.tw-otp-inline input{flex:1}
+.tw-otp-inline button{min-width:92px;display:grid;place-items:center;text-align:center}
+.tw-reset-password-form .tw-password-row{position:relative}
+.tw-reset-password-form .tw-password-row input{padding-right:48px}
+.tw-reset-password-form .tw-password-row button{position:absolute;right:0;top:0;bottom:0;width:46px;padding:0;display:grid;place-items:center;color:var(--tw-brand);border:0;background:transparent}
+.tw-reset-requirements h3{margin:0 0 8px}
+.tw-reset-requirements small{text-align:center;color:inherit;opacity:.75}
+.tw-reset-strength{height:6px;border-radius:999px;background:rgba(120,140,180,.24);overflow:hidden;margin-top:8px}
+.tw-reset-strength i{display:block;height:100%;background:var(--tw-success);transition:width .18s ease}
+/* Stable public navigation: only the destination content gently enters. */
+.tw-public-soft-enter{animation:twPublicSoftEnter .24s cubic-bezier(.22,.8,.22,1) both}
+@keyframes twPublicSoftEnter{from{opacity:0;transform:translateX(var(--tw-public-enter-x,18px))}to{opacity:1;transform:translateX(0)}}
+/* Guest sidebar typography matches the shared teacher sidebar. */
+.tw-guest-sidebar nav button{font-family:inherit!important;font-size:14px!important;font-weight:700!important;letter-spacing:0!important;}
+.tw-guest-exit{font-family:inherit!important;font-size:14px!important;font-weight:700!important;letter-spacing:0!important;}
+/* Revision 8.6.3 polish */
+.tw-reset-send{border-radius:14px!important;min-height:50px}
+.tw-reset-send:hover{box-shadow:0 0 0 8px rgba(43,108,255,.12),0 18px 38px rgba(43,108,255,.3)!important}
+.tw-3d-blue,.tw-3d-red{border-radius:10px!important;color:var(--tw-on-brand)!important;font-weight:800!important;transition:transform .16s ease,filter .16s ease,box-shadow .16s ease!important}
+.tw-3d-blue{background:var(--tw-brand)!important;border:1px solid var(--tw-blue-edge)!important;box-shadow:0 5px 0 var(--tw-blue-deep),0 10px 24px rgba(43,108,255,.22)!important}
+.tw-3d-red{background:var(--tw-danger)!important;border:1px solid var(--tw-danger-light)!important;box-shadow:0 5px 0 var(--tw-danger-deep),0 10px 24px rgba(220,38,38,.2)!important}
+.tw-3d-blue:hover,.tw-3d-red:hover{filter:brightness(.9);transform:translateY(-1px)}
+.tw-3d-blue:active,.tw-3d-red:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.35),0 4px 10px rgba(0,0,0,.14)!important}
+.tw-notification-row,.tw-notification-card,.tw-super-institution-card,.tw-health-status-row>section,.tw-health-grid>section,.tw-health-metrics>.tw-super-card{box-shadow:0 12px 28px rgba(15,23,42,.13)!important}
+.tw-notification-row{border-radius:14px!important;transition:transform .16s ease,filter .16s ease,box-shadow .16s ease;cursor:pointer}
+.tw-notification-row:hover{filter:brightness(.94);transform:translateY(-2px)}
+.tw-notification-row:active{transform:translateY(2px)}
+.tw-notification-description{margin-top:9px!important;line-height:1.45}
+.tw-super-institution-card{box-shadow:0 14px 32px rgba(15,23,42,.14)!important}
+.tw-admin-card.tw-admin-metric{border-width:4px!important;border-color:var(--metric-border)!important;background:var(--metric-tone)!important;color:var(--metric-ink)!important;box-shadow:0 14px 32px color-mix(in srgb,var(--metric-tone) 26%,rgba(15,23,42,.18))!important}
+.tw-admin-card.tw-admin-metric b,.tw-admin-card.tw-admin-metric small{color:var(--metric-ink)!important}
+.tw-admin-card.tw-tone-teacher,.tw-admin-card.tw-tone-calendar,.tw-admin-card.tw-tone-live,.tw-admin-card.tw-tone-student,.tw-admin-card.tw-tone-check,.tw-admin-card.tw-tone-spark,.tw-admin-card.tw-tone-classes{background:var(--metric-tone)!important}
+.tw-overview-charts>section,.tw-admin-institution-v251>section,.tw-admin-institution-charts>section,.tw-admin-two-panel>section{box-shadow:0 14px 34px rgba(15,23,42,.14)!important}
+.tw-teacher-row{box-shadow:0 8px 18px rgba(15,23,42,.09);border-width:2px!important}
+.tw-teacher-row.selected{border-width:4px!important;border-color:var(--tw-brand)!important;box-shadow:0 10px 25px rgba(43,108,255,.2)}
+.tw-standard-sidebar{overflow-x:hidden!important}
+.tw-standard-dashboard-main{overflow-x:hidden!important;min-width:0!important}
+.tw-standard-sidebar-bottom .tw-theme-icon-button svg{display:block!important;visibility:visible!important;opacity:1!important;flex:none!important}
+@media (max-width:1180px) and (min-width:761px){.tw-responsive-sidebar,.tw-standard-sidebar{width:78px!important;min-width:78px!important}.tw-standard-dashboard-main,.tw-responsive-dashboard-main{margin-left:78px!important;width:calc(100% - 78px)!important;max-width:calc(100% - 78px)!important}.tw-responsive-sidebar .tw-standard-sidebar-head{padding-inline:12px!important;justify-content:center!important}.tw-responsive-sidebar .tw-standard-sidebar-head>div{display:none!important}.tw-responsive-sidebar nav button{justify-content:center!important;padding-inline:10px!important}.tw-responsive-sidebar nav button>span:last-child{display:none!important}.tw-standard-sidebar-bottom{padding-inline:9px!important;flex-direction:column!important}.tw-standard-sidebar-bottom>button{width:100%!important;flex:none!important}.tw-standard-sidebar-bottom>button span{display:none!important}.tw-standard-sidebar-bottom .tw-theme-icon-button{display:grid!important;width:42px!important;height:42px!important}}
+/* Revision 8.6.5 — dashboard routes must never inherit a transformed route wrapper.
+   A transformed ancestor changes position:fixed into ancestor-relative positioning,
+   which made every dashboard sidebar scroll with the page. */
+.tw-dashboard-route{position:static!important;transform:none!important;animation:none!important;min-height:100dvh}
+/* Revision 8.6.4 — fixed dashboard sidebars and Admin visual refinements */
+.tw-responsive-dashboard{min-height:100dvh!important;align-items:stretch!important}
+.tw-standard-sidebar,.tw-responsive-sidebar{position:fixed!important;top:0!important;bottom:0!important;left:0!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+.tw-standard-sidebar nav,.tw-responsive-sidebar nav{min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important}
+.tw-standard-sidebar-bottom{flex:0 0 auto!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
+.tw-standard-dashboard-main,.tw-responsive-dashboard-main{min-height:100dvh!important;overflow:visible!important}
+.tw-admin-logout-backdrop{position:fixed;inset:0;background:rgba(2,8,23,.62);backdrop-filter:blur(6px);z-index:3000}
+.tw-admin-logout-layer{position:fixed;inset:0;z-index:3001;display:grid;place-items:center;padding:20px}
+.tw-admin-logout-modal{width:min(92vw,470px);min-height:210px;border:1px solid;border-radius:18px;padding:24px;box-sizing:border-box;box-shadow:0 26px 80px rgba(2,8,23,.34);display:flex;flex-direction:column;text-align:left}
+.tw-admin-logout-modal header{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:900}
+.tw-admin-logout-modal header svg{border:0!important;background:transparent!important;padding:0!important}
+.tw-admin-logout-modal p{margin:8px 0 24px;font-size:13px;line-height:1.55;max-width:360px}
+.tw-admin-logout-actions{margin-top:auto;display:flex;justify-content:flex-end}
+.tw-admin-logout-actions .btn{min-width:145px;border-radius:10px!important}
+.tw-admin-metric{box-shadow:0 14px 30px color-mix(in srgb,var(--metric-tone) 16%,rgba(15,23,42,.16))!important}
+body.dark-mode .tw-overview-charts>section{box-shadow:0 18px 42px rgba(0,0,0,.34)!important}
+.tw-admin-teacher-details{box-shadow:0 18px 42px rgba(15,23,42,.16)!important}
+body.dark-mode .tw-admin-teacher-details{box-shadow:0 18px 42px rgba(0,0,0,.34)!important}
+.tw-admin-institution-panel{box-shadow:0 18px 42px rgba(15,23,42,.16)!important}
+body.dark-mode .tw-admin-institution-panel{box-shadow:0 18px 42px rgba(0,0,0,.34)!important}
+.tw-admin-invite-actions{display:flex;gap:12px;margin-top:14px}
+.tw-admin-invite-actions .btn{flex:1;border-radius:10px!important}
+.tw-admin-invite-notice{margin-top:13px;text-align:center;font-size:13px;font-weight:700}
+.tw-admin-institution-stats .tw-admin-card{box-shadow:0 10px 24px color-mix(in srgb,var(--metric-tone) 18%,rgba(15,23,42,.14))!important}
+@media(max-width:760px){.tw-standard-sidebar,.tw-responsive-sidebar{top:auto!important;left:0!important;right:0!important;bottom:0!important;height:68px!important;max-height:68px!important;overflow:visible!important}.tw-standard-sidebar nav,.tw-responsive-sidebar nav{overflow-x:auto!important;overflow-y:hidden!important}.tw-standard-dashboard-main,.tw-responsive-dashboard-main{min-height:calc(100dvh - 68px)!important}}
+/* Revision 8.6.6 — Admin press buttons keep their lower 3D base stationary. */
+.tw-admin-press{
+  --tw-press-face:var(--tw-brand);
+  --tw-press-base:var(--tw-blue-deep);
+  --tw-press-border:var(--tw-blue-edge);
+  appearance:none;
+  border:0;
+  border-radius:10px;
+  padding:0;
+  background:var(--tw-press-base);
+  color:var(--tw-on-brand);
+  font:inherit;
+  font-weight:850;
+  line-height:1;
+  cursor:pointer;
+  display:inline-grid;
+  box-shadow:0 10px 22px rgba(15,23,42,.18);
+  transition:box-shadow .16s ease,filter .16s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+.tw-admin-press-red{--tw-press-face:var(--tw-danger);--tw-press-base:var(--tw-danger-deep);--tw-press-border:var(--tw-danger-light);box-shadow:0 10px 22px rgba(220,38,38,.22)}
+.tw-admin-press-blue{--tw-press-face:var(--tw-brand);--tw-press-base:var(--tw-blue-deep);--tw-press-border:var(--tw-blue-edge);box-shadow:0 10px 22px rgba(43,108,255,.22)}
+.tw-admin-press-neutral{box-shadow:0 10px 22px rgba(71,85,105,.18);color:#0f172a}
+.tw-admin-press-neutral>span{color:inherit}
+body.dark-mode .tw-admin-press-neutral{box-shadow:0 10px 22px rgba(0,0,0,.4);color:var(--tw-on-brand)}
+body.dark-mode .tw-admin-press-neutral>span{color:#e7ecfb}
+.tw-admin-press>span{
+  min-height:44px;
+  padding:0 20px;
+  box-sizing:border-box;
+  border:1px solid var(--tw-press-border);
+  border-radius:10px;
+  background:var(--tw-press-face);
+  color:var(--tw-on-brand);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transform:translateY(-5px);
+  transition:transform .14s ease,filter .16s ease;
+  white-space:nowrap;
+}
+.tw-admin-press:hover>span{filter:brightness(.9);transform:translateY(-6px)}
+.tw-admin-press:active>span{transform:translateY(0);filter:brightness(.86)}
+.tw-admin-press:focus-visible{outline:3px solid rgba(96,165,250,.5);outline-offset:4px}
+.tw-admin-press:disabled{cursor:not-allowed;opacity:.58;filter:saturate(.65)}
+.tw-admin-invite-actions .tw-admin-press{flex:1}
+.tw-admin-logout-actions .tw-admin-press{min-width:145px}
+/* Revision 8.6.7: Superadmin metric cards and expandable audit notifications */
+.tw-super-card.tw-super-metric{
+  border-width:4px!important;
+  border-color:var(--metric-border)!important;
+  background:var(--metric-tone)!important;
+  color:var(--metric-ink)!important;
+  box-shadow:0 14px 32px color-mix(in srgb,var(--metric-tone) 26%,rgba(15,23,42,.18))!important;
+}
+.tw-super-card.tw-super-metric b,.tw-super-card.tw-super-metric small{color:var(--metric-ink)!important}
+.tw-notification-list{display:grid;gap:12px;margin-top:18px}
+.tw-notification-card{box-shadow:0 12px 28px rgba(15,23,42,.13)!important}
+.tw-notification-head{transition:background .16s ease,filter .16s ease}
+.tw-notification-head:hover{background:rgba(43,108,255,.07)}
+.tw-notification-head:active{filter:brightness(.94)}
+.tw-notification-audit{border-top:1px solid;padding:18px}
+.tw-notification-audit-description{margin:0 0 15px;line-height:1.6;font-size:14px;font-weight:650}
+.tw-application-details-inline{border-top:0!important;padding:0!important}
+.tw-audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tw-audit-grid>div{display:grid;gap:5px;padding:12px;border-radius:12px;background:rgba(43,108,255,.065);border:1px solid rgba(43,108,255,.12)}
+.tw-audit-grid small{font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:800}
+.tw-audit-grid b{font-size:14px;overflow-wrap:anywhere}
+@media(max-width:760px){.tw-audit-grid{grid-template-columns:1fr}.tw-notification-head{grid-template-columns:auto minmax(0,1fr) auto}}
+/* Revision 8.7: Teacher dashboard refresh */
+.tw-teacher-metric{min-height:132px;padding:18px;border:4px solid var(--teacher-metric-border);border-radius:18px;background:var(--teacher-metric-bg);color:var(--teacher-metric-ink);display:flex;align-items:center;gap:15px;box-shadow:0 16px 34px color-mix(in srgb,var(--teacher-metric-border) 24%,rgba(15,23,42,.2));box-sizing:border-box;transition:transform .17s ease,filter .17s ease,box-shadow .17s ease}
+.tw-teacher-metric-icon{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:rgba(255,255,255,.28);border:1px solid rgba(255,255,255,.38);color:var(--teacher-metric-ink);flex:0 0 auto}
+.tw-teacher-metric strong{display:block;font-size:29px;line-height:1;color:var(--teacher-metric-ink)}
+.tw-teacher-metric b{display:block;margin-top:7px;color:var(--teacher-metric-ink);font-size:14px}
+.tw-teacher-metric small{display:block;margin-top:6px;color:var(--teacher-metric-ink);opacity:.76;font-size:11px;line-height:1.35}
+.tw-teacher-press>span{gap:8px}
+.tw-thinkbot-empty{width:100%;min-height:520px;box-sizing:border-box;border:1px solid;border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px;box-shadow:0 18px 42px rgba(15,23,42,.1)}
+.tw-thinkbot-empty.is-compact{min-height:360px}
+.tw-thinkbot-empty img{width:min(300px,58vw);height:auto;max-height:250px;object-fit:contain}
+.tw-thinkbot-empty h3{margin:18px 0 24px;font-size:21px;line-height:1.35;font-weight:500!important;opacity:.58;letter-spacing:.005em}
+.tw-teacher-action-modal{width:min(92vw,560px)!important;min-height:245px!important}
+.tw-teacher-action-modal>p{max-width:470px!important}
+.tw-teacher-action-actions{gap:12px}
+.tw-teacher-template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;padding-top:7px}
+.tw-teacher-template-press{appearance:none;border:0;border-radius:16px;padding:0;background:var(--template-base);cursor:pointer;box-shadow:0 12px 24px rgba(15,23,42,.14);transition:filter .16s ease,box-shadow .16s ease;min-height:108px;position:relative;overflow:visible}
+.tw-teacher-template-press>span{height:100%;min-height:108px;padding:16px;padding-top:24px;border:4px solid var(--template-border);border-radius:16px;background:var(--template-face);display:flex;align-items:center;justify-content:center;gap:12px;transform:translateY(-6px);transition:transform .14s ease,filter .16s ease;box-sizing:border-box;color:var(--template-ink,currentColor)}
+.tw-teacher-template-press:hover>span{filter:brightness(.93);transform:translateY(-7px)}
+.tw-teacher-template-press:active>span{transform:translateY(0);filter:brightness(.87)}
+.tw-teacher-template-press.is-active>span{box-shadow:inset 0 0 0 2px currentColor}
+.tw-teacher-template-labelstack{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.tw-template-recommended-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:2;display:inline-flex;align-items:center;width:fit-content;padding:3px 10px;border-radius:999px;font-size:9.5px;font-weight:950;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;background:var(--rec-badge-bg);color:var(--rec-badge-fg);border:1.5px solid var(--rec-badge-border);animation:twRecommendPulseWhite 1.9s ease-in-out infinite}
+/* Mobile only (<=760px): the colored submit button that appears under the
+   selected template picks up that template's own accent instead of blue. */
+@media(max-width:760px){.tw-teacher-create-submit-inline{--tw-press-face:var(--tpl-submit-face);--tw-press-base:var(--tpl-submit-base);--tw-press-border:var(--tpl-submit-border)}}
+@keyframes twRecommendPulseWhite{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.5)}50%{box-shadow:0 0 12px 3px rgba(255,255,255,.7)}}
+@keyframes twRecommendBannerIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.tw-teacher-create-submit{justify-self:stretch;width:100%}
+.tw-teacher-create-submit>span{width:100%;min-height:50px}
+.tw-teacher-template-cell{display:flex;flex-direction:column;gap:10px}
+.tw-teacher-template-cell .tw-teacher-create-submit-inline{animation:tw-template-submit-pop .18s ease}
+@keyframes tw-template-submit-pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.tw-teacher-shortcut-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.tw-teacher-shortcut-card{min-height:135px;text-align:left;display:grid;align-content:center;gap:8px;cursor:pointer;transition:transform .18s ease,filter .18s ease,box-shadow .18s ease;border-radius:18px!important;overflow:hidden}
+.tw-teacher-shortcut-card:hover{transform:translateY(-3px);filter:brightness(.96);box-shadow:0 16px 32px rgba(15,23,42,.15)!important}
+.tw-teacher-bank-toggle{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tw-teacher-bank-toggle-single{grid-template-columns:1fr}
+.tw-teacher-bank-toggle .tw-admin-press{width:100%}
+.tw-teacher-bank-toggle .tw-admin-press>span{width:100%;min-height:52px}
+.tw-teacher-bank-toggle .tw-admin-press:not(.is-selected){opacity:.76;filter:saturate(.7)}
+@media(max-width:900px){.tw-teacher-template-grid,.tw-teacher-shortcut-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.tw-teacher-bank-toggle,.tw-teacher-template-grid,.tw-teacher-shortcut-grid{grid-template-columns:1fr}.tw-thinkbot-empty{min-height:430px;padding:24px}.tw-thinkbot-empty img{width:min(250px,75vw)}}
+.tw-admin-press-purple{--tw-press-face:#7c3aed;--tw-press-base:#4c1d95;--tw-press-border:#a78bfa;box-shadow:0 10px 22px rgba(124,58,237,.22)}
+/* Revision 8.7.1 — Teacher interaction polish and compact-sidebar icon fix. */
+.tw-responsive-sidebar .tw-theme-icon-button .tw-theme-icon-swap,
+.tw-standard-sidebar .tw-theme-icon-button .tw-theme-icon-swap{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+.tw-responsive-sidebar .tw-theme-icon-button svg,
+.tw-standard-sidebar .tw-theme-icon-button svg{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+  flex:0 0 auto!important;
+}
+.tw-teacher-metric:hover{
+  transform:translateY(-4px);
+  filter:brightness(.96);
+  box-shadow:0 21px 40px color-mix(in srgb,var(--teacher-metric-border) 31%,rgba(15,23,42,.24));
+}
+.tw-teacher-template-press.is-active>span,
+.tw-teacher-template-press.is-active:hover>span{
+  transform:translateY(0);
+  filter:brightness(.9);
+  box-shadow:inset 0 0 0 2px currentColor,inset 0 4px 10px rgba(15,23,42,.12);
+}
+.tw-teacher-template-press.is-active:active>span{
+  transform:translateY(1px);
+}
+.tw-teacher-bank-toggle .tw-admin-press.is-selected>span,
+.tw-teacher-bank-toggle .tw-admin-press.is-selected:hover>span,
+.tw-session-toggle.is-selected>span,
+.tw-session-toggle.is-selected:hover>span{
+  transform:translateY(0);
+  filter:brightness(.9);
+}
+.tw-teacher-bank-toggle .tw-admin-press.is-selected,
+.tw-session-toggle.is-selected{
+  box-shadow:0 5px 12px rgba(15,23,42,.18);
+}
+.tw-teacher-text-cancel{
+  appearance:none;
+  border:0;
+  background:transparent;
+  color:var(--tw-brand);
+  padding:10px 4px;
+  font:inherit;
+  font-size:14px;
+  font-weight:850;
+  cursor:pointer;
+  border-radius:8px;
+  transition:color .15s ease,background .15s ease,transform .15s ease;
+}
+.tw-teacher-text-cancel:hover{
+  color:var(--tw-blue-deep);
+  background:rgba(43,108,255,.08);
+}
+.tw-teacher-text-cancel:active{
+  transform:translateY(1px);
+}
+body.dark-mode .tw-teacher-text-cancel{
+  color:#93c5fd;
+}
+body.dark-mode .tw-teacher-text-cancel:hover{
+  color:#dbeafe;
+  background:rgba(147,197,253,.1);
+}
+/* Revision 8.7.2 — Student achievements and Guest workspace polish. */
+.tw-achievement-carousel{
+  position:relative;
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 42px;
+  align-items:center;
+  gap:12px;
+  margin-top:18px;
+  overflow:hidden;
+}
+.tw-achievement-page{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+  animation:twAchievementSlide .24s ease both;
+}
+@keyframes twAchievementSlide{from{opacity:.25;transform:translateX(18px)}to{opacity:1;transform:none}}
+.tw-achievement-arrow{
+  width:42px;
+  height:42px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border:1px solid;
+  border-radius:50%;
+  cursor:pointer;
+  transition:transform .16s ease,filter .16s ease,opacity .16s ease;
+}
+.tw-achievement-arrow.is-left svg{transform:rotate(180deg)}
+.tw-achievement-arrow:hover:not(:disabled){transform:scale(1.06);filter:brightness(.94)}
+.tw-achievement-arrow:active:not(:disabled){transform:scale(.96)}
+.tw-achievement-arrow:disabled{opacity:.25;cursor:default}
+.tw-achievement-card{
+  height:130px;
+  min-height:130px;
+  border:3px solid;
+  border-radius:16px;
+  padding:14px 15px;
+  box-sizing:border-box;
+  display:grid;
+  align-content:space-between;
+  gap:8px;
+  opacity:.72;
+  filter:saturate(.3);
+  box-shadow:0 12px 24px rgba(15,23,42,.1);
+  transition:transform .18s ease,filter .18s ease,opacity .18s ease,box-shadow .18s ease;
+}
+.tw-achievement-card.is-complete{opacity:1;filter:none;box-shadow:0 16px 30px rgba(15,23,42,.18)}
+.tw-achievement-card:hover{transform:translateY(-3px)}
+.tw-achievement-card-title{font-size:clamp(12.5px,1.1vw,15px);font-weight:950;line-height:1.22;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tw-achievement-progress{font-size:clamp(10px,.9vw,12px);font-weight:750;line-height:1.25;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-achievement-track{height:6px;border-radius:999px;background:rgba(255,255,255,.38);overflow:hidden;box-shadow:inset 0 1px 3px rgba(15,23,42,.2)}
+.tw-achievement-track>span{display:block;height:100%;border-radius:inherit;background:currentColor;opacity:.8;transition:width .35s ease}
+.tw-achievement-modal-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:20px}
+@media(max-width:1080px){.tw-achievement-page,.tw-achievement-modal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.tw-achievement-carousel{grid-template-columns:34px minmax(0,1fr) 34px;gap:7px}.tw-achievement-arrow{width:34px;height:34px}.tw-achievement-page,.tw-achievement-modal-grid{grid-template-columns:1fr}.tw-achievement-card{height:126px;min-height:126px}}

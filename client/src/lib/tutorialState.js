@@ -21,6 +21,14 @@ export function writeTutorialState(userId, patch) {
   return next;
 }
 
+// Overwrite (not merge): used when the stored tour belongs to a previous
+// account that reused this numeric id after a database reset.
+export function resetTutorialState(userId) {
+  if (!userId || typeof window === "undefined") return {};
+  try { window.localStorage.setItem(storageKey(userId), JSON.stringify({})); } catch {}
+  return {};
+}
+
 export function updateTutorialState(userId, updater) {
   const current = readTutorialState(userId);
   const next = typeof updater === "function" ? updater(current) : { ...current, ...(updater || {}) };

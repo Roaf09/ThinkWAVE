@@ -42,7 +42,7 @@ const httpServer = http.createServer(app);
 
 // Socket.IO powers the live classroom features (host panel, student play, scores, roster, etc.).
 const io = new IOServer(httpServer, {
-  cors: { origin: env.CLIENT_ORIGIN, methods: ["GET","POST"] }
+  cors: { origin: env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN], methods: ["GET", "POST"], credentials: true }
 });
 
 io.use(async (socket, next) => {
@@ -79,8 +79,37 @@ closeOrphanedSessions().catch((error) => console.error("closeOrphanedSessions fa
 // normal 5-minute teacher-disconnect timer at all, since that timer only
 // starts from an actual disconnect event. Re-running this sweep periodically,
 // not just at boot, catches that case without waiting for the next restart.
-setInterval(() => { closeOrphanedSessions().catch((error) => console.error("closeOrphanedSessions failed:", error)); }, 15 * 60 * 1000);
+const orphanSweep = setInterval(() => { closeOrphanedSessions().catch((error) => console.error("closeOrphanedSessions failed:", error)); }, 15 * 60 * 1000);
 
 httpServer.listen(env.PORT, () => {
   console.log(`API listening on http://localhost:${env.PORT}`);
 });
+
+// Render (and Docker/K8s) send SIGTERM before stopping the process. Without
+// this, in-flight joins die mid-write and the event loop stays alive on the
+// sweep timer until forcibly killed. Drain: stop accepting, close sockets,
+// then release the DB pool. Force-exit after 10s so a stuck connection can't
+// hang a deploy forever.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received — draining...`);
+  clearInterval(orphanSweep);
+  const forceExit = setTimeout(() => {
+    console.error("[shutdown] drain timed out — forcing exit.");
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref?.();
+  httpServer.close(() => {
+    io.close();
+    pool.end()
+      .catch((error) => console.error("[shutdown] pool close failed:", error?.message || error))
+      .finally(() => {
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
+  });
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

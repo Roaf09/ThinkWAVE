@@ -1,0 +1,74 @@
+/* Tailwind v4 — theme tokens + utilities ONLY, no preflight.
+ *
+ * Preflight (Tailwind's global reset) is deliberately NOT imported: it would
+ * restyle every heading/button/list in the app. Legacy stylesheets own the
+ * base look; Tailwind is adopted component-by-component. A component is done
+ * when its legacy base rules are deleted and only shared hooks/keyframes
+ * remain (see ThemeIconButton.jsx for the reference pattern).
+ *
+ * Imported FIRST in main.jsx so legacy unlayered CSS keeps winning any
+ * accidental conflicts during the transition.
+ *
+  * Auth pilot (Login.jsx, Register.jsx): light tokens live in @theme, dark twins end in
+  * `-dark` and are applied with the `dark:` variant. Dark mode is class-based
+  * on `body.dark-mode` (set by ThemeContext), NOT prefers-color-scheme.
+ */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@custom-variant dark (&:where(body.dark-mode, body.dark-mode *));
+
+@theme {
+  --color-brand: #2b6cff;
+  --color-brand-dark: #3b82f6;
+  --color-brand-deep: #17356f;
+  --color-brand-sky: #0284c7;
+  --radius-card: 22px;
+  --shadow-soft: 0 18px 44px rgba(15, 23, 42, 0.1);
+
+  /* Auth surfaces — light (use with `dark:` twin). Reuse for Register/VerifyOtp. */
+  --color-auth-text: #0f172a;
+  --color-auth-muted: #475985;
+  --color-auth-card: rgba(255, 250, 239, 0.95);
+  --color-auth-border: rgba(154, 116, 54, 0.22);
+  --color-auth-input: rgba(255, 252, 245, 0.98);
+  --color-auth-input-border: rgba(154, 116, 54, 0.3);
+  --color-auth-error-bg: #fee2e2;
+  --color-auth-error-border: #fca5a5;
+  --color-auth-error-title: #b91c1c;
+  --color-auth-error-body: #7f1d1d;
+  --color-auth-warn-bg: #fff9eb;
+  --color-auth-warn-border: #f4d28a;
+  --color-auth-warn-title: #92400e;
+  --color-auth-warn-body: #78350f;
+  --color-auth-success-bg: #dcfce7;
+  --color-auth-success-border: #86efac;
+  --color-auth-success-title: #166534;
+  --color-auth-success-body: #166534;
+  --color-auth-panel: rgba(250, 242, 224, 0.9);
+
+  /* Auth surfaces — dark twins. */
+  --color-auth-text-dark: #eef4ff;
+  --color-auth-muted-dark: #9aacd8;
+  --color-auth-card-dark: #17243d;
+  --color-auth-border-dark: rgba(132, 167, 255, 0.2);
+  --color-auth-input-dark: rgba(8, 18, 35, 0.88);
+  --color-auth-input-border-dark: rgba(132, 167, 255, 0.28);
+  --color-auth-error-bg-dark: rgba(239, 68, 68, 0.12);
+  --color-auth-error-border-dark: rgba(248, 113, 113, 0.35);
+  --color-auth-error-title-dark: #fca5a5;
+  --color-auth-error-body-dark: #fecaca;
+  --color-auth-warn-bg-dark: rgba(245, 158, 11, 0.12);
+  --color-auth-warn-border-dark: rgba(245, 158, 11, 0.35);
+  --color-auth-warn-title-dark: #fcd34d;
+  --color-auth-warn-body-dark: #fde68a;
+  --color-auth-success-bg-dark: rgba(34, 197, 94, 0.1);
+  --color-auth-success-border-dark: rgba(34, 197, 94, 0.35);
+  --color-auth-success-title-dark: #86efac;
+  --color-auth-success-body-dark: #bbf7d0;
+  --color-auth-panel-dark: rgba(10, 28, 58, 0.86);
+
+  /* Auth page gradients (too complex for color tokens). */
+  --background-image-auth-page: radial-gradient(circle at 10% 8%, rgba(210, 170, 90, 0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255, 224, 170, 0.3), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%);
+  --background-image-auth-page-dark: radial-gradient(circle at 12% 8%, rgba(54, 92, 180, 0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44, 126, 205, 0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%);
+}

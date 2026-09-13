@@ -4,7 +4,7 @@
  * Tip: This page is now filterable and grouped by recency so history feels more useful than a plain list.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
@@ -38,27 +38,18 @@ const badge = (c, extra = {}) => ({
   ...extra,
 });
 
-const btn = (c, primary = false) => ({
-  padding: "9px 13px",
-  borderRadius: 12,
-  border: `1px solid ${primary ? c.accent : c.border}`,
-  background: primary ? c.accent : c.cardBg2,
-  color: primary ? "#fff" : c.text,
-  fontWeight: 800,
-  fontSize: 13,
-  cursor: "pointer",
-});
-
-export default function SessionHistoryTab({ setActiveTab, guestMode = false, tutorial }) {
+export default function SessionHistoryTab({ guestMode = false, tutorial }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [modeFilter, setModeFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("recent");
   const [exporting, setExporting] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [historyTutorialStage, setHistoryTutorialStage] = useState(null);
   const c = useColors();
   const navigate = useNavigate();
+  const hasActiveHistoryFilters = modeFilter !== "ALL" || sortBy !== "recent";
   const tutorialSessionId = tutorial?.userId ? Number(readTutorialState(tutorial.userId)?.tutorialDemoSessionId || 0) : 0;
 
   useEffect(() => {
@@ -148,31 +139,40 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
   }
 
   return (
-    <div className="container" style={{ display: "grid", gap: 18 }}>
+    <div className="container grid gap-[18px]">
       <section>
-        <h2 style={{ marginBottom: 4, color: c.text }}>Session History</h2>
+        <h2 className="mb-[4px]" style={{ color: c.text }}>Session History</h2>
       </section>
 
-      {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gap: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.3fr) repeat(2, minmax(140px, 0.7fr))", gap: 12 }}>
+      {sessions.length > 0 && <section className="tw-bank-search-shell" style={{ ...card(c), position: "relative", overflow: "visible" }}>
+        <div className="tw-search-filter-row">
           <input
-            className="tw-history-search-field"
+            className="tw-history-search-field tw-search-filter-input w-full box-border px-[14px] py-[12px] rounded-[12px]"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by quiz title, template, or category"
-            style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}
+            style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}
           />
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
-            <option value="ALL">All sessions</option>
-            <option value="LIVE">Live session</option>
-            <option value="ASSIGNED">Assigned session</option>
-          </select>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
-            <option value="recent">Newest first</option>
-            <option value="score">Highest average</option>
-            <option value="title">Title A–Z</option>
-          </select>
+          <TeacherPressButton type="button" tone="neutral" icon="filter" className={`tw-filter-toggle-btn${filterOpen ? " is-selected" : ""}${hasActiveHistoryFilters ? " has-active-filters" : ""}`} onClick={() => setFilterOpen((v) => !v)}>Filter</TeacherPressButton>
         </div>
+        {filterOpen && <div className="tw-filter-panel" style={{ ...card(c), position: "absolute", top: "calc(100% + 8px)", right: 12, left: 12, zIndex: 40, display: "grid", gap: 14 }}>
+          <div className="tw-filter-panel-group">
+            <label className="block text-[11px] font-[900] uppercase tracking-[0.06em] mb-[6px]" style={{ color: c.textMuted }}>Session type</label>
+            <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="w-full box-border px-[14px] py-[12px] rounded-[12px]" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
+              <option value="ALL">All sessions</option>
+              <option value="LIVE">Live session</option>
+              <option value="ASSIGNED">Assigned session</option>
+            </select>
+          </div>
+          <div className="tw-filter-panel-group">
+            <label className="block text-[11px] font-[900] uppercase tracking-[0.06em] mb-[6px]" style={{ color: c.textMuted }}>Sort by</label>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full box-border px-[14px] py-[12px] rounded-[12px]" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}>
+              <option value="recent">Newest first</option>
+              <option value="score">Highest average</option>
+              <option value="title">Title A–Z</option>
+            </select>
+          </div>
+        </div>}
       </section>}
 
       {sessions.length === 0 ? (
@@ -181,8 +181,8 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
         <div style={card(c)}>No session history matches your current filters.</div>
       ) : (
         Object.entries(grouped).map(([group, rows]) => (
-          <section key={group} style={{ display: "grid", gap: 12 }}>
-            <div style={{ fontWeight: 900, color: c.text, fontSize: 16 }}>{group}</div>
+          <section key={group} className="grid gap-[12px]">
+            <div className="font-[900] text-[16px]" style={{ color: c.text }}>{group}</div>
             {rows.map((session) => {
               const insight = buildInsight(session);
               const displayParticipantCount = !isAssignedSession(session) && Number(session.id) === tutorialSessionId
@@ -190,13 +190,13 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
                 : Number(session.participant_count || 0);
               return (
                 <div key={`${session.session_type || "LIVE"}-${session.id}`} data-tutorial="history-record" className="tw-history-session-card" style={{ ...card(c), ...templateCardChrome(session.template_type, c, false), borderWidth: 4 }}>
-                  <div style={{ display: "grid", gap: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+                  <div className="grid gap-[14px]">
+                    <div className="flex justify-between items-start gap-[14px] flex-wrap">
                       <div>
-                        <div style={{ fontWeight: 900, fontSize: 16, color: c.text }}>{session.quiz_title}</div>
-                        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div>
+                        <div className="font-[900] text-[16px]" style={{ color: c.text }}>{session.quiz_title}</div>
+                        <div className="text-[13px] mt-[6px]" style={{ color: c.textMuted }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div>
                       </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div className="flex gap-[8px] flex-wrap">
                         <span style={badge(c, { borderColor: templateTone(session.template_type, c, false).border, background: templateTone(session.template_type, c, false).softBg, color: templateTone(session.template_type, c, false).accent })}>{templateLabel(session.template_type)}</span>
                         <span style={badge(c)}>{isAssignedSession(session) ? "Assigned session" : "Live session"}</span>
                         <span style={badge(c)}>{displayParticipantCount} {isAssignedSession(session) ? "submitted" : session.join_mode === "GROUP" ? "groups" : "participants"}</span>
@@ -205,14 +205,14 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
                       </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                    <div className="tw-history-mini-grid grid gap-[10px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
                       <MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} />
                       <MiniInfo label="Category" value={session.category} c={c} />
                       <MiniInfo label="Questions" value={session.question_count} c={c} />
                       <MiniInfo label={isAssignedSession(session) ? "Submitted" : session.join_mode === "GROUP" ? "Groups" : "Participants"} value={displayParticipantCount} c={c} />
                     </div>
 
-                    <div style={{ padding: "12px 13px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted, fontSize: 13, lineHeight: 1.6 }}>
+                    <div className="px-[13px] py-[12px] rounded-[14px] text-[13px] leading-[1.6]" style={{ background: c.cardBg2, border: `1px solid ${c.border}`, color: c.textMuted }}>
                       <strong style={{ color: c.text }}>Session insight:</strong> {insight}
                       {session.below_50_count !== undefined && <div className="tw-history-advanced-insights">
                         <span><b style={{ color: c.text }}>{session.below_50_count || 0}</b> participants scored below 50% in this session.</span>
@@ -228,8 +228,14 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
                           : `/teacher/analytics/${session.id}`)}
                       >Open Analytics</TeacherPressButton>
                       <span className="tw-history-export-actions">
-                        <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
-                        <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
+                        <span className="tw-history-export-text">
+                          <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
+                        </span>
+                        <span className="tw-history-export-icons">
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title="Export PDF" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>PDF</button>
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export Excel" title="Export Excel" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>XLSX</button>
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -240,28 +246,36 @@ export default function SessionHistoryTab({ setActiveTab, guestMode = false, tut
         ))
       )}
       {historyTutorialStage === "intro" && <ThinkBotTutorial clickAnywhere onClickAnywhere={() => setHistoryTutorialStage("records")}><p>Every completed activity leaves a record here in <strong>History</strong>.</p></ThinkBotTutorial>}
-      {historyTutorialStage === "records" && <ThinkBotTutorial target='[data-tutorial="history-record"]' actionLabel="Got it" onAction={finishHistoryTutorial}><p>You can find your previous live sessions and assignments here without searching through your classes.</p></ThinkBotTutorial>}
+      {historyTutorialStage === "records" && <ThinkBotTutorial target='[data-tutorial="history-record"]' clickAnywhere onClickAnywhere={() => finishHistoryTutorial()}><p>You can find your previous live sessions and assignments here without searching through your classes.</p></ThinkBotTutorial>}
     </div>
   );
 }
 
 
 function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, navigate }) {
-  return <div className="container" style={{ display: "grid", gap: 18 }}>
-    <section><h2 style={{ marginBottom: 4, color: c.text }}>History</h2></section>
-    {sessions.length > 0 && <section style={{ ...card(c), display: "grid", gridTemplateColumns: "minmax(220px,1.3fr) minmax(150px,.7fr)", gap: 12 }}>
-      <input className="tw-history-search-field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
-      <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
+  return <div className="container grid gap-[18px]">
+    <section><h2 className="mb-[4px]" style={{ color: c.text }}>History</h2></section>
+    {sessions.length > 0 && <section className="grid grid-cols-[minmax(220px,1.3fr)_minmax(150px,.7fr)] gap-[12px]" style={{ ...card(c) }}>
+      <input className="tw-history-search-field w-full box-border px-[14px] py-[12px] rounded-[12px]" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+      <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full box-border px-[14px] py-[12px] rounded-[12px]" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
     </section>}
     {!sessions.length ? <ThinkBotEmptyState c={c} title="You have not done any sessions yet." /> : sessions.map((session) => {
       const tone = templateTone(session.template_type, c, false);
+      async function reuseGuestQuiz() {
+        try {
+          await api.post(`/quizzes/${session.quiz_id}/reuse`, {});
+          alert("Quiz sent back to Sessions.");
+        } catch (e) {
+          alert(e?.response?.data?.message || "Failed to reuse quiz.");
+        }
+      }
       return <div key={session.id} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-          <div><div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>{session.quiz_title}</div><div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div></div>
+        <div className="flex justify-between items-start gap-[14px] flex-wrap">
+          <div><div className="font-[900] text-[17px]" style={{ color: c.text }}>{session.quiz_title}</div><div className="text-[13px] mt-[6px]" style={{ color: c.textMuted }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div></div>
           <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(150px,1fr))", gap: 10, marginTop: 14 }}><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
-        <div style={{ marginTop: 14 }}><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton></div>
+        <div className="grid grid-cols-[repeat(2,minmax(150px,1fr))] gap-[10px] mt-[14px]"><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
+        <div className="mt-[14px] flex gap-[10px] flex-wrap"><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton><TeacherPressButton tone="neutral" onClick={reuseGuestQuiz}>Reuse</TeacherPressButton></div>
       </div>;
     })}
   </div>;
@@ -269,9 +283,9 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
 
 function MiniInfo({ label, value, c }) {
   return (
-    <div style={{ padding: "11px 12px", borderRadius: 14, background: c.cardBg2, border: `1px solid ${c.border}` }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, color: c.textSub }}>{label}</div>
-      <div style={{ marginTop: 6, fontWeight: 800, color: c.text }}>{value}</div>
+    <div className="px-[12px] py-[11px] rounded-[14px]" style={{ background: c.cardBg2, border: `1px solid ${c.border}` }}>
+      <div className="text-[11px] uppercase tracking-[0.08em] font-[800]" style={{ color: c.textSub }}>{label}</div>
+      <div className="mt-[6px] font-[800]" style={{ color: c.text }}>{value}</div>
     </div>
   );
 }

@@ -4,18 +4,20 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useState } from "react";
+import { useState } from "react";
 import PublicHeader from "../components/PublicHeader";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
+import { consumeLastRoute } from "../lib/lastRoute";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
+import ThemeIconButton from "../components/ThemeIconButton";
 
 export default function SuperadminLogin({ onLoginSuccess }) {
   const nav = useNavigate();
-  const { dark, toggleTheme } = useTheme();
   const c = useColors();
+  const { dark, toggleTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -30,7 +32,7 @@ export default function SuperadminLogin({ onLoginSuccess }) {
       setRole(data.role);
       setAuthToken(data.token);
       if (onLoginSuccess) onLoginSuccess(data.token, data.role, data);
-      nav("/superadmin");
+      nav(consumeLastRoute(data.role) || "/superadmin");
     } catch (err) {
       const response = err?.response?.data || {};
       if (response.requiresVerification) {
@@ -42,70 +44,54 @@ export default function SuperadminLogin({ onLoginSuccess }) {
   }
 
   return (
-    <div className="tw-starry-page" style={s.page(c)}>
-      <div style={s.glow} />
-      <PublicHeader compact hideSuper />
+    <div className="tw-starry-page tw-auth-page min-h-screen flex flex-col" style={s.page(c)}>
+      <PublicHeader compact hideSuper hideTheme />
 
-      <main style={s.main}>
-        <div style={s.card(c)}>
-          <div style={s.cardTop}>
-            <h1 style={s.title}>Super Admin Access</h1>
-            <p style={s.subtitle(c)}>Restricted administrative login</p>
+      <main className="tw-auth-main flex-1 flex items-center justify-center w-full px-5 py-9">
+        <div className="tw-auth-form-shell my-auto rounded-[20px] px-[44px] pt-[44px] pb-9 w-[min(100%,440px)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]" style={s.card(c)}>
+          <div className="mb-7 text-center">
+            <h1 className="m-[0_0_6px] text-[28px] font-black tracking-[-0.5px] text-[#f87171]">Super Admin Access</h1>
+            <p className="m-0 text-sm" style={s.subtitle(c)}>Restricted administrative login</p>
           </div>
 
-          <form onSubmit={submit} style={s.form}>
-            <div style={s.field}>
-              <label style={s.label(c)}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@thinkwave.local" required style={s.input(c)} />
+          <form onSubmit={submit} className="flex flex-col gap-[18px]">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold" style={s.label(c)}>Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@thinkwave.local" required className="px-[14px] py-[11px] rounded-xl text-sm w-full box-border" style={s.input(c)} />
             </div>
 
-            <div style={s.field}>
-              <label style={s.label(c)}>Password</label>
-              <div style={s.passwordWrap}>
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required style={{ ...s.input(c), paddingRight: 48 }} />
-                <button type="button" style={s.showBtn} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold" style={s.label(c)}>Password</label>
+              <div className="relative">
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="px-[14px] py-[11px] rounded-xl text-sm w-full box-border" style={{ ...s.input(c), paddingRight: 48 }} />
+                <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
             </div>
 
-            {msg && <p style={s.msgBox}>{msg}</p>}
+            {msg && <p className="text-[13px] rounded-lg p-[10px_14px] m-0" style={s.msgBox}>{msg}</p>}
 
-            <button type="button" style={s.forgotBtn} onClick={() => nav("/forgot-password")}>Forgot password?</button>
+            <button type="button" className="self-end border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => nav("/forgot-password")}>Forgot password?</button>
 
-            <div style={s.btnWrap}>
-              <button type="submit" className="tw-superadmin-primary" style={s.loginBtn}>Authorize and Enter</button>
+            <div className="flex justify-center mt-1">
+              <button type="submit" className="tw-superadmin-primary w-full p-[13px] rounded-xl text-[15px] font-extrabold cursor-pointer" style={s.loginBtn}>Authorize and Enter</button>
             </div>
           </form>
         </div>
       </main>
+      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }
 
 const s = {
-  page: (c) => ({ minHeight: "100vh", background: c.pageBg, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text, position: "relative", overflow: "hidden" }),
-  glow: { position: "absolute", top: -200, left: "50%", transform: "translateX(-50%)", width: 600, height: 600, background: "radial-gradient(circle, rgba(239,68,68,0.08) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 },
-  header: (c) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 40px", zIndex: 1, borderBottom: `1px solid ${c.border}` }),
-  logo: { display: "flex", alignItems: "baseline", textDecoration: "none" },
-  logoThink: (c) => ({ fontSize: 20, fontWeight: 900, color: c.text }),
-  logoWave: { fontSize: 20, fontWeight: 900, color: "#ef4444" },
-  headerRight: { display: "flex", alignItems: "center", gap: 10 },
-  themeBtn: (c) => ({ padding: "8px 14px", borderRadius: 20, border: `1px solid ${c.inputBorder}`, background: "transparent", color: c.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer" }),
-  portalBadge: { padding: "4px 12px", borderRadius: 6, background: "#450a0a", color: "#f87171", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", border: "1px solid #7f1d1d" },
-  main: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", zIndex: 1 },
-  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}`, borderRadius: 20, padding: "44px 44px 36px", width: "min(100%, 440px)", boxShadow: "0 24px 80px rgba(0,0,0,0.45)" }),
-  cardTop: { marginBottom: 28, textAlign: "center" },
-  title: { margin: "0 0 6px", fontSize: 28, fontWeight: 900, letterSpacing: "-0.5px", color: "#f87171" },
-  subtitle: (c) => ({ margin: 0, fontSize: 14, color: c.textMuted }),
-  form: { display: "flex", flexDirection: "column", gap: 18 },
-  field: { display: "flex", flexDirection: "column", gap: 6 },
-  label: (c) => ({ fontSize: 13, fontWeight: 600, color: c.text }),
-  input: (c) => ({ padding: "11px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, width: "100%", boxSizing: "border-box" }),
-  passwordWrap: { position: "relative" },
-  showBtn: { position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#ef4444", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
-  forgotBtn: { alignSelf: "flex-end", background: "none", border: "none", color: "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 },
-  msgBox: { fontSize: 13, color: "#fecaca", background: "rgba(127,29,29,0.4)", borderRadius: 8, padding: "10px 14px", margin: 0 },
-  btnWrap: { display: "flex", justifyContent: "center", marginTop: 4 },
-  loginBtn: { width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#dc2626", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.25)" },
-  backPrompt: (c) => ({ textAlign: "center", fontSize: 13, color: c.textMuted, marginTop: 24 }),
-  link: { color: "#60a5fa", fontWeight: 700, textDecoration: "none" },
+  page: (c) => ({ background: c.pageBg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text }),
+  glow: { background: "radial-gradient(circle, rgba(239,68,68,0.08) 0%, transparent 70%)" },
+  card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}` }),
+  subtitle: (c) => ({ color: c.textMuted }),
+  label: (c) => ({ color: c.text }),
+  input: (c) => ({ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }),
+  showBtn: { color: "#ef4444" },
+  forgotBtn: { color: "#60a5fa" },
+  msgBox: { color: "#fecaca", background: "rgba(127,29,29,0.4)" },
+  loginBtn: { background: "#dc2626", color: "#fff", boxShadow: "0 4px 20px rgba(220,38,38,0.25)" },
 };

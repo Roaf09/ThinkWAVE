@@ -150,13 +150,21 @@ authRouter.post("/guest-token", rateLimit({ windowMs: 60 * 60 * 1000, max: 60, k
   const token = jwt.sign(
     { sub: guest.id, role: "GUEST_HOST", ver: Number(guest.token_version || 0) },
     env.JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: env.JWT_EXPIRES_IN }
   );
   res.json({ token, guestId: guest.last_name || null });
 }));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6 });
+const clientIp = (req) => String(req.ip || req.socket?.remoteAddress || "unknown");
+// Key brute-force-sensitive endpoints by IP + account identifier (not IP
+// alone): a whole computer lab behind one school NAT shares a single public
+// IP, and a pure-IP key would let a handful of students burn the budget for
+// everyone else. Per-account keys keep the brute-force protection while
+// letting distinct users share an IP.
+const accountKey = (req) =>
+  `${clientIp(req)}:${String(req.body?.email || req.params?.token || "").toLowerCase().slice(0, 120)}`;
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: accountKey });
+const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, keyGenerator: accountKey });
 
 authRouter.get("/admin-invitation/:token", authLimiter, asyncHandler(checkAdminInvitation));
 authRouter.post("/register", authLimiter, validateBody(RegisterSchema), asyncHandler(register));

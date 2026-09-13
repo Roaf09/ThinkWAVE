@@ -3,7 +3,7 @@
  * Purpose: Teacher dashboard home/command center.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
@@ -15,21 +15,12 @@ import { manilaDateTime } from "../../../lib/dateFormat";
 const shellCard = (c, extra = {}) => ({
   background: c.cardBg,
   border: `3px solid ${c.border}`,
-  borderRadius: 18,
-  padding: 18,
   boxShadow: c.pageBg === "#eef2ff" ? "0 16px 34px rgba(43,108,255,0.08)" : "0 16px 34px rgba(0,0,0,0.14)",
   transition: "background 0.3s, border-color 0.3s, transform 0.25s, box-shadow 0.3s",
   ...extra,
 });
 
 const pill = (c, extra = {}) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "5px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 800,
   background: c.cardBg2,
   border: `1px solid ${c.border}`,
   color: c.text,
@@ -38,13 +29,9 @@ const pill = (c, extra = {}) => ({
 
 const actionBtn = (c, primary = false) => ({
   padding: primary ? "10px 14px" : "9px 13px",
-  borderRadius: 12,
   border: `1px solid ${primary ? c.accent : c.border}`,
   background: primary ? c.accent : c.cardBg2,
   color: primary ? "#fff" : c.text,
-  fontWeight: 800,
-  fontSize: 13,
-  cursor: "pointer",
 });
 
 export default function HomeTab({ setActiveTab }) {
@@ -130,9 +117,6 @@ export default function HomeTab({ setActiveTab }) {
   const sentAssignments = quizzes.filter((q) => q.delivery_mode === "ASYNCHRONOUS").length;
   const warningCount = quizzes.filter((q) => q.status !== "PUBLISHED" || !q.class_id).length;
   const banked = quizzes.filter((q) => q.status === "BANKED");
-  const lastEditedQuiz = quizzes[0] || null;
-  const latestReport = recentSessions.find((session) => session.session_type !== "ASSIGNED") || null;
-  const lastBankedQuiz = banked[0] || null;
   const teacherInstitution = me?.institution_name || me?.institutionName || "";
   const scrollStats = submissionStats.length > 3;
 
@@ -154,50 +138,50 @@ export default function HomeTab({ setActiveTab }) {
   }, [analyticsMap]);
 
   if (loading) {
-    return <div className="container"><div className="tw-home-performance-shell" style={shellCard(c)}>Loading your dashboard…</div></div>;
+    return <div className="container"><div className="tw-home-performance-shell rounded-[18px] p-[18px]" style={shellCard(c)}>Loading your dashboard…</div></div>;
   }
 
   return (
     <>
-      <div className="container" style={{ display: "grid", gap: 18 }}>
+      <div className="container grid gap-[18px]">
         <section>
-          <h2 style={{ marginBottom: 4, color: c.text }}>Home</h2>
+          <h2 className="mb-[4px]" style={{ color: c.text }}>Home</h2>
         </section>
 
-        <section className="tw-home-top-grid" style={{ display: "grid", gridTemplateColumns: "minmax(180px, 250px) minmax(300px, 1fr)", gap: 16, alignItems: "stretch" }}>
-          <div className="tw-home-quick-metrics" style={{ display: "grid", gap: 14 }}>
+        <section className="tw-home-top-grid grid gap-[16px] items-stretch grid-cols-[minmax(180px,250px)_minmax(300px,1fr)]">
+          <div className="tw-home-quick-metrics grid gap-[14px]">
             <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Quizzes currently available in Sessions" tone="blue" onClick={() => setActiveTab?.("live")} />
             <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
           </div>
 
-          <div className="tw-home-overview-shell" style={shellCard(c, { display: "grid", gap: 16 })}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+          <div className="tw-home-overview-shell rounded-[18px] p-[18px] grid gap-[16px]" style={shellCard(c)}>
+            <div className="flex items-start justify-between gap-[14px] flex-wrap">
               <div>
-                <div style={{ fontWeight: 950, fontSize: 19, color: c.text }}>Teacher overview</div>
+                <div className="font-[950] text-[19px]" style={{ color: c.text }}>Teacher overview</div>
                 {teacherInstitution ? (
-                  <div style={{ color: c.textMuted, marginTop: 8, fontSize: 18, display:"flex", alignItems:"center", gap:10 }}><span style={{ color: dark ? "#ffffff" : "#000000", display:"inline-flex", transition:"color .16s ease" }}><TwIcon name="classes" size={29}/></span><b style={{ color: c.text, fontSize: 21 }}>{teacherInstitution}</b></div>
+                  <div className="mt-[8px] text-[18px] flex items-center gap-[10px]" style={{ color: c.textMuted }}><span className="inline-flex" style={{ color: dark ? "#ffffff" : "#000000", transition: "color .16s ease" }}><TwIcon name="classes" size={29}/></span><b className="text-[21px]" style={{ color: c.text }}>{teacherInstitution}</b></div>
                 ) : (
-                  <div style={{ color: c.textMuted, marginTop: 6, fontSize: 14 }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} style={{ border: 0, background: "transparent", color: c.accent, fontWeight: 950, cursor: "pointer", padding: 0 }}>Join.</button></div>
+                  <div className="mt-[6px] text-[14px]" style={{ color: c.textMuted }}>You are not part of any institution yet. <button onClick={() => setInviteOpen(true)} className="border-0 bg-transparent font-[950] cursor-pointer p-0" style={{ color: c.accent }}>Join.</button></div>
                 )}
               </div>
             </div>
 
-            <div className="tw-mini-info-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 }}>
-              <MiniInfo c={c} label="Class Handled" value={classesHandled} tone="red" />
-              <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" />
-              <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" />
-              <MiniInfo c={c} label="Banked quizzes" value={banked.length} tone="yellow" />
+            <div className="tw-mini-info-grid grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))]">
+              <MiniInfo c={c} label="Class Handled" value={classesHandled} tone="red" onClick={() => setActiveTab?.("classes")} />
+              <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" onClick={() => setActiveTab?.("live")} />
+              <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" onClick={() => setActiveTab?.("live")} />
+              <MiniInfo c={c} label="Banked quizzes" value={banked.length} tone="yellow" onClick={() => setActiveTab?.("bank")} />
             </div>
 
             <div>
-              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".08em", color: c.textSub, fontWeight: 900, marginBottom: 10 }}>Assigned work submissions</div>
+              <div className="text-[12px] uppercase tracking-[.08em] font-[900] mb-[10px]" style={{ color: c.textSub }}>Assigned work submissions</div>
               {submissionStats.length === 0 ? (
                 <EmptyState c={c} icon="chart" title="No assigned submissions yet" message="Submission updates from assigned quizzes will appear here." compact />
               ) : (
-                <div className="tw-submission-scroll" style={{ display: "grid", gap: 9, maxHeight: scrollStats ? 222 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
+                <div className="tw-submission-scroll grid gap-[9px]" style={{ maxHeight: scrollStats ? 222 : "none", overflowY: scrollStats ? "auto" : "visible", paddingRight: scrollStats ? 6 : 0 }}>
                   {submissionStats.map((row) => {
                     const rowTone = templateTone(row.template_type, c, false);
-                    return <div key={`${row.class_id}-${row.quiz_id}`} style={{ padding: "18px 15px", minHeight: 68, display: "flex", alignItems: "center", borderRadius: 14, border: `3px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent, fontSize: 13, lineHeight: 1.5, fontWeight: 850 }}>
+                    return <div key={`${row.class_id}-${row.quiz_id}`} className="px-[15px] py-[18px] min-h-[68px] flex items-center rounded-[14px] text-[13px] leading-[1.5] font-[850]" style={{ border: `3px solid ${rowTone.border}`, background: rowTone.softBg, color: rowTone.accent }}>
                       {Number(row.submitted_count || 0)} {Number(row.submitted_count || 0) === 1 ? "student" : "students"} from {row.class_name} have submitted their answers on {row.quiz_title}
                     </div>;
                   })}
@@ -207,34 +191,34 @@ export default function HomeTab({ setActiveTab }) {
           </div>
         </section>
 
-        <section className="tw-home-mid-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(280px, 0.9fr)", gap: 16 }}>
-          <div style={shellCard(c)}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
+        <section className="tw-home-mid-grid grid gap-[16px] grid-cols-[minmax(0,1.3fr)_minmax(280px,0.9fr)]">
+          <div className="rounded-[18px] p-[18px]" style={shellCard(c)}>
+            <div className="flex items-center justify-between gap-[12px] flex-wrap mb-[12px]">
               <div>
-                <div style={{ fontWeight: 900, fontSize: 17, color: c.text }}>Recent Sessions</div>
+                <div className="font-[900] text-[17px]" style={{ color: c.text }}>Recent Sessions</div>
               </div>
               <TeacherPressButton tone="blue" onClick={() => setActiveTab?.("history")}>Open History</TeacherPressButton>
             </div>
             {recentSessions.length === 0 ? (
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
             ) : (
-              <div className="tw-session-card-grid" style={{ display: "grid", gap: 10 }}>
+              <div className="tw-session-card-grid grid gap-[10px]">
                 {recentSessions.map((session) => <SessionCard key={`${session.session_type || "LIVE"}-${session.id}`} session={session} analytics={analyticsMap[session.id]} c={c} navigate={navigate} />)}
               </div>
             )}
           </div>
 
-          <div className="tw-home-performance" style={shellCard(c)}>
-            <div style={{ fontWeight: 900, fontSize: 17, color: c.text, marginBottom: 10 }}>Performance highlights</div>
+          <div className="tw-home-performance rounded-[18px] p-[18px]" style={shellCard(c)}>
+            <div className="font-[900] text-[17px] mb-[10px]" style={{ color: c.text }}>Performance highlights</div>
             {performanceHighlights.length === 0 ? (
               <EmptyState c={c} icon="chart" title="No highlights yet" message="Recent analytics will surface smart highlights here after more completed live sessions." compact />
             ) : (
-              <div style={{ display: "grid", gap: 10 }}>
+              <div className="grid gap-[10px]">
                 {performanceHighlights.map((item) => (
-                  <div key={item.label} style={{ padding: 12, borderRadius: 14, border: `3px solid ${c.border}`, background: c.cardBg2 }}>
-                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: c.textSub, fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: c.text, marginTop: 6 }}>{item.value}</div>
-                    <div style={{ fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>{item.hint}</div>
+                  <div key={item.label} className="p-[12px] rounded-[14px]" style={{ border: `3px solid ${c.border}`, background: c.cardBg2 }}>
+                    <div className="text-[12px] uppercase tracking-[0.08em] font-[800]" style={{ color: c.textSub }}>{item.label}</div>
+                    <div className="text-[24px] font-[900] mt-[6px]" style={{ color: c.text }}>{item.value}</div>
+                    <div className="text-[12px] mt-[6px] leading-[1.5]" style={{ color: c.textMuted }}>{item.hint}</div>
                   </div>
                 ))}
               </div>
@@ -254,28 +238,28 @@ function SessionCard({ session, analytics, c, navigate }) {
   const goToAnalytics = () => navigate(assigned ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}` : `/teacher/analytics/${session.id}`);
   return (
     <div
-      className="tw-session-card"
+      className="tw-session-card grid gap-[10px] p-[14px] rounded-[14px] cursor-pointer"
       role="button"
       tabIndex={0}
       onClick={goToAnalytics}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); goToAnalytics(); } }}
-      style={{ ...templateCardChrome(session.template_type, c, false, { padding: 14, borderRadius: 14, display: "grid", gap: 10, borderWidth: 4, transition: "transform 220ms ease", cursor: "pointer" }) }}
+      style={{ ...templateCardChrome(session.template_type, c, false, { borderWidth: 4, transition: "transform 220ms ease" }) }}
     >
       {/* Desktop layout - hidden on mobile, replaced by the compact square below */}
-      <div className="tw-session-card-desktop-row" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="tw-session-card-desktop-row flex items-center justify-between gap-[12px] flex-wrap">
         <div>
-          <div style={{ fontWeight: 900, color: c.text }}>{session.quiz_title}</div>
-          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{manilaDateTime(session.ended_at || session.available_until || session.started_at, { dateStyle: "medium", timeStyle: "short" })}</div>
+          <div className="font-[900]" style={{ color: c.text }}>{session.quiz_title}</div>
+          <div className="text-[12px] mt-[4px]" style={{ color: c.textMuted }}>{manilaDateTime(session.ended_at || session.available_until || session.started_at, { dateStyle: "medium", timeStyle: "short" })}</div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={pill(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
-          <span style={pill(c)}>{assigned ? "Assigned session" : "Live session"}</span>
-          <span style={pill(c)}>{session.participant_count} {assigned ? "submitted" : session.join_mode === "GROUP" ? "groups" : "students"}</span>
-          {analytics && <span style={pill(c, { borderColor: c.greenBorder, background: c.greenBg, color: c.greenFg })}>Avg {analytics.summary?.avg_score ?? 0}</span>}
+        <div className="flex gap-[8px] flex-wrap">
+          <span className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[999px] text-[12px] font-[800]" style={pill(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
+          <span className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[999px] text-[12px] font-[800]" style={pill(c)}>{assigned ? "Assigned session" : "Live session"}</span>
+          <span className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[999px] text-[12px] font-[800]" style={pill(c)}>{session.participant_count} {assigned ? "submitted" : session.join_mode === "GROUP" ? "groups" : "students"}</span>
+          {analytics && <span className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-[999px] text-[12px] font-[800]" style={pill(c, { borderColor: c.greenBorder, background: c.greenBg, color: c.greenFg })}>Avg {analytics.summary?.avg_score ?? 0}</span>}
         </div>
       </div>
-      <div className="tw-session-card-desktop-row" style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ color: c.textMuted, fontSize: 13 }}>
+      <div className="tw-session-card-desktop-row flex items-center justify-between gap-[12px] flex-wrap">
+        <div className="text-[13px]" style={{ color: c.textMuted }}>
           {session.question_count || 0} questions · {assigned ? `${session.avg_score ?? 0} average score` : analytics?.questions?.length ? `${Math.round(Number(analytics.questions[0]?.pct_correct || 0))}% correct on the first tracked item` : "Analytics ready to open"}
         </div>
         <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); goToAnalytics(); }}>Open Analytics</button>
@@ -291,7 +275,7 @@ function SessionCard({ session, analytics, c, navigate }) {
   );
 }
 
-function MiniInfo({ c, label, value, tone = "blue" }) {
+function MiniInfo({ c, label, value, tone = "blue", onClick }) {
   const tones = {
     red: { fg: c.redFg || "#dc2626", bg: c.redBg || "rgba(239,68,68,.12)", border: c.redBorder || "rgba(239,68,68,.5)" },
     blue: { fg: c.accent || "#2b6cff", bg: `${c.accent || "#2b6cff"}18`, border: `${c.accent || "#2b6cff"}88` },
@@ -299,26 +283,22 @@ function MiniInfo({ c, label, value, tone = "blue" }) {
     yellow: { fg: c.yellowFg || "#ca8a04", bg: c.yellowBg || "rgba(234,179,8,.14)", border: c.yellowBorder || "rgba(234,179,8,.55)" },
   };
   const t = tones[tone] || tones.blue;
+  const clickable = typeof onClick === "function";
   return (
-    <div className={`tw-mini-info-card is-${tone}`} style={{ padding: 12, borderRadius: 14, background: t.bg, border: `3px solid ${t.border}` }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: t.fg, fontWeight: 900 }}>{label}</div>
-      <div style={{ color: c.text, fontWeight: 950, fontSize: 22, marginTop: 5 }}>{value}</div>
+    <div
+      className={`tw-mini-info-card is-${tone}${clickable ? " is-clickable" : ""} p-[12px] rounded-[14px]`}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+      style={{ background: t.bg, border: `3px solid ${t.border}`, cursor: clickable ? "pointer" : "default" }}
+    >
+      <div className="text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: t.fg }}>{label}</div>
+      <div className="font-[950] text-[22px] mt-[5px]" style={{ color: c.text }}>{value}</div>
     </div>
   );
 }
 
-function ContinueCard({ c, title, subtitle, buttonLabel, onClick, templateType }) {
-  const chrome = templateType ? templateCardChrome(templateType, c, false) : {};
-  return (
-    <div className="tw-continue-card" style={{ padding: 16, borderRadius: 16, border: `3px solid ${c.border}`, background: c.cardBg2, display: "grid", gap: 12, ...chrome }}>
-      <div>
-        <div style={{ fontWeight: 900, color: c.text, fontSize: 15 }}>{title}</div>
-        <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6, lineHeight: 1.55 }}>{subtitle}</div>
-      </div>
-      <button style={actionBtn(c, true)} onClick={onClick}>{buttonLabel}</button>
-    </div>
-  );
-}
 
 function InvitationModal({ c, onClose, onJoined }) {
   const [code, setCode] = useState("");
@@ -340,23 +320,24 @@ function InvitationModal({ c, onClose, onJoined }) {
   }
 
   return (
-    <div style={modalBackdrop}>
-      <section style={shellCard(c, { width: "min(94vw, 520px)", background: c.cardBg, position: "relative" })}>
-        <button type="button" onClick={onClose} style={{ position: "absolute", right: 14, top: 14, ...actionBtn(c) }}>×</button>
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+    <div className="fixed inset-0 grid place-items-center p-[20px] bg-[rgba(0,0,0,.55)]" style={modalBackdrop}>
+      <section className="rounded-[18px] p-[18px] w-[min(94vw,520px)] relative" style={shellCard(c, { background: c.cardBg })}>
+        <button type="button" onClick={onClose} className="absolute right-[14px] top-[14px] rounded-[12px] text-[13px] font-[800] cursor-pointer" style={{ ...actionBtn(c) }}>×</button>
+        <form onSubmit={handleSubmit} className="grid gap-[14px]">
           <div>
-            <div style={{ fontWeight: 900, fontSize: 18, color: c.text, marginBottom: 6 }}>Enter Invitation Code</div>
-            <div style={{ color: c.textMuted, fontSize: 13, lineHeight: 1.6 }}>Once accepted, your teacher account will be linked to the institution that owns the code.</div>
+            <div className="font-[900] text-[18px] mb-[6px]" style={{ color: c.text }}>Enter Invitation Code</div>
+            <div className="text-[13px] leading-[1.6]" style={{ color: c.textMuted }}>Once accepted, your teacher account will be linked to the institution that owns the code.</div>
           </div>
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="e.g. ABCD1234"
             maxLength={12}
-            style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 14, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 22, fontWeight: 800, textAlign: "center", letterSpacing: "0.15em" }}
+            className="w-full box-border px-[16px] py-[14px] rounded-[14px] text-[22px] font-[800] text-center tracking-[0.15em]"
+            style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}
           />
-          {msg && <div style={{ padding: "10px 12px", borderRadius: 12, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-          <button type="submit" disabled={status === "loading" || !code.trim()} style={{ padding: "13px 16px", borderRadius: 14, border: "none", background: c.accent, color: "#fff", fontWeight: 900, cursor: status === "loading" ? "wait" : "pointer", opacity: !code.trim() ? 0.7 : 1 }}>
+          {msg && <div className="px-[12px] py-[10px] rounded-[12px] text-[13px]" style={{ background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg }}>{msg}</div>}
+          <button type="submit" disabled={status === "loading" || !code.trim()} className="px-[16px] py-[13px] rounded-[14px] border-0 font-[900] text-white" style={{ background: c.accent, cursor: status === "loading" ? "wait" : "pointer", opacity: !code.trim() ? 0.7 : 1 }}>
             {status === "loading" ? "Joining…" : "Join Institution"}
           </button>
         </form>
@@ -365,4 +346,4 @@ function InvitationModal({ c, onClose, onJoined }) {
   );
 }
 
-const modalBackdrop = { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "grid", placeItems: "center", padding: 20, zIndex: 2000, backdropFilter: "blur(6px)" };
+const modalBackdrop = { zIndex: 2000, backdropFilter: "blur(6px)" };

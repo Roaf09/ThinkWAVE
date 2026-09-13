@@ -3,17 +3,20 @@
  * Purpose: Teacher dashboard shell, profile settings, and tab container.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearToken, clearRole } from "../../lib/auth";
+import { clearLastRoute } from "../../lib/lastRoute";
 import { api, setAuthToken } from "../../lib/api";
-import { useTheme, useColors, ThemedModal } from "../../context/ThemeContext";
+import { useTheme, useColors } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
+import { sidebarStyle as sidebar, dashboardNavButtonStyle as navButton } from "../../components/DashboardShell";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherActionModal } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
-import { readTutorialState, writeTutorialState, markMainStage } from "../../lib/tutorialState";
+import { useIsMobileViewport } from "./tabs/teacherTabShared";
+import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState } from "../../lib/tutorialState";
 import { TEMPLATE_TYPES } from "../../lib/templateTypes";
 
 import HomeTab           from "./tabs/HomeTab";
@@ -25,6 +28,22 @@ import SessionHistoryTab from "./tabs/SessionHistoryTab";
 
 const blankProfile = { firstName: "", lastName: "", contactNumber: "", email: "", institutionName: "", profileImage: "" };
 
+// Resuming a tour after an interruption must land on a stage that can actually
+// render: folder-name modals don't survive a reload, so modal-gated waits fall
+// back to the stable prompt that reopens them.
+const TRANSIENT_TUTORIAL_FALLBACK = {
+  classes_wait_subject: "classes_intro",
+  classes_wait_section: "classes_create_section",
+};
+
+function tutorialTabForStage(stage) {
+  if (!stage) return null;
+  if (stage.startsWith("classes_")) return "classes";
+  if (stage.startsWith("create_") || stage.startsWith("builder_")) return "create";
+  if (stage.startsWith("sessions_") || stage.startsWith("host_") || stage.startsWith("assign_")) return "live";
+  return "home";
+}
+
 export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = useState("home");
   const [showLogout, setShowLogout] = useState(false);
@@ -35,6 +54,7 @@ export default function TeacherDashboard() {
   const [profileSaved, setProfileSaved] = useState(false);
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [tutorialState, setTutorialState] = useState({});
+  const isMobileViewport = useIsMobileViewport();
   const profileFileRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,17 +62,54 @@ export default function TeacherDashboard() {
   const c = useColors();
 
   useEffect(() => {
-    api.get("/auth/me").then(({ data }) => {
+    api.get("/auth/me").then(async ({ data }) => {
       setProfile(profileFromUser(data));
       if (!data?.id) return;
       setTutorialUserId(data.id);
-      const saved = readTutorialState(data.id);
+      let saved = readTutorialState(data.id);
+      // A recreated database restarts AUTO_INCREMENT, so a brand-new account
+      // can reuse an id whose tour is already marked complete in this
+      // browser. The account creation timestamp tells the two apart: on a
+      // mismatch, drop the stale tour and treat this as a fresh account.
+      const accountCreated = data.created_at ? String(data.created_at) : null;
+      if (accountCreated && saved.tutorialAccountCreated && saved.tutorialAccountCreated !== accountCreated) {
+        saved = resetTutorialState(data.id);
+      }
+      if (accountCreated && !saved.tutorialAccountCreated) {
+        saved = writeTutorialState(data.id, { tutorialAccountCreated: accountCreated });
+      }
       let firstLoginPending = false;
       try { firstLoginPending = sessionStorage.getItem("tw_teacher_first_login") === "1"; } catch {}
       if (!saved.mainComplete && (firstLoginPending || saved.mainStarted)) {
-        const stage = saved.mainStage || "home_welcome";
-        const next = saved.mainStarted ? saved : writeTutorialState(data.id, { ...saved, mainStarted: true, mainStage: stage });
+        let stage = saved.mainStage || "home_welcome";
+        let next = saved.mainStarted ? saved : writeTutorialState(data.id, { ...saved, mainStarted: true, mainStage: stage });
+        const fallback = TRANSIENT_TUTORIAL_FALLBACK[stage];
+        if (fallback) {
+          stage = fallback;
+          next = writeTutorialState(data.id, { ...next, mainStage: fallback });
+        }
+        const tab = tutorialTabForStage(stage);
+        if (tab) setActiveTab(tab);
         setTutorialState(next);
+      } else if (!saved.mainComplete && !saved.mainStarted) {
+        // Fallback: the one-shot first-login flag may have been burned without
+        // the dashboard ever mounting (e.g. a stale resume redirect sent the
+        // true first login straight into the quiz builder). An account with no
+        // tour state and no content yet is un-onboarded — start the tour.
+        try {
+          const [foldersRes, quizzesRes] = await Promise.all([
+            api.get("/classes"),
+            api.get("/quizzes"),
+          ]);
+          const hasContent = (foldersRes.data || []).length > 0 || (quizzesRes.data || []).length > 0;
+          if (!hasContent) {
+            setTutorialState(writeTutorialState(data.id, { mainStarted: true, mainStage: "home_welcome" }));
+          } else {
+            setTutorialState(saved);
+          }
+        } catch {
+          setTutorialState(saved);
+        }
       } else {
         setTutorialState(saved);
       }
@@ -107,10 +164,27 @@ export default function TeacherDashboard() {
     patch: patchTutorial,
   };
 
+  // A burned one-shot used to need console surgery (localStorage key +
+  // session flag) to recover. Replaying restarts only the main tour from the
+  // welcome dialog; per-template / host-panel / analytics seen-flags are left
+  // alone so those don't nag again.
+  function replayMainTutorial() {
+    if (!tutorialUserId) return;
+    const next = writeTutorialState(tutorialUserId, {
+      mainStarted: true,
+      mainComplete: false,
+      mainStage: "home_welcome",
+    });
+    setTutorialState(next);
+    setActiveTab("home");
+    setProfileOpen(false);
+  }
+
   function doLogout() {
     clearToken();
     clearRole();
     setAuthToken("");
+    clearLastRoute();
     navigate("/");
   }
 
@@ -194,7 +268,7 @@ export default function TeacherDashboard() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 12px", flex: 1 }}>
           {navItems.map((item) => (
-            <button key={item.id} data-tutorial={`nav-${item.id}`} style={navButton(c, activeTab === item.id)} onClick={() => handleNavSelect(item.id)}>
+            <button key={item.id} data-tutorial={`nav-${item.id}`} className="tw-side-nav-btn" style={navButton(c, activeTab === item.id)} onClick={() => handleNavSelect(item.id)}>
               <span style={{ width: 20, display: "inline-flex", justifyContent: "center" }}><TwIcon name={item.icon} size={18} /></span>
               <span key={item.id === "bank" ? item.label : `${item.id}-${item.label}`} className={item.id === "bank" ? "sidebar-bank-label" : undefined}>{item.label}</span>
             </button>
@@ -211,15 +285,27 @@ export default function TeacherDashboard() {
         <div key={activeTab} className="dashboard-tab-panel">{renderTab()}</div>
       </main>
 
-      <MobileTabBar c={c} items={mobilePrimaryNav} secondaryItems={mobileSecondaryNav} activeId={activeTab} onSelect={handleNavSelect} />
+      <MobileTabBar c={c} items={mobilePrimaryNav} secondaryItems={mobileSecondaryNav} activeId={activeTab} onSelect={handleNavSelect} iconsOnly />
 
-      {tutorial.stage === "home_welcome" && <ThinkBotTutorial transparent actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel="Skip" onSecondary={skipMainTutorial}><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></ThinkBotTutorial>}
-      {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" actionLabel="Let's Go" actionDelay={2000} onAction={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
-      {tutorial.stage === "nav_classes" && <ThinkBotTutorial target='[data-tutorial="nav-classes"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>}
-      {tutorial.stage === "nav_create" && <ThinkBotTutorial target='[data-tutorial="nav-create"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Create</strong>.</p></ThinkBotTutorial>}
-      {tutorial.stage === "nav_sessions" && <ThinkBotTutorial target='[data-tutorial="nav-live"]' placement="right" dialogWidth={285} className="tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>}
+      {tutorial.stage === "home_welcome" && <ThinkBotTutorial className="tw-tutorial-plain-secondary" actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel="Skip" onSecondary={skipMainTutorial}><div><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></div></ThinkBotTutorial>}
+      {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" clickAnywhere onClickAnywhere={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
+      {tutorial.stage === "nav_classes" && (isMobileViewport ? (
+        <ThinkBotTutorial target='[data-tutorial="mobile-nav-classes"]' placement="above" square className="tw-tutorial-mobile-nav-prompt" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>
+      ) : (
+        <ThinkBotTutorial target='[data-tutorial="nav-classes"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>
+      ))}
+      {tutorial.stage === "nav_create" && (isMobileViewport ? (
+        <ThinkBotTutorial target='[data-tutorial="mobile-nav-create"]' placement="above" square className="tw-tutorial-mobile-nav-prompt" highlight highlightMode="target"><p>Next, let’s go to <strong>Create</strong>.</p></ThinkBotTutorial>
+      ) : (
+        <ThinkBotTutorial target='[data-tutorial="nav-create"]' placement="right" dialogWidth={270} className="tw-tutorial-nav-lower tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Create</strong>.</p></ThinkBotTutorial>
+      ))}
+      {tutorial.stage === "nav_sessions" && (isMobileViewport ? (
+        <ThinkBotTutorial target='[data-tutorial="mobile-nav-live"]' placement="above" square className="tw-tutorial-mobile-nav-prompt" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>
+      ) : (
+        <ThinkBotTutorial target='[data-tutorial="nav-live"]' placement="right" dialogWidth={285} className="tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>
+      ))}
 
-      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
+      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} onSubmit={saveProfile} onReplayTutorial={replayMainTutorial} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the teacher dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
@@ -227,7 +313,7 @@ export default function TeacherDashboard() {
   );
 }
 
-function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose, onUpload }) {
+function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose, onUpload, onReplayTutorial }) {
   return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...modalCard(c), width: "min(94vw,600px)", position: "relative" }}>
     <button type="button" onClick={onClose} style={{ ...iconButton(c), position: "absolute", right: 14, top: 14 }}><TwIcon name="close" size={18} /></button>
     <h3 style={{ marginTop: 0, color: c.text }}>Teacher Info</h3>
@@ -245,6 +331,7 @@ function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose,
       <Field label="Contact number" c={c}><input value={profile.contactNumber} onChange={(e) => setProfile({ ...profile, contactNumber: e.target.value })} style={input(c)} /></Field>
       <Field label="Institution" c={c}><input disabled value={profile.institutionName || "Basic plan"} style={{ ...input(c), opacity: .72 }} /></Field>
     </div>
+    <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}><button type="button" onClick={onReplayTutorial} style={{ ...sideAction(c), width: "auto" }}><TwIcon name="spark" size={16} /><span>Replay onboarding tour</span></button></div>
     {error && <div style={{ marginTop: 14, padding: 12, borderRadius: 12, color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, fontWeight: 850 }}>{error}</div>}
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button style={primary(c)}>Save</button></div>
   </form></div>;
@@ -256,12 +343,9 @@ function profileFromUser(user = {}) { return { firstName: user.first_name || "",
 
 const avatarImage = { width: "100%", height: "100%", objectFit: "cover" };
 const modalBackdrop = { position: "fixed", inset: 0, zIndex: 3000, display: "grid", placeItems: "center", padding: 20, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)" };
-function sidebar(c) { return { width: 220, minWidth: 220, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}`, display: "flex", flexDirection: "column", padding: "0 0 24px", position: "fixed", top: 0, left: 0, height: "100vh", overflowY: "auto", zIndex: 100, transition: "background .3s,border-color .3s" }; }
-function navButton(c, active) { return { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, border: "none", background: active ? "linear-gradient(135deg,#2b6cff,#5b7cff)" : "transparent", boxShadow: active ? "0 5px 0 rgba(18,54,145,.5),0 10px 20px rgba(43,108,255,.18)" : "none", transform: active ? "translateY(-1px)" : "none", color: active ? "#fff" : c.navColor, fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left", width: "100%", transition: "transform .18s ease,background .2s,color .2s,box-shadow .18s ease" }; }
 function sideAction(c) { return { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${c.sidebarBorder}`, background: "transparent", color: c.navColor, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "color .2s,border-color .2s" }; }
 function avatarButton(c) { return { width: 38, height: 38, padding: 0, overflow: "hidden", display: "grid", placeItems: "center", borderRadius: "50%", border: 0, background: "rgba(255,255,255,.08)", color: c.navColor, cursor: "pointer" }; }
 function modalCard(c) { return { background: c.cardBg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 20, padding: 20, boxShadow: "0 28px 80px rgba(0,0,0,.28)" }; }
 function iconButton(c) { return { width: 38, height: 38, display: "grid", placeItems: "center", borderRadius: 11, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, cursor: "pointer" }; }
 function input(c) { return { width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 11, border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text, fontFamily: "inherit" }; }
-function primary(c) { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 14px", borderRadius: 11, border: 0, background: "#2b6cff", color: "#fff", fontFamily: "inherit", fontWeight: 950, cursor: "pointer" }; }
-function secondary(c) { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 14px", borderRadius: 11, border: `1px solid ${c.border}`, background: c.cardBg2, color: c.text, fontFamily: "inherit", fontWeight: 950, cursor: "pointer" }; }
+function primary() { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 14px", borderRadius: 11, border: 0, background: "#2b6cff", color: "#fff", fontFamily: "inherit", fontWeight: 950, cursor: "pointer" }; }

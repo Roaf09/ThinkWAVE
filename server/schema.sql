@@ -68,6 +68,19 @@ CREATE TABLE otp_codes (
 );
 
 -- -----------------------------------------------------------
+-- 2b. rate_limit_hits (shared HTTP rate limiter store)
+-- Rows are short-lived (pruned after ~2h by the app). No FK: hits must be
+-- recordable even for unauthenticated requests.
+-- -----------------------------------------------------------
+CREATE TABLE rate_limit_hits (
+  id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+  endpoint_key VARCHAR(190) NOT NULL,
+  client_key   VARCHAR(190) NOT NULL,
+  hit_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX idx_ratelimit_lookup (endpoint_key, client_key, hit_at)
+) ENGINE=InnoDB;
+
+-- -----------------------------------------------------------
 -- 3. classes (folder tree)
 -- top-level folder example: subject
 -- child folder example: section

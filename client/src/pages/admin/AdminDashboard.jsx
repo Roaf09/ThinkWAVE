@@ -1,26 +1,26 @@
-import React,{Component,useEffect,useMemo,useState} from "react";
+import {Component,useEffect,useMemo,useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {api,setAuthToken} from "../../lib/api";
 import {clearRole,clearToken} from "../../lib/auth";
+import {clearLastRoute} from "../../lib/lastRoute";
 import {ThemedModal,useColors,useTheme} from "../../context/ThemeContext";
 import {TwIcon} from "../../components/TwUI";
 import DashboardShell from "../../components/DashboardShell";
 import {ProfileSettingsModal,ProfileSavedOverlay,useDashboardProfile} from "../../components/ProfileSettings";
 import {DualLineChart,DonutChart,BarChart} from "../../components/SimpleCharts";
-import {manilaDateTime,manilaDate} from "../../lib/dateFormat";
+import {manilaDateTime} from "../../lib/dateFormat";
 
 const NAV=[{id:"overview",label:"Overview",icon:"home"},{id:"teachers",label:"Teachers",icon:"teacher"},{id:"institution",label:"Institution",icon:"classes"}];
 const card=(c,extra={})=>({background:c.cardBg,border:`1px solid ${c.border}`,borderRadius:18,padding:18,boxShadow:"0 18px 40px rgba(15,23,42,.07)",...extra});
 const quiet=(c,extra={})=>({background:c.cardBg2,border:`1px solid ${c.border}`,borderRadius:14,padding:14,...extra});
 const fmt=d=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
-const weekLabel=value=>value?manilaDate(value,{month:"short",day:"numeric"}):"";
 
-export default function AdminDashboard(){const nav=useNavigate();const c=useColors();const {dark,toggleTheme}=useTheme();const [activeTab,setActiveTab]=useState("overview");const [setupDone,setSetupDone]=useState(true);const [institution,setInstitution]=useState("");const [setupName,setSetupName]=useState("");const [setupError,setSetupError]=useState("");const [logout,setLogout]=useState(false);const profileState=useDashboardProfile();
+export default function AdminDashboard(){const nav=useNavigate();const c=useColors();const {dark,toggleTheme}=useTheme();const [activeTab,setActiveTab]=useState("overview");const [setupDone,setSetupDone]=useState(true);const [,setInstitution]=useState("");const [setupName,setSetupName]=useState("");const [setupError,setSetupError]=useState("");const [logout,setLogout]=useState(false);const profileState=useDashboardProfile();
 useEffect(()=>{api.get("/admin-dashboard/setup-status").then(({data})=>{setSetupDone(data.setupDone??true);setInstitution(data.institutionName||"")}).catch(()=>{})},[]);
 async function saveSetup(){if(!setupName.trim())return;try{await api.post("/admin-dashboard/setup-institution",{institutionName:setupName.trim()});setInstitution(setupName.trim());setSetupDone(true)}catch(e){setSetupError(e?.response?.data?.message||"Failed to save institution name.")}}
-function doLogout(){clearToken();clearRole();setAuthToken("");nav("/")}
+function doLogout(){clearToken();clearRole();setAuthToken("");clearLastRoute();nav("/")}
 if(!setupDone)return <div style={{minHeight:"100vh",display:"grid",placeItems:"center",background:c.pageBg,padding:24}}><div style={card(c,{width:"min(100%,470px)",padding:34,textAlign:"center"})}><TwIcon name="classes" size={42} style={{color:c.accent}}/><h2 style={{color:c.text}}>Complete your institution setup</h2><p style={{color:c.textMuted,lineHeight:1.6}}>Enter your school or institution name to organize teachers, students, and activity under one shared profile.</p><input value={setupName} onChange={e=>setSetupName(e.target.value)} placeholder="Institution name" style={{width:"100%",boxSizing:"border-box",padding:14,borderRadius:13,border:`1px solid ${c.inputBorder}`,background:c.inputBg,color:c.text}}/>{setupError&&<p style={{color:c.redFg}}>{setupError}</p>}<button className="btn" style={{width:"100%",marginTop:14}} onClick={saveSetup}>Save and Continue</button></div></div>;
-return <><AdminDashboardBoundary c={c}><DashboardShell navItems={NAV} activeTab={activeTab} setActiveTab={setActiveTab} dark={dark} toggleTheme={toggleTheme} onLogout={()=>setLogout(true)} profile={profileState.profile} onProfile={()=>profileState.setProfileOpen(true)}><AdminTabBoundary c={c} key={activeTab}>{activeTab==="overview"&&<Overview/>}{activeTab==="teachers"&&<Teachers/>}{activeTab==="institution"&&<Institution/>}</AdminTabBoundary></DashboardShell></AdminDashboardBoundary>
+return <><AdminDashboardBoundary c={c}><DashboardShell navItems={NAV} activeTab={activeTab} setActiveTab={setActiveTab} dark={dark} toggleTheme={toggleTheme} onLogout={()=>setLogout(true)} profile={profileState.profile} onProfile={()=>profileState.setProfileOpen(true)} mobileTabIconsOnly><AdminTabBoundary c={c} key={activeTab}>{activeTab==="overview"&&<Overview/>}{activeTab==="teachers"&&<Teachers/>}{activeTab==="institution"&&<Institution/>}</AdminTabBoundary></DashboardShell></AdminDashboardBoundary>
 {profileState.profileOpen&&<ProfileSettingsModal roleLabel="Admin" profile={profileState.profile} setProfile={profileState.setProfile} onClose={()=>profileState.setProfileOpen(false)} onSaved={()=>{profileState.setSaved(true);setTimeout(()=>profileState.setSaved(false),2000)}}/>}{profileState.saved&&<ProfileSavedOverlay/>}{logout&&<><div className="tw-admin-logout-backdrop" onClick={()=>setLogout(false)}/><div className="tw-admin-logout-layer" onClick={()=>setLogout(false)}><section className="tw-admin-logout-modal" onClick={event=>event.stopPropagation()} style={{background:c.cardBg,borderColor:c.border,color:c.text}}><header><TwIcon name="logout" size={24}/><strong>Logout</strong></header><p style={{color:c.textMuted}}>Are you sure you want to log out of the admin dashboard?</p><div className="tw-admin-logout-actions"><AdminPressButton tone="red" onClick={doLogout}>Yes, Logout</AdminPressButton></div></section></div></>}</>}
 
 function Heading({title}){const c=useColors();return <h2 style={{margin:"0 0 22px",color:c.text,fontSize:28,letterSpacing:"-.035em"}}>{title}</h2>}

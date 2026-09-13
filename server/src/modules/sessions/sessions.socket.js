@@ -4,13 +4,12 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import { env } from "../../env.js";
 import { pool } from "../../db.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
-import { normalizeThinkWordKey, resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
+import { resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
-import { attachCompetitiveTotals, calculateCompetitivePoints, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
+import { attachCompetitiveTotals, calculateCompetitivePoints, competitiveSpeedMultiplier, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
 
 
 function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
@@ -688,6 +687,25 @@ function roomTeacher(sessionId) { return `session:${sessionId}:teacher`; }
 function roomParticipant(participantId) { return `participant:${participantId}`; }
 function roomGroup(sessionId, groupId) { return `session:${sessionId}:group:${groupId}`; }
 
+// Privacy + payload split for student/guest rooms. Uploaded profile photos
+// (base64 blobs up to 4MB each) and kick reasons stay in the teacher room: a
+// guest holding only a join code must not receive other users' photos, and
+// stripping them also shrinks the roster/groups/leaderboard rebroadcast that
+// fires on every join for the whole class. Recursive so nested group members
+// and leaderboard rows are covered too. Exported for unit tests.
+export function stripPhotosForStudents(value) {
+  if (Array.isArray(value)) return value.map(stripPhotosForStudents);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k === "profile_image" || k === "kick_reason") continue;
+      out[k] = stripPhotosForStudents(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function isQuestionTimeUp(session, questionId = null) {
   if (!session?.question_started_at) return false;
   const snapshot = safeJson(session.questions_snapshot_json) || [];
@@ -829,6 +847,26 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
   const points = Number(scored.pointsAwarded || 0);
   const canonical = scored.canonicalWord || null;
   const nextWords = isCorrect && canonical ? [...priorWords, canonical] : priorWords;
+  // Per-word competitive accumulation so each found word adds a full unit
+  // (base*1000, base capped 1..3) scaled by speed — matches batch scoring.
+  let wordCompetitive = 0;
+  try {
+    const timeLimitMs = Math.max(0, Number(config?.timeLimitSec || session.quiz_time_limit_sec || session.time_limit_sec || 0)) * 1000;
+    const [[timingRow]] = await pool.query(
+      `SELECT GREATEST(0, TIMESTAMPDIFF(MICROSECOND, question_started_at, NOW(3)) / 1000) AS elapsed_ms FROM sessions WHERE id=:sid LIMIT 1`,
+      { sid: sessionId }
+    );
+    const elapsedMs = Math.max(0, Number(timingRow?.elapsed_ms || 0));
+    const expired = timeLimitMs > 0 && elapsedMs > timeLimitMs + 300;
+    if (isCorrect && !expired && timeLimitMs > 0) {
+      const remainingRatio = Math.max(0, Math.min(1, 1 - (elapsedMs / timeLimitMs)));
+      const speed = competitiveSpeedMultiplier(remainingRatio);
+      const unit = Math.max(1, Math.min(3, Number(basePoints) || 1)) * 1000;
+      wordCompetitive = Math.round(unit * speed);
+    }
+  } catch { wordCompetitive = 0; }
+  const priorCompetitive = Number(priorPayload?.__tw_live?.competitivePoints || 0);
+  const priorResponseMs = Number(priorPayload?.__tw_live?.responseMs || 0);
   const nextPayload = {
     words: nextWords,
     lastAttempt: answer?.text || "",
@@ -837,6 +875,11 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
     gridSize: scored.gridSize || priorPayload?.gridSize || null,
     refillCounter: Number(scored.refillCounter ?? priorPayload?.refillCounter ?? 0),
     streak: isCorrect ? Number(scored.streak || 0) : 0,
+    __tw_live: {
+      competitivePoints: priorCompetitive + (isCorrect ? wordCompetitive : 0),
+      responseMs: priorResponseMs,
+      timeExpired: false,
+    },
   };
   const nextPoints = priorPoints + points;
   const wordBank = resolveThinkSpellWordBank({ config, correct });
@@ -847,6 +890,7 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
   const ackPayload = {
     isCorrect,
     points,
+    competitivePoints: isCorrect ? wordCompetitive : 0,
     locked: allFound,
     message: allFound ? "All words found!" : undefined,
     templateType: TEMPLATE_TYPES.THINK_SPELL,
@@ -908,6 +952,7 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
     questionId,
     isCorrect,
     points,
+    competitivePoints: isCorrect ? wordCompetitive : 0,
     thinkSpell: { totalWords: nextWords.length, totalPoints: nextPoints },
   });
   await broadcastScores(io, sessionId);
@@ -1196,7 +1241,7 @@ async function kickParticipant(io, sessionId, participantId, reason) {
   await broadcastGroups(io, sessionId);
 }
 
-async function broadcastRoster(io, sessionId) {
+export async function broadcastRoster(io, sessionId) {
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
@@ -1214,10 +1259,10 @@ async function broadcastRoster(io, sessionId) {
     { sid: sessionId }
   );
   io.to(roomTeacher(sessionId)).emit("roster:update", participants);
-  io.to(roomSession(sessionId)).emit("roster:update", participants);
+  io.to(roomSession(sessionId)).emit("roster:update", stripPhotosForStudents(participants));
 }
 
-async function broadcastGroups(io, sessionId) {
+export async function broadcastGroups(io, sessionId) {
   const [rows] = await pool.query(
     `SELECT g.id, g.session_id, g.group_order, g.default_name, g.display_name, g.name_editor_participant_id,
             COALESCE(
@@ -1250,10 +1295,10 @@ async function broadcastGroups(io, sessionId) {
   );
   const groups = rows.map((g) => ({ ...g, members: (safeJson(g.members_json) || []).filter(Boolean) }));
   io.to(roomTeacher(sessionId)).emit("groups:update", groups);
-  io.to(roomSession(sessionId)).emit("groups:update", groups);
+  io.to(roomSession(sessionId)).emit("groups:update", stripPhotosForStudents(groups));
 }
 
-async function broadcastScores(io, sessionId) {
+export async function broadcastScores(io, sessionId) {
   const [[session]] = await pool.query(`SELECT s.join_mode, q.template_type FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
   let scores;
   if (session?.join_mode === "GROUP") {
@@ -1292,13 +1337,15 @@ async function broadcastScores(io, sessionId) {
   }
   io.to(roomTeacher(sessionId)).emit("scores:update", scores);
 
-  const top5 = scores.slice(0, 5);
+  // Leaderboard rows carry profile photos for the teacher's full
+  // scores:update above; per-student rooms get the stripped copy.
+  const top5 = stripPhotosForStudents(scores.slice(0, 5));
   if (session?.join_mode === "GROUP") {
     for (const row of scores) {
       const memberIds = String(row.member_ids || "").split(",").map(Number).filter(Boolean);
       const rank = scores.indexOf(row) + 1;
       for (const participantId of memberIds) {
-        io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: rank, myScore: row });
+        io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: rank, myScore: stripPhotosForStudents(row) });
       }
     }
   } else {
@@ -1314,13 +1361,13 @@ async function broadcastScores(io, sessionId) {
         await pool.query(`INSERT INTO student_competitive_overtakes(student_user_id,session_id,overtakes) VALUES(:uid,:sid,:count)`,{uid:Number(row.student_user_id),sid:Number(sessionId),count:overtakes});
       }
       rankMap.set(participantId,nextRank);
-      io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: nextRank, myScore: row });
+      io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: nextRank, myScore: stripPhotosForStudents(row) });
     }
     previousCompetitiveRanks.set(Number(sessionId),rankMap);
   }
 
   const [[statusRow]] = await pool.query(`SELECT status FROM sessions WHERE id=:sid`, { sid: sessionId });
-  if (statusRow?.status === "ENDED") io.to(roomSession(sessionId)).emit("scores:update", scores);
+  if (statusRow?.status === "ENDED") io.to(roomSession(sessionId)).emit("scores:update", stripPhotosForStudents(scores));
 }
 
 async function broadcastState(io, sessionId) {

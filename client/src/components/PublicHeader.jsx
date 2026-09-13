@@ -1,23 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useColors, useTheme } from "../context/ThemeContext";
 import ThemeIconButton from "./ThemeIconButton";
-import { TwIcon } from "./TwUI";
+import { IconBubble, TwIcon } from "./TwUI";
 
-// Emoji-based bubble for the Sign Up modal. Reuses the same .tw-icon-bubble
-// class (and its .tw-role-option-<tone> color overrides) as the SVG
-// IconBubble so it matches the "Get Started" modal styling without adding
-// new CSS, but renders a plain emoji glyph instead of a stroked icon.
-function EmojiBubble({ emoji, size = 42 }) {
-  return (
-    <span className="tw-icon-bubble" style={{ width: size, height: size, borderRadius: Math.round(size * 0.32), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: Math.round(size * 0.52), lineHeight: 1 }}>
-      {emoji}
-    </span>
-  );
-}
-
-export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false, hideTheme = false }) {
+export default function PublicHeader({ onSection, compact = false, setupComplete = true, concealSuper = false, hideSuper = false, hideTheme = false, hideAuth = false }) {
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
   const nav = useNavigate();
@@ -41,7 +29,7 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
     else nav("/login", { state: { authFrom: "right" } });
   }
   return (
-    <header className="tw-public-header" style={{ background:c.cardBg3, borderBottom:`1px solid ${c.border}` }}>
+    <header className="tw-public-header flex-none" style={{ background:c.cardBg3, borderBottom:`1px solid ${c.border}` }}>
       <Link to="/" onClick={goHome} className="tw-public-logo"><span style={{ color:c.text }}>Think</span><span>WAVE</span></Link>
       {!compact && <nav className="tw-public-nav">
         <button onClick={() => goSection("home")} style={{ color:c.textMuted }}>Home</button>
@@ -49,17 +37,17 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
         <button onClick={() => goSection("analytics")} style={{ color:c.textMuted }}>Analytics</button>
         <button onClick={() => goSection("plans")} style={{ color:c.textMuted }}>Plans</button>
       </nav>}
-      <div className="tw-public-actions">
+      <div className="tw-public-actions flex items-center gap-[9px]">
         {setupComplete && !hideSuper && <Link
           to="/superadmin-login"
           aria-label="Superadmin login"
           title="Superadmin login"
-          className="tw-public-ghost tw-super-dot"
+          className="tw-public-ghost tw-super-dot inline-flex items-center justify-center gap-[7px] px-[14px] py-[9px] rounded-full text-[13px] font-extrabold no-underline whitespace-nowrap border border-solid bg-transparent cursor-pointer"
           style={{ color:c.text, borderColor:c.border, opacity: concealSuper ? 0 : 1 }}
         ><span aria-hidden="true">S</span></Link>}
-        {!hideTheme && <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-public-ghost" style={{ color:c.text, borderColor:c.border }} size={16} />}
-        {setupComplete && <button type="button" onClick={() => setLoginOpen(true)} className="tw-public-ghost tw-header-login" style={{ color:c.text, borderColor:c.border, cursor:"pointer" }}>Login</button>}
-        {setupComplete && <button type="button" onClick={() => setSignupOpen(true)} className="tw-public-signup tw-header-signup" style={{ cursor:"pointer" }}>Sign Up</button>}
+        {!hideTheme && <ThemeIconButton dark={dark} onClick={toggleTheme} className="px-[14px]! py-[9px]! rounded-full! text-[13px] font-[850]" style={{ color:c.text, borderColor:c.border }} size={16} />}
+        {setupComplete && !hideAuth && <button type="button" onClick={() => setLoginOpen(true)} className="tw-public-ghost tw-header-login inline-flex items-center justify-center gap-[7px] px-[14px] py-[9px] rounded-full text-[13px] font-extrabold no-underline whitespace-nowrap border border-solid bg-transparent cursor-pointer" style={{ color:c.text, borderColor:c.border, cursor:"pointer" }}>Login</button>}
+        {setupComplete && !hideAuth && <button type="button" onClick={() => setSignupOpen(true)} className="tw-public-signup tw-header-signup inline-flex items-center justify-center gap-[7px] px-[14px] py-[9px] rounded-full text-[13px] font-extrabold no-underline whitespace-nowrap border border-solid bg-brand text-white border-brand shadow-[0_9px_26px_rgba(43,108,255,0.24)]" style={{ cursor:"pointer" }}>Sign Up</button>}
       </div>
 
       {signupOpen && createPortal(
@@ -70,13 +58,13 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
             <h2>Sign Up</h2>
             <p style={{ color:c.textMuted }}>Choose how you want to Sign up to enter ThinkWAVE.</p>
             <div className="tw-modal-options">
-              <button className="tw-role-option tw-role-option-green" onClick={() => chooseSignup("student")}>
-                <EmojiBubble emoji="🧑‍🎓" />
+              <button className="tw-role-option tw-role-option-red" onClick={() => chooseSignup("student")}>
+                <IconBubble name="student" c={c} tone="red" />
                 <b>Student Sign Up</b>
                 <small>Enter as a student</small>
               </button>
               <button className="tw-role-option tw-role-option-blue" onClick={() => chooseSignup("teacher")}>
-                <EmojiBubble emoji="🧑‍🏫" />
+                <IconBubble name="teacher" c={c} tone="blue" />
                 <b>Teacher Sign Up</b>
                 <small>Enter as a teacher</small>
               </button>
@@ -94,13 +82,13 @@ export default function PublicHeader({ onSection, compact = false, setupComplete
             <h2>Log in</h2>
             <p style={{ color:c.textMuted }}>Choose how you want to Log in to enter ThinkWAVE.</p>
             <div className="tw-modal-options">
-              <button className="tw-role-option tw-role-option-green" onClick={() => chooseLogin("student")}>
-                <EmojiBubble emoji="🧑‍🎓" />
+              <button className="tw-role-option tw-role-option-red" onClick={() => chooseLogin("student")}>
+                <IconBubble name="student" c={c} tone="red" />
                 <b>Student Log in</b>
                 <small>Enter as a student</small>
               </button>
               <button className="tw-role-option tw-role-option-blue" onClick={() => chooseLogin("teacher")}>
-                <EmojiBubble emoji="🧑‍🏫" />
+                <IconBubble name="teacher" c={c} tone="blue" />
                 <b>Teacher Log in</b>
                 <small>Enter as a teacher</small>
               </button>

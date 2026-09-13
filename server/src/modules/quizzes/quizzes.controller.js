@@ -6,7 +6,6 @@
 
 import { pool } from "../../db.js";
 import { normalizeTemplateType } from "./templates.js";
-import { BASIC_LIMITS, getTeacherPlan, validateBasicQuestionPayload } from "../plans/plan.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { normalizeQuizBackgroundKey, rememberQuizBackground } from "./quizBackground.runtime.js";
 
@@ -63,12 +62,8 @@ export async function listQuizzes(req, res) {
 
 export async function createQuiz(req, res) {
   const b = req.body;
-  const plan = await getTeacherPlan(req.user.sub);
+  // No plan restrictions: all users get full template features.
   const template = normalizeTemplateType(b.templateType);
-  const templateLimit = BASIC_LIMITS[template];
-  if (plan.code === "BASIC" && templateLimit && Number(b.timeLimitSec) > templateLimit.maxTimeSec) {
-    return res.status(403).json({ message: `Basic plan time limit is ${Math.round(templateLimit.maxTimeSec / 60)} minute${templateLimit.maxTimeSec > 60 ? "s" : ""} maximum for this template.` });
-  }
   const [r] = await pool.query(
     `INSERT INTO quizzes(teacher_id,class_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,delivery_mode,available_from,available_until)
      VALUES(:tid,:cid,:title,:cat,:tt,:tls,:ppq,:rq,:sa,:mode,:fromDt,:untilDt)`,
@@ -145,11 +140,7 @@ export async function upsertQuestions(req, res) {
     });
     if (invalidMatching) return res.status(400).json({ message: "Matching questions require at least 2 completed pairs." });
   }
-  const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code === "BASIC") {
-    const issue = validateBasicQuestionPayload(q[0].template_type, items);
-    if (issue) return res.status(403).json({ message: issue });
-  }
+  // No plan restrictions: all users get full template features.
 
   // Serialize complete-question-set replacements on the parent quiz row. The
   // old implementation could interleave two near-simultaneous saves:
@@ -450,11 +441,7 @@ export async function updateQuizSettings(req, res) {
   const { timeLimitSec, pointsPerQuestion, randomizeQuestions, shuffleAnswers } = req.body;
   const [[quiz]] = await pool.query(`SELECT template_type FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: req.params.id, tid: req.user.sub });
   if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-  const plan = await getTeacherPlan(req.user.sub);
-  const templateLimit = BASIC_LIMITS[normalizeTemplateType(quiz.template_type)];
-  if (plan.code === "BASIC" && templateLimit && Number(timeLimitSec) > templateLimit.maxTimeSec) {
-    return res.status(403).json({ message: `Basic plan time limit is ${Math.round(templateLimit.maxTimeSec / 60)} minute${templateLimit.maxTimeSec > 60 ? "s" : ""} maximum for this template.` });
-  }
+  // No plan restrictions: all users get full template features.
   await pool.query(
     `UPDATE quizzes
      SET time_limit_sec       = :tls,

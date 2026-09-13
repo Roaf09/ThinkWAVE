@@ -548,17 +548,39 @@ export async function joinStudentLiveSession(req, res) {
   const [[existing]] = await pool.query(`SELECT id,reconnect_key,kicked_at FROM session_participants WHERE session_id=:sid AND student_user_id=:uid LIMIT 1`, { sid:sessionId, uid });
   if (existing?.kicked_at) return res.status(403).json({ message:'You were removed from this session and cannot rejoin.' });
   if (existing) return res.json({ sessionId, participantId:existing.id, reconnectKey:existing.reconnect_key, joinMode:session.join_mode, existing:true });
-  if (Number(session.max_participants || 0) > 0) {
-    const [[count]] = await pool.query(`SELECT COUNT(*) AS total FROM session_participants WHERE session_id=:sid`, { sid:sessionId });
-    if (Number(count?.total||0) >= Number(session.max_participants)) return res.status(400).json({ message:'Session is full.' });
-  }
+  // Atomic seat claim (see joinSession in sessions.controller.js): the INSERT
+  // only lands when a seat is actually free — kicked seats don't count — so a
+  // burst of concurrent joins can neither overshoot the cap nor falsely
+  // reject on phantom rows.
   const reconnectKey = makeReconnectKey();
-  const [r] = await pool.query(
-    `INSERT INTO session_participants(session_id,first_name,last_name,reconnect_key,student_user_id,connected,join_type,group_name) VALUES(:sid,:fn,:ln,:rk,:uid,1,:jt,NULL)`,
-    { sid:sessionId, fn:profile.first_name, ln:profile.last_name, rk:reconnectKey, uid, jt:session.join_mode }
+  const [claimed] = await pool.query(
+    `INSERT INTO session_participants(session_id,first_name,last_name,reconnect_key,student_user_id,connected,join_type,group_name)
+     SELECT :sid,:fn,:ln,:rk,:uid,1,:jt,NULL
+     FROM sessions s
+     WHERE s.id = :sid2
+       AND (s.max_participants IS NULL OR s.max_participants <= 0
+         OR (SELECT COUNT(*) FROM session_participants p
+             WHERE p.session_id = :sid3 AND p.kicked_at IS NULL) < s.max_participants)
+     LIMIT 1`,
+    { sid:sessionId, fn:profile.first_name, ln:profile.last_name, rk:reconnectKey, uid, jt:session.join_mode, sid2:sessionId, sid3:sessionId }
   );
-  await pool.query(`INSERT INTO scores(session_id,participant_id,total_points) VALUES(:sid,:pid,0)`, { sid:sessionId, pid:r.insertId });
-  res.status(201).json({ sessionId, participantId:r.insertId, reconnectKey, joinMode:session.join_mode });
+  if (!claimed.affectedRows) {
+    const [[cur]] = await pool.query(
+      `SELECT status, max_participants,
+              (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid AND kicked_at IS NULL) AS seats
+       FROM sessions WHERE id=:sid2`,
+      { sid:sessionId, sid2:sessionId }
+    );
+    if (cur && ['LOBBY','LIVE','PAUSED'].includes(cur.status)
+        && Number(cur.max_participants || 0) > 0
+        && Number(cur.seats || 0) >= Number(cur.max_participants)) {
+      console.warn(`[join] session ${sessionId} full (${cur.seats}/${cur.max_participants} seats, student path)`);
+      return res.status(400).json({ message:'Session is full.' });
+    }
+    return res.status(400).json({ message: 'Session has ended.' });
+  }
+  await pool.query(`INSERT INTO scores(session_id,participant_id,total_points) VALUES(:sid,:pid,0)`, { sid:sessionId, pid:claimed.insertId });
+  res.status(201).json({ sessionId, participantId:claimed.insertId, reconnectKey, joinMode:session.join_mode });
 }
 
 function questionCorrectDisplay(templateType, correct, config) {

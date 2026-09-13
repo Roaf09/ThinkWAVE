@@ -29,10 +29,12 @@ export function calculateCompetitivePoints({ templateType, scored, basePoints, e
     return scored?.isCorrect ? Math.round(maxCompetitive * speed) : 0;
   }
   if (PARTIAL_SPEED_TEMPLATES.has(tt)) {
+    // Per-unit competitive: each matched pair / found word is worth a full
+    // unit (base*1000, base capped 1..3) scaled by speed. E.g. points=2 with
+    // 4 pairs => 4 x 2000 = 8000 max; 5 words => 5 x 2000 = 10000 max.
     const correctCount = Number(scored?.correctCount ?? scored?.totalWords ?? 0);
-    const total = Number(scored?.totalCorrect ?? scored?.totalPairs ?? scored?.totalItems ?? scored?.requiredWords ?? 0);
-    const correctness = total > 0 ? Math.max(0, Math.min(1, correctCount / total)) : (scored?.isCorrect ? 1 : 0);
-    return Math.round(maxCompetitive * correctness * speed);
+    if (!(correctCount > 0)) return 0;
+    return Math.round(maxCompetitive * correctCount * speed);
   }
   return scored?.isCorrect ? Math.round(maxCompetitive * speed) : 0;
 }

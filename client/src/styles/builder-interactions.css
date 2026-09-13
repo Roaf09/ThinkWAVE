@@ -1,0 +1,407 @@
+/* ThinkWAVE styles — builder-interactions.css (source styles.css lines 5008-5605). Import order in main.jsx must not change. */
+/* Revision 10.24 — Quiz Builder interaction + template surface refinements. */
+.tw-builder-title-input,
+.tw-builder-title-button{
+  font-family:inherit!important;
+  font-style:normal!important;
+  font-weight:950!important;
+  letter-spacing:normal!important;
+}
+/* Bank choices and builder dialog actions follow the active template color. */
+.tw-builder-bank-choice-press{
+  border-width:3px!important;
+  border-color:color-mix(in srgb,var(--tw-bank-accent,var(--tw-brand)) 70%,var(--tw-slate-soft))!important;
+  background:var(--tw-bank-soft,rgba(43,108,255,.12))!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--tw-bank-accent,var(--tw-brand)) 64%,var(--tw-slate)),0 11px 20px rgba(15,23,42,.14)!important;
+  transition:transform .16s ease!important;
+}
+.tw-builder-bank-choice-press:hover{transform:translateY(-2px)!important;filter:none!important}
+.tw-builder-bank-choice-press:active{transform:translateY(3px)!important;box-shadow:0 2px 0 color-mix(in srgb,var(--tw-bank-accent,var(--tw-brand)) 64%,var(--tw-slate))!important}
+.tw-builder-dialog-template-action,
+.tw-builder-duplicate-action{
+  --tw-press-face:var(--tw-template-accent,var(--tw-brand))!important;
+  --tw-press-base:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 66%,var(--tw-ink))!important;
+  --tw-press-border:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 74%,var(--tw-ink))!important;
+}
+.tw-builder-review-duplicates{font-weight:900!important;text-decoration:underline;text-underline-offset:3px}
+/* Sidebar is its own fixed, template-coded rail and animates independently. */
+.tw-builder-question-strip{
+  border-left:4px solid color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 72%,var(--tw-slate-soft))!important;
+  border-top-color:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 34%,var(--tw-builder-border,var(--tw-line)))!important;
+  border-bottom-color:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 34%,var(--tw-builder-border,var(--tw-line)))!important;
+  box-shadow:-12px 0 30px rgba(15,23,42,.12),-3px 0 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 16%,transparent)!important;
+}
+.tw-builder-question-strip-close{
+  border:0!important;
+  outline:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+}
+.tw-builder-question-strip-close:hover{transform:none!important;filter:none!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 10%,transparent)!important}
+/* Revision 10.29 — tactile paper-like question organization. */
+.tw-builder-question-mini{border-color:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 50%,var(--tw-builder-border,var(--tw-line)))!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 8%,var(--tw-builder-card,var(--tw-on-brand)))!important;transition:transform .30s cubic-bezier(.2,.85,.2,1),box-shadow .24s ease,border-color .22s ease,background .22s ease!important;will-change:transform,box-shadow;transform-origin:center center}
+.tw-builder-question-mini.is-active{
+  border-color:var(--tw-template-accent,var(--tw-brand))!important;
+  background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 16%,var(--tw-builder-card,var(--tw-on-brand)))!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 17%,transparent),0 6px 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 44%,var(--tw-slate-soft))!important;
+}
+.tw-builder-question-mini.is-drag-source{opacity:.25!important;border-style:dashed!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 5%,transparent)!important;transform:scale(.965)!important;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 22%,transparent)!important}
+.tw-builder-question-mini-drag-image{opacity:1!important;border:3px solid var(--tw-template-accent,var(--tw-brand))!important;border-radius:16px!important;background:var(--tw-builder-card,var(--tw-on-brand))!important;box-shadow:0 18px 42px rgba(15,23,42,.28)!important;transform:rotate(1.5deg) scale(1.035) translateY(-5px)!important;box-shadow:0 26px 48px rgba(15,23,42,.32),0 8px 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 42%,var(--tw-slate))!important;cursor:grabbing!important}
+.tw-builder-question-strip-gap{
+  height:9px;
+  margin:0 5px;
+  border-radius:999px;
+  background:transparent;
+  transition:height .2s cubic-bezier(.22,1,.36,1),background .16s ease,box-shadow .16s ease;
+}
+.tw-builder-question-strip-gap.is-active{height:42px!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 18%,transparent);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 52%,transparent);transition:height .28s cubic-bezier(.2,.85,.2,1),background .18s ease,box-shadow .18s ease!important}
+/* Held question form becomes a compact floating card; page edges are the targets. */
+.tw-builder-question-form.is-dragging{transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.61)!important;transform-origin:center top!important;box-shadow:0 30px 72px rgba(0,0,0,.30),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 24%,transparent)!important;transition:none!important}
+/* Page-turn edge targets: neighboring page peeks in as the held question reaches an edge. */
+.tw-quiz-builder-page.is-question-dragging::before, .tw-quiz-builder-page.is-question-dragging::after{opacity:.42!important;width:34px!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 22%,transparent)!important;box-shadow:0 0 54px 24px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 30%,transparent)!important;content:"";position:fixed;top:102px;bottom:28px;z-index:1450;pointer-events:none;border-radius:24px;transition:width .18s ease,opacity .18s ease,box-shadow .18s ease,transform .22s cubic-bezier(.16,1,.3,1)}
+.tw-quiz-builder-page.is-drag-edge-left::before,
+.tw-quiz-builder-page.is-drag-edge-right::after{
+  opacity:1!important;
+  background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 48%,transparent)!important;
+  box-shadow:0 0 72px 32px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 62%,transparent)!important;
+}
+.tw-builder-edge-drag-hint{position:fixed;top:50%;z-index:1460;pointer-events:none;width:150px!important;transform:translateY(-50%);text-align:center;font-weight:1000!important;font-size:16px!important;line-height:1.08!important;letter-spacing:.01em;color:var(--tw-template-accent,var(--tw-brand));opacity:.38;text-shadow:0 0 15px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 45%,transparent);transition:opacity .18s ease,transform .2s ease}
+.tw-builder-edge-drag-hint.is-left{left:28px!important}
+.tw-builder-edge-drag-hint.is-right{right:28px!important}
+.tw-builder-edge-drag-hint.is-near{opacity:.95;transform:translateY(-50%) scale(1.11)!important;text-shadow:0 0 22px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 70%,transparent)!important}
+/* Dark-mode question form is solid, not a neon/glass panel. */
+body.dark-mode .tw-builder-question-form,
+.dark-mode .tw-builder-question-form{
+  background:var(--tw-builder-question-solid,#18283f)!important;
+  box-shadow:0 7px 0 color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 45%,var(--tw-ink)),0 18px 34px rgba(0,0,0,.26)!important;
+}
+/* MCQ selector shape transitions and right-handle dragging. */
+.tw-mcq-letter-selector{transition:border-radius .30s cubic-bezier(.22,1,.36,1),transform .22s ease,background .22s ease,border-color .22s ease!important}
+.tw-mcq-letter-selector.is-two-answer{border-radius:8px!important}
+.tw-mcq-choice-drag-handle{touch-action:none!important}
+.tw-mcq-choice-drag-handle:active{cursor:grabbing!important}
+/* True/False staged transition: fill -> colored icon -> border disappears. */
+/* True / False builder: quick circle → color → icon transition. */
+.tw-tf-state-dot{position:relative!important;color:var(--tw-tf-color)!important;background:transparent!important;border:3px solid var(--tw-tf-idle,var(--tw-muted))!important;display:grid!important;place-items:center!important;transition:border-color .08s ease .04s,color .08s ease,background .08s ease!important;color:var(--tw-tf-idle,currentColor)!important;border-color:currentColor!important}
+.tw-tf-state-dot::after{position:absolute!important;inset:0!important;display:grid!important;place-items:center!important;color:var(--tw-on-brand)!important;opacity:0!important;transform:scale(.72)!important;transition:color .045s ease,opacity .07s ease,transform .08s cubic-bezier(.22,1,.36,1)!important}
+.tw-tf-state-dot.is-active{background:color-mix(in srgb,var(--tw-tf-color) 24%,transparent)!important;border-color:transparent!important;transition:background .16s ease,border-color .16s ease .22s!important;color:var(--tw-tf-color,currentColor)!important;animation:twTfSelect1025 .16s ease both!important}
+.tw-tf-state-dot.is-active::after{color:var(--tw-tf-color)!important;opacity:1!important;transform:scale(1) rotate(0)!important;transition:color .12s ease .08s,opacity .17s ease .12s,transform .20s cubic-bezier(.22,1,.36,1) .12s!important;color:var(--tw-tf-color,currentColor)!important;animation:twTfIcon1025 .16s ease both!important}
+/* Matching builder controls. */
+.tw-matching-arrow:not(:disabled){
+  color:var(--tw-on-brand)!important;
+  background:var(--tw-match-accent,var(--tw-template-accent,var(--tw-warn)))!important;
+  border-color:color-mix(in srgb,var(--tw-match-accent,var(--tw-template-accent,var(--tw-warn))) 74%,var(--tw-slate))!important;
+  box-shadow:0 4px 0 color-mix(in srgb,var(--tw-match-accent,var(--tw-template-accent,var(--tw-warn))) 58%,var(--tw-slate))!important;
+}
+.tw-matching-arrow:disabled{filter:none!important;box-shadow:none!important;opacity:.45!important}
+.tw-matching-delete-minus{border:2px solid currentColor!important}
+.tw-matching-distractor-input{min-height:104px!important;height:104px!important;resize:vertical!important}
+.tw-matching-dummy-card .tw-builder-image-tile,
+.tw-matching-dummy-card .tw-builder-image-upload{
+  width:132px!important;min-width:132px!important;max-width:132px!important;
+  height:132px!important;min-height:132px!important;max-height:132px!important;
+  aspect-ratio:1 / 1!important;justify-self:end!important;
+}
+.tw-matching-dummy-card .tw-builder-image-tile>label,
+.tw-matching-dummy-card .tw-builder-image-tile img{
+  width:100%!important;height:100%!important;min-height:0!important;aspect-ratio:1 / 1!important;object-fit:cover!important;
+}
+@media(max-width:640px){.tw-matching-dummy-card .tw-builder-image-tile, .tw-matching-dummy-card .tw-builder-image-upload{justify-self:start!important}}
+/* Matching bank labels. */
+.tw-bank-matching-column-labels{
+  display:grid;grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr);gap:10px;align-items:end;
+  margin:2px 0 8px;font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--tw-text-muted,var(--tw-muted));
+}
+.tw-bank-matching-column-labels>:first-child{grid-column:1}
+.tw-bank-matching-column-labels>:last-child{grid-column:3}
+/* Host-launch mode controls use the newest raised press treatment. */
+.tw-host-mode-row .tw-host-mode-press{
+  min-height:64px!important;
+  border:3px solid var(--tw-hostmode)!important;
+  border-radius:18px!important;
+  background:var(--tw-hostmode)!important;
+  box-shadow:0 7px 0 var(--tw-hostmode-deep),0 13px 22px rgba(15,23,42,.16)!important;
+  overflow:hidden!important;
+  transition:transform .16s ease,box-shadow .16s ease!important;
+}
+.tw-host-mode-row .tw-host-mode-press>span{background:var(--tw-brand)!important;color:var(--tw-on-brand)!important;min-height:58px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.tw-host-mode-row .tw-host-mode-press:hover:not(:disabled){transform:translateY(-2px)!important;filter:none!important}
+.tw-host-mode-row .tw-host-mode-press:active:not(:disabled),
+.tw-host-mode-row .tw-host-mode-press.is-selected,
+.tw-host-mode-row .tw-host-mode-press.is-basic-locked{
+  transform:translateY(5px)!important;box-shadow:0 2px 0 var(--tw-hostmode-deep)!important;
+}
+.tw-host-mode-row .tw-host-mode-press.is-basic-locked{opacity:1!important;cursor:not-allowed!important}
+.tw-host-mode-row .tw-host-mode-press:disabled:not(.is-basic-locked){opacity:.48!important;cursor:not-allowed!important}
+/* Host-panel 3D controls, metrics, template Next action and flowing timer. */
+.tw-host-modern-press{border-radius:16px!important;transition:transform .16s ease,box-shadow .16s ease!important}
+.tw-host-modern-press:hover:not(:disabled){transform:translateY(-2px)!important;filter:none!important}
+.tw-host-next-template{
+  --tw-press-face:var(--host-accent,var(--tw-brand))!important;
+  --tw-press-base:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 62%,var(--tw-ink))!important;
+  --tw-press-border:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 75%,var(--tw-ink))!important;
+}
+.tw-host-dialog-template{
+  --tw-press-face:var(--host-dialog-accent,var(--tw-brand))!important;
+  --tw-press-base:color-mix(in srgb,var(--host-dialog-accent,var(--tw-brand)) 62%,var(--tw-ink))!important;
+  --tw-press-border:color-mix(in srgb,var(--host-dialog-accent,var(--tw-brand)) 75%,var(--tw-ink))!important;
+}
+.tw-host-white-metric{
+  background:var(--tw-on-brand)!important;color:#111827!important;
+  border-color:#d7e0ee!important;box-shadow:0 3px 0 #b8c4d6!important;
+}
+.tw-host-timer-fill,
+.tw-host-pixel-progress>span,
+.tw-host-pixel-progress .tw-host-timer-fill{
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--host-accent,var(--tw-brand)) 76%,var(--tw-timer-deep)),var(--host-accent,var(--tw-brand)),color-mix(in srgb,var(--host-accent,var(--tw-brand)) 66%,var(--tw-on-brand)),var(--host-accent,var(--tw-brand)))!important;
+  background-size:240% 100%!important;
+  animation:tw1024HostTimerFlow 2.1s linear infinite!important;
+  box-shadow:0 0 16px color-mix(in srgb,var(--host-accent,var(--tw-brand)) 62%,transparent),0 0 28px color-mix(in srgb,var(--host-accent,var(--tw-brand)) 30%,transparent)!important;
+  transition:width .18s linear,background .75s ease,box-shadow .75s ease!important;
+}
+.tw-host-pixel-progress.is-warning>span,
+.tw-host-pixel-progress.is-danger>span,
+.tw-host-timer.is-warning .tw-host-timer-fill,
+.tw-host-timer.is-danger .tw-host-timer-fill{
+  background-image:linear-gradient(100deg,#ff7b7b,var(--tw-danger-accent),#ffb0b0,var(--tw-danger))!important;
+  box-shadow:0 0 18px rgba(239,68,68,.72),0 0 34px rgba(239,68,68,.38)!important;
+}
+@keyframes tw1024HostTimerFlow{to{background-position:-240% 0}}
+/* Revision 10.24 host timer final selectors. */
+.tw-host-pixel-timer{
+  background-image:linear-gradient(105deg,color-mix(in srgb,var(--host-accent,var(--tw-brand)) 74%,var(--tw-ink)),var(--host-accent,var(--tw-brand)),color-mix(in srgb,var(--host-accent,var(--tw-brand)) 68%,var(--tw-on-brand)),var(--host-accent,var(--tw-brand)))!important;
+  background-size:240% 100%!important;
+  animation:tw1024HostTimerFlow 2.2s linear infinite!important;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent,var(--tw-brand)) 52%,var(--tw-abyss)),0 0 18px color-mix(in srgb,var(--host-accent,var(--tw-brand)) 74%,transparent),0 0 34px color-mix(in srgb,var(--host-accent,var(--tw-brand)) 36%,transparent)!important;
+  transition:background .72s ease,border-color .72s ease,box-shadow .72s ease,color .72s ease!important;
+}
+.tw-host-pixel-timer.is-warning, .tw-host-pixel-timer.is-danger{background-image:linear-gradient(105deg,var(--tw-danger-deep),var(--tw-danger-accent),var(--tw-danger-pale),var(--tw-danger))!important;color:#fff5f5!important;background-image:linear-gradient(110deg,#8f1d1d,#dc3535 48%,#bd2727)!important;background-size:180% 100%!important;box-shadow:0 4px 0 var(--tw-danger-ink),0 0 14px rgba(239,68,68,.48),0 0 24px rgba(239,68,68,.22)!important}
+.tw-host-pixel-progress>div{
+  background-image:linear-gradient(100deg,color-mix(in srgb,var(--host-accent,var(--tw-brand)) 76%,var(--tw-timer-deep)),var(--host-accent,var(--tw-brand)),color-mix(in srgb,var(--host-accent,var(--tw-brand)) 66%,var(--tw-on-brand)),var(--host-accent,var(--tw-brand))),repeating-linear-gradient(90deg,rgba(255,255,255,.22) 0 5px,transparent 5px 10px)!important;
+  background-size:240% 100%,auto!important;
+  animation:tw1024HostTimerFlow 2.1s linear infinite!important;
+  transition:width .18s linear,background .72s ease,box-shadow .72s ease!important;
+}
+.tw-host-pixel-progress.is-warning,
+.tw-host-pixel-progress.is-danger{--host-accent:var(--tw-danger-accent)!important;border-color:var(--tw-danger-deep)!important;background:var(--tw-danger-ink)!important}
+/* Revision 10.25 — Quiz Builder drag scale, faster T/F state motion, and Matching action parity. */
+.tw-builder-question-form{
+  transition:transform .34s cubic-bezier(.22,1,.36,1),box-shadow .24s ease!important;
+}
+.tw-builder-question-form.is-dragging.is-template-mcq,
+.tw-builder-question-form.is-dragging.is-template-matching,
+.tw-builder-question-form.is-dragging.is-template-think-spell{
+  transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.41)!important;
+  transform-origin:center top!important;
+}
+.tw-tf-state-dot.is-false.is-active::after{transform:translateY(-2px) scale(1) rotate(0)!important}
+@keyframes twTfSelect1025{
+  0%{border-color:var(--tw-tf-idle,currentColor);background:transparent}
+  34%{border-color:var(--tw-tf-color,currentColor);background:var(--tw-tf-color,currentColor)}
+  62%,100%{border-color:transparent;background:transparent}
+}
+@keyframes twTfIcon1025{
+  0%,36%{opacity:0;color:var(--tw-on-brand);transform:scale(.72)}
+  54%{opacity:.45;color:var(--tw-on-brand)}
+  100%{opacity:1;color:var(--tw-tf-color,currentColor);transform:scale(1)}
+}
+.tw-builder-answer-choice{transition:background .12s ease,border-color .12s ease,color .12s ease,box-shadow .12s ease,outline-color .12s ease!important}
+/* Revision 10.25 — Student gameplay. */
+/* True is green and False is red in both live and assigned gameplay. */
+.quiz-choices.true-false-choices .choice-btn:nth-child(1){--choice-face:var(--tw-pick-green)!important;--choice-base:var(--tw-pick-green-deep)!important;--choice-border:var(--tw-pick-green-edge)!important;--choice-ink:var(--tw-pick-green-ink)!important}
+.quiz-choices.true-false-choices .choice-btn:nth-child(2){--choice-face:var(--tw-pick-red)!important;--choice-base:var(--tw-pick-red-deep)!important;--choice-border:var(--tw-pick-red-edge)!important;--choice-ink:var(--tw-danger-ink)!important}
+.theme-dark .quiz-choices.true-false-choices .choice-btn:nth-child(1){--choice-face:var(--tw-pick-green-dark)!important;--choice-base:var(--tw-pick-green-ink)!important;--choice-border:var(--tw-success)!important;--choice-ink:var(--tw-mint-pale)!important}
+.theme-dark .quiz-choices.true-false-choices .choice-btn:nth-child(2){--choice-face:var(--tw-pick-red-dark)!important;--choice-base:var(--tw-danger-ink)!important;--choice-border:var(--tw-danger-accent)!important;--choice-ink:var(--tw-danger-pale)!important}
+/* Keep the full explanation card inside the viewport when it docks. */
+.sp-explanation-feedback.is-corner{
+  left:calc(100% - 18px)!important;
+  top:calc(100% - 18px)!important;
+  width:min(390px,calc(100vw - 36px))!important;
+  max-height:min(320px,46vh)!important;
+  overflow:auto!important;
+  transform:translate(-100%,-100%) scale(.82)!important;
+  transform-origin:right bottom!important;
+}
+@media(max-width:950px){.sp-explanation-feedback.is-corner{left:calc(100% - 14px)!important;top:calc(100% - 14px)!important;width:min(350px,calc(100vw - 28px))!important;transform:translate(-100%,-100%) scale(.82)!important}}
+@media(max-width:600px){.sp-explanation-feedback.is-corner{left:calc(100% - 10px)!important;top:calc(100% - 10px)!important;width:calc(100vw - 20px)!important;max-height:42vh!important;transform:translate(-100%,-100%) scale(.78)!important}}
+/* Student final navigation uses the exact shared TeacherPressButton construction. */
+.tw-student-final-nav{min-width:220px!important;max-width:min(360px,100%)!important}
+.sp-final-dashboard-row .tw-student-final-nav{width:min(360px,100%)!important}
+/* Name and points live inside the podium platform. */
+.sp-podium-platform{padding:10px 8px!important;box-sizing:border-box!important}
+.sp-podium-platform-content{display:grid;place-items:center;align-content:center;gap:4px;width:100%;min-width:0;color:var(--tw-on-brand)}
+.sp-podium-platform .sp-podium-name{color:var(--tw-on-brand)!important;width:100%;font-weight:950;text-shadow:0 1px 3px rgba(0,0,0,.30)}
+.sp-podium-platform .sp-podium-points{color:var(--tw-on-brand)!important;margin:0!important;font-size:13px!important;text-shadow:0 1px 3px rgba(0,0,0,.30)}
+.sp-podium-platform-content>b{font-size:16px;color:var(--tw-on-brand);text-shadow:0 1px 3px rgba(0,0,0,.30)}
+/* Revision 10.25 — Host panel. */
+/* Frost only the scoreboard surface; title, trophies and podium platforms stay sharp above it. */
+.tw-host-live-v25 .tw-host-scoreboard{
+  background:rgba(255,255,255,.42)!important;
+  backdrop-filter:blur(16px) saturate(1.12)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.12)!important;
+}
+body.dark-mode .tw-host-live-v25 .tw-host-scoreboard{
+  background:rgba(8,20,43,.58)!important;
+}
+.tw-host-scoreboard .tw-host-section-title,
+.tw-host-scoreboard .tw-host-podium{position:relative;z-index:1}
+/* Answered badge turns green when every expected participant has answered. */
+.tw-host-white-metric.is-complete{
+  background:var(--tw-success)!important;
+  color:var(--tw-on-brand)!important;
+  border-color:var(--tw-neon-deep)!important;
+  box-shadow:0 3px 0 #15803d,0 0 15px rgba(34,197,94,.34)!important;
+}
+/* Header timer is neon green until its existing 4→3 second red warning takes over. */
+.tw-host-pixel-timer:not(.is-warning):not(.is-danger){border-color:#5ee68c!important;background-image:linear-gradient(105deg,#0f7a38,var(--tw-success),var(--tw-mint-pale),var(--tw-neon-deep))!important;box-shadow:0 4px 0 #0e632f,0 0 13px rgba(34,197,94,.54),0 0 23px rgba(34,197,94,.24)!important;color:#f0fff4!important;background:var(--tw-neon)!important;background-image:linear-gradient(110deg,#116b34,#19984a 45%,var(--tw-neon) 72%,#11753a)!important;background-size:180% 100%!important;animation:tw1024HostTimerFlow 3.3s linear infinite!important;text-shadow:0 1px 2px rgba(0,0,0,.22)!important}
+/* Wait / Review are solid-blue raised buttons without a contrasting inner outline. */
+.tw-host-dialog-blue-no-outline>span{border-color:var(--tw-press-face,var(--tw-brand))!important}
+/* Guess Word host preview now includes the correct answer beneath the 2×2 clue images. */
+.tw-host-guess-preview{display:grid;gap:13px;width:min(100%,720px);margin-inline:auto}
+.tw-host-guess-answer{border:3px solid;border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 5px 0 color-mix(in srgb,var(--host-accent,var(--tw-success)) 32%,var(--tw-slate-soft))}
+.tw-host-guess-answer>span{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.68}
+.tw-host-guess-answer>b{font-size:clamp(18px,2vw,25px);overflow-wrap:anywhere}
+/* Host actions now inherit the shared 3D press button geometry without host-only hover transforms. */
+.tw-host-actions .tw-host-action-button,
+.tw-host-question-meta .tw-host-action-button{
+  transform:none!important;
+  border-radius:10px!important;
+  transition:box-shadow .16s ease,filter .16s ease!important;
+}
+.tw-host-actions .tw-host-action-button:hover:not(:disabled),
+.tw-host-question-meta .tw-host-action-button:hover:not(:disabled){transform:none!important;filter:none!important}
+.tw-host-actions .tw-host-action-button>span,
+.tw-host-question-meta .tw-host-action-button>span{
+  border-radius:10px!important;
+  transform:translateY(-5px)!important;
+}
+.tw-host-actions .tw-host-action-button:hover:not(:disabled)>span,
+.tw-host-question-meta .tw-host-action-button:hover:not(:disabled)>span{transform:translateY(-6px)!important;filter:brightness(.9)!important}
+.tw-host-actions .tw-host-action-button:active:not(:disabled)>span,
+.tw-host-question-meta .tw-host-action-button:active:not(:disabled)>span{transform:translateY(0)!important;filter:brightness(.86)!important}
+/* Revision 10.26 — smooth question-form pickup and release. */
+/* Quiz-builder question pickup/release: keep the scale change smooth in both directions. */
+.tw-builder-question-form.is-dragging:not(.is-drag-settled){transition:transform .30s cubic-bezier(.16,1,.3,1),box-shadow .24s ease!important}
+.tw-builder-question-form.is-dragging.is-drag-settled{transition:none!important}
+.tw-builder-question-form:not(.is-dragging){transition:transform .34s cubic-bezier(.16,1,.3,1),box-shadow .26s ease!important}
+/* Revision 10.26 — host score modes, student-style answer previews, and calmer neon timer. */
+.tw-host-score-mode-chip{
+  border:0!important;background:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 16%,transparent)!important;
+  color:var(--host-accent,var(--tw-brand))!important;border-radius:999px!important;padding:7px 11px!important;
+  font-weight:950!important;font-size:12px!important;cursor:pointer!important;box-shadow:none!important;
+}
+.tw-host-score-mode-chip:hover{background:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 24%,transparent)!important}
+.tw-host-score-click{font:inherit;cursor:pointer!important}
+.tw-host-podium-platform .tw-host-score-click{
+  border:0!important;padding:0!important;margin:0!important;background:transparent!important;color:var(--tw-on-brand)!important;
+  font-weight:1000!important;text-shadow:0 1px 2px rgba(0,0,0,.55)!important;box-shadow:none!important;
+}
+/* Student-attendance points are always normal quiz points and are not interactive. */
+.tw-host-attendance-score{border:0!important;background:transparent!important;color:inherit!important;padding:2px 4px!important;font-weight:1000!important;border-radius:8px!important;box-shadow:none!important;cursor:default!important;pointer-events:none!important}
+.tw-host-attendance-score:hover{background:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 12%,transparent)!important;background:transparent!important}
+.tw-host-student-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:15px!important;width:min(100%,900px)!important;margin-inline:auto}
+.tw-host-student-choice-grid .tw-host-student-choice{
+  --choice-face:var(--tw-pick-blue);--choice-base:var(--tw-pick-blue-deep);--choice-border:var(--tw-pick-blue-edge);--choice-ink:var(--tw-pick-blue-ink);
+  position:relative!important;min-height:96px!important;height:96px!important;box-sizing:border-box!important;
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:13px!important;
+  padding:12px 54px 12px 16px!important;border:4px solid var(--choice-border)!important;border-radius:20px!important;
+  background:var(--choice-face)!important;color:var(--choice-ink)!important;
+  box-shadow:0 8px 0 var(--choice-base),0 16px 28px rgba(15,23,42,.14)!important;
+}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-red);--choice-base:var(--tw-pick-red-deep);--choice-border:var(--tw-pick-red-edge);--choice-ink:var(--tw-danger-ink)}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-green);--choice-base:var(--tw-pick-green-deep);--choice-border:var(--tw-pick-green-edge);--choice-ink:var(--tw-pick-green-ink)}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:var(--tw-pick-blue);--choice-base:var(--tw-pick-blue-deep);--choice-border:var(--tw-pick-blue-edge);--choice-ink:var(--tw-pick-blue-ink)}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#f4d467;--choice-base:#a87813;--choice-border:#d4a522;--choice-ink:#713f12}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-green);--choice-base:var(--tw-pick-green-deep);--choice-border:var(--tw-pick-green-edge);--choice-ink:var(--tw-pick-green-ink)}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-red);--choice-base:var(--tw-pick-red-deep);--choice-border:var(--tw-pick-red-edge);--choice-ink:var(--tw-danger-ink)}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-red-dark);--choice-ink:var(--tw-danger-pale)}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-green-dark);--choice-ink:var(--tw-mint-pale)}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:#244f9d;--choice-ink:#dbeafe}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#786018;--choice-ink:#fef3c7}
+body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-green-dark);--choice-ink:var(--tw-mint-pale)}
+body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-red-dark);--choice-ink:var(--tw-danger-pale)}
+.tw-host-student-choice-badge{
+  flex:0 0 42px!important;width:42px!important;height:42px!important;border-radius:50%!important;
+  display:grid!important;place-items:center!important;border:4px solid var(--choice-border)!important;
+  background:color-mix(in srgb,var(--choice-face) 78%,var(--tw-on-brand))!important;color:var(--choice-ink)!important;
+  box-shadow:0 3px 0 var(--choice-base)!important;font-weight:1000!important;
+}
+body.dark-mode .tw-host-student-choice-badge{background:color-mix(in srgb,var(--choice-face) 88%,var(--tw-abyss))!important}
+.tw-host-student-choice-content{display:flex;min-width:0;flex:1;align-items:center;justify-content:center;gap:10px;color:var(--choice-ink)!important}
+.tw-host-student-choice-content b{min-width:0;max-width:100%;color:var(--choice-ink)!important;font-weight:900!important;text-align:center!important;overflow-wrap:anywhere}
+.tw-host-student-choice-content img{width:70px!important;height:54px!important;object-fit:cover!important;border-radius:9px!important}
+.tw-host-student-choice-grid .tw-host-choice-count{
+  position:absolute!important;right:15px!important;top:50%!important;transform:translateY(-50%)!important;
+  min-width:26px!important;padding:0 2px!important;color:var(--choice-ink)!important;font-weight:1000!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice{padding-right:16px!important;width:100%!important;min-width:0!important;height:104px!important;min-height:104px!important;max-height:104px!important;padding:14px 22px!important;gap:16px!important}
+@media(max-width:760px){.tw-host-student-choice-grid{grid-template-columns:1fr!important}.tw-host-student-choice-grid .tw-host-student-choice{height:auto!important;min-height:88px!important}}
+.tw-host-options .tw-host-student-choice-content b{text-align:center!important;flex:1!important}
+/* Revision 10.27 --------------------------------------------------------- */
+/* Theme changes and small UI state changes should feel quicker. */
+.tw-theme-switching *, .tw-theme-switching *::before, .tw-theme-switching *::after{
+  transition-duration:105ms!important;
+}
+/* Host Top Scores now shows the profile image between trophy and platform. */
+.tw-host-podium-avatar{
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;overflow:hidden;
+  margin:1px auto 4px;background:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 16%,var(--tw-on-brand));
+  border:3px solid color-mix(in srgb,var(--host-accent,var(--tw-brand)) 54%,var(--tw-on-brand));
+  color:var(--host-accent,var(--tw-brand));box-shadow:0 5px 12px rgba(15,23,42,.18);
+  flex:0 0 auto;
+}
+.tw-host-podium-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.tw-host-podium-place.place-1 .tw-host-podium-avatar{width:44px;height:44px}
+.tw-host-podium-place.place-3 .tw-host-podium-avatar{width:34px;height:34px;margin-top:5px}
+body.dark-mode .tw-host-podium-avatar{background:#0b1830;border-color:color-mix(in srgb,var(--host-accent,var(--tw-brand)) 68%,var(--tw-line));color:#eef4ff}
+/* Host True/False must keep the same roomy student-gameplay geometry instead of inheriting old span sizing. */
+.tw-host-student-choice-grid.is-true-false{
+  width:min(100%,760px)!important;
+  grid-template-columns:repeat(2,minmax(240px,1fr))!important;
+  gap:20px!important;
+}
+.tw-host-student-choice-grid .tw-host-student-choice-content{
+  width:auto!important;height:auto!important;min-height:0!important;border-radius:0!important;
+  background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;
+  display:flex!important;place-items:initial!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice-content b{
+  white-space:nowrap!important;overflow:visible!important;display:block!important;-webkit-line-clamp:unset!important;
+  font-size:clamp(20px,2.2vw,27px)!important;line-height:1.1!important;text-align:center!important;
+}
+.tw-host-student-choice-grid.is-true-false .tw-host-student-choice-badge{
+  width:48px!important;height:48px!important;flex:0 0 48px!important;font-size:20px!important;
+}
+@media(max-width:760px){.tw-host-student-choice-grid.is-true-false{grid-template-columns:1fr!important;width:min(100%,520px)!important}}
+/* Revision 10.28 --------------------------------------------------------- */
+/* Host Top Scores: profile icon belongs inside the platform to the left of the name. */
+.tw-host-podium-person{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+.tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-1 .tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-2 .tw-host-podium-platform .tw-host-podium-avatar,
+.tw-host-podium-place.place-3 .tw-host-podium-platform .tw-host-podium-avatar{
+  width:29px!important;height:29px!important;min-width:29px!important;margin:0!important;border-width:2px!important;transform:none!important;
+  box-shadow:0 3px 8px rgba(15,23,42,.18)!important;
+}
+.tw-host-podium-person>b{min-width:0;max-width:calc(100% - 37px)!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Revision 10.28.1 follow-up ------------------------------------------------ */
+/* Student Home surfaces sit visibly above the dark page background. */
+body.dark-mode .tw-student-home-surface{
+  background:rgba(17,39,76,.94)!important;
+  border-color:rgba(132,167,255,.34)!important;
+  box-shadow:0 18px 38px rgba(0,0,0,.26)!important;
+}
+.tw-builder-question-mini.is-preview-shift-up{transform:translateY(-16px)!important}
+.tw-builder-question-mini.is-preview-shift-down{transform:translateY(16px)!important}
+.tw-builder-question-mini.is-drop-swap{transform:translateY(-5px) scale(1.015)!important;box-shadow:0 13px 24px rgba(15,23,42,.18),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 28%,transparent)!important}
+.tw-builder-question-mini.is-settling{animation:twQuestionPaperSettle .32s cubic-bezier(.16,1,.3,1)}
+@keyframes twQuestionPaperSettle{
+  0%{transform:translateY(-6px) scale(1.025);filter:brightness(1.04)}
+  48%{transform:translateY(2px) scale(.986)}
+  100%{transform:translateY(0) scale(1);filter:none}
+}
+.tw-quiz-builder-page.is-question-dragging::before{left:0;transform:translateX(-25px);border-right:3px solid color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 62%,transparent)}
+.tw-quiz-builder-page.is-question-dragging::after{right:0;transform:translateX(25px);border-left:3px solid color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 62%,transparent)}
+.tw-quiz-builder-page.is-drag-edge-left::before{width:118px!important;transform:translateX(-7px)!important;opacity:1!important;box-shadow:20px 0 70px 22px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 35%,transparent)!important}
+.tw-quiz-builder-page.is-drag-edge-right::after{width:118px!important;transform:translateX(7px)!important;opacity:1!important;box-shadow:-20px 0 70px 22px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 35%,transparent)!important}

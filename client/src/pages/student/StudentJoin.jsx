@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
@@ -69,51 +69,37 @@ export default function StudentJoin() {
   const inputBor = dark ? "#2a3b73" : "#a5b8f5";
 
   return (
-    <div style={{ ...s.page, background: pageBg, transition: "background 0.3s" }}>
-      <div style={s.blob1} />
-      <div style={s.blob2} />
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-5 pt-5 pb-10" style={{ background: pageBg, transition: "background 0.3s", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+      <div className="fixed w-[500px] h-[500px] rounded-full -top-[150px] -left-[100px] pointer-events-none" style={s.blob1} />
+      <div className="fixed w-[400px] h-[400px] rounded-full -bottom-[100px] -right-[100px] pointer-events-none" style={s.blob2} />
 
       <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-guest-join-theme" size={20} />
 
-      <Link to="/" aria-label="Back to ThinkWAVE landing page" className="tw-guest-join-logo" style={s.logo}>
-        <span style={{ ...s.logoThink, color: textC }}>Think</span>
-        <span style={s.logoWave}>WAVE</span>
+      <Link to="/" aria-label="Back to ThinkWAVE landing page" className="tw-guest-join-logo flex items-baseline no-underline cursor-pointer mb-7 z-[1]">
+        <span className="text-[32px] font-black" style={{ color: textC }}>Think</span>
+        <span className="text-[32px] font-black text-brand">WAVE</span>
       </Link>
 
-      <div style={{ ...s.card, background: cardBg, border: `1px solid ${cardBor}` }}>
-          <p style={{ ...s.cardLabel, color: textC }}>What's your name?</p>
-          <p style={{ fontSize: 13, color: mutedC, margin: "0 0 20px", textAlign: "center" }}>
-            Code: <b style={{ color: textC, letterSpacing: 2 }}>{code}</b>
+      <div className="rounded-3xl p-[36px_32px] w-[min(100%,420px)] z-[1] shadow-[0_20px_60px_rgba(0,0,0,0.3)]" style={{ background: cardBg, border: `1px solid ${cardBor}` }}>
+          <p className="text-center font-black text-xl m-[0_0_4px]" style={{ color: textC }}>What's your name?</p>
+          <p className="text-[13px] m-[0_0_20px] text-center" style={{ color: mutedC }}>
+            Code: <b className="tracking-[2px]" style={{ color: textC }}>{code}</b>
           </p>
-          <form onSubmit={handleJoin} style={s.form}>
-            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" required autoFocus style={{ ...s.nameInput, background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
-            <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name (optional)" style={{ ...s.nameInput, background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
-            {msg && <p style={s.errMsg}>{msg}</p>}
-            <button type="submit" disabled={loading} className="tw-guest-join-primary" style={{ ...s.joinBtn, opacity: loading ? 0.7 : 1 }}>{loading ? "Joining…" : "Join Session"}</button>
-            <button type="button" onClick={() => nav("/?join=guest")} style={{ ...s.backLink, color: mutedC }}>Change code</button>
+          <form onSubmit={handleJoin} className="flex flex-col gap-3">
+            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" required autoFocus className="px-4 py-[14px] rounded-xl text-base w-full box-border outline-none" style={{ background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
+            <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name (optional)" className="px-4 py-[14px] rounded-xl text-base w-full box-border outline-none" style={{ background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
+            {msg && <p className="text-[13px] rounded-xl p-[10px_12px] m-0 border border-solid text-[#f87171] bg-[rgba(239,68,68,0.12)] border-[rgba(239,68,68,0.2)]">{msg}</p>}
+            <button type="submit" disabled={loading} className="tw-guest-join-primary mt-1 p-[14px_16px] rounded-full border-0 bg-brand text-white text-[15px] font-extrabold cursor-pointer shadow-[0_12px_30px_rgba(43,108,255,0.28)]" style={{ opacity: loading ? 0.7 : 1 }}>{loading ? "Joining…" : "Join Session"}</button>
+            <button type="button" onClick={() => nav("/?join=guest")} className="bg-transparent border-0 text-[13px] cursor-pointer font-bold" style={{ color: mutedC }}>Change code</button>
           </form>
         </div>
 
-      <p style={{ color: mutedC, fontSize: 12, marginTop: 20, zIndex: 1 }}>No account needed · Just your name and code</p>
+      <p className="text-xs mt-5 z-[1]" style={{ color: mutedC, fontSize: 12, marginTop: 20, zIndex: 1 }}>No account needed · Just your name and code</p>
     </div>
   );
 }
 
 const s = {
-  page: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif", position: "relative", overflow: "hidden", padding: "20px 20px 40px" },
-  blob1: { position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle,rgba(43,108,255,0.12) 0%,transparent 70%)", top: -150, left: -100, pointerEvents: "none" },
-  blob2: { position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,0.08) 0%,transparent 70%)", bottom: -100, right: -100, pointerEvents: "none" },
-  topBar: { position: "fixed", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
-  topLink: { border: "1px solid", borderRadius: 20, padding: "8px 14px", textDecoration: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  logo: { display: "flex", alignItems: "baseline", marginBottom: 28, zIndex: 1, textDecoration: "none", cursor: "pointer" },
-  logoThink: { fontSize: 32, fontWeight: 900 },
-  logoWave: { fontSize: 32, fontWeight: 900, color: "#2b6cff" },
-  card: { borderRadius: 24, padding: "36px 32px", width: "min(100%,420px)", zIndex: 1, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" },
-  cardLabel: { textAlign: "center", fontWeight: 900, fontSize: 20, margin: "0 0 4px" },
-  form: { display: "flex", flexDirection: "column", gap: 12 },
-  codeInput: { padding: "16px", borderRadius: 14, fontSize: 28, fontWeight: 900, textAlign: "center", letterSpacing: "0.2em", width: "100%", boxSizing: "border-box", outline: "none" },
-  nameInput: { padding: "14px 16px", borderRadius: 12, fontSize: 16, width: "100%", boxSizing: "border-box", outline: "none" },
-  errMsg: { fontSize: 13, color: "#f87171", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", padding: "10px 12px", borderRadius: 12, margin: 0 },
-  joinBtn: { marginTop: 4, padding: "14px 16px", borderRadius: 999, border: "none", background: "#2b6cff", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 12px 30px rgba(43,108,255,0.28)" },
-  backLink: { background: "transparent", border: "none", fontSize: 13, cursor: "pointer", fontWeight: 700 },
+  blob1: { background: "radial-gradient(circle,rgba(43,108,255,0.12) 0%,transparent 70%)" },
+  blob2: { background: "radial-gradient(circle,rgba(139,92,246,0.08) 0%,transparent 70%)" },
 };

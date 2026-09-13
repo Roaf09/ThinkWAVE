@@ -18,6 +18,7 @@ import {
   startSession,
   pauseSession,
   endSession,
+  validateJoinCode,
   joinSession,
   getSessionStateTeacher,
   getTeacherSessionHistory,
@@ -43,15 +44,27 @@ const JoinSchema = z.object({
   lastName: z.string().optional(),
 });
 
-// This limiter's default key is the requester's IP (middleware/rateLimit.js),
-// and a whole classroom typically joins from behind one school NAT/WiFi
-// gateway - they all share this bucket. At max:20 the 21st student from that
-// network hit "Too many requests" even though the session's own capacity
-// (checked separately below, in joinSession, via max_participants) allows up
-// to 45. Raised well above any realistic per-network join burst; the real
-// per-session capacity is still enforced by joinSession, this only guards
-// against a script hammering the endpoint.
-sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 300 }), optionalAuth, validateBody(JoinSchema), asyncHandler(joinSession));
+const CodeSchema = z.object({
+  code: z.string().min(4),
+});
+
+// The unload beacon proves ownership of the seat with the same reconnectKey
+// the socket handshake uses (nanoid 32). Without it anyone could POST another
+// student's sequential participantId and forge tab-outs (false cheating
+// flags). Lenient length bounds so old clients fail closed with a clear 400
+// instead of silently recording nothing.
+const TabEventSchema = z.object({
+  participantId: z.coerce.number().int().positive(),
+  reconnectKey: z.string().min(20).max(64),
+});
+
+// Keyed by IP + join code (not IP alone): a whole classroom typically joins
+// from behind one school NAT/WiFi gateway sharing a single public IP, and a
+// pure-IP key would let one session's burst eat the budget for every other
+// session. The real per-session capacity is still enforced by joinSession via
+// max_participants; this only guards against a script hammering the endpoint.
+sessionsRouter.post("/join", rateLimit({ windowMs: 10 * 60 * 1000, max: 300, keyGenerator: (req) => `${req.ip || req.socket?.remoteAddress || "unknown"}:${String(req.body?.code || "").toUpperCase().slice(0, 16)}` }), optionalAuth, validateBody(JoinSchema), asyncHandler(joinSession));
+sessionsRouter.post("/validate-code", rateLimit({ windowMs: 10 * 60 * 1000, max: 300, keyGenerator: (req) => `${req.ip || req.socket?.remoteAddress || "unknown"}:${String(req.body?.code || "").toUpperCase().slice(0, 16)}` }), optionalAuth, validateBody(CodeSchema), asyncHandler(validateJoinCode));
 sessionsRouter.get("/history", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(getTeacherSessionHistory));
 sessionsRouter.get("/active", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listActiveSessions));
 sessionsRouter.post("/", requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(CreateSchema), asyncHandler(createSession));
@@ -62,13 +75,13 @@ sessionsRouter.get("/:id/full-analytics", requireAuth, requireRole("TEACHER", "G
 sessionsRouter.post("/:id/start", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(startSession));
 sessionsRouter.post("/:id/pause", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(pauseSession));
 sessionsRouter.post("/:id/end", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(endSession));
-// Same per-IP-behind-one-school-NAT problem as /join above: this limiter's key
-// is the requester's IP, and a whole class shares it. StudentPlay.jsx now
+// Same per-IP-behind-one-school-NAT consideration as /join above, but
+// tab-event beacons carry no session code in the body path — the session id
+// is in the URL, so scope the bucket per session instead. StudentPlay.jsx
 // sendBeacon()s here when the page is being torn down (the one case a socket
-// emit can't survive), so at max:10/min a class would have its tab-outs
-// silently dropped after the first few. Per-participant duplicate protection
-// is the client-side throttle, not this limiter - this only guards against a
+// emit can't survive). Per-participant duplicate protection is the
+// client-side throttle, not this limiter - this only guards against a
 // script hammering the endpoint.
-sessionsRouter.post("/:id/tab-event", rateLimit({ windowMs: 60 * 1000, max: 400 }), asyncHandler(logTabEvent));
+sessionsRouter.post("/:id/tab-event", rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: (req) => `${req.ip || req.socket?.remoteAddress || "unknown"}:session:${String(req.params?.id || "").slice(0, 16)}` }), validateBody(TabEventSchema), asyncHandler(logTabEvent));
 sessionsRouter.get("/:id/tab-monitoring", requireAuth, requireRole("TEACHER"), asyncHandler(getTabMonitoring));
 sessionsRouter.delete("/:id", requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(deleteTeacherSession));

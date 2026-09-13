@@ -130,6 +130,17 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     (acc[key] ||= []).push(row);
     return acc;
   }, {});
+  // Competitive points live inside responses.answer_json.__tw_live (written on
+  // every live answer). Summing them here keeps guest-hosted sessions — whose
+  // participants are all guests — showing the same incrementing totals as
+  // teacher-hosted ones, without relying on socket-only state.
+  const competitiveByParticipant = new Map();
+  for (const row of responseRows) {
+    const payload = safeJson(row.answer_json) || {};
+    const meta = payload?.__tw_live || {};
+    const pid = Number(row.participant_id);
+    competitiveByParticipant.set(pid, Number(competitiveByParticipant.get(pid) || 0) + Number(meta.competitivePoints || 0));
+  }
 
   const [students] = await pool.query(
     `SELECT
@@ -191,6 +202,7 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     students: students.map((row) => ({
       ...row,
       total_points: Number(row.total_points || 0),
+      competitive_points: Math.round(Number(competitiveByParticipant.get(Number(row.participant_id)) || 0)),
       completion_ms: row.completion_ms === null ? null : Number(row.completion_ms),
       responses: buildStudentResponseDetails(responsesByParticipant[Number(row.participant_id)] || []),
     })),

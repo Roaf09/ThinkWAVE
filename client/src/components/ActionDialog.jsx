@@ -96,50 +96,47 @@ export default function ActionDialog({
     <>
       <div
         onClick={closeOnBackdrop && !autoDismiss ? dismiss : undefined}
+        className="fixed inset-0 z-[4200]"
         style={{
-          position: "fixed",
-          inset: 0,
           background: dark ? "rgba(0,0,0,0.68)" : "rgba(30,45,85,0.30)",
           backdropFilter: "blur(8px)",
-          zIndex: 4200,
           opacity: closing ? 0 : 1,
           transition: "opacity 260ms ease",
         }}
       />
-      <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 4201, pointerEvents: "none" }}>
+      <div className="fixed inset-0 z-[4201] flex items-center justify-center p-5 pointer-events-none">
         <div
+          className="rounded-[20px] overflow-hidden"
           style={{
             width,
-            borderRadius: 20,
             background: c.cardBg,
             border: `1px solid ${c.border}`,
             boxShadow: dark ? "0 24px 64px rgba(0,0,0,0.48)" : "0 22px 56px rgba(43,108,255,0.14)",
-            overflow: "hidden",
             opacity: closing ? 0 : 1,
             transform: closing ? "translateY(12px) scale(0.985)" : "translateY(0) scale(1)",
             transition: "opacity 260ms ease, transform 260ms ease",
             pointerEvents: "auto",
           }}
         >
-          <div style={{ padding: "28px 30px 18px", background: flatSurface ? "transparent" : (dark ? `linear-gradient(180deg, ${toneConfig.darkTint}, transparent)` : `linear-gradient(180deg, ${toneConfig.lightTint}, transparent)`) }}>
-            <div style={{ width: 76, height: 76, borderRadius: plainIcon ? 0 : 18, display: "flex", alignItems: "center", justifyContent: "center", background: plainIcon ? "transparent" : toneConfig.bg, color: plainIcon ? (dark ? "#fff" : "#0f172a") : toneConfig.fg, marginBottom: 16, border: plainIcon ? "none" : `1px solid ${toneConfig.border}`, boxShadow: "none" }}>
+          <div className="px-[30px] pt-7 pb-[18px]" style={{ background: flatSurface ? "transparent" : (dark ? `linear-gradient(180deg, ${toneConfig.darkTint}, transparent)` : `linear-gradient(180deg, ${toneConfig.lightTint}, transparent)`) }}>
+            <div className="w-[76px] h-[76px] flex items-center justify-center mb-4" style={{ borderRadius: plainIcon ? 0 : 18, background: plainIcon ? "transparent" : toneConfig.bg, color: plainIcon ? (dark ? "#fff" : "#0f172a") : toneConfig.fg, border: plainIcon ? "none" : `1px solid ${toneConfig.border}`, boxShadow: "none" }}>
               <DialogIcon icon={icon} fallback={toneConfig.icon} />
             </div>
-            {title && <h3 style={{ margin: 0, color: c.text, fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>{title}</h3>}
+            {title && <h3 className="m-0 text-2xl font-black tracking-[-0.02em]" style={{ color: c.text }}>{title}</h3>}
             {message !== undefined && (
-              <div style={{ marginTop: 12, color: c.textMuted, lineHeight: 1.7, fontSize: 14 }}>
-                {typeof message === "string" ? <p style={{ margin: 0 }}>{message}</p> : message}
+              <div className="mt-3 text-sm leading-[1.7]" style={{ color: c.textMuted }}>
+                {typeof message === "string" ? <p className="m-0">{message}</p> : message}
               </div>
             )}
           </div>
 
           {(children || actions || confirmLabel || !autoDismiss) && (
-            <div style={{ padding: "0 30px 28px", display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <div className="px-[30px] pb-7 flex gap-3 justify-end flex-wrap">
               {children || actions || (
                 autoDismiss ? null : (
                   <>
-                    <button onClick={dismiss} style={secondaryBtn(c, dark)}>{cancelLabel}</button>
-                    {confirmLabel && <button onClick={onConfirm} style={primaryBtn(toneConfig)}>{confirmLabel}</button>}
+                    <button onClick={dismiss} className={SECONDARY_BTN_CLASS} style={secondaryBtn(c, dark)}>{cancelLabel}</button>
+                    {confirmLabel && <button onClick={onConfirm} className={PRIMARY_BTN_CLASS} style={primaryBtn(toneConfig)}>{confirmLabel}</button>}
                   </>
                 )
               )}
@@ -153,29 +150,24 @@ export default function ActionDialog({
   return createPortal(node, document.body);
 }
 
+// Static button shells as utilities; colors stay inline (theme/tone-driven).
+// secondaryBtn/primaryBtn now return dynamic-only style objects.
+const SECONDARY_BTN_CLASS = "px-[22px] py-3 rounded-xl text-[15px] font-extrabold cursor-pointer";
+const PRIMARY_BTN_CLASS = "px-[22px] py-3 rounded-xl text-[15px] font-black cursor-pointer";
+
 export function secondaryBtn(c, dark) {
   return {
-    padding: "12px 22px",
-    borderRadius: 12,
     border: `1px solid ${dark ? c.border : c.inputBorder || c.border}`,
     background: dark ? c.cardBg2 : "#edf3ff",
     color: dark ? c.text : "#17305f",
-    fontSize: 15,
-    fontWeight: 800,
-    cursor: "pointer",
     boxShadow: dark ? "none" : "0 8px 18px rgba(43,108,255,0.08)",
   };
 }
 
 export function primaryBtn(tone) {
   return {
-    padding: "12px 22px",
-    borderRadius: 12,
     border: `1px solid ${tone.border}`,
     background: tone.bg,
     color: tone.fg,
-    fontSize: 15,
-    fontWeight: 900,
-    cursor: "pointer",
   };
 }

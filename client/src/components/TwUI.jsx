@@ -3,7 +3,6 @@
  * Purpose: Shared ThinkWAVE visual primitives for the UI refresh: thick-line icons, empty states, and metric cards.
  */
 
-import React from "react";
 import { useColors } from "../context/ThemeContext";
 
 const iconSet = {
@@ -121,7 +120,7 @@ export function IconBubble({ name = "spark", c, size = 42, iconSize = 22, tone =
   const toneValue = toneMap[tone] || toneMap.blue;
   return (
     <span
-      className="tw-icon-bubble"
+      className="tw-icon-bubble shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(43,108,255,0.10)]"
       style={{
         width: size,
         height: size,
@@ -144,7 +143,7 @@ export function EmptyState({ icon = "spark", title, message, action, c, compact 
   const fallbackColors = useColors();
   const colors = c || fallbackColors;
   return (
-    <div className="tw-empty-state" style={{ borderColor: colors.border, background: colors.cardBg2, color: colors.text, padding: compact ? 14 : 20 }}>
+    <div className="tw-empty-state flex items-center gap-3.5 border border-dashed rounded-[18px] min-h-[76px]" style={{ borderColor: colors.border, background: colors.cardBg2, color: colors.text, padding: compact ? 14 : 20 }}>
       <IconBubble name={icon} c={colors} size={compact ? 38 : 48} iconSize={compact ? 19 : 24} />
       <div style={{ minWidth: 0 }}>
         {title && <div style={{ fontWeight: 900, color: colors.text, marginBottom: 4 }}>{title}</div>}
@@ -155,11 +154,29 @@ export function EmptyState({ icon = "spark", title, message, action, c, compact 
   );
 }
 
+export function LoadingDots({ color = "currentColor" }) {
+  return (
+    <span className="tw-loading-dots inline-flex ml-1 min-w-[18px]" aria-hidden="true" style={{ color }}>
+      <span>.</span><span>.</span><span>.</span>
+    </span>
+  );
+}
+
+export function gameSurfaceColors(dark) {
+  return {
+    pageBg: dark ? "#0a4eb4" : "#6db9f1",
+    cardBg: dark ? "#0e1733" : "#ffffff",
+    cardBor: dark ? "#1e2d55" : "#c7d2fe",
+    textC: dark ? "#e7e9ee" : "#0f172a",
+    mutedC: dark ? "#8a9bc4" : "#5a6a9a",
+  };
+}
+
 export function StatCard({ c, icon = "chart", label, value, hint, tone = "blue", accent }) {
   const fallbackColors = useColors();
   const colors = c || fallbackColors;
   return (
-    <div className="tw-stat-card" style={{ background: colors.cardBg, borderColor: colors.border }}>
+    <div className="tw-stat-card relative overflow-hidden border border-solid rounded-card p-[18px] shadow-soft backdrop-blur-[14px]" style={{ background: colors.cardBg, borderColor: colors.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div>
           <div style={{ textTransform: "uppercase", letterSpacing: "0.08em", color: colors.textSub, fontWeight: 900, fontSize: 11 }}>{label}</div>

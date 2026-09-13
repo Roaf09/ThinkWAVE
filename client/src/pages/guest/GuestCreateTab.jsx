@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { IconBubble } from "../../components/TwUI";
 import { normalizeTemplateType } from "../../lib/templateTypes";
-import { templateTone } from "../../lib/templatePalette";
+import { templateTone, templateAccent } from "../../lib/templatePalette";
 import { TeacherPressButton } from "../teacher/TeacherUI";
 
 const TEMPLATES = [
@@ -24,17 +24,17 @@ export default function GuestCreateTab() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function submit(event) {
-    event.preventDefault();
+  async function createWithTemplate(templateType) {
+    const title = form.title.trim();
     setMsg("");
-    if (!form.title.trim()) return setMsg("Enter a quiz title.");
-    if (!form.templateType) return setMsg("Select a quiz template.");
+    if (!title) return setMsg("Enter a quiz title.");
+    if (!templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
-        title: form.title.trim(),
+        title,
         category: "K12",
-        templateType: form.templateType,
+        templateType,
         classId: null,
         timeLimitSec: 30,
         pointsPerQuestion: 1,
@@ -50,10 +50,15 @@ export default function GuestCreateTab() {
     } finally { setSaving(false); }
   }
 
+  function handleSubmit(event) {
+    event.preventDefault();
+    createWithTemplate(form.templateType);
+  }
+
   return <div className="container" style={{ display: "grid", gap: 20 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
     <section style={card(c)}>
-      <form onSubmit={submit} style={{ display: "grid", gap: 22 }}>
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>
         <div>
           <label style={label(c)}>Quiz Title</label>
           <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" style={input(c)} />
@@ -65,14 +70,17 @@ export default function GuestCreateTab() {
               const active = form.templateType === template.value;
               const tone = templateTone(template.value, c, active);
               const ink = templateInk(template.value, dark);
-              return <button key={template.value} type="button" className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => setForm((current) => ({ ...current, templateType: template.value }))} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
-                <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
-              </button>;
+              const accent = templateAccent(template.value);
+              return <div key={template.value} className="tw-teacher-template-cell">
+                <button type="button" className={`tw-teacher-template-press${active ? " is-active" : ""}`} onClick={() => setForm((current) => ({ ...current, templateType: template.value }))} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
+                  <span><IconBubble name={template.icon} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><b style={{ color: ink }}>{template.label}</b></span>
+                </button>
+                {active && <TeacherPressButton type="button" tone="blue" disabled={saving} onClick={() => createWithTemplate(template.value)} className="tw-teacher-create-submit tw-teacher-create-submit-inline" style={{ "--tpl-submit-face": accent, "--tpl-submit-base": `color-mix(in srgb, ${accent} 62%, #000)`, "--tpl-submit-border": accent }}>{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>}
+              </div>;
             })}
           </div>
         </div>
         {msg && <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13 }}>{msg}</div>}
-        <TeacherPressButton type="submit" tone="blue" disabled={saving} className="tw-teacher-create-submit">{saving ? "Creating…" : "Create & Open Builder"}</TeacherPressButton>
       </form>
     </section>
   </div>;

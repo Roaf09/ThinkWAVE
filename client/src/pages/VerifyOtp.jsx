@@ -3,7 +3,7 @@
  * Purpose: Shared OTP verification form for teacher, student, admin, and superadmin accounts.
  */
 
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
 import { IconBubble, TwIcon } from "../components/TwUI";
 import { useColors, useTheme } from "../context/ThemeContext";
@@ -80,27 +80,27 @@ export default function VerifyOtp() {
   }
 
   return (
-    <div className="tw-otp-page" style={{ minHeight: "100vh", background: c.pageBg, color: c.text, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "fixed", width: 520, height: 520, borderRadius: "50%", background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)`, top: -180, left: -110, pointerEvents: "none" }} />
-      <div style={{ position: "fixed", width: 420, height: 420, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,.14) 0%,transparent 70%)", bottom: -120, right: -110, pointerEvents: "none" }} />
+    <div className="tw-otp-page min-h-screen flex flex-col relative overflow-hidden" style={{ background: c.pageBg, color: c.text }}>
+      <div className="fixed w-[520px] h-[520px] rounded-full -top-[180px] -left-[110px] pointer-events-none" style={{ background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)` }} />
+      <div className="fixed w-[420px] h-[420px] rounded-full -bottom-[120px] -right-[110px] pointer-events-none bg-[radial-gradient(circle,rgba(139,92,246,0.14)_0%,transparent_70%)]" />
       <PublicHeader compact hideSuper hideTheme />
 
-      <div className="tw-otp-main" style={{ display: "grid", placeItems: "center", flex: 1, padding: "34px 20px 50px", zIndex: 1 }}>
-        <div className="tw-otp-card" style={{ width: "min(100%,470px)", padding: "38px 34px", borderRadius: 26, textAlign: "center", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
+      <div className="tw-otp-main grid place-items-center flex-1 px-5 pt-[34px] pb-[50px] z-[1]">
+        <div className="tw-otp-card w-[min(100%,470px)] p-[38px_34px] rounded-[26px] text-center" style={{ background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
           {success ? <SuccessContent mode={mode} c={c} /> : <>
-            <div className="tw-otp-icon-wrap" style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><IconBubble name="invitation" c={c} size={58} iconSize={28} /></div>
-            <h2 style={{ fontSize: 27, fontWeight: 950, margin: "0 0 10px", color: c.text }}>Check your email</h2>
-            <p className="tw-otp-intro" style={{ fontSize: 14, color: c.textMuted, lineHeight: 1.7, margin: "0 0 28px" }}>We sent a 6-digit code to <b style={{ color: c.text }}>{email || "your email"}</b>.</p>
+            <div className="tw-otp-icon-wrap flex justify-center mb-[14px]"><IconBubble name="invitation" c={c} size={58} iconSize={28} /></div>
+            <h2 className="text-[27px] font-[950] m-[0_0_10px]" style={{ color: c.text }}>Check your email</h2>
+            <p className="tw-otp-intro text-sm leading-[1.7] m-[0_0_28px]" style={{ color: c.textMuted }}>We sent a 6-digit code to <b style={{ color: c.text }}>{email || "your email"}</b>.</p>
 
-            {!email && <label style={{ display: "grid", gap: 7, textAlign: "left", color: c.textMuted, fontSize: 12, fontWeight: 800, marginBottom: 17 }}>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" style={input(c)} /></label>}
+            {!email && <label className="grid gap-[7px] text-left text-xs font-extrabold mb-[17px]" style={{ color: c.textMuted }}>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="px-[14px] py-3 rounded-xl text-sm w-full box-border" style={input(c)} /></label>}
 
             <form onSubmit={submit}>
-              <div className="tw-otp-digits" onPaste={handlePaste} style={{ display: "flex", gap: 9, justifyContent: "center", marginBottom: 20 }}>
-                {digits.map((digit, index) => <input key={index} ref={(element) => { refs.current[index] = element; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => handleDigit(index, event.target.value)} onKeyDown={(event) => handleKeyDown(index, event)} autoFocus={index === 0} style={{ width: 50, height: 62, boxSizing: "border-box", borderRadius: 14, border: `2px solid ${digit ? c.accent : c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text, fontSize: 27, fontWeight: 950, textAlign: "center", outline: "none", caretColor: "transparent", transition: "border-color .15s,transform .15s" }} />)}
+              <div className="tw-otp-digits flex gap-[9px] justify-center mb-5" onPaste={handlePaste}>
+                {digits.map((digit, index) => <input key={index} ref={(element) => { refs.current[index] = element; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => handleDigit(index, event.target.value)} onKeyDown={(event) => handleKeyDown(index, event)} autoFocus={index === 0} className="w-[50px] h-[62px] box-border rounded-[14px] text-[27px] font-[950] text-center outline-none caret-transparent transition-[border-color,transform] duration-150 ease-[ease]" style={{ border: `2px solid ${digit ? c.accent : c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }} />)}
               </div>
-              {msg && <div style={{ color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, fontWeight: 800, marginBottom: 16 }}>{msg}</div>}
-              <button type="submit" disabled={loading || digits.join("").length < BOX_COUNT} style={{ width: "100%", minHeight: 51, borderRadius: 14, border: 0, background: c.accent, color: "#fff", fontSize: 15, fontWeight: 950, cursor: "pointer", opacity: loading || digits.join("").length < BOX_COUNT ? .55 : 1, boxShadow: `0 13px 30px ${c.accent}35` }}>{loading ? "Verifying…" : "Verify"}</button>
-              <button type="button" onClick={resend} disabled={resending} style={{marginTop:12,border:0,background:"transparent",color:c.accent,fontWeight:900,cursor:"pointer",opacity:resending?.6:1}}>{resending?"Sending new code…":"Resend code"}</button>
+              {msg && <div className="rounded-[11px] p-[10px_13px] text-[13px] font-extrabold mb-4" style={{ color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}` }}>{msg}</div>}
+              <button type="submit" disabled={loading || digits.join("").length < BOX_COUNT} className="w-full min-h-[51px] rounded-[14px] border-0 text-white text-[15px] font-[950] cursor-pointer" style={{ background: c.accent, opacity: loading || digits.join("").length < BOX_COUNT ? .55 : 1, boxShadow: `0 13px 30px ${c.accent}35` }}>{loading ? "Verifying…" : "Verify"}</button>
+              <button type="button" onClick={resend} disabled={resending} className="mt-3 border-0 bg-transparent font-black cursor-pointer" style={{color:c.accent,opacity:resending?.6:1}}>{resending?"Sending new code…":"Resend code"}</button>
             </form>
           </>}
         </div>
@@ -112,7 +112,7 @@ export default function VerifyOtp() {
 
 function SuccessContent({ mode, c }) {
   const label = mode === "admin" ? "admin" : mode === "superadmin" ? "superadmin" : mode === "student" ? "student" : "teacher";
-  return <><div style={{ display: "flex", justifyContent: "center", marginBottom: 15 }}><span style={{ width: 70, height: 70, borderRadius: 22, display: "grid", placeItems: "center", color: c.greenFg, background: c.greenBg, border: `2px solid ${c.greenBorder}` }}><TwIcon name="check" size={38} strokeWidth={3.2} /></span></div><h2 style={{ fontSize: 27, fontWeight: 950, margin: "0 0 10px", color: c.text }}>Verified!</h2><p style={{ color: c.textMuted, lineHeight: 1.7, margin: 0 }}>Your {label} account is verified. Redirecting you to login…</p></>;
+  return <><div className="flex justify-center mb-[15px]"><span className="w-[70px] h-[70px] rounded-[22px] grid place-items-center" style={{ color: c.greenFg, background: c.greenBg, border: `2px solid ${c.greenBorder}` }}><TwIcon name="check" size={38} strokeWidth={3.2} /></span></div><h2 className="text-[27px] font-[950] m-[0_0_10px]" style={{ color: c.text }}>Verified!</h2><p className="leading-[1.7] m-0" style={{ color: c.textMuted }}>Your {label} account is verified. Redirecting you to login…</p></>;
 }
 
-function input(c) { return { width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text, fontSize: 14 }; }
+function input(c) { return { border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }; }

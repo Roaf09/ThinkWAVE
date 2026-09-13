@@ -300,7 +300,7 @@ export async function exportClassAsyncPdf(req, res) {
   const scores = data.rows.filter((r) => r.score != null).map((r) => Number(r.score));
   // Same fields the Excel export carries, plus the submitted/average roll-up
   // the teacher would otherwise have to work out by hand from the rows.
-  let y = drawInfoBlock(doc, {
+  const y = drawInfoBlock(doc, {
     x: left,
     y: doc.y + 10,
     rows: [
@@ -580,10 +580,4 @@ async function loadQuizMaxPoints(quizIds = []) {
     map.set(Number(row.quiz_id), Number(map.get(Number(row.quiz_id)) || 0) + max);
   }
   return map;
-}
-
-function safeJsonValue(value) {
-  if (!value) return null;
-  if (typeof value === "object") return value;
-  try { return JSON.parse(value); } catch { return null; }
 }

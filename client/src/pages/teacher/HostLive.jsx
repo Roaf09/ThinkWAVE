@@ -1,24 +1,82 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { makeSocket } from "../../lib/socket";
 import { QRCodeCanvas } from "qrcode.react";
 import { useTheme } from "../../context/ThemeContext";
-import ActionDialog, { primaryBtn, secondaryBtn } from "../../components/ActionDialog";
+import ActionDialog from "../../components/ActionDialog";
 import { normalizeTemplateType } from "../../lib/templateTypes";
 import { templateAccent } from "../../lib/templatePalette";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherPressButton } from "./TeacherUI";
 import { TwIcon } from "../../components/TwUI";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
-import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../templates/thinkspell/thinkSpell";
+import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../lib/thinkSpell";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../lib/tutorialState";
+
+function useHostIsMobile(breakpoint = 760) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 export default function HostLive({ guestMode = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { dark, toggleTheme } = useTheme();
+  const hostIsMobile = useHostIsMobile();
+  const [mobileSheet, setMobileSheet] = useState(null);
+  const [codeContinueReady, setCodeContinueReady] = useState(false);
+  // Mobile tutorial: open the participants sheet the moment the welcome step
+  // arrives so the dialog has something to sit above.
+  useEffect(() => {
+    if (!hostIsMobile) return undefined;
+    if (hostTutorialStage === "participants" && !mobileSheet) setMobileSheet("participants");
+    return undefined;
+  }, [hostTutorialStage, hostIsMobile]);
+  // Mobile tutorial: the code step's continue affordance appears 2s after the
+  // code tab is shown, not before it is tapped.
+  useEffect(() => {
+    setCodeContinueReady(false);
+    if (hostTutorialStage !== "code" || !hostIsMobile || mobileSheet !== "code") return undefined;
+    const timer = window.setTimeout(() => setCodeContinueReady(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [hostTutorialStage, hostIsMobile, mobileSheet]);
+  const sheetRef = useRef(null);
+  const sheetDragRef = useRef(null);
+  function onSheetTouchStart(event) {
+    const touch = event.touches?.[0];
+    const el = sheetRef.current;
+    if (!touch || !el) return;
+    sheetDragRef.current = { y: touch.clientY, h: el.offsetHeight };
+  }
+  function onSheetTouchMove(event) {
+    const drag = sheetDragRef.current;
+    const el = sheetRef.current;
+    if (!drag || !el) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const maxH = window.innerHeight - 70;
+    const next = Math.min(maxH, Math.max(drag.h, drag.h + (drag.y - touch.clientY)));
+    el.style.height = `${next}px`;
+    el.style.maxHeight = "none";
+  }
+  function onSheetTouchEnd() {
+    const drag = sheetDragRef.current;
+    const el = sheetRef.current;
+    sheetDragRef.current = null;
+    if (!drag || !el) return;
+    const full = window.innerHeight - 70;
+    const snap = el.offsetHeight >= (drag.h + full) / 2 ? full : drag.h;
+    el.style.height = `${snap}px`;
+    el.style.maxHeight = "none";
+  }
   const [state, setState] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [roster, setRoster] = useState([]);
@@ -165,6 +223,29 @@ export default function HostLive({ guestMode = false }) {
     };
   }, [id, guestMode]);
 
+  // Polling fallback so guest-hosted sessions (and any host whose socket
+  // misses a scores:update) still see scores/competitive points increment
+  // live. Socket remains the primary path; this just re-syncs every 3s while
+  // the session is active.
+  useEffect(() => {
+    if (!state || !["LOBBY", "LIVE", "PAUSED"].includes(state.status)) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const { data } = await api.get(`/sessions/${id}/state`);
+        if (Array.isArray(data.scores)) setScores(data.scores);
+        if (Array.isArray(data.participants)) setRoster(data.participants);
+        if (data.session) {
+          setState((current) => ({ ...(current || {}), ...(data.session || {}) }));
+          if (data.session?.server_now_ms != null) setClockOffsetMs(Date.now() - Number(data.session.server_now_ms));
+        }
+        if (Array.isArray(data.questions) && data.questions.length) {
+          setQuestions((current) => (sameQuestionSnapshot(current, data.questions) ? current : data.questions));
+        }
+      } catch { /* socket remains primary; ignore poll failures */ }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [id, state?.status]);
+
   const currentQ = useMemo(() => state ? questions[Number(state.current_question_index || 0)] || null : null, [state, questions]);
   const isGuestHost = guestMode || !!state?.is_guest_host;
   const isEnded = state?.status === "ENDED";
@@ -190,7 +271,6 @@ export default function HostLive({ guestMode = false }) {
   const expected = useMemo(() => joinMode === "GROUP"
     ? groups.filter((group) => (group.members || []).some((member) => Number(member.connected) === 1)).length
     : connected, [joinMode, groups, connected]);
-  const sortedRoster = useMemo(() => [...roster].sort((a, b) => `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`)), [roster]);
   const displayRoster = useMemo(() => tutorialDemo ? [...roster, ...tutorialBots] : roster, [tutorialDemo, roster, tutorialBots]);
   const sortedDisplayRoster = useMemo(() => [...displayRoster].sort((a, b) => `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`)), [displayRoster]);
   const displayScores = useMemo(() => {
@@ -569,14 +649,14 @@ export default function HostLive({ guestMode = false }) {
     : C.pageBg, [selectedBackground, dark, C.pageBg]);
 
 
-  if (!state) return <div style={{ minHeight: "100vh", background: C.pageBg, display: "grid", placeItems: "center", color: C.muted }}>Loading session…</div>;
+  if (!state) return <div className="grid min-h-[100vh] place-items-center" style={{ background: C.pageBg, color: C.muted }}>Loading session…</div>;
 
   const startLabel = starting ? `Starting in ${countdown}…` : isLive ? "Pause" : isPaused ? "Resume" : "Start";
   const sideBorder = `color-mix(in srgb, ${accent} ${dark ? 72 : 62}%, ${dark ? "#dbeafe" : "#0f172a"})`;
   const joinUrl = `${window.location.origin}/play?code=${encodeURIComponent(state.join_code || "")}`;
   const disableControl = starting || (isLast && isLive && timer.remainingSec === 0);
 
-  return <div className="tw-host-live tw-host-live-v24 tw-host-live-v25" style={{ minHeight: "100vh", backgroundImage: experienceBackground, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", color: C.text, "--host-accent": accent, "--host-soft": `${C.accent}18`, "--host-side-border": sideBorder, "--host-action-icon": dark ? "#fff" : "#0f172a" }}>
+  return <div className="tw-host-live tw-host-live-v24 tw-host-live-v25 min-h-[100vh] bg-cover bg-center bg-fixed" style={{ backgroundImage: experienceBackground, color: C.text, "--host-accent": accent, "--host-soft": `${C.accent}18`, "--host-side-border": sideBorder, "--host-action-icon": dark ? "#fff" : "#0f172a" }}>
     <header className="tw-host-header" style={{ background: C.headerBg, borderColor: C.border }}>
       <div>
         <div className="tw-host-brand"><span>Think</span><span>WAVE</span><small>Host Panel</small></div>
@@ -591,7 +671,7 @@ export default function HostLive({ guestMode = false }) {
       </div>
     </header>
 
-    <main className="tw-host-main tw-host-main-v24">
+    <main className={`tw-host-main tw-host-main-v24${hostIsMobile ? " is-mobile-host" : ""}`}>
       <section className="tw-host-scoreboard" style={{ ...card(C), background: dark ? "#16213c" : "#dbeafe" }}>
         <div className="tw-host-section-title"><h3><TwIcon name="trophy" size={21}/>Top Scores</h3><button type="button" className="tw-host-score-mode-chip" onClick={() => setScoreMode((mode) => mode === "competitive" ? "normal" : "competitive")} title="Switch between competitive and normal points">{scoreMode === "competitive" ? "Competitive points" : "Normal points"}</button></div>
         <Podium leaders={displayLeaders} C={C} scoreMode={scoreMode} onToggleScoreMode={() => setScoreMode((mode) => mode === "competitive" ? "normal" : "competitive")}/>
@@ -600,9 +680,13 @@ export default function HostLive({ guestMode = false }) {
       {!isEnded ? <div className="tw-host-content-grid">
         <section data-tutorial="host-question-content" className="tw-host-question-card" style={{ ...card(C), border: `5px solid color-mix(in srgb, ${accent} 82%, ${C.border})`, boxShadow: `0 10px 0 color-mix(in srgb, ${accent} 44%, ${C.border}), 0 20px 42px ${accent}24` }}>
           <div className="tw-host-question-head">
-            <div><h2>{state.quiz_title || "Quiz"}</h2><span className="tw-host-question-count">{state.template_type === "MATCHING" ? "Batch" : "Question"} {Number(state.current_question_index || 0) + 1} of {questions.length}</span></div>
+            <div data-tutorial="host-quiz-title"><h2>{state.quiz_title || "Quiz"}</h2><span className="tw-host-question-count">{state.template_type === "MATCHING" ? "Batch" : "Question"} {Number(state.current_question_index || 0) + 1} of {questions.length}</span></div>
             <div data-tutorial="host-question-metrics" className="tw-host-question-meta">
-              <StatusPill className={`tw-host-white-metric${displayExpected > 0 && displayAnsweredCount >= displayExpected ? " is-complete" : ""}`} label={`${displayAnsweredCount}/${displayExpected} answered`} kind={displayExpected > 0 && displayAnsweredCount >= displayExpected ? "green" : "blue"}/>
+              {hostIsMobile ? (
+                <StatusPill className={`tw-host-white-metric${displayExpected > 0 && displayAnsweredCount >= displayExpected ? " is-complete" : ""}`} label={`${displayAnsweredCount}/${displayExpected} answered`} kind={displayExpected > 0 && displayAnsweredCount >= displayExpected ? "green" : "blue"}/>
+              ) : (
+                <StatusPill className={`tw-host-white-metric${displayExpected > 0 && displayAnsweredCount >= displayExpected ? " is-complete" : ""}`} label={`${displayAnsweredCount}/${displayExpected} answered`} kind={displayExpected > 0 && displayAnsweredCount >= displayExpected ? "green" : "blue"}/>
+              )}
               <StatusPill className="tw-host-white-metric" label={`${tutorialQuestionMaxPoints(currentQ, normalizeTemplateType(state?.template_type), state?.points_per_question)} pts`} kind="blue"/>
               <span className={`tw-host-pixel-timer${timer.remainingSec <= 3 && isLive ? " is-danger" : timer.remainingSec <= 4 && isLive ? " is-warning" : ""}`} style={{ "--host-accent": "#22c55e" }}><TwIcon name="clock" size={20}/>{fmtTime(timer.remainingSec)}</span>
               {isLive && !isLast && <TeacherPressButton tone="blue" className="tw-host-action-button tw-host-control-white-icon tw-host-next-template" style={{ "--tw-press-face": accent, "--tw-press-base": `color-mix(in srgb, ${accent} 62%, #071024)`, "--tw-press-border": `color-mix(in srgb, ${accent} 58%, #fff)` }} icon="arrowRight" onClick={nextQuestion}>Next</TeacherPressButton>}
@@ -611,33 +695,71 @@ export default function HostLive({ guestMode = false }) {
           <div data-tutorial="host-question-progress" className={`tw-host-progress tw-host-pixel-progress${timer.remainingSec <= 3 && isLive ? " is-danger" : timer.remainingSec <= 4 && isLive ? " is-warning" : ""}`} style={{ "--host-accent": accent }}><div style={{ width: `${Math.round(timer.progress * 100)}%` }}/></div>
           <div className="tw-host-prompt" style={{ background: C.cardBg2, borderColor: C.border }}><h3 style={{ fontSize: fitHostTextSize(currentQ?.prompt, 31, 17) }}>{currentQ?.prompt || "Waiting for the first question"}</h3>{currentQ && <QuestionPreview q={currentQ} templateType={state.template_type} C={C} choiceCounts={displayChoiceCounts}/>}</div>
         </section>
-        <div className="tw-host-right-stack">
+        <div className={`tw-host-right-stack${hostIsMobile ? " is-mobile-hidden" : ""}`}>
           <section data-tutorial="host-panel-participants" className="tw-host-attendance" style={{ ...card(C), border: `3px solid ${sideBorder}` }}>
-            <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span style={{ color: C.muted, fontSize: 12 }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
-            <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div style={{ color: C.muted, textAlign: "center", padding: 24 }}>No participants have joined yet.</div>}</div>
+            <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+            <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No participants have joined yet.</div>}</div>
           </section>
           <section data-tutorial="host-panel-code" className="tw-host-join" style={{ ...card(C), border: `3px solid ${sideBorder}` }}>
-            <div className="tw-host-section-title"><h3><TwIcon name="qr" size={21}/> {isGuestHost ? "Join Code" : "Guest Join"}</h3><b style={{ color: C.accent, letterSpacing: ".18em" }}>{state.join_code}</b></div>
+            <div className="tw-host-section-title"><h3><TwIcon name="qr" size={21}/> {isGuestHost ? "Join Code" : "Guest Join"}</h3><b className="tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</b></div>
             <div className="tw-host-qr"><QRCodeCanvas value={joinUrl} size={116} bgColor="#ffffff" fgColor="#0f172a" includeMargin/></div>
             {joinMode === "GROUP" && state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
           </section>
         </div>
       </div> : <section className="tw-host-ended-shell" style={card(C)}><div className="tw-host-ended-card"><h2>Session ended</h2><TeacherPressButton data-tutorial="host-panel-analytics" tone="blue" icon="chart" className="tw-host-open-analytics" style={{ "--host-accent": accent }} onClick={openAnalyticsFromTutorial}>Open Analytics</TeacherPressButton></div></section>}
+      {hostIsMobile && mobileSheet && (
+        <div className="tw-host-mobile-sheet-backdrop" onClick={() => setMobileSheet(null)}>
+          <div ref={sheetRef} data-tutorial="host-mobile-sheet" className={`tw-host-mobile-sheet${mobileSheet === "code" ? " is-code" : ""}`} role="dialog" aria-label={mobileSheet === "participants" ? "Participants" : "Join code"} onClick={(e) => e.stopPropagation()} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+            <div className="tw-builder-sheet-handle" style={{ touchAction: "none" }} onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd} />
+            <div className="tw-host-mobile-sheet-tabs">
+              <button type="button" className={mobileSheet === "participants" ? "is-active" : ""} onClick={() => setMobileSheet("participants")}>Participants</button>
+              <button type="button" data-tutorial="host-sheet-code-tab" className={mobileSheet === "code" ? "is-active" : ""} onClick={() => setMobileSheet("code")}>Code</button>
+            </div>
+            {mobileSheet === "participants" ? (
+              <div className="tw-host-mobile-sheet-body">
+                <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+                <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No participants have joined yet.</div>}</div>
+              </div>
+            ) : (
+              <div className="tw-host-mobile-sheet-body">
+                <div className="tw-host-section-title"><h3><TwIcon name="qr" size={21}/> {isGuestHost ? "Join Code" : "Guest Join"}</h3><b className="tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</b></div>
+                <div className="tw-host-qr"><QRCodeCanvas value={joinUrl} size={200} bgColor="#ffffff" fgColor="#0f172a" includeMargin/></div>
+                <div className="tw-host-mobile-code-text text-center text-[22px] font-black tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</div>
+                {joinMode === "GROUP" && state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
 
     <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-host-floating-theme" size={22} />
+    {hostIsMobile && !mobileSheet && (
+      <button type="button" className="tw-host-participants-fab" aria-label="Open participants" onClick={() => setMobileSheet("participants")} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+        <TwIcon name="users" size={22} />
+      </button>
+    )}
 
-    {!tabTutorialOpen && hostTutorialStage === "participants" && (
+    {!tabTutorialOpen && hostTutorialStage === "participants" && (hostIsMobile ? (
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-mobile-sheet"]' placement="above" square clickAnywhere allowTargetInteraction={true} onClickAnywhere={() => setHostTutorialStage("code")}>
+        <p><strong>Welcome to your Host Panel!</strong></p>
+        <p>Students or Guests joining your live session will appear here.</p>
+      </ThinkBotTutorial>
+    ) : (
       <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-participants"]' placement="left" square clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }); setHostTutorialStage("code"); }}>
         <p><strong>Welcome to your Host Panel!</strong></p>
         <p>Students or Guests joining your live session will appear here.</p>
       </ThinkBotTutorial>
-    )}
-    {!tabTutorialOpen && hostTutorialStage === "code" && (
+    ))}
+    {!tabTutorialOpen && hostTutorialStage === "code" && (hostIsMobile ? (
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-sheet-code-tab"]' placement="above" square highlightMode="target" allowTargetInteraction={true} clickAnywhere={codeContinueReady} onClickAnywhere={() => setHostTutorialStage("start")}>
+        <p>If someone still needs to join, share this code with them.</p>
+      </ThinkBotTutorial>
+    ) : (
       <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-code"]' placement="left" square clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setHostTutorialStage("start"); }}>
         <p>If someone still needs to join, share this code with them.</p>
       </ThinkBotTutorial>
-    )}
+    ))}
     {!tabTutorialOpen && hostTutorialStage === "start" && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-start"]' placement="below" square highlightMode="target"><p>Once everyone is ready, start the activity from here.</p></ThinkBotTutorial>}
     {!tabTutorialOpen && ["countdown", "question_delay", "ending"].includes(hostTutorialStage) && <ThinkBotTutorial accentColor={accent} />}
     {!tabTutorialOpen && hostTutorialStage === "question" && (
@@ -645,11 +767,15 @@ export default function HostLive({ guestMode = false }) {
         <p className="tw-tutorial-fade-line">This is the question content area. It displays the current question the students are answering on their screens.</p>
       </ThinkBotTutorial>
     )}
-    {!tabTutorialOpen && hostTutorialStage === "question_metrics" && (
+    {!tabTutorialOpen && hostTutorialStage === "question_metrics" && (hostIsMobile ? (
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-quiz-title"]' placement="above" square dialogWidth={300} highlight={false} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
+        <p className="tw-tutorial-fade-line">You can see how many have already answered, how many points the question is worth, and the timer.</p>
+      </ThinkBotTutorial>
+    ) : (
       <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} highlight={false} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
         <p className="tw-tutorial-fade-line">You can see how many have already answered, how many points the question is worth, and the timer.</p>
       </ThinkBotTutorial>
-    )}
+    ))}
     {!tabTutorialOpen && hostTutorialStage === "end" && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-end"]' placement="below" square highlightMode="target"><p>When your class is finished, use <strong>End Session</strong>.</p></ThinkBotTutorial>}
     {!tabTutorialOpen && hostTutorialStage === "analytics" && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-analytics"]' placement="right" dialogWidth={390} highlightMode="target"><p>Ending the session closes live gameplay and saves the session results so you can review them in <strong>Analytics</strong>.</p></ThinkBotTutorial>}
 
@@ -662,21 +788,20 @@ export default function HostLive({ guestMode = false }) {
   </div>;
 }
 
-const Podium = memo(function Podium({ leaders, C, scoreMode = "competitive", onToggleScoreMode }) {
+const Podium = memo(function Podium({ leaders, scoreMode = "competitive", onToggleScoreMode }) {
   const order = [leaders[1], leaders[0], leaders[2]];
   const places = [2, 1, 3];
   return <div className="tw-host-podium">{order.map((row, index) => {
     const place = places[index];
-    const isPracticeBot = Number(row?.participant_id) < 0;
     const name = row ? (row.group_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()) : "Waiting…";
     const value = scoreMode === "competitive" ? Number(row?.competitive_points || 0) : Number(row?.total_points || 0);
     return <div key={place} className={`tw-host-podium-place place-${place}`}>
       <div className="tw-host-trophy"><TwIcon name="trophy" size={54} strokeWidth={2.2}/><span>{place}</span></div>
-      <div className="tw-host-podium-platform"><div className="tw-host-podium-person"><div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={row?.group_name ? "users" : "user"} size={18}/>}</div><b>{name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." style={{ fontStyle: "normal", opacity: .7, fontSize: 11, marginLeft: 4 }}>(Practice)</em> : null}</b></div><button type="button" className="tw-host-podium-points tw-host-score-click" onClick={onToggleScoreMode} title="Click to switch point type">{formatHostScore(value, scoreMode)} pts</button></div>
+      <div className="tw-host-podium-platform"><div className="tw-host-podium-person"><div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={row?.group_name ? "users" : "user"} size={18}/>}</div><b>{name}</b></div><button type="button" className="tw-host-podium-points tw-host-score-click" onClick={onToggleScoreMode} title="Click to switch point type">{formatHostScore(value, scoreMode)} pts</button></div>
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." style={{ fontStyle: "normal", opacity: .7, fontSize: 11, marginLeft: 4 }}>(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" style={{ color: tabColor, fontSize: 12, fontWeight: 800 }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" className="text-[12px] font-extrabold" style={{ color: tabColor }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
 const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choiceCounts = {} }) {
   const cfg = q?.config_json || {};
   const correct = q?.correct_json || {};
@@ -805,7 +930,7 @@ function tutorialWrongChoiceIndex(question, templateType, correctIndex) {
   for (let index = 0; index < optionCount; index += 1) if (index !== correctIndex) return index;
   return correctIndex;
 }
-function StatusPill({ label, kind = "neutral", className = "" }) { const palette = kind === "green" ? { bg: "#22c55e20", fg: "#22c55e", br: "#22c55e55" } : kind === "yellow" ? { bg: "#fbbf2420", fg: "#f59e0b", br: "#fbbf2455" } : kind === "red" ? { bg: "#ef444420", fg: "#ef4444", br: "#ef444455" } : kind === "blue" ? { bg: "#2b6cff20", fg: "#6792ff", br: "#2b6cff55" } : { bg: "#94a3b820", fg: "#94a3b8", br: "#94a3b855" }; return <span className={className} style={{ padding: "5px 11px", borderRadius: 999, fontSize: 12, fontWeight: 850, background: palette.bg, color: palette.fg, border: `1px solid ${palette.br}` }}>{label}</span>; }
+function StatusPill({ label, kind = "neutral", className = "" }) { const palette = kind === "green" ? { bg: "#22c55e20", fg: "#22c55e", br: "#22c55e55" } : kind === "yellow" ? { bg: "#fbbf2420", fg: "#f59e0b", br: "#fbbf2455" } : kind === "red" ? { bg: "#ef444420", fg: "#ef4444", br: "#ef444455" } : kind === "blue" ? { bg: "#2b6cff20", fg: "#6792ff", br: "#2b6cff55" } : { bg: "#94a3b820", fg: "#94a3b8", br: "#94a3b855" }; return <span className={`${className} px-[11px] py-[5px] text-[12px] font-[850] rounded-[999px]`} style={{ background: palette.bg, color: palette.fg, border: `1px solid ${palette.br}` }}>{label}</span>; }
 function formatHostScore(value, mode = "normal") {
   const n = Number(value || 0);
   if (mode === "competitive") return Math.round(n).toLocaleString();

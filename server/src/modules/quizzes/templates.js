@@ -149,7 +149,6 @@ export function scoreThinkSpellBatch({
 
   for (const entry of entries) {
     const text = entry?.text || entry?.word || "";
-    const key = normalizeThinkWordKey(text);
     const path = Array.isArray(entry?.path) ? entry.path.map(Number).filter(Number.isInteger) : [];
     const canonical = matchThinkSpellWord(text, wordBank);
     if (!canonical || acceptedKeys.has(canonical) || !expectedKeys.has(canonical)) continue;
@@ -263,26 +262,4 @@ function normWord(s) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Number(value || 0)));
-}
-
-function levenshtein(a, b) {
-  const s = String(a || "");
-  const t = String(b || "");
-  if (s === t) return 0;
-  if (!s.length) return t.length;
-  if (!t.length) return s.length;
-  const dp = Array.from({ length: s.length + 1 }, () => new Array(t.length + 1).fill(0));
-  for (let i = 0; i <= s.length; i += 1) dp[i][0] = i;
-  for (let j = 0; j <= t.length; j += 1) dp[0][j] = j;
-  for (let i = 1; i <= s.length; i += 1) {
-    for (let j = 1; j <= t.length; j += 1) {
-      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost,
-      );
-    }
-  }
-  return dp[s.length][t.length];
 }

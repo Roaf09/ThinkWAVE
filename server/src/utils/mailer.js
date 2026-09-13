@@ -25,7 +25,7 @@ const mg = env.MAILGUN_API_KEY
       key: env.MAILGUN_API_KEY,
       // Change MAILGUN_BASE_URL to https://api.eu.mailgun.net if your Mailgun
       // domain was created in the EU region.
-      url: env.MAILGUN_BASE_URL || "https://api.mailgun.net",
+      url: env.MAILGUN_BASE_URL,
     })
   : null;
 
@@ -41,7 +41,7 @@ export async function sendMail({ to, subject, text, html }) {
 
   try {
     const info = await mg.messages.create(env.MAILGUN_DOMAIN, {
-      from: env.SMTP_FROM,
+      from: env.MAIL_FROM || env.SMTP_FROM,
       to,
       subject,
       text,

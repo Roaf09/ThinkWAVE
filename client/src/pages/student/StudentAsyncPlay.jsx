@@ -2,36 +2,28 @@
  * client/src/pages/student/StudentAsyncPlay.jsx
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { useTheme } from "../../context/ThemeContext";
 import ThemeIconButton from "../../components/ThemeIconButton";
-import { TwIcon } from "../../components/TwUI";
+import { TwIcon, LoadingDots, gameSurfaceColors } from "../../components/TwUI";
+import { GameMcq } from "../../components/game/GameMcq";
+import { GameTrueFalse } from "../../components/game/GameTrueFalse";
+import { GameTypeAnswer } from "../../components/game/GameTypeAnswer";
+import { GameGuessWord } from "../../components/game/GameGuessWord";
+import { GameMatching } from "../../components/game/GameMatching";
+import { GameCrossword } from "../../components/game/GameCrossword";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { makeSocket } from "../../lib/socket";
 import { QuestionAudioButton } from "../../components/AudioControls";
-import MatchingConnectorGame from "../../components/MatchingConnectorGame";
 import thinkBotLogo from "../../assets/thinkbot-logo.png";
 import { templateAccent } from "../../lib/templatePalette";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
-import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
-import {
-  buildThinkSpellSignature,
-  getPathLinePoints,
-  loadThinkSpellGridState,
-  matchThinkSpellWord,
-  normalizeThinkWordKey,
-  resolveThinkSpellWordBank,
-  validatePathSpellsWord,
-} from "../../templates/thinkspell/thinkSpell";
+
 import soundManager from "../../utils/soundmanager";
 import "./StudentPlay.css";
-
-function LoadingDots({ color = "currentColor" }) {
-  return <span className="tw-loading-dots" aria-hidden="true" style={{ color }}><span>.</span><span>.</span><span>.</span></span>;
-}
 
 // Assignment progress is persisted to localStorage so that if a student
 // closes/loses the tab mid-assignment and comes back later via "Answer Now",
@@ -106,11 +98,7 @@ export default function StudentAsyncPlay() {
   const scheduleTransient=useCallback((callback,delayMs)=>{const timer=setTimeout(()=>{transientTimersRef.current.delete(timer);if(mountedRef.current)callback();},delayMs);transientTimersRef.current.add(timer);return timer;},[]);
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;for(const timer of transientTimersRef.current)clearTimeout(timer);transientTimersRef.current.clear();};},[]);
 
-  const pageBg = dark ? "#0a4eb4" : "#6db9f1";
-  const cardBg = dark ? "#0e1733" : "#ffffff";
-  const cardBor = dark ? "#1e2d55" : "#c7d2fe";
-  const textC = dark ? "#e7e9ee" : "#0f172a";
-  const mutedC = dark ? "#8a9bc4" : "#5a6a9a";
+  const { pageBg, cardBg, cardBor, textC, mutedC } = gameSurfaceColors(dark);
   const selectedBackground = useMemo(() => getSessionBackground(quiz?.background_key), [quiz?.background_key]);
   const assignmentBgStyle = useMemo(() => selectedBackground
     ? {
@@ -475,7 +463,7 @@ function hasAnswer(templateType,answer,q){
 }
 function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
 
-function AsyncShell({ dark, pageBg, backgroundStyle, cardBg, cardBor, textC, mutedC, title, isMuted, onMute, onTheme, children }) {
+function AsyncShell({ dark, pageBg, backgroundStyle, textC, title, isMuted, onMute, onTheme, children }) {
   const hasBackground = Boolean(backgroundStyle?.backgroundImage);
   return (
     <div style={{ minHeight: "100vh", ...(backgroundStyle || { background: pageBg }), color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
@@ -488,219 +476,60 @@ function AsyncShell({ dark, pageBg, backgroundStyle, cardBg, cardBor, textC, mut
   );
 }
 
-function trimText(v) { return String(v || "").trim(); }
-function normalizeChoiceOption(option, index = 0) {
-  if (option && typeof option === "object") return { id: String(option.id || `option-${index + 1}`), text: option.text ?? option.label ?? "", image: option.image ?? "" };
-  return { id: `option-${index + 1}`, text: String(option ?? ""), image: "" };
-}
-function choiceValue(option) { return option?.id || option?.text || ""; }
-
 function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = false }) {
   const cfg = q?.config_json || {};
   if (templateType === TEMPLATE_TYPES.MCQ) return <McqTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.TRUE_FALSE) return <TrueFalseTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.MATCHING) return <MatchingTemplate q={q} cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.GUESS_WORD_4PICS) return <GuessWord4PicsTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
-  if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <BookwormThinkSpellTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} />;
+  if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <GameCrossword config={cfg} correct={{}} store={value} onStore={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} initExtra={{ words: [] }} summaryHint="Continue when the next question unlocks." totalPoints={null} />;
   return <TypeAnswerTemplate value={value} onChange={onChange} disabled={disabled} />;
 }
 
 function McqTemplate({ cfg, value, onChange, disabled }) {
-  const opts = Array.isArray(cfg.options) ? cfg.options.map(normalizeChoiceOption) : [];
-  const labels = "ABCDEFGHIJ".split("");
-  const isModifiedMcq = cfg.mcqMode === "MODIFIED";
-  const twoMode = cfg.answerMode === "TWO";
-  const selectedList = Array.isArray(value.choices) ? value.choices : [value.choice].filter(Boolean);
-  function toggleChoice(choice) {
-    if (!twoMode) return onChange({ choice });
-    if (selectedList.includes(choice)) return onChange({ choices: selectedList.filter((x) => x !== choice) });
-    if (selectedList.length >= 2) return onChange({ choices: [selectedList[1], choice] });
-    return onChange({ choices: [...selectedList, choice] });
-  }
   return (
-    <div className={`quiz-choices ${isModifiedMcq ? "modified-mcq-choices" : ""}`}>
-      {opts.map((o, i) => {
-        const choice = choiceValue(o);
-        const active = selectedList.includes(choice) || selectedList.includes(o.text);
-        const textLen = trimText(o.text).length;
-        return <button key={o.id || i} type="button" className={`choice-btn ${isModifiedMcq ? "modified-mcq-choice" : ""} ${active ? "active" : ""}`} onClick={() => !disabled && toggleChoice(choice)} disabled={disabled}><span className="choice-badge">{labels[i] || ""}</span><span className="choice-content">{o.image ? <img src={o.image} alt="" className="choice-img" /> : null}{(trimText(o.text) || !o.image) ? <span className="choice-text" style={{ fontSize: textLen > 90 ? 13 : textLen > 55 ? 14 : undefined }}>{trimText(o.text) || `Option ${labels[i] || i + 1}`}</span> : null}</span></button>;
-      })}
-    </div>
+    <GameMcq
+      options={cfg.options}
+      mcqMode={cfg.mcqMode}
+      answerMode={cfg.answerMode}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      lock="lock-all"
+      shuffleSeed={null}
+    />
   );
 }
 
 function TrueFalseTemplate({ cfg, value, onChange, disabled }) {
-  const opts = Array.isArray(cfg.options) && cfg.options.length ? cfg.options : ["True", "False"];
-  return <div className="quiz-choices true-false-choices">{opts.map((o, i) => <button key={i} type="button" className={`choice-btn ${value.choice === o ? "active" : ""}`} onClick={() => !disabled && onChange({ choice: o })} disabled={disabled}><span className="choice-badge">{i === 0 ? "T" : "F"}</span><span className="choice-text">{o}</span></button>)}</div>;
+  return <GameTrueFalse options={cfg.options} value={value} onChange={onChange} disabled={disabled} lock="lock-all" />;
 }
 
 function TypeAnswerTemplate({ value, onChange, disabled }) {
-  const text = String(value.text || "");
-  const MAX = 255;
-  return <div className="type-wrap"><div className="type-center-shell"><p className="type-label">Type your identification answer below</p><div className={`type-input-row${disabled ? " locked" : ""}`}><input className="type-input" value={text} onChange={(e) => onChange({ text: e.target.value.slice(0, MAX) })} placeholder="Start typing..." disabled={disabled} autoFocus autoComplete="off" spellCheck={false} maxLength={MAX} />{!disabled && text && <button type="button" className="type-clear-btn" onClick={() => onChange({ text: "" })}>✕</button>}</div><div className="type-count">{text.length} / {MAX}</div></div></div>;
-}
-
-function matchingOrder(length, shouldShuffle, seedText) {
-  const order = Array.from({ length }, (_, index) => index);
-  if (!shouldShuffle || length < 2) return order;
-  let seed = 2166136261;
-  for (const ch of String(seedText || "matching")) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
-  const random = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  for (let i = order.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
-  if (order.every((value, index) => value === index)) order.push(order.shift());
-  return order;
+  return <GameTypeAnswer value={value.text} onChange={(text) => onChange({ text })} disabled={disabled} />;
 }
 
 function MatchingTemplate({ q, cfg, value, onChange, disabled }) {
-  const map = Object.fromEntries((Array.isArray(value?.pairs) ? value.pairs : []).map((pair) => [Number(pair.aIndex), Number(pair.bIndex)]));
-  function updateMap(nextMap) {
-    const pairs = Object.entries(nextMap).map(([aIndex, bIndex]) => ({ aIndex: Number(aIndex), bIndex: Number(bIndex) })).sort((a, b) => a.aIndex - b.aIndex);
-    onChange({ ...(value || {}), pairs });
-  }
-  return <MatchingConnectorGame config={cfg} valueMap={map} onChange={updateMap} disabled={disabled} questionKey={`${q?.id || q?.prompt || "assigned-matching"}:${cfg?.shuffleSeed || "assigned"}`} />;
+  return (
+    <GameMatching
+      config={cfg}
+      pairs={value?.pairs}
+      onPairs={(pairs) => onChange({ ...(value || {}), pairs })}
+      disabled={disabled}
+      shuffleKey={`${q?.id || q?.prompt || "assigned-matching"}:${cfg?.shuffleSeed || "assigned"}`}
+    />
+  );
 }
 function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
-  const [zoomedImage, setZoomedImage] = useState(null);
-  const images = Array.isArray(cfg.images) ? cfg.images : [];
-  const target = String(cfg.target ?? "");
-  const answerLen = Math.max(1, countAnswerLetters(target));
-  useEffect(() => {
-    if (value.mode === "pics4" && value.target === target && Array.isArray(value.bank) && value.bank.length) return;
-    onChange({ mode: "pics4", target, text: "", bank: buildLetterBank(target, Number(cfg.dummyLetters || 6)) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg.dummyLetters, target]);
-  const bank = Array.isArray(value.bank) ? value.bank.map((x, i) => typeof x === "string" ? { id: i, ch: x } : x) : [];
-  const built = String(value.text || "");
-  const usedIds = (() => { const ids = []; const chars = built.split(""); const avail = bank.map((b) => ({ ...b, taken: false })); for (const ch of chars) { const t = avail.find((tile) => !tile.taken && tile.ch === ch); if (t) { t.taken = true; ids.push(t.id); } } return new Set(ids); })();
-  function tap(id, ch) { if (disabled || usedIds.has(id) || built.length >= answerLen) return; onChange({ ...value, text: `${built}${ch}` }); }
-  const guessBankSignature = bank.map((tile) => `${tile.id}:${tile.ch}`).join("|");
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (disabled || event.ctrlKey || event.metaKey || event.altKey) return;
-      const targetEl = event.target;
-      if (targetEl instanceof HTMLElement && (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA" || targetEl.isContentEditable)) return;
-      if (event.key === "Backspace") {
-        if (built) { event.preventDefault(); onChange({ ...value, text: built.slice(0, -1) }); }
-        return;
-      }
-      if (!/^[a-zA-Z]$/.test(event.key) || built.length >= answerLen) return;
-      const pressed = event.key.toUpperCase();
-      const tile = bank.find((candidate) => !usedIds.has(candidate.id) && String(candidate.ch || "").toUpperCase() === pressed);
-      if (!tile) return;
-      event.preventDefault();
-      onChange({ ...value, text: `${built}${tile.ch}` });
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disabled, answerLen, guessBankSignature, built]);
-  return <div className="pics4-wrap simple-mode"><div className="pics4-grid compact-grid">{[0,1,2,3].map((i) => <div key={i} className="pics4-frame compact-frame">{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} role="button" tabIndex={0} onClick={() => setZoomedImage(images[i])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setZoomedImage(images[i]); }} /> : <span className="pics4-placeholder">?</span>}</div>)}</div><div className="pics4-answer-shell"><p className="pics4-answer-label">Tap letters to build the word.</p><div className="spell-wrap"><div className="spell-display">{Array.from({ length: answerLen }).map((_, i) => <div key={i} className="spell-char">{built[i] || "•"}</div>)}</div><div className="spell-bank">{bank.map(({ id, ch }) => <button key={id} type="button" className={`spell-tile${usedIds.has(id) ? " used" : ""}`} onClick={() => tap(id, ch)} disabled={disabled || usedIds.has(id) || built.length >= answerLen}>{ch}</button>)}</div><div className="spell-controls"><button type="button" className="spell-ctrl back" onClick={() => onChange({ ...value, text: built.slice(0, -1) })} disabled={disabled || !built}>Back</button><button type="button" className="spell-ctrl clr" onClick={() => onChange({ ...value, text: "" })} disabled={disabled || !built}>Clear</button></div></div></div>{zoomedImage && <div className="sp-image-zoom-backdrop" role="dialog" aria-modal="true" onClick={() => setZoomedImage(null)}><div className="sp-image-zoom-card" onClick={(event) => event.stopPropagation()}><button type="button" className="sp-image-zoom-close" aria-label="Close image" onClick={() => setZoomedImage(null)}><TwIcon name="close" size={22}/></button><img src={zoomedImage} alt="Zoomed clue" /></div></div>}</div>;
+  return (
+    <GameGuessWord
+      images={cfg.images}
+      target={String(cfg.target ?? "")}
+      dummyLetters={cfg.dummyLetters}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+    />
+  );
 }
 
-function straightAsyncThinkSpellPath(startIndex, endIndex, gridSize) {
-  const size = Math.max(1, Number(gridSize || 1));
-  const start = Number(startIndex);
-  const end = Number(endIndex);
-  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
-  const startRow = Math.floor(start / size);
-  const startCol = start % size;
-  const endRow = Math.floor(end / size);
-  const endCol = end % size;
-  const rowDelta = endRow - startRow;
-  const colDelta = endCol - startCol;
-  if (rowDelta !== 0 && colDelta !== 0 && Math.abs(rowDelta) !== Math.abs(colDelta)) return null;
-  const steps = Math.max(Math.abs(rowDelta), Math.abs(colDelta));
-  if (steps === 0) return [start];
-  const rowStep = Math.sign(rowDelta);
-  const colStep = Math.sign(colDelta);
-  return Array.from({ length: steps + 1 }, (_, step) => (startRow + rowStep * step) * size + (startCol + colStep * step));
-}
-
-function BookwormThinkSpellTemplate({ cfg, value, onChange, disabled, questionId, timeUp = false }) {
-  const gridSize = Math.min(12, Math.max(5, Number(cfg.gridSize ?? 8) || 8));
-  const minWordLength = Math.min(8, Math.max(2, Number(cfg.minWordLength ?? 3) || 3));
-  const wordBank = resolveThinkSpellWordBank({ config: cfg, correct: {} });
-  const sig = buildThinkSpellSignature({ questionId, gridSize, words: wordBank });
-  const draggingRef = useRef(false);
-  const gridShellRef = useRef(null);
-  const pointerIdRef = useRef(null);
-  const moveFrameRef = useRef(0);
-  const pendingPointRef = useRef(null);
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  useEffect(() => {
-    if (value?.mode === "wordhunt-batch" && value.sig === sig && Array.isArray(value.grid) && value.grid.length) return;
-    const initial = loadThinkSpellGridState({ config: cfg, correct: {}, questionId, priorPayload: null });
-    onChange({ mode: "wordhunt-batch", sig, grid: initial.grid, gridSize: initial.gridSize, wordBank, words: [], foundEntries: [], selected: [], built: "" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig]);
-  const grid = Array.isArray(value.grid) ? value.grid : [];
-  const activeGridSize = Number(value.gridSize || gridSize);
-  const selected = Array.isArray(value.selected) ? value.selected : [];
-  const selectedSet = new Set(selected);
-  const foundEntries = Array.isArray(value.foundEntries) ? value.foundEntries : [];
-  const foundSet = new Set(foundEntries.map((entry) => normalizeThinkWordKey(entry.text || entry.word || "")));
-  const foundPathSet = new Set(foundEntries.flatMap((entry) => Array.isArray(entry.path) ? entry.path.map(Number) : []));
-  const built = selected.map((cell) => grid[cell] || "").join("");
-  const cellGap = 8;
-  function patch(next) {
-    const merged = { ...(valueRef.current || {}), ...next };
-    valueRef.current = merged;
-    onChange(merged);
-  }
-  function addIndex(cell) {
-    if (disabled || !grid[cell]) return;
-    const currentSelected = Array.isArray(valueRef.current?.selected) ? valueRef.current.selected : [];
-    if (!currentSelected.length) return patch({ selected: [cell], built: String(grid[cell] || "") });
-    const nextSelected = straightAsyncThinkSpellPath(currentSelected[0], cell, activeGridSize);
-    if (!nextSelected || nextSelected.some((cellIndex) => !grid[cellIndex])) return;
-    patch({ selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") });
-  }
-  function finishSelection() {
-    const pointerId = pointerIdRef.current;
-    if (pointerId !== null && gridShellRef.current?.hasPointerCapture?.(pointerId)) {
-      try { gridShellRef.current.releasePointerCapture(pointerId); } catch {}
-    }
-    pointerIdRef.current = null;
-    draggingRef.current = false;
-    const path = Array.isArray(valueRef.current?.selected) ? [...valueRef.current.selected] : [];
-    const text = path.map((cell) => grid[cell] || "").join("");
-    const matchedKey = matchThinkSpellWord(text, wordBank);
-    const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path, word: text });
-    const latestFound = Array.isArray(valueRef.current?.foundEntries) ? valueRef.current.foundEntries : [];
-    const latestFoundSet = new Set(latestFound.map((entry) => normalizeThinkWordKey(entry.text || entry.word || "")));
-    if (matchedKey && pathValid && !latestFoundSet.has(matchedKey)) {
-      const nextFound = [...latestFound, { text, path }];
-      return patch({ foundEntries: nextFound, words: nextFound, selected: [], built: "" });
-    }
-    patch({ selected: [], built: "" });
-  }
-  function handleGridPointerMove(e) {
-    if (!draggingRef.current || disabled) return;
-    pendingPointRef.current = { x: e.clientX, y: e.clientY };
-    if (moveFrameRef.current) return;
-    moveFrameRef.current = requestAnimationFrame(() => {
-      moveFrameRef.current = 0;
-      const point = pendingPointRef.current;
-      if (!point || !draggingRef.current) return;
-      const target = document.elementFromPoint(point.x, point.y)?.closest?.("[data-bword-index]");
-      if (target) addIndex(Number(target.dataset.bwordIndex));
-    });
-  }
-  useEffect(() => () => {
-    if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
-  }, []);
-
-  const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
-  const foundLines = foundEntries
-    .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
-    .filter((points) => points.length > 1);
-  const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
-  return <div className="bword-wrap"><div className="bword-game-panel"><div className="bword-hud"><div className="bword-hud-stat"><span className="bword-hud-label">Found</span><span className="bword-hud-value">{foundEntries.length}/{wordBank.length}</span></div></div>{wordBank.length > 0 && <div className="bword-quest-panel"><div className="bword-quest-title">Word goals</div>{cfg.showWordList !== false ? <div className="bword-quest-list">{wordBank.map((word) => { const key = normalizeThinkWordKey(word); const done = foundSet.has(key); return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>; })}</div> : <div className="bword-quest-hidden">Find the hidden words in the grid.</div>}</div>}<div ref={gridShellRef} className="bword-grid-shell" onPointerMove={handleGridPointerMove} onPointerUp={finishSelection} onPointerCancel={finishSelection}><div className="bword-grid" style={{ gridTemplateColumns: `repeat(${activeGridSize}, minmax(0, 1fr))`, gap: cellGap }}>{grid.map((ch, cell) => <button key={`${sig}-${cell}`} type="button" className={`bword-cell${selectedSet.has(cell) ? " selected" : ""}${foundPathSet.has(cell) ? " found" : ""}`} onPointerDown={(e) => { if (disabled) return; e.preventDefault(); pointerIdRef.current = e.pointerId; gridShellRef.current?.setPointerCapture?.(e.pointerId); draggingRef.current = true; patch({ selected: [cell], built: String(grid[cell] || "") }); }} onPointerEnter={() => draggingRef.current && addIndex(cell)} disabled={disabled} data-bword-index={cell}>{ch}</button>)}</div>{(foundLines.length > 0 || linePoints.length > 1) && <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">{foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}{linePoints.length > 1 && <polyline points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}</svg>}</div><div className="bword-built-row"><div className="spell-display bword-current-word">{(built || "•").split("").map((letter, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: letter === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{letter}</div>)}</div><div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div></div>{timeUp && <div className="bword-summary bword-summary-inside"><div className="bword-summary-title">Time&apos;s up!</div><div className="bword-summary-meta">You found <b>{foundEntries.length}</b> word{foundEntries.length === 1 ? "" : "s"}.</div><div className="bword-summary-hint">Continue when the next question unlocks.</div></div>}</div></div>;
-}

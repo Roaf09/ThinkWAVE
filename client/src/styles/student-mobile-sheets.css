@@ -1,0 +1,704 @@
+/* ThinkWAVE styles — student-mobile-sheets.css (source styles.css lines 5606-6048). Import order in main.jsx must not change. */
+/* Revision 10.29 — student progression, goals, achievements and richer classes. */
+.tw-student-progression-shell{display:grid;gap:14px}
+.tw-student-level-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tw-student-progress-actions{display:flex;gap:9px;align-items:center}
+.tw-level-row{display:flex;align-items:center;gap:0;max-width:760px}
+.tw-level-orb{width:72px;height:72px;border-radius:999px;border:4px solid;display:grid;place-items:center;text-align:center;line-height:1;font-size:11px;font-weight:900;z-index:2;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 9%,transparent);box-shadow:0 7px 0 rgba(15,23,42,.16)}
+.tw-level-orb strong{font-size:25px}
+.tw-level-orb-silver{width:52px;height:52px;border-width:6px;box-shadow:0 5px 0 rgba(15,23,42,.14)}
+.tw-level-orb-silver strong{font-size:19px}
+.tw-level-track{height:36px;flex:1;margin-left:-8px;border:3px solid;border-radius:0 999px 999px 0;position:relative;overflow:hidden;box-shadow:inset 0 3px 6px rgba(15,23,42,.16)}
+.tw-level-track-compact{height:26px;max-width:340px}
+.tw-level-track-compact>b{font-size:11px}
+.tw-level-track>span{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--tw-brand),#22c55e);border-radius:inherit;transition:width .48s cubic-bezier(.16,1,.3,1)}
+.tw-level-track>b{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:var(--tw-on-brand);text-shadow:0 1px 3px rgba(0,0,0,.55);z-index:1}
+.tw-favorite-achievements{display:flex;gap:8px;flex-wrap:wrap}
+.tw-favorite-achievements span{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(245,158,11,.12);border:2px solid rgba(245,158,11,.42);font-size:11px;font-weight:900}
+.tw-goal-reset{font-size:11px;font-weight:900;opacity:.65;text-transform:uppercase;letter-spacing:.08em}
+.tw-goal-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tw-student-goal-card{border:3px solid;border-radius:16px;padding:13px;display:grid;gap:8px;box-shadow:0 5px 0 rgba(15,23,42,.13);transition:transform .2s ease,box-shadow .2s ease}
+.tw-student-goal-card.is-complete{animation:twGoalCompletePulse .6s cubic-bezier(.16,1,.3,1)}
+.tw-goal-reward{font-size:11px;font-weight:950;color:var(--tw-warn);white-space:nowrap}
+@keyframes twGoalCompletePulse{0%{transform:scale(.97)}45%{transform:scale(1.025);box-shadow:0 0 0 5px rgba(34,197,94,.15),0 7px 0 rgba(15,23,42,.13)}100%{transform:scale(1)}}
+.tw-achievement-state{font-size:9px;text-transform:uppercase;letter-spacing:.09em;font-weight:1000;opacity:.68;margin-bottom:5px}
+.tw-achievement-card.is-in-progress .tw-achievement-track span{animation:twAchievementProgressGlow 1.1s ease-out}
+@keyframes twAchievementProgressGlow{0%{filter:brightness(1.8);box-shadow:0 0 18px rgba(43,108,255,.75)}100%{filter:none;box-shadow:none}}
+.tw-achievement-picker{display:grid;gap:7px}
+.tw-achievement-favorite{border:2px solid rgba(127,127,127,.28);border-radius:10px;padding:7px 10px;background:transparent;color:inherit;font:inherit;font-size:11px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.tw-achievement-favorite.is-selected{background:rgba(245,158,11,.15);border-color:var(--tw-warn);color:var(--tw-warn)}
+.tw-achievement-favorite:disabled{opacity:.35;cursor:not-allowed}
+.tw-achievement-unlock-toast{position:fixed;right:24px;top:24px;z-index:5000;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:16px;background:#111c33;color:var(--tw-on-brand);border:3px solid #fbbf24;box-shadow:0 8px 0 #7c4a03,0 20px 44px rgba(0,0,0,.25);animation:twAchievementToast 3.6s cubic-bezier(.16,1,.3,1) forwards}
+.tw-achievement-unlock-toast small,.tw-achievement-unlock-toast strong{display:block}.tw-achievement-unlock-toast small{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#fcd34d}.tw-achievement-unlock-toast strong{margin-top:3px}
+@keyframes twAchievementToast{0%{opacity:0;transform:translateX(35px) scale(.96)}10%,78%{opacity:1;transform:translateX(0) scale(1)}85%{filter:brightness(1.35)}100%{opacity:0;transform:translate(-180px,115px) scale(.28);filter:none}}
+.tw-student-class-surface{transition:background .18s ease!important}
+.tw-student-class-card-head{width:100%;border:0;background:transparent;padding:16px;cursor:pointer;font-family:inherit;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto 28px;gap:14px;align-items:center}
+.tw-student-class-subject{font-weight:950;font-size:15px;transition:font-size .3s cubic-bezier(.16,1,.3,1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw-student-class-head-fade{display:grid;gap:2px;overflow:hidden;max-height:40px;opacity:1;transition:max-height .3s ease,opacity .26s ease,margin-top .3s ease;margin-top:2px}
+.tw-student-class-card-head.is-expanded .tw-student-class-subject{font-size:21px}
+.tw-student-class-card-head.is-expanded .tw-student-class-head-fade{max-height:0;opacity:0;margin-top:0}
+.tw-class-card-summary{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.tw-class-card-summary span{padding:5px 8px;border-radius:999px;background:rgba(127,127,127,.10);border:1px solid rgba(127,127,127,.24);font-size:10px;font-weight:900;white-space:nowrap}
+.tw-student-class-detail{padding:16px}
+.tw-student-class-card-slot{opacity:1;max-height:2400px;transform:scale(1);transition:opacity .32s ease,max-height .38s ease,transform .32s ease,margin .32s ease;overflow:hidden}
+.tw-student-class-card-slot.is-faded{opacity:0;max-height:0;transform:scale(.97);margin:0!important;pointer-events:none}
+.tw-student-class-header-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.tw-student-class-header-grid>div{padding:11px;border-radius:13px;background:rgba(127,127,127,.08);border:2px solid rgba(127,127,127,.18);display:grid;gap:4px}.tw-student-class-header-grid small{font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.62;font-weight:900}.tw-student-class-header-grid strong{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.tw-student-class-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:15px}
+@media(max-width:900px){.tw-goal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tw-student-class-header-grid,.tw-student-class-progress{grid-template-columns:1fr 1fr}.tw-student-class-card-head{grid-template-columns:1fr 24px}.tw-class-card-summary{grid-column:1/-1;justify-content:flex-start}}
+@media(max-width:600px){.tw-goal-grid,.tw-student-class-header-grid,.tw-student-class-progress{grid-template-columns:1fr}.tw-level-orb{width:62px;height:62px}.tw-level-track{height:32px}}
+.tw-builder-edge-drag-hint small{display:grid;gap:4px;margin-top:12px;padding:10px;border-radius:14px;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 10%,rgba(255,255,255,.82));border:2px solid color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 52%,transparent);font-size:9px;letter-spacing:.04em;opacity:.5;transform:scale(.9);transition:opacity .18s ease,transform .22s cubic-bezier(.16,1,.3,1)}
+.tw-builder-edge-drag-hint small b{font-size:10px;line-height:1.2;max-height:2.4em;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0}
+.tw-builder-edge-drag-hint.is-near small{opacity:.95;transform:scale(1)}
+
+/* Student mobile dashboard revision v11.7 */
+.tw-desktop-progress-actions{display:flex;gap:9px;align-items:center}
+.tw-mobile-trophy-trigger{display:none}
+.tw-mobile-progress-modal-backdrop{position:fixed;inset:0;z-index:6000;display:grid;place-items:center;background:rgba(3,7,18,.45);backdrop-filter:blur(8px);padding:20px}
+.tw-mobile-progress-modal{width:min(94vw,720px);max-height:85vh;overflow:auto;border:3px solid;border-radius:24px;padding:20px;position:relative}
+.tw-mobile-progress-close{position:absolute;right:14px;top:14px;border:0;background:transparent;color:inherit;cursor:pointer}
+.tw-mobile-progress-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}
+.tw-mobile-progress-title h3{margin:0;font-weight:950}
+.tw-mobile-progress-title button{border:0;background:transparent;color:inherit;cursor:pointer}
+.tw-achievement-card{position:relative}
+.tw-achievement-card-trophy{position:absolute;right:8px;top:8px;border-radius:999px;border:1px solid rgba(245,158,11,.4);background:rgba(245,158,11,.12);color:var(--tw-warn);width:25px;height:25px;display:grid;place-items:center;cursor:pointer}
+@media(max-width:1100px){
+ .tw-student-overview-grid{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+ .tw-mobile-trophy-trigger{display:inline-flex}
+ .tw-desktop-progress-actions{display:none}
+ .tw-student-level-head{order:2}
+ .tw-level-row{order:1}
+ .tw-student-progression-shell{display:flex;flex-direction:column}
+ .tw-student-level-head{width:100%}
+}
+/* Bounded to 701-900px only - below 700px the single-column rule further up
+   (".tw-student-work-grid{grid-template-columns:1fr}" at max-width:700px)
+   is meant to win, but this used to be a plain max-width:900px rule, so it
+   silently re-forced 2 columns all the way down to phone widths too. At
+   ~390px that squeezed each card to ~135px, wrapping "Ready to answer"
+   onto 3 lines. */
+@media(min-width:701px) and (max-width:900px){
+ .tw-student-work-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+.tw-achievement-modal-scroll{display:grid;gap:14px;max-height:60vh;overflow-y:auto;padding-right:6px;overscroll-behavior:contain}
+
+/* Live Sessions tab, mobile: "Host Live" setup modal (class picker +
+   background + mobile/desktop preview) becomes scrollable, sits with a gap
+   below the fixed mobile header instead of running under it, and its
+   portrait mobile-preview thumbnail scales taller while keeping its 9:16
+   ratio. The pill-shaped bottom tab bar is hidden via .tw-mobile-modal-open
+   (see rule above) while this modal is open. */
+@media(max-width:760px){
+  .tw-host-launch-backdrop{
+    align-items:flex-start!important;
+    padding-top:calc(56px + env(safe-area-inset-top,0px) + 14px)!important;
+    overflow-y:auto!important;
+  }
+  .tw-host-launch-modal{
+    max-height:calc(100dvh - 56px - env(safe-area-inset-top,0px) - 28px)!important;
+    overflow-y:auto!important;
+  }
+  .tw-host-preview-mobile{
+    height:min(300px,38vh)!important;
+    max-height:none!important;
+    width:auto!important;
+    aspect-ratio:9/16!important;
+  }
+}
+
+/* Host Live setup modal, mobile: smaller intro copy under the previews. */
+@media(max-width:760px){
+  .tw-host-launch-copy p{font-size:13px!important;line-height:1.55!important}
+}
+
+/* Solo/Group mode row is hidden for guest and Basic-plan users on every
+   viewport (they only ever use Solo; joinMode already defaults to SOLO). */
+.tw-host-mode-row-basic,.tw-host-mode-row-guest{display:none!important}
+
+/* Host Live setup modal, mobile: authoritative background-picker sizing.
+   Placed last so it wins over any earlier/legacy breakpoint rules touching
+   the same selectors. Shows 3 backgrounds at a time, scaled up, in one row
+   (matching the desktop layout) instead of 2 smaller ones. */
+@media(max-width:760px){
+  .tw-session-background-track,
+  .tw-session-background-track-inner{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+  .tw-session-background-card:nth-child(n+4){display:none!important}
+}
+
+/* Revision 11.16 — Quiz Builder desktop popup + mobile sheets. */
+.tw-builder-settings-anchor{position:relative;display:grid;place-items:center}
+.tw-builder-settings-catcher{position:fixed;inset:0;z-index:1299;background:transparent;cursor:default}
+.tw-builder-settings-popup{
+  position:absolute;top:calc(100% + 10px);left:0;z-index:1300;
+  min-width:270px;max-width:min(340px,calc(100vw - 32px));
+  background:var(--tw-on-brand);border:1px solid var(--tw-sheet-border);border-radius:14px;
+  box-shadow:0 20px 45px rgba(15,23,42,.18);
+  padding:8px;display:grid;gap:2px;
+  animation:twBuilderSettingsPop .18s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes twBuilderSettingsPop{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.tw-builder-settings-row{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  width:100%;padding:10px 12px;border:0;background:transparent;border-radius:10px;
+  cursor:pointer;font:inherit;font-size:13.5px;font-weight:800;color:var(--tw-ink);text-align:left;
+  transition:background .14s ease;
+}
+.tw-builder-settings-row:hover{background:rgba(43,108,255,.08)}
+.tw-builder-settings-row-label{flex:1;min-width:0}
+.tw-builder-bare-icon{border:0!important;background:transparent!important;box-shadow:none!important}
+.tw-builder-flat-btn.is-bare{border:0!important;background:transparent!important;box-shadow:none!important;color:var(--tw-on-brand)!important}
+.tw-builder-flat-btn.is-bare:hover:not(:disabled){background:rgba(255,255,255,.16)!important;color:var(--tw-on-brand)!important}
+.tw-builder-flat-btn.is-bare.tone-red{color:var(--tw-on-brand)!important}
+.tw-builder-flat-btn.is-bare.tone-red:hover:not(:disabled){background:rgba(239,68,68,.32)!important;color:var(--tw-on-brand)!important}
+.tw-builder-ellipsis{font-size:23px;font-weight:1000;line-height:1;letter-spacing:1px;display:inline-block;transform:translateY(-2px)}
+.tw-builder-mobile-topbar{flex-wrap:nowrap!important}
+.tw-builder-mobile-title{max-width:100%;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;display:block!important}
+.tw-builder-title-input{color:var(--tw-on-brand)}
+.tw-builder-title-input::placeholder{color:rgba(255,255,255,.65)}
+.tw-builder-mobile-pager{display:flex;justify-content:center;padding:10px 16px;border-bottom:1px solid rgba(127,127,127,.18)}
+.tw-builder-pill-badge{
+  appearance:none;border:1px solid rgba(43,108,255,.30);background:var(--tw-on-brand);color:var(--tw-ink);
+  border-radius:999px;padding:8px 20px;font:inherit;font-weight:900;font-size:13.5px;cursor:pointer;
+  box-shadow:0 6px 16px rgba(15,23,42,.10);transition:transform .15s ease,box-shadow .15s ease;
+}
+.tw-builder-pill-badge:hover{transform:translateY(-1px);box-shadow:0 9px 20px rgba(15,23,42,.14)}
+.tw-builder-pill-badge-text{display:inline-block;animation:twSlideLeftIn 220ms cubic-bezier(.22,1,.36,1)}
+.tw-builder-pager-bar{transition:padding-right .34s cubic-bezier(.22,1,.36,1)}
+.tw-builder-pager-bar.has-question-strip{padding-right:340px!important}
+@media(max-width:1050px){.tw-builder-pager-bar.has-question-strip{padding-right:16px!important}}
+.tw-builder-question-count-animated{display:inline-block;animation:twSlideLeftIn 220ms cubic-bezier(.22,1,.36,1)}
+.tw-builder-sheet-backdrop{
+  position:fixed;inset:0;z-index:2000;background:rgba(3,8,24,.55);
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:twSheetFade .22s ease both;
+}
+@keyframes twSheetFade{from{opacity:0}to{opacity:1}}
+.tw-builder-bottom-sheet{
+  width:100%;max-height:50vh;overflow-y:auto;background:var(--tw-on-brand);color:var(--tw-ink);
+  border-radius:20px 20px 0 0;padding:8px 14px 22px;
+  box-shadow:0 -18px 50px rgba(0,0,0,.25);
+  animation:twSheetUp .28s cubic-bezier(.22,1,.36,1) both;
+  display:grid;gap:2px;align-content:start;
+}
+@keyframes twSheetUp{from{opacity:.4;transform:translateY(48px)}to{opacity:1;transform:none}}
+.tw-builder-sheet-handle{width:44px;height:5px;border-radius:999px;background:var(--tw-line);margin:8px auto 12px}
+.tw-builder-overflow-title-row,.tw-builder-overflow-row{
+  display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;
+  border:0;background:transparent;border-radius:12px;font:inherit;font-weight:850;font-size:14.5px;
+  cursor:pointer;text-align:left;color:var(--tw-ink);transition:background .14s ease;
+}
+.tw-builder-overflow-title-row:hover,.tw-builder-overflow-row:hover{background:rgba(43,108,255,.07)}
+.tw-builder-overflow-title-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:950}
+.tw-builder-overflow-row.is-danger{color:#dc2626}
+.tw-builder-overflow-row.is-danger:hover{background:rgba(239,68,68,.08)}
+.tw-builder-mobile-question{display:grid;gap:16px;min-width:0}
+.tw-builder-mobile-shell{background:transparent!important}
+.tw-builder-meta-sidebyside{grid-template-columns:1fr 1fr!important;gap:10px!important}
+@media(max-width:900px){
+  .tw-builder-meta-sidebyside{grid-template-columns:1fr 1fr!important}
+}
+.tw-builder-mobile-dots{
+  position:sticky;bottom:0;z-index:600;
+  display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(to top,rgba(255,255,255,.96) 55%,rgba(255,255,255,0));
+}
+.tw-builder-mobile-dot{
+  width:8px;height:8px;border-radius:999px;border:0;background:var(--tw-line);cursor:pointer;padding:0;
+  transition:width .22s cubic-bezier(.22,1,.36,1),background .18s ease;
+}
+.tw-builder-mobile-dot.is-active{width:26px;background:var(--tw-brand)}
+.tw-mcq-menu-toggle{
+  appearance:none;border:1.5px solid var(--tw-line);background:var(--tw-on-brand);color:var(--tw-ink);border-radius:10px;
+  width:38px;height:38px;display:grid;place-items:center;font-size:17px;font-weight:1000;cursor:pointer;flex:0 0 auto;
+}
+.tw-mcq-menu-toggle:hover{background:#f1f5f9}
+.tw-mcq-mobile{position:relative}
+.tw-mcq-mobile-menu{display:grid;gap:8px;margin-bottom:6px;padding:10px;border-radius:12px;background:rgba(43,108,255,.06);border:1px solid rgba(43,108,255,.16)}
+.tw-mcq-mobile-menu .tw-mcq-control-row{justify-content:flex-start}
+.tw-mcq-choice-step-row{display:flex;justify-content:flex-end;align-items:center;margin:2px 0 10px;min-height:34px}
+.tw-mcq-choice-step-spacer{flex:1}
+.tw-matching-head-row{flex-wrap:nowrap!important}
+.tw-matching-pair-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
+@media(max-width:900px){
+  .tw-matching-head-row h4{font-size:15px!important}
+  .tw-matching-pair-actions button{padding:6px 10px!important;font-size:11.5px!important}
+}
+.tw-crossword-mobile{grid-template-columns:1fr!important}
+@media(max-width:900px){
+  .tw-builder-mobile-shell{padding-bottom:96px!important}
+  .tw-builder-question-strip{top:76px!important}
+}
+
+/* Revision 11.17 — pager strip in front, bigger header icons, flat hovers. */
+.tw-builder-content-region.has-question-strip{z-index:50!important}
+.tw-builder-pager-bar .tw-builder-template-nav:disabled{opacity:.45!important;cursor:not-allowed!important;filter:saturate(.6)}
+.tw-builder-flat-btn.no-hover-bg:hover:not(:disabled),
+.tw-builder-settings-flat.no-hover-bg:hover,
+.tw-builder-flat-icon-btn.no-hover-bg:hover{background:transparent!important;filter:none!important;transform:none!important}
+.tw-builder-settings-flat.no-hover-bg:active,
+.tw-builder-flat-icon-btn.no-hover-bg:active{transform:scale(.94)!important}
+.tw-builder-mobile-topbar.is-single-row{flex-wrap:nowrap!important;padding:8px 12px!important;min-height:0!important}
+.tw-builder-mobile-topbar.is-single-row .tw-builder-title-button{font-size:17px!important}
+.tw-builder-ellipsis.is-small{font-size:20px!important;transform:translateY(-1px)!important}
+/* Mobile question actions: flat row + anchored triple-dot menu. */
+.tw-builder-mobile-qactions{display:flex;gap:2px;align-items:center;flex-wrap:nowrap}
+.tw-builder-qmenu-anchor{position:relative;display:grid;place-items:center}
+.tw-builder-qmenu-catcher{position:fixed;inset:0;z-index:1299;background:transparent;cursor:default}
+.tw-builder-qmenu-popup{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:1300;min-width:190px;
+  background:var(--tw-on-brand);border:1px solid var(--tw-sheet-border);border-radius:12px;
+  box-shadow:0 18px 40px rgba(15,23,42,.18);padding:6px;display:grid;gap:2px;
+  animation:twBuilderSettingsPop .16s cubic-bezier(.22,1,.36,1) both;
+}
+.tw-builder-qmenu-row{
+  display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;background:transparent;
+  border-radius:9px;font:inherit;font-size:13px;font-weight:800;color:var(--tw-ink);cursor:pointer;text-align:left;
+}
+.tw-builder-qmenu-row:hover:not(:disabled){background:rgba(43,108,255,.08)}
+.tw-builder-qmenu-row:disabled{opacity:.38;cursor:not-allowed}
+/* Overflow title editing inside the popup window. */
+.tw-builder-overflow-title-edit{display:grid;gap:8px;padding:6px 4px 10px}
+.tw-builder-overflow-title-input{
+  width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;
+  border:1.5px solid var(--tw-brand);background:var(--tw-on-brand);color:var(--tw-ink);font:inherit;font-size:14px;font-weight:800;outline:none;
+}
+.tw-builder-overflow-title-edit-actions{display:flex;gap:8px;justify-content:flex-end}
+.tw-builder-overflow-edit-btn{appearance:none;border-radius:9px;padding:8px 14px;font:inherit;font-size:13px;font-weight:900;cursor:pointer;border:1.5px solid var(--tw-line);background:var(--tw-on-brand);color:var(--tw-ink)}
+.tw-builder-overflow-edit-btn.is-save{background:var(--tw-brand);border-color:var(--tw-brand);color:var(--tw-on-brand)}
+.tw-builder-overflow-edit-btn.is-save:disabled{opacity:.55;cursor:not-allowed}
+/* Mobile strip: centered + pushed below the header so it never sits behind it. */
+.tw-quiz-builder-page.is-mobile .tw-builder-question-strip{
+  left:14px!important;right:14px!important;width:auto!important;max-width:420px!important;margin:0 auto!important;
+  top:128px!important;max-height:calc(100dvh - 180px)!important;
+  animation:twBuilderStripDown .26s cubic-bezier(.22,1,.36,1) both!important;
+}
+.tw-quiz-builder-page.is-mobile .tw-builder-question-strip.is-closing{animation:twBuilderStripDownOut .22s ease both!important}
+@keyframes twBuilderStripDown{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes twBuilderStripDownOut{to{opacity:0;transform:translateY(12px)}}
+/* Mobile matching: keep +Image/+Pair pinned to the other corner, never covering the title. */
+.tw-matching-head-row{flex-wrap:nowrap!important;align-items:center!important}
+.tw-matching-head-row>div:first-child{min-width:0!important;flex:1 1 auto!important}
+.tw-matching-head-row h4{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;margin:0!important}
+.tw-matching-pair-actions{margin-left:auto!important;flex:0 0 auto!important}
+@media(max-width:900px){
+  .tw-matching-head-row{gap:8px!important}
+  .tw-matching-head-row h4{font-size:14px!important}
+  .tw-matching-pair-actions{gap:6px!important}
+  .tw-matching-pair-actions button{padding:6px 9px!important;font-size:11px!important;white-space:nowrap!important}
+}
+
+/* Revision 11.18 — desktop builder pager badge, narrow-desktop adapt, colored minis, visible MCQ drag. */
+/* Desktop pager uses the same pill badge as mobile. */
+.tw-builder-desktop-pill{
+  border-width:2px!important;
+  box-shadow:0 6px 16px rgba(15,23,42,.10)!important;
+}
+.tw-builder-desktop-pill:hover{transform:translateY(-1px)!important;box-shadow:0 9px 20px rgba(15,23,42,.14)!important}
+/* Narrow desktop (minimized / split) keeps desktop UI but adapts via wrapping. */
+.tw-builder-pager-bar{flex-wrap:wrap!important;gap:10px!important}
+.tw-builder-pager-bar .tw-builder-desktop-pill{order:0;flex:0 1 auto;min-width:0}
+@media(max-width:1100px){
+  .tw-builder-pager-bar{padding:12px 16px!important}
+  .tw-builder-pager-bar .tw-builder-template-nav{padding:10px 16px!important;font-size:13.5px!important}
+}
+/* Colored desktop mini buttons keep their hue on hover; disabled stays muted. */
+.tw-builder-toolbar-colored .tw-builder-flat-icon-btn{opacity:1!important;border-radius:10px!important}
+.tw-builder-toolbar-colored .tw-builder-flat-icon-btn:hover:not(:disabled){filter:brightness(.94)!important;transform:translateY(-1px)!important}
+.tw-builder-toolbar-colored .tw-builder-flat-icon-btn:active:not(:disabled){transform:scale(.94)!important}
+.tw-builder-toolbar-colored .tw-builder-flat-icon-btn:disabled{opacity:.38!important;background:rgba(127,127,127,.08)!important;color:var(--tw-shadow-gray)!important;border-color:rgba(127,127,127,.25)!important}
+/* MCQ drag source is fully visible (was ~34% opacity with hidden content). */
+.tw-mcq-normal-choice.is-drag-source{opacity:1!important;border-style:solid!important;border-color:var(--tw-template-accent,var(--tw-brand))!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 14%,var(--tw-on-brand))!important;box-shadow:0 18px 38px rgba(15,23,42,.22),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 30%,transparent)!important;transform:scale(1.015)!important}
+.tw-mcq-normal-choice.is-drag-source>*{visibility:visible!important}
+.tw-mcq-normal-choice.is-touch-dragging{opacity:1!important;border-color:var(--tw-template-accent,var(--tw-brand))!important;background:color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 14%,var(--tw-on-brand))!important;box-shadow:0 22px 44px rgba(15,23,42,.26),0 0 0 4px color-mix(in srgb,var(--tw-template-accent,var(--tw-brand)) 32%,transparent)!important;transform:scale(1.02)!important;z-index:5}
+/* Desktop create submit follows the selected template color (was mobile-only). */
+.tw-teacher-create-submit-inline{--tw-press-face:var(--tpl-submit-face,var(--tw-brand))!important;--tw-press-base:var(--tpl-submit-base,#1749bd)!important;--tw-press-border:var(--tpl-submit-border,#5b8cff)!important}
+/* Mobile: hide the h2 under the header for teacher/student/guest tabs. */
+@media(max-width:760px){
+  .dashboard-tab-panel>.container>section:first-child>h2,
+  .dashboard-tab-panel>.container>section:first-child h2,
+  .tw-live-sessions-page>section:first-child>h2,
+  .tw-mobile-hide-tab-title{display:none!important}
+  .dashboard-tab-panel>.container>section:first-child{margin-bottom:-6px!important}
+  /* Mobile quiz bank: left-aligned title/badges, actions bottom-right. */
+  .tw-bank-quiz-card{grid-template-columns:1fr!important;text-align:left!important}
+  .tw-bank-card-main{text-align:left!important;justify-items:start!important}
+  .tw-bank-card-title{text-align:left!important}
+  .tw-bank-card-badges{justify-content:flex-start!important}
+  .tw-bank-card-actions{justify-content:flex-end!important;align-items:center!important;margin-top:4px!important}
+  /* Mobile single-row swipeable pill tab bar (no separated pages). */
+  .tw-mobile-tabbar{overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important}
+  .tw-mobile-tabbar::-webkit-scrollbar{display:none!important}
+  .tw-mobile-tabbar-track{transform:none!important;transition:none!important;width:max-content!important;min-width:100%!important}
+  .tw-mobile-tabbar-page{flex:0 0 auto!important;width:auto!important}
+  .tw-mobile-tabbar-btn{min-width:76px!important}
+  .tw-mobile-tabbar-dots{display:none!important}
+  .tw-mobile-tabbar-single.is-centered-few .tw-mobile-tabbar-track-single,
+  .tw-mobile-tabbar-single.is-centered-few .tw-mobile-tabbar-page-single{width:100%!important;justify-content:center!important}
+}
+
+/* Revision 11.19 — follow-up refinements. */
+/* Desktop builder toolbar: single template color, icon only, no borders. */
+.tw-builder-toolbar-template .tw-builder-flat-icon-btn,
+.tw-builder-toolbar-template .tw-mini-template{
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  opacity:1!important;border-radius:9px!important;
+}
+.tw-builder-toolbar-template .tw-builder-flat-icon-btn:hover:not(:disabled){background:rgba(127,127,127,.10)!important;filter:none!important;transform:none!important}
+.tw-builder-toolbar-template .tw-builder-flat-icon-btn:active:not(:disabled){transform:scale(.92)!important}
+.tw-builder-toolbar-template .tw-builder-flat-icon-btn:disabled{opacity:.30!important;color:var(--tw-shadow-gray)!important;background:transparent!important}
+/* Mobile builder bottom sheet saved/published rows are not tappable. */
+.tw-builder-overflow-row:disabled{opacity:.55!important;cursor:default!important;background:transparent!important}
+.tw-builder-overflow-row:disabled:hover{background:transparent!important}
+/* Mobile host panel: bigger leaderboard + full-width question card. */
+.tw-host-answered-sheet-trigger{appearance:none;border:0;background:transparent;padding:0;cursor:pointer}
+.tw-host-answered-sheet-trigger .tw-host-white-metric{pointer-events:none}
+.tw-host-right-stack.is-mobile-hidden{display:none!important}
+.tw-mini-info-card.is-clickable:hover{transform:translateY(-2px);filter:brightness(.97)}
+.tw-mini-info-card.is-clickable:active{transform:translateY(0);filter:brightness(.94)}
+@media(max-width:760px){
+  /* Host panel header: one row — compact brand/badges left, Start/End
+     top-right with their original button styling. */
+  .tw-host-header{flex-wrap:nowrap!important;align-items:center!important;padding:10px 12px!important;gap:10px!important}
+  .tw-host-header>div:first-child{min-width:0!important;flex:1 1 auto!important}
+  .tw-host-brand{font-size:15px!important}
+  .tw-host-brand small{font-size:10px!important;margin-left:6px!important}
+  .tw-host-status{flex-wrap:wrap!important;gap:5px!important}
+  .tw-host-status>span{padding:2px 7px!important;font-size:9.5px!important}
+  .tw-host-actions{flex-wrap:nowrap!important;gap:6px!important;flex:none!important}
+  .tw-host-actions .tw-admin-press>span{min-height:38px!important;padding:0 14px!important;font-size:13.5px!important}
+  .tw-host-question-meta .tw-host-white-metric{border-color:transparent!important;box-shadow:0 8px 18px rgba(15,23,42,.18)!important}
+  .tw-host-answered-sheet-trigger.tw-host-white-metric{border-radius:999px!important;overflow:hidden}
+  .tw-host-main.is-mobile-host .tw-host-prompt h3{font-size:36px!important;line-height:1.35!important}
+  .tw-host-main.is-mobile-host .tw-host-student-choice-grid{gap:14px!important}
+  .tw-host-main.is-mobile-host .tw-host-student-choice-grid .tw-host-student-choice{min-height:104px!important;padding:14px 58px 14px 18px!important}
+  .tw-host-main.is-mobile-host .tw-host-student-choice-content b{font-size:19px!important}
+  .tw-host-main.is-mobile-host .tw-host-student-choice-badge{flex-basis:46px!important;width:46px!important;height:46px!important;font-size:17px!important}
+  .tw-host-main.is-mobile-host .tw-host-choice-count{font-size:15px!important}
+@media(max-width:360px){
+  .tw-host-brand{font-size:13px!important}
+  .tw-host-status>span{font-size:8.5px!important}
+  .tw-host-actions .tw-admin-press>span{min-height:38px!important;padding:0 12px!important;font-size:13px!important}
+}
+  /* Score mode toggle is desktop-only; podium points are static on mobile. */
+  .tw-host-score-mode-chip{display:none!important}
+  .tw-host-podium-points.tw-host-score-click{pointer-events:none!important;cursor:default!important}
+  /* Podium: roomier platforms, trophy just above with a gap, wrappable names. */
+  .tw-host-podium{gap:6px!important}
+  .tw-host-podium-place{flex:1 1 0!important;min-width:0!important;width:auto!important;padding:14px 8px!important}
+  .tw-host-podium-place.place-1,.tw-host-podium-place.place-2,.tw-host-podium-place.place-3{transform:none!important}
+  .tw-host-trophy{margin-bottom:6px!important}
+  .tw-host-podium-place .tw-host-trophy{transform:none!important}
+  .tw-host-main.is-mobile-host .tw-host-trophy svg{width:60px!important;height:60px!important}
+  .tw-host-podium-place b{white-space:normal!important;text-align:center;font-size:13px!important;line-height:1.3}
+  .tw-host-main.is-mobile-host .tw-host-podium-platform{height:auto!important;min-height:104px!important}
+  /* Question head: smaller title, bigger counter, 2x metrics pinned right. */
+  .tw-host-main.is-mobile-host .tw-host-question-card h2{font-size:28px!important}
+  .tw-host-question-count{font-size:21px!important}
+  .tw-host-live-v25 .tw-host-question-meta{margin-left:auto!important;justify-content:flex-end!important}
+  .tw-host-question-meta{gap:8px!important}
+  .tw-host-question-meta .tw-host-white-metric{font-size:22px!important;padding:8px 14px!important}
+  .tw-host-pixel-timer{font-size:28px!important;padding:8px 14px!important}
+  .tw-host-pixel-timer svg{width:34px!important;height:34px!important}
+  .tw-host-main.is-mobile-host .tw-host-scoreboard{transform:none}
+  .tw-host-main.is-mobile-host .tw-host-content-grid{grid-template-columns:1fr!important}
+  .tw-host-main.is-mobile-host .tw-host-question-card{width:100%!important;box-sizing:border-box!important}
+  .tw-host-mobile-sheet-backdrop{position:fixed;inset:0;z-index:2000;background:rgba(3,8,24,.55);display:flex;align-items:flex-end;justify-content:center;animation:twSheetFade .22s ease both}
+  .tw-host-mobile-sheet{width:100%;max-height:62vh;overflow-y:auto;background:var(--tw-on-brand);border-radius:20px 20px 0 0;padding:8px 14px 26px;box-shadow:0 -18px 50px rgba(0,0,0,.25);animation:twSheetUp .28s cubic-bezier(.22,1,.36,1) both;display:grid;gap:10px;align-content:start;transition:height .16s ease-out}
+@media(max-width:760px){
+  .tw-host-mobile-sheet-tabs button{padding:12px!important;font-size:16px!important}
+  .tw-host-mobile-sheet h3{font-size:26px!important}
+  .tw-host-mobile-sheet h3 svg{width:28px!important;height:28px!important}
+  .tw-host-mobile-sheet .tw-host-section-title b{font-size:18px!important}
+  .tw-host-mobile-sheet .tw-host-section-title span{font-size:15px!important}
+  .tw-host-mobile-sheet .tw-host-attendance-scroll>div:not(.tw-host-attendance-row){font-size:16px!important}
+  .tw-host-mobile-code-text{font-size:26px!important}
+}
+  .tw-host-mobile-sheet-tabs{display:flex;gap:8px;margin:6px 0 4px}
+  .tw-host-mobile-sheet-tabs button{flex:1;padding:10px;border-radius:12px;border:1.5px solid var(--tw-line);background:var(--tw-on-brand);font:inherit;font-weight:900;cursor:pointer}
+  .tw-host-mobile-sheet-tabs button.is-active{background:var(--tw-brand);border-color:var(--tw-brand);color:var(--tw-on-brand)}
+  .tw-host-mobile-sheet-body{display:grid;gap:12px}
+  .tw-host-mobile-sheet.is-code{overflow-y:visible!important;max-height:none!important}
+  .tw-host-mobile-sheet .tw-builder-sheet-handle{cursor:grab;touch-action:none}
+  .tw-host-mobile-sheet .tw-host-section-title h3{font-size:24px!important}
+  .tw-host-mobile-sheet .tw-host-attendance-row{font-size:15px!important}
+  .tw-host-mobile-sheet .tw-host-student-name{font-size:16px!important;font-weight:800}
+  .tw-host-mobile-sheet .tw-host-attendance-score{font-size:15px!important}
+}
+/* Session-ended screen reads big on both viewports (stale narrower
+   duplicates of these rules were removed so a single source governs). */
+.tw-host-ended-card h2{font-size:32px!important}
+.tw-host-open-analytics>span{min-height:64px!important;padding:0 36px!important;font-size:19px!important}
+
+/* Revision 11.20 — builder mobile polish. */
+/* Modified MCQ on mobile: 2x2 small tiles like Guess Word. */
+@media(max-width:760px){
+  .tw-mcq-modified-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .tw-mcq-image-choice{padding:8px!important;gap:6px!important;border-radius:14px!important}
+  .tw-mcq-image-choice .tw-builder-image-tile{min-height:90px!important}
+  .tw-mcq-image-choice .tw-builder-image-tile>label,.tw-mcq-image-choice .tw-builder-image-tile img{min-height:90px!important;aspect-ratio:1!important}
+}
+/* Mobile builder dots: fixed to very bottom, no white gradient. */
+.tw-builder-mobile-dots{
+  position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:700!important;
+  background:var(--tw-on-brand)!important;background-image:none!important;
+  border-top:1px solid rgba(127,127,127,.18)!important;
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))!important;
+}
+.tw-builder-mobile-shell{padding-bottom:60px!important}
+/* Mobile history: 2x2 mini grid + icon-only exports sharing row with analytics. */
+@media(max-width:760px){
+  .tw-history-mini-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .tw-history-actions-row{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:nowrap!important}
+  .tw-history-actions-row .tw-admin-press{flex:1 1 auto!important}
+  .tw-history-export-text{display:none!important}
+  .tw-history-export-icons{display:inline-flex!important;gap:8px!important;flex:0 0 auto!important}
+}
+.tw-history-export-icons{display:none}
+.tw-history-export-icon-btn{
+  min-width:52px;height:44px;padding:0 10px;border-radius:11px;cursor:pointer;
+  border:2px solid var(--tw-line);background:var(--tw-on-brand);color:var(--tw-ink);font:inherit;font-size:11px;font-weight:1000;
+}
+.tw-history-export-icon-btn:disabled{opacity:.5;cursor:not-allowed}
+/* GuessWord inline submit between Back and Clear. */
+.spell-controls .spell-ctrl.submit-inline{
+  background:var(--tw-brand)!important;color:var(--tw-on-brand)!important;border-color:var(--tw-brand)!important;font-weight:900!important;
+}
+/* Crossword grid must fit on mobile. */
+@media(max-width:760px){
+  .bword-wrap{max-width:100%!important;overflow:hidden!important}
+  .bword-game-panel{max-width:100%!important;box-sizing:border-box!important}
+  .bword-grid-shell{width:min(94vw,100%)!important;max-width:100%!important;margin-inline:auto!important;overflow:hidden!important}
+  .bword-grid{width:100%!important;max-width:100%!important}
+  .bword-cell{font-size:12px!important;min-height:28px!important;min-width:0!important}
+}
+/* In-game leaderboard bigger, without touching question container. */
+.quiz-shell-new .sp-live-top5,.sp-gameplay-page .sp-live-top5{width:min(340px,30vw)!important}
+.quiz-shell-new .sp-live-top5-panel,.sp-gameplay-page .sp-live-top5-panel{font-size:15px!important}
+.quiz-shell-new .sp-live-top5-title,.sp-gameplay-page .sp-live-top5-title{font-size:17px!important}
+.quiz-shell-new .sp-live-top5-name,.sp-gameplay-page .sp-live-top5-name{font-size:15px!important}
+.quiz-shell-new .sp-live-top5-row b,.sp-gameplay-page .sp-live-top5-row b{font-size:15px!important}
+@media(max-width:760px){
+  .quiz-shell-new .sp-live-top5,.sp-gameplay-page .sp-live-top5{width:min(78vw,300px)!important}
+  .quiz-shell-new .sp-live-top5-panel,.sp-gameplay-page .sp-live-top5-panel{font-size:17px!important;padding:14px!important}
+  .quiz-shell-new .sp-live-top5-title,.sp-gameplay-page .sp-live-top5-title{font-size:20px!important}
+  .quiz-shell-new .sp-live-top5-name,.sp-gameplay-page .sp-live-top5-name{font-size:17px!important}
+  .quiz-shell-new .sp-live-top5-row b,.sp-gameplay-page .sp-live-top5-row b{font-size:17px!important}
+  .quiz-shell-new .sp-live-top5-trophy svg,.sp-gameplay-page .sp-live-top5-trophy svg{width:20px!important;height:20px!important}
+  .quiz-shell-new .sp-live-top5-avatar,.sp-gameplay-page .sp-live-top5-avatar{width:32px!important;height:32px!important}
+}
+/* Mobile matching header: title left, actions right corner. */
+.tw-matching-mobile .tw-matching-head-row{flex-wrap:nowrap!important;align-items:center!important}
+.tw-matching-mobile .tw-matching-head-row>div:first-child{flex:1 1 auto!important;min-width:0!important}
+.tw-matching-mobile .tw-matching-pair-actions{margin-left:auto!important;flex:0 0 auto!important}
+
+/* Auth pages (Login/Register/StudentAuth): fixed header, then the form —
+   nothing else, no scrolling anywhere. The shells are compacted to fit
+   laptop heights; zoom fallbacks shrink them further on very short screens
+   so the form is never cut off and never scrolls. */
+.tw-auth-page{height:100vh!important;height:100dvh!important;max-height:100vh!important;max-height:100dvh!important;overflow:hidden!important}
+.tw-auth-page.tw-starry-page>main{overflow:hidden!important;height:calc(100vh - 72px)!important;height:calc(100dvh - 72px)!important;min-height:0!important;flex:1 1 auto!important;display:flex!important;align-items:center!important;justify-content:center!important;margin-top:72px!important}
+.tw-auth-page .tw-public-header{position:fixed!important;top:0!important;left:0!important;right:0!important;z-index:1200!important;flex:none!important}
+.tw-auth-main{width:100%!important;max-height:100%!important;padding:8px 16px!important}
+.tw-auth-page .tw-auth-form-shell{max-height:100%!important;overflow:hidden!important;margin-top:auto!important;margin-bottom:auto!important;padding-top:20px!important;padding-bottom:20px!important}
+.tw-auth-page .tw-auth-form-shell .mb-7{margin-bottom:12px!important}
+.tw-auth-page .tw-auth-form-shell h1{font-size:22px!important}
+.tw-auth-page .tw-auth-form-shell form.flex-col{gap:10px!important}
+.tw-auth-page .tw-auth-form-shell input{padding-top:8px!important;padding-bottom:8px!important}
+.tw-auth-page .tw-auth-columns{gap:20px!important}
+@media(max-height:620px){.tw-auth-page .tw-auth-form-shell{zoom:.9}}
+@media(max-height:540px){.tw-auth-page .tw-auth-form-shell{zoom:.8}}
+
+/* Browser-autofilled fields (saved email/password) must keep the themed input
+   look instead of flashing the browser's pale autofill wash, which made them
+   look like different fields from first/last/confirm. */
+.tw-auth-form-shell input:-webkit-autofill,
+.tw-auth-form-shell input:-webkit-autofill:hover,
+.tw-auth-form-shell input:-webkit-autofill:focus,
+.tw-auth-form-shell input:-webkit-autofill:active{
+  -webkit-box-shadow:0 0 0 1000px var(--color-auth-input) inset!important;
+  -webkit-text-fill-color:var(--color-auth-text)!important;
+  caret-color:var(--color-auth-text)!important;
+  transition:background-color 99999s ease-in-out 0s!important;
+}
+body.dark-mode .tw-auth-form-shell input:-webkit-autofill,
+body.dark-mode .tw-auth-form-shell input:-webkit-autofill:hover,
+body.dark-mode .tw-auth-form-shell input:-webkit-autofill:focus,
+body.dark-mode .tw-auth-form-shell input:-webkit-autofill:active{
+  -webkit-box-shadow:0 0 0 1000px var(--color-auth-input-dark) inset!important;
+  -webkit-text-fill-color:var(--color-auth-text-dark)!important;
+  caret-color:var(--color-auth-text-dark)!important;
+}
+.tw-auth-form-shell input:-moz-autofill{
+  background-color:var(--color-auth-input)!important;
+  color:var(--color-auth-text)!important;
+}
+body.dark-mode .tw-auth-form-shell input:-moz-autofill{
+  background-color:var(--color-auth-input-dark)!important;
+  color:var(--color-auth-text-dark)!important;
+}
+@media(max-width:640px){
+  .tw-auth-page .tw-auth-columns{flex-direction:column!important}
+  .tw-auth-page .tw-auth-form-shell{padding-left:22px!important;padding-right:22px!important}
+}
+
+/* Plan page mobile: one window scroll only, no inner scroll areas. Hide the
+   in-form "Apply for ..." title and leave breathing room between the last
+   benefit bullet and the form. */
+@media(max-width:900px){
+  .tw-plan-page{height:auto!important;min-height:100dvh!important;overflow:visible!important}
+  .tw-plan-page-main{height:auto!important;min-height:0!important;overflow:visible!important;padding-bottom:36px!important}
+  .tw-plan-application{max-height:none!important;overflow:visible!important}
+  .tw-plan-page-copy{margin-bottom:30px!important}
+  .tw-plan-form-title{display:none!important}
+}
+
+/* Icons-only pill tab bar: the pill hugs its tab count (fixed-width icon
+   buttons) instead of stretching full-width, with slightly bigger icons. */
+.tw-mobile-tabbar{width:auto!important;max-width:100%!important}
+.tw-mobile-tabbar-btn.is-icon-only{flex:0 0 auto!important;min-width:60px!important;padding:8px 0!important}
+.tw-mobile-tabbar-btn.is-icon-only.is-active{border-radius:999px!important}
+
+/* Teacher/student/guest sidebar tabs get the same hover nudge as the
+   superadmin/admin sidebar (slides slightly right on hover). */
+.tw-side-nav-btn{transition:transform .22s ease,background .22s ease,color .22s ease,filter .22s ease}
+.tw-side-nav-btn:hover{transform:translateX(3px)!important;background:rgba(43,108,255,.13)!important}
+
+/* Sessions "Assign" button uses a light face in light mode, but the press
+   face span forces white text — unreadable. Black in light, white in dark. */
+body:not(.dark-mode) .tw-session-assign-btn>span{color:#0f172a!important}
+body.dark-mode .tw-session-assign-btn>span{color:#fff!important}
+
+/* Repeat prompt on mobile: pinned to the very top, above the builder header
+   and clear of the editor highlight below. */
+@media(max-width:760px){
+  .tw-thinkbot-tutorial.tw-tutorial-repeat-top:not(.is-dragging){top:8px!important}
+}
+
+/* Mobile nav-prompt dialogs (Class/Create/Sessions): compact square bubble just
+   above the pill tab, bobbing up and down instead of side to side. Avatar
+   sized to sit aligned with the short sentence. */
+@media(max-width:760px){
+  .tw-thinkbot-tutorial.tw-tutorial-mobile-nav-prompt:not(.is-dragging){width:min(320px,calc(100vw - 24px))!important;animation:twTutorialBobUp .95s ease-in-out infinite!important}
+  .tw-tutorial-mobile-nav-prompt{padding:16px 66px 18px 18px!important}
+  .tw-tutorial-mobile-nav-prompt .tw-thinkbot-tutorial-avatar{width:44px!important;height:44px!important;right:12px!important;top:12px!important}
+  .tw-tutorial-mobile-nav-prompt .tw-thinkbot-tutorial-copy{font-size:14px!important}
+}
+/* Mobile assignment modal: same box as the host modal, compacted to fit
+   without scrolling. */
+@media(max-width:760px){
+  .tw-assignment-setup-modal{width:min(100%,760px)!important;max-height:calc(100dvh - 56px - env(safe-area-inset-top,0px) - 28px)!important;overflow:hidden!important}
+  .tw-assignment-setup-modal .px-\[28px\]{padding-left:20px!important;padding-right:20px!important}
+  .tw-assignment-setup-modal .py-\[22px\]{padding-top:14px!important;padding-bottom:14px!important}
+  .tw-assignment-setup-modal .p-\[28px\]{padding:20px!important}
+  .tw-assignment-setup-modal .gap-\[14px\]{gap:10px!important}
+  .tw-assign-schedule-value{font-size:13px!important}
+}
+
+/* All mobile tutorial bubbles hug their content (no big boxy min-heights),
+   can never scroll sideways, and keep text clear of the ThinkBot avatar. */
+@media(max-width:760px){
+  .tw-thinkbot-tutorial{min-height:0!important;overflow-x:hidden!important}
+  .tw-thinkbot-tutorial.is-square{min-height:0!important}
+  .tw-thinkbot-tutorial-copy{overflow-wrap:break-word;word-break:normal}
+}
+/* Bubble height ends right after its last element: buttons, the floating
+   click-anywhere line, or the text itself — no excess space after.
+   Reserved-but-empty action slots collapse too (they left 48px voids while
+   waiting for Done/Continue to appear). */
+@media(max-width:760px){
+  .tw-thinkbot-tutorial{padding-bottom:56px!important}
+  .tw-thinkbot-tutorial-actions{bottom:8px!important}
+  .tw-thinkbot-tutorial.has-click-anywhere:not(:has(.tw-thinkbot-tutorial-actions.has-action)){padding-bottom:38px!important}
+  .tw-thinkbot-tutorial:not(:has(.tw-thinkbot-tutorial-actions.has-action)):not(.has-click-anywhere){padding-bottom:20px!important}
+  .tw-thinkbot-tutorial-actions.is-reserved:not(.has-action){display:none!important;min-height:0!important}
+  .tw-builder-qmenu-row:disabled,.tw-builder-flat-icon-btn:disabled,.tw-builder-overflow-row:disabled,.tw-builder-overflow-title-row:disabled{opacity:.45!important}
+}
+/* Host setup previews: phone thumbnail overlaps the desktop preview's
+   bottom-right corner like a browser device mockup. Scoped to the setup
+   modal so legacy preview rules elsewhere are untouched. */
+.tw-host-launch-modal .tw-host-preview-dual{position:relative!important;display:block!important;height:auto!important;max-height:none!important;margin:0 0 22px!important;padding:0 0 14px!important}
+.tw-host-launch-modal .tw-host-preview-desktop{position:relative!important;display:block!important;width:100%!important;max-width:none!important;height:auto!important;max-height:300px!important;aspect-ratio:16/9!important;left:auto!important;right:auto!important;overflow:hidden!important;padding:0!important;border-radius:20px!important}
+.tw-host-launch-modal .tw-host-preview-mobile{position:absolute!important;right:12px!important;bottom:0!important;width:112px!important;max-width:32%!important;height:auto!important;max-height:none!important;aspect-ratio:9/16!important;z-index:2!important;overflow:hidden!important;padding:0!important;border-radius:16px!important;box-shadow:0 18px 40px rgba(2,8,23,.4)!important}
+.tw-host-launch-modal .tw-host-preview-desktop img,.tw-host-launch-modal .tw-host-preview-mobile img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;border-radius:12px!important}
+@media(max-width:760px){
+  .tw-host-launch-toprow{display:flex!important;justify-content:flex-end!important}
+  .tw-host-launch-modal>.tw-host-launch-toprow{margin:-2px -2px 6px!important}
+  .tw-assignment-setup-modal>.tw-host-launch-toprow{padding:14px 18px 0!important}
+  .tw-host-launch-toprow>button{width:40px!important;height:40px!important;display:grid!important;place-items:center!important;border:0!important;background:transparent!important;color:inherit!important;cursor:pointer!important;border-radius:10px!important}
+  .tw-host-launch-modal .tw-host-preview-dual{margin-bottom:18px!important}
+  .tw-host-launch-modal .tw-host-preview-desktop{max-height:150px!important}
+  .tw-host-launch-modal .tw-host-preview-mobile{width:76px!important;right:8px!important;border-radius:12px!important}
+  .tw-assignment-primary-actions{justify-content:stretch!important}
+  .tw-assignment-primary-actions .tw-teacher-text-cancel{display:none!important}
+  .tw-assignment-primary-actions .tw-admin-press{flex:1!important}
+  .tw-assignment-primary-actions .tw-admin-press>span{width:100%!important}
+}
+
+/* Short phones (e.g. iPhone SE 667px): tighter bubbles so below-anchored
+   dialogs fit instead of overlapping their target. Right padding is left
+   alone so copy never slides under the avatar. */
+@media(max-width:760px) and (max-height:700px){
+  .tw-thinkbot-tutorial{padding-top:20px!important;padding-bottom:56px!important}
+  .tw-thinkbot-tutorial-copy{font-size:14px!important}
+  .tw-tutorial-press span{padding:10px 18px!important;font-size:14px!important}
+}
+
+/* Mobile class-flow dialogs. */
+@media(max-width:760px){
+  /* Small rectangular tip pinned above the folder modal. */
+  .tw-thinkbot-tutorial.tw-tutorial-tip-small:not(.is-dragging){width:min(250px,calc(100vw - 48px))!important;min-height:0!important;padding:16px 18px 20px!important}
+  .tw-thinkbot-tutorial.tw-tutorial-tip-small .tw-thinkbot-tutorial-avatar{display:none!important}
+  .tw-thinkbot-tutorial.tw-tutorial-tip-small .tw-thinkbot-tutorial-copy{font-size:14px!important;padding:0!important;text-align:center}
+  /* Pinned just below the fixed mobile header with breathing room. */
+  .tw-thinkbot-tutorial.tw-tutorial-below-header:not(.is-dragging){top:calc(56px + 14px)!important}
+  /* Breathing room between a highlighted box and the bubble below it. */
+  .tw-thinkbot-tutorial.tw-tutorial-gap-below{margin-top:14px!important}
+}
+
+/* MCQ "you may also add or delete choices" hint sits a little higher, next to
+   the add-choice button row. (Sole tw-tutorial-hint usage in the app.) */
+.tw-tutorial-hint{transform:translateY(-18px)}
+/* MCQ hint stays desktop-only (blanket mobile hide applies); the shortened
+   copy and nudge above serve desktop. */
+
+/* Tutorial target pulse on flat/bare icon buttons (header/question ⋯): their
+   base rules kill box-shadow, so pin a solid blue outline ring instead. */
+@media(max-width:760px){
+  .tw-builder-bare-icon.tw-tutorial-target-pulse,
+  .tw-builder-settings-flat.tw-tutorial-target-pulse,
+  .tw-builder-flat-icon-btn.tw-tutorial-target-pulse{outline:3px solid var(--tw-brand)!important;outline-offset:2px!important}
+}
+
+/* Mobile participants launcher: fixed bottom-right mirror of the theme toggle. */
+.tw-host-participants-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:1500;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;border:1px solid;box-shadow:0 14px 30px rgba(2,8,23,.35);cursor:pointer}
+
+/* Mobile schedule picker: compact like the assignment modal, viewport-fitted. */
+@media(max-width:760px){
+  .tw-schedule-dialog{width:min(94vw,340px)!important;max-height:calc(100dvh - 40px)!important;overflow-y:auto!important}
+  .tw-schedule-days{gap:6px!important}
+  .tw-schedule-days>button{height:34px!important;font-size:15px!important}
+}
+
+/* Welcome dialog Skip: plain text instead of the 3D secondary button. */
+.tw-thinkbot-tutorial.tw-tutorial-plain-secondary .tw-tutorial-secondary{border:0!important;background:transparent!important;box-shadow:none!important;color:inherit!important;padding:9px 8px!important;text-decoration:none;opacity:.72}
+.tw-thinkbot-tutorial.tw-tutorial-plain-secondary .tw-tutorial-secondary:hover{transform:none!important;filter:none!important;opacity:1;text-decoration:underline}
+
+/* Student goals modal: swiping between Daily / Weekly / Achievements slides
+   the incoming page in from the swipe direction instead of swapping instantly. */
+.tw-mobile-progress-slide{animation:twMobileProgressSlide .26s cubic-bezier(.22,1,.36,1) both}
+.tw-mobile-progress-slide.is-next{--tw-progress-x:26px}
+.tw-mobile-progress-slide.is-prev{--tw-progress-x:-26px}
+@keyframes twMobileProgressSlide{from{opacity:0;transform:translateX(var(--tw-progress-x,26px))}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.tw-mobile-progress-slide{animation:none}}
+
+/* Dashboard mobile: content must clear the fixed 56px mobile header on every
+   tab (System Health title + Refresh button were sliding underneath it). */
+@media(max-width:760px){
+  .tw-responsive-dashboard-main{padding-top:70px!important}
+  .dashboard-tab-panel{scroll-margin-top:78px!important}
+  .tw-section-title-action{flex-wrap:wrap!important;gap:10px!important;align-items:center!important}
+}

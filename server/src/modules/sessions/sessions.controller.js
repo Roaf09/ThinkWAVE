@@ -43,19 +43,6 @@ function responseChoiceKeys(templateType, answer, config = {}) {
   }
   return Array.from(new Set(keys));
 }
-function sortScoreRows(rows, templateType) {
-  const timedTemplates = new Set(["TYPE_ANSWER", "MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"]);
-  return [...rows].sort((a, b) => {
-    const points = Number(b.total_points || 0) - Number(a.total_points || 0);
-    if (points) return points;
-    if (timedTemplates.has(normalizeTemplateType(templateType))) {
-      const aTime = Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER);
-      const bTime = Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER);
-      if (aTime !== bTime) return aTime - bTime;
-    }
-    return `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(`${b.last_name || ""} ${b.first_name || ""}`);
-  });
-}
 
 function shuffle(arr) {
   const a = [...arr];
@@ -516,8 +503,30 @@ export async function getSessionFullAnalytics(req, res) {
   });
 }
 
+// Lightweight public check so the landing "enter session code" modal can tell
+// whether a code is valid BEFORE sending the user to the name-entry screen.
+// Creates nothing — joining (seat claim) still happens in joinSession.
+export async function validateJoinCode(req, res) {
+  const code = String(req.body?.code || "").trim().toUpperCase();
+  if (code.length < 4) return res.status(400).json({ message: "Please enter a valid session code first." });
+  const [[session]] = await pool.query(
+    `SELECT status FROM sessions WHERE join_code=:code`,
+    { code }
+  );
+  if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
+  if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
+    const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
+    return res.status(400).json({ message });
+  }
+  res.json({ ok: true });
+}
+
 export async function joinSession(req, res) {
   const { code, firstName, lastName } = req.body;
+
+  const fn = (firstName || "").trim().slice(0, 100);
+  const ln = (lastName || "").trim().slice(0, 100);
+  if (!fn) return res.status(400).json({ message: "Please enter your first name." });
 
   const [[session]] = await pool.query(
     `SELECT s.*, CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
@@ -530,39 +539,77 @@ export async function joinSession(req, res) {
     return res.status(400).json({ message });
   }
 
-  if (Number(session.max_participants || 0) > 0) {
-    const [[countRow]] = await pool.query(`SELECT COUNT(*) AS total FROM session_participants WHERE session_id=:sid`, { sid: session.id });
-    if (Number(countRow?.total || 0) >= Number(session.max_participants)) {
-      return res.status(400).json({ message: 'Session is full.' });
-    }
+  // Idempotent rejoin: every POST here used to INSERT a brand-new participant
+  // row, so a retry (double submit, back-button rejoin, timeout where the
+  // server inserted but the response was lost) burned one of the 45
+  // max_participants seats each time — ~30 real students plus phantom rows
+  // read as "Session is full". If a non-kicked row with the same normalized
+  // name is currently OFFLINE, hand back that same seat instead of minting a
+  // new one. A same-name row that is still CONNECTED belongs to an active tab
+  // (second device, or a classmate with the same name), so fall through and
+  // claim a fresh seat for it.
+  const [[rejoin]] = await pool.query(
+    `SELECT id, reconnect_key, connected FROM session_participants
+     WHERE session_id=:sid AND kicked_at IS NULL
+       AND LOWER(TRIM(first_name))=:fn AND LOWER(TRIM(last_name))=:ln
+     ORDER BY connected ASC, id DESC LIMIT 1`,
+    { sid: session.id, fn: fn.toLowerCase(), ln: ln.toLowerCase() }
+  );
+  if (rejoin && Number(rejoin.connected) !== 1) {
+    return res.json({
+      sessionId: session.id,
+      participantId: rejoin.id,
+      reconnectKey: rejoin.reconnect_key,
+      joinMode: session.join_mode,
+      isGuestHost: !!session.is_guest_host,
+      existing: true,
+    });
   }
 
+  // Atomic seat claim: the INSERT only lands when a seat is actually free
+  // (kicked seats don't count) or the plan is unlimited. One statement, so a
+  // 45-student burst can neither overshoot the cap (the old COUNT-then-INSERT
+  // race) nor falsely reject. Distinct placeholder names because mysql2 does
+  // not reliably reuse a named placeholder twice in one statement.
   const reconnectKey = makeReconnectKey();
-  const fn = (firstName || "").trim();
-  const ln = (lastName || "").trim();
-  if (!fn) return res.status(400).json({ message: "Please enter your first name." });
-
-  const [r] = await pool.query(
+  const [claimed] = await pool.query(
     `INSERT INTO session_participants
        (session_id, first_name, last_name, reconnect_key, connected, join_type, group_name)
-     VALUES(:sid, :fn, :ln, :rk, 1, :jt, NULL)`,
-    {
-      sid: session.id,
-      fn,
-      ln,
-      rk: reconnectKey,
-      jt: session.join_mode,
-    }
+     SELECT :sid, :fn, :ln, :rk, 1, :jt, NULL
+     FROM sessions s
+     WHERE s.id = :sid2
+       AND (s.max_participants IS NULL OR s.max_participants <= 0
+         OR (SELECT COUNT(*) FROM session_participants p
+             WHERE p.session_id = :sid3 AND p.kicked_at IS NULL) < s.max_participants)
+     LIMIT 1`,
+    { sid: session.id, fn, ln, rk: reconnectKey, jt: session.join_mode, sid2: session.id, sid3: session.id }
   );
+  if (!claimed.affectedRows) {
+    const [[cur]] = await pool.query(
+      `SELECT status, max_participants,
+              (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid AND kicked_at IS NULL) AS seats
+       FROM sessions WHERE id=:sid2`,
+      { sid: session.id, sid2: session.id }
+    );
+    if (cur && ['LOBBY', 'LIVE', 'PAUSED'].includes(cur.status)
+        && Number(cur.max_participants || 0) > 0
+        && Number(cur.seats || 0) >= Number(cur.max_participants)) {
+      // No student names here — seat counts only, for diagnosing the next
+      // "couldn't enter the session" report without leaking PII to logs.
+      console.warn(`[join] session ${session.id} full (${cur.seats}/${cur.max_participants} seats, code ${code.toUpperCase()})`);
+      return res.status(400).json({ message: 'Session is full.' });
+    }
+    return res.status(400).json({ message: 'Session is not available for joining.' });
+  }
 
   await pool.query(
     `INSERT INTO scores(session_id, participant_id, total_points) VALUES(:sid,:pid,0)`,
-    { sid: session.id, pid: r.insertId }
+    { sid: session.id, pid: claimed.insertId }
   );
 
   res.json({
     sessionId: session.id,
-    participantId: r.insertId,
+    participantId: claimed.insertId,
     reconnectKey,
     joinMode: session.join_mode,
     isGuestHost: !!session.is_guest_host,
@@ -570,19 +617,22 @@ export async function joinSession(req, res) {
 }
 
 export async function logTabEvent(req, res) {
-  const { participantId } = req.body;
+  const { participantId, reconnectKey } = req.body;
   const sessionId = Number(req.params.id);
-  if (!participantId) return res.status(400).json({ message: "participantId required" });
   try {
     // This is the unload/sendBeacon path for the same event the socket handler
-    // records (student:tabOut in sessions.socket.js). Apply the same guards it
-    // does, so a stale beacon can't add tab-outs to a session that already
-    // ended or credit a participant who isn't in this session.
+    // records (student:tabOut in sessions.socket.js). The socket path proves
+    // seat ownership via the authenticated connection; this path has no
+    // connection, so it must present the reconnectKey instead — otherwise any
+    // client could forge tab-outs for any sequential participantId and frame
+    // another student. Same guards as the socket handler beyond that, so a
+    // stale beacon can't add tab-outs to an ended session or a seat that
+    // isn't theirs.
     const [[participant]] = await pool.query(
       `SELECT p.id, p.kicked_at, s.status
        FROM session_participants p JOIN sessions s ON s.id=p.session_id
-       WHERE p.id=:pid AND p.session_id=:sid`,
-      { pid: participantId, sid: sessionId }
+       WHERE p.id=:pid AND p.session_id=:sid AND p.reconnect_key=:rk`,
+      { pid: participantId, sid: sessionId, rk: reconnectKey }
     );
     if (!participant || participant.kicked_at || participant.status === "ENDED") return res.json({ ok: true, recorded: false });
     await pool.query(

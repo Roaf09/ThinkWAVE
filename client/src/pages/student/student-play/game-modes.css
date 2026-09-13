@@ -500,11 +500,8 @@ body:not(.dark) .sp-inline-theme-toggle {
 .sp-phase-wait {
   animation: spFadeIn 280ms ease both;
 }
-.tw-loading-dots {
-  display: inline-flex;
-  margin-left: 4px;
-  min-width: 18px;
-}
+/* Layout migrated to Tailwind utilities in TwUI.jsx (LoadingDots).
+   Kept: dot animation + keyframes (no utility equivalent). */
 .tw-loading-dots span {
   display: inline-block;
   animation: twDot 1.2s infinite ease-in-out;

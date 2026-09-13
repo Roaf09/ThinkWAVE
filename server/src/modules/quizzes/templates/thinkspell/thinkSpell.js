@@ -288,7 +288,7 @@ export function computeThinkSpellPoints(wordLength, config = {}, basePoints = 1)
   return Math.max(1, Number(basePoints) || 1);
 }
 
-export function loadThinkSpellGridState({ config, correct, questionId, priorPayload }) {
+export function loadThinkSpellGridState({ config, correct, questionId: _questionId, priorPayload }) {
   const wordBank = resolveThinkSpellWordBank({ config, correct });
   const gridSize = Math.min(12, Math.max(5, Number(config?.gridSize ?? 8) || 8));
   const prior = priorPayload || {};
