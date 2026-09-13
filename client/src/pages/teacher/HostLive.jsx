@@ -33,21 +33,6 @@ export default function HostLive({ guestMode = false }) {
   const hostIsMobile = useHostIsMobile();
   const [mobileSheet, setMobileSheet] = useState(null);
   const [codeContinueReady, setCodeContinueReady] = useState(false);
-  // Mobile tutorial: open the participants sheet the moment the welcome step
-  // arrives so the dialog has something to sit above.
-  useEffect(() => {
-    if (!hostIsMobile) return undefined;
-    if (hostTutorialStage === "participants" && !mobileSheet) setMobileSheet("participants");
-    return undefined;
-  }, [hostTutorialStage, hostIsMobile]);
-  // Mobile tutorial: the code step's continue affordance appears 2s after the
-  // code tab is shown, not before it is tapped.
-  useEffect(() => {
-    setCodeContinueReady(false);
-    if (hostTutorialStage !== "code" || !hostIsMobile || mobileSheet !== "code") return undefined;
-    const timer = window.setTimeout(() => setCodeContinueReady(true), 2000);
-    return () => window.clearTimeout(timer);
-  }, [hostTutorialStage, hostIsMobile, mobileSheet]);
   const sheetRef = useRef(null);
   const sheetDragRef = useRef(null);
   function onSheetTouchStart(event) {
@@ -98,6 +83,21 @@ export default function HostLive({ guestMode = false }) {
   const [advanceReason, setAdvanceReason] = useState("answered");
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [hostTutorialStage, setHostTutorialStage] = useState(null);
+  // Mobile tutorial: open the participants sheet the moment the welcome step
+  // arrives so the dialog has something to sit above.
+  useEffect(() => {
+    if (!hostIsMobile) return undefined;
+    if (hostTutorialStage === "participants" && !mobileSheet) setMobileSheet("participants");
+    return undefined;
+  }, [hostTutorialStage, hostIsMobile]);
+  // Mobile tutorial: the code step's continue affordance appears 2s after the
+  // code tab is shown, not before it is tapped.
+  useEffect(() => {
+    setCodeContinueReady(false);
+    if (hostTutorialStage !== "code" || !hostIsMobile || mobileSheet !== "code") return undefined;
+    const timer = window.setTimeout(() => setCodeContinueReady(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [hostTutorialStage, hostIsMobile, mobileSheet]);
   const [tabTutorialOpen, setTabTutorialOpen] = useState(false);
   const [tutorialDemo, setTutorialDemo] = useState(false);
   const [tutorialBots, setTutorialBots] = useState([]);
