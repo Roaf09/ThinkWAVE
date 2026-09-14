@@ -18,7 +18,10 @@ const profileSchema = z.object({
   middleInitial: z.string().max(10).optional().nullable(),
   studentId: z.string().min(1).max(80),
   birthDate: z.string().optional().nullable(),
-  profileImage: z.string().max(5000000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional().nullable(),
+  // "" means "no picture" for clients that still send the raw form state (the
+  // bundle deployed before DEF-20 did); treat it as null instead of failing
+  // the data-URI check and rejecting the whole profile save.
+  profileImage: z.preprocess((value) => (value === "" ? null : value), z.string().max(5000000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional().nullable()),
 });
 
 const joinProfileSchema = z.object({

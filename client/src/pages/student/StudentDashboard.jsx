@@ -26,6 +26,12 @@ export default function StudentDashboard() {
   const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {}, achievementStats: {}, removalNotices: [] });
   const [joinOpen, setJoinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // The 5-second dashboard poll below re-derives the profile form from the
+  // server payload; while the Student Info modal is open that overwrote
+  // whatever the student was typing (DEF-20b). Mirror the open flag in a ref
+  // so the poll can leave the form alone until the modal closes.
+  const profileOpenRef = useRef(false);
+  useEffect(() => { profileOpenRef.current = profileOpen; }, [profileOpen]);
   const [showLogout, setShowLogout] = useState(false);
   const [classCode, setClassCode] = useState("");
   const [joinProfileStep, setJoinProfileStep] = useState(false);
@@ -64,7 +70,7 @@ export default function StudentDashboard() {
         for (const notice of next.removalNotices || []) byId.set(Number(notice.enrollment_id), notice);
         return [...byId.values()].sort((a, b) => new Date(a.removed_at || 0) - new Date(b.removed_at || 0));
       });
-      setProfile((current) => profileFromData(next, current));
+      if (!profileOpenRef.current) setProfile((current) => profileFromData(next, current));
     } catch (error) {
       if (!silent) setMsg(error?.response?.data?.message || "Unable to load your dashboard.");
     }
@@ -125,7 +131,16 @@ export default function StudentDashboard() {
     event.preventDefault();
     setProfileMsg("");
     try {
-      await api.post("/student/profile", profile);
+      // The form keeps empty strings for the optional fields, but the server
+      // validates profileImage as a data: URI when it is present, so a student
+      // with no photo got "Validation error" on every save (DEF-20a). Send
+      // absent values as null, the same way the teacher profile form does.
+      await api.post("/student/profile", {
+        ...profile,
+        middleInitial: String(profile.middleInitial || "").trim() || null,
+        birthDate: profile.birthDate || null,
+        profileImage: profile.profileImage || null,
+      });
       await load({ silent: true });
       setProfileOpen(false);
       setProfileSaved(true);
