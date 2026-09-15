@@ -132,8 +132,15 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
       const timer = window.setTimeout(() => setBuilderTutorialStage("repeat_done"), tt === "TYPE_ANSWER" ? 2000 : 250);
       return () => window.clearTimeout(timer);
     }
-    if (builderTutorialStage === "save" && isSaved) {
-      const timer = window.setTimeout(() => setBuilderTutorialStage("publish"), 2000);
+    // On a phone the Save/Publish actions live inside the "⋯" bottom sheet, so
+    // the walkthrough runs on save_menu/publish_menu instead of save/publish.
+    // Both variants have to advance once the save lands: while the stage is
+    // stuck on save_menu the sheet keeps Publish disabled and the ⋯ toggle
+    // locked, so the teacher is left staring at "Save your finished work to
+    // continue." on an already-saved quiz with no way to reach Publish.
+    if ((builderTutorialStage === "save" || builderTutorialStage === "save_menu") && isSaved) {
+      const next = builderTutorialStage === "save_menu" ? "publish_menu" : "publish";
+      const timer = window.setTimeout(() => setBuilderTutorialStage(next), 2000);
       return () => window.clearTimeout(timer);
     }
     return undefined;
