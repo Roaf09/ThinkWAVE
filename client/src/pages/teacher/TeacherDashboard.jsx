@@ -34,6 +34,14 @@ const blankProfile = { firstName: "", lastName: "", contactNumber: "", email: ""
 const TRANSIENT_TUTORIAL_FALLBACK = {
   classes_wait_subject: "classes_intro",
   classes_wait_section: "classes_create_section",
+  // "builder_pending" is handed back to the tour only when the quiz is
+  // published. A teacher who opens the builder and then leaves without
+  // publishing used to strand the tour there for good: no tab renders a
+  // dialog for it, so the tour went silent and never reached the Sessions
+  // leg. Resume from the start of the Create walkthrough instead - it is the
+  // only resume point that always has something to point at, because the
+  // "Create & Open Builder" button exists only once a template is selected.
+  builder_pending: "create_intro",
 };
 
 function tutorialTabForStage(stage) {

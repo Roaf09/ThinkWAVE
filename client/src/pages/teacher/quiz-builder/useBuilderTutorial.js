@@ -27,19 +27,23 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
     setBuilderTutorialStage((current) => current || (hasSeenAny ? "template_prompt" : "intro"));
   }, [guestMode, tutorialUserId, quiz?.template_type, isSaved, questions]);
 
+  // Persist the outcome immediately, for BOTH ways a follow-up template
+  // tutorial can end - completing it and skipping it. Without this, the
+  // "Would you like to see the tutorial for this template?" prompt reappears
+  // the moment the teacher types or clicks anything, because the trigger
+  // effect below re-runs on every questions/quiz change and re-opens the
+  // prompt whenever the stage is falsy and the template hasn't been marked
+  // seen yet. Finishing used to skip this, so a completed follow-up tutorial
+  // (e.g. MCQ, which ends right after the correct answer is picked) popped up
+  // again on the very next keystroke, over and over.
   function finishFollowupTemplateTutorial() {
+    if (!guestMode && tutorialUserId && quiz?.template_type) {
+      markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    }
     setBuilderTutorialStage(null);
   }
 
   function skipFollowupTemplateTutorial() {
-    // Persist the skip immediately. Without this, the "Would you like to see
-    // the tutorial for this template?" prompt reappears the moment the teacher
-    // types or clicks anything, because the trigger effect below re-runs on
-    // every questions/quiz change and re-opens the prompt whenever the stage
-    // is falsy and the template hasn't been marked seen yet.
-    if (!guestMode && tutorialUserId && quiz?.template_type) {
-      markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
-    }
     finishFollowupTemplateTutorial();
   }
 
