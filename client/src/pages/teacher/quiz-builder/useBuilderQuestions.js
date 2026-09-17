@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { buildBlankQuestion } from "./quizBuilderUtils";
+import { buildBlankQuestion, validateQuestion } from "./quizBuilderUtils";
 
 export function useBuilderQuestions({
   quiz,
@@ -37,7 +37,11 @@ export function useBuilderQuestions({
       // The repeat step always highlights the whole question form with a single
       // "try again" dialog now, rather than stepping through each field one at
       // a time - that granular walkthrough only made sense the first time.
-      setBuilderTutorialStage("repeat");
+      // Guard: only enter repeat when the current question is valid, otherwise
+      // the new blank question makes repeat unfinishable (repeat validates the
+      // current slot).
+      const currentValid = validateQuestion(questions[qIndex] || questions[0], quiz?.template_type).length === 0;
+      if (currentValid) setBuilderTutorialStage("repeat");
     }
   }
 

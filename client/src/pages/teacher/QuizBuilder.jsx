@@ -109,7 +109,7 @@ export default function QuizBuilder({ guestMode = false }) {
     finishFollowupTemplateTutorial,
     skipFollowupTemplateTutorial,
     startFollowupTemplateTutorial,
-  } = useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved });
+  } = useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved, bankSavedOrders });
 
   const {
     addQuestion,

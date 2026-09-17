@@ -354,12 +354,13 @@ export async function getStudentDashboard(req, res) {
       { uid, since: boundaries.weeklyAt }
     );
   } catch (err) {
-    // Assignment-based goal credit needs the competitive_points column added
-    // by server/scripts/add_assignment_competitive_points_column.js. If that
-    // migration hasn't been run yet, don't take the whole dashboard down -
-    // just skip assignment credit for goals until it has been applied.
+    // Assignment-based goal credit needs the competitive_points column
+    // (present in schema.sql and auto-added at server startup for older
+    // databases). If that auto-migration hasn't applied yet, don't take the
+    // whole dashboard down - just skip assignment credit for goals until the
+    // server has restarted and applied it.
     if (err?.code === "ER_BAD_FIELD_ERROR") {
-      console.warn("[student.dashboard] async_quiz_submissions.competitive_points is missing - run `node server/scripts/add_assignment_competitive_points_column.js` to enable assignment credit toward daily/weekly goals.");
+      console.warn("[student.dashboard] async_quiz_submissions.competitive_points is missing - restart the server so the startup check can add it, to enable assignment credit toward daily/weekly goals.");
       dailyAssignmentSubs = [];
       weeklyAssignmentSubs = [];
     } else {
@@ -771,12 +772,12 @@ export async function submitStudentQuiz(req, res) {
     );
   } catch (err) {
     if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
-    // competitive_points hasn't been added to this database yet - run
-    // `node server/scripts/add_assignment_competitive_points_column.js`.
-    // Still record the submission so the student's answers are never lost;
-    // just skip competitive points/leaderboard until the migration runs.
+    // competitive_points hasn't been added to this database yet - it is
+    // added automatically at server startup. Still record the submission so
+    // the student's answers are never lost; just skip competitive
+    // points/leaderboard until the server has restarted and applied it.
     competitivePointsColumnMissing = true;
-    console.warn("[submitStudentQuiz] async_quiz_submissions.competitive_points is missing - run `node server/scripts/add_assignment_competitive_points_column.js`. Submission saved without competitive points.");
+    console.warn("[submitStudentQuiz] async_quiz_submissions.competitive_points is missing - restart the server so the startup check can add it. Submission saved without competitive points.");
     await pool.query(
       `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score)
        VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore)`,

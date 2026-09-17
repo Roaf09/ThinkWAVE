@@ -310,7 +310,7 @@ export function useBuilderPersistence({
         next.add(Number(q?.order ?? qIndex));
         return next;
       });
-      if (builderTutorialStage === "bank") {
+      if (["bank", "bank_menu"].includes(builderTutorialStage)) {
         setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
       }
     } catch (error) {
@@ -318,6 +318,9 @@ export function useBuilderPersistence({
       if (/already.*saved|duplicate/i.test(message)) {
         setMsg("");
         setBankSavedOrders((current) => new Set([...current, Number(q?.order ?? qIndex)]));
+        if (["bank", "bank_menu"].includes(builderTutorialStage)) {
+          setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
+        }
         return;
       }
       setMsg(message || "Failed to save to bank.");

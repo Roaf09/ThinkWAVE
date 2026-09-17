@@ -3,7 +3,7 @@ import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { hasSeenTemplateTutorial, markTemplateTutorialSeen, readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 import { trimText, validateQuestion } from "./quizBuilderUtils";
 
-export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved }) {
+export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved, bankSavedOrders }) {
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [builderTutorialStage, setBuilderTutorialStage] = useState(null);
   const [followupTemplateTutorial, setFollowupTemplateTutorial] = useState(false);
@@ -132,8 +132,37 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
         return () => window.clearTimeout(timer);
       }
     }
-    if (builderTutorialStage === "repeat" && validateQuestion(q, quiz.template_type).length === 0) {
+    if (builderTutorialStage === "repeat" && questions.every((item) => validateQuestion(item, quiz.template_type).length === 0)) {
       const timer = window.setTimeout(() => setBuilderTutorialStage("repeat_done"), tt === "TYPE_ANSWER" ? 2000 : 250);
+      return () => window.clearTimeout(timer);
+    }
+    // Crossword recovery: editing words after Fill resets gridFilled upstream,
+    // which would strand crossword_shuffle (needs gridFilled) pointing at
+    // Shuffle while Fill is the required action. Fall back instead.
+    if (tt === "THINK_SPELL" && ["crossword_fill", "crossword_shuffle", "crossword_word_controls"].includes(builderTutorialStage)) {
+      const corAns = Array.isArray(cor.answers) && cor.answers.length ? cor.answers : (Array.isArray(cfg.answers) ? cfg.answers : []);
+      const wordCount = corAns.filter((word) => trimText(word)).length;
+      if (wordCount < 4 && builderTutorialStage !== "specific") {
+        const timer = window.setTimeout(() => setBuilderTutorialStage("specific"), 400);
+        return () => window.clearTimeout(timer);
+      }
+      if (builderTutorialStage === "crossword_shuffle" && !cfg.gridFilled) {
+        const timer = window.setTimeout(() => setBuilderTutorialStage("crossword_fill"), 400);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    // Bank recovery: the current question may already be in the bank (loaded
+    // state match or duplicate-save race). The Save-to-bank row is disabled in
+    // that case, so advance instead of stranding the tutorial.
+    if ((builderTutorialStage === "bank" || builderTutorialStage === "bank_menu") && bankSavedOrders?.has?.(Number((q?.order ?? qIndex)))) {
+      const timer = window.setTimeout(() => {
+        if (["MATCHING", "THINK_SPELL"].includes(tt)) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          setBuilderTutorialStage("save");
+        } else {
+          setBuilderTutorialStage("add");
+        }
+      }, 600);
       return () => window.clearTimeout(timer);
     }
     // On a phone the Save/Publish actions live inside the "⋯" bottom sheet, so
@@ -147,8 +176,16 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
       const timer = window.setTimeout(() => setBuilderTutorialStage(next), 2000);
       return () => window.clearTimeout(timer);
     }
+    // Publish recovery: editing after save makes Publish disabled with Save
+    // hidden (mobile publish_menu) or unhighlighted (desktop). Fall back to
+    // the save step so the teacher is guided to re-save instead of stuck.
+    if ((builderTutorialStage === "publish" || builderTutorialStage === "publish_menu") && !isSaved) {
+      const next = builderTutorialStage === "publish_menu" ? "save_menu" : "save";
+      const timer = window.setTimeout(() => setBuilderTutorialStage(next), 800);
+      return () => window.clearTimeout(timer);
+    }
     return undefined;
-  }, [builderTutorialStage, questions, qIndex, quiz, isSaved, followupTemplateTutorial]);
+  }, [builderTutorialStage, questions, qIndex, quiz, isSaved, followupTemplateTutorial, bankSavedOrders]);
 
   useEffect(() => {
     if (builderTutorialStage === "add_delay") {
