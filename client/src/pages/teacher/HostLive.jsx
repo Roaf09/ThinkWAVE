@@ -503,7 +503,7 @@ export default function HostLive({ guestMode = false }) {
     if (!tutorialDemo || hostTutorialStage !== "question_delay" || !isLive) return undefined;
     const timerId = window.setTimeout(() => {
       setHostTutorialStage("question");
-    }, 2000);
+    }, 3000);
     return () => window.clearTimeout(timerId);
   }, [tutorialDemo, hostTutorialStage, isLive]);
 
@@ -613,6 +613,7 @@ export default function HostLive({ guestMode = false }) {
   }
 
   async function handlePrimaryControl() {
+    if (hostIsMobile) setMobileSheet(null);
     if (tutorialDemo && hostTutorialStage === "start" && !isLive && !isPaused) {
       setHostTutorialStage("countdown");
       // Revision 10.14: move the teacher to the question area immediately after

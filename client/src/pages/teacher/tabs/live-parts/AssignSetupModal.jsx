@@ -21,7 +21,15 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
   function submit(event) { event.preventDefault(); if (complete) { if (tutorialStage === "assign_create") onTutorialFinish?.(); onSubmit(quiz, form); } }
   useEffect(() => {
     document.body.classList.add("tw-mobile-modal-open");
-    return () => document.body.classList.remove("tw-mobile-modal-open");
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.classList.remove("tw-mobile-modal-open");
+      document.body.style.overflow = prevOverflow;
+      document.body.style.overscrollBehavior = prevOverscroll;
+    };
   }, []);
   return <div style={modalBackdrop} onClick={onClose}><form onSubmit={submit} onClick={(event) => event.stopPropagation()} className="tw-assignment-setup-modal" style={{ ...card(c, { width: "min(95vw, 700px)", padding: 0, overflow: "hidden", background: solidModalBg(c) }) }}>
     {isMobile && <div className="tw-host-launch-toprow"><button type="button" aria-label="Close" onClick={onClose}><TwIcon name="close" size={20} /></button></div>}
@@ -33,7 +41,7 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
       </div>
       <div className="text-[13px]" style={{ color: c.textMuted }}>Students will only be able to answer within the selected schedule.</div>
       <button data-tutorial="assign-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
-      <div className="tw-assignment-primary-actions flex justify-end items-center gap-[14px] mt-[4px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" disabled={!complete}>Create Assignment</TeacherPressButton></div>
+      <div className="tw-assignment-primary-actions flex justify-end items-center gap-[14px] mt-[4px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" icon="send" disabled={!complete}>Send Assignment</TeacherPressButton></div>
       <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} category={quiz.category} />
     </div>
     {tutorialStage === "assign_schedule" && !editing && <ThinkBotTutorial target='[data-tutorial="assign-schedule"]' placement="left" square><p>Assignments are completed by students on their own time. Start by deciding when students can access this activity.</p></ThinkBotTutorial>}

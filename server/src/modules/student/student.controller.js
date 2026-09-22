@@ -174,6 +174,7 @@ async function getProfile(userId) {
 
 export async function upsertProfile(req, res) {
   const { lastName, firstName, middleInitial, studentId, birthDate = null, profileImage = null } = req.body;
+  try {
   await pool.query(
     `INSERT INTO student_profiles(user_id,last_name,first_name,middle_initial,student_id,birth_date,profile_image)
      VALUES(:uid,:ln,:fn,:mi,:sid,:birthDate,:profileImage)
@@ -188,6 +189,12 @@ export async function upsertProfile(req, res) {
       birthDate2: birthDate || null, profileImage2: profileImage || null,
     }
   );
+  } catch (e) {
+    if (e && (e.code === "ER_DUP_ENTRY" || String((e.sqlMessage || e.message) || "").toLowerCase().includes("duplicate"))) {
+      return res.status(409).json({ message: "This Student ID is already used by another account." });
+    }
+    throw e;
+  }
   await pool.query(
     `UPDATE class_enrollments SET first_name=:fn,last_name=:ln,middle_initial=:mi,student_id=:sid
      WHERE student_user_id=:uid AND removed_at IS NULL`,

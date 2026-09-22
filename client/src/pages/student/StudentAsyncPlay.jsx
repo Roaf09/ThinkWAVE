@@ -369,7 +369,7 @@ export default function StudentAsyncPlay() {
     const displayName=(row)=>`${row.first_name||""} ${row.last_name||""}`.trim()||"Student";
     const isMe=(row)=>Number(row.student_user_id)===Number(myUserId);
     return (
-      <div className={`sp-final-page ${dark?"theme-dark":"theme-light"}`} style={{minHeight:"100vh",...assignmentBgStyle,"--sp-template-accent":gameplayAccent,"--host-accent":gameplayAccent,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <div className={`sp-final-page ${dark?"theme-dark":"theme-light"}`} style={{minHeight:"100vh",...assignmentBgStyle,"--sp-template-accent":gameplayAccent,"--host-accent":gameplayAccent,fontFamily:"Inter,'Segoe UI',system-ui,sans-serif"}}>
         <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
         <div className={`sp-final-wrap sp-page-enter columns-${leaderboardColumns}`}>
           <section className="sp-final-leaderboard-card" style={{background:cardBg,borderColor:gameplayAccent}}>
@@ -411,7 +411,7 @@ export default function StudentAsyncPlay() {
     );
   }
 
-  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"'Segoe UI', system-ui, sans-serif"}}>
+  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"Inter,'Segoe UI',system-ui,sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
     {entryStage==="lobby"&&<div className="sp-anticheat-backdrop">
       <div className="sp-wait-card sp-page-enter sp-assignment-lobby-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}>
@@ -466,7 +466,7 @@ function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.f
 function AsyncShell({ dark, pageBg, backgroundStyle, textC, title, isMuted, onMute, onTheme, children }) {
   const hasBackground = Boolean(backgroundStyle?.backgroundImage);
   return (
-    <div style={{ minHeight: "100vh", ...(backgroundStyle || { background: pageBg }), color: textC, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", ...(backgroundStyle || { background: pageBg }), color: textC, fontFamily: "Inter,'Segoe UI', system-ui, sans-serif" }}>
       <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={onMute}/><ThemeTogglePill dark={dark} onClick={onTheme}/></div>
       <div className={`quiz-shell-new sp-assigned-shell ${dark ? "theme-dark" : "theme-light"} ${hasBackground ? "has-session-background" : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column" }}>
         <div className="qn-header"><div style={{display:"flex",alignItems:"center",gap:10}}><div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{title}</div></div><div className="qn-meta"><div className="qn-timer"><TwIcon name="clock" size={17}/> Assignment</div></div></div>

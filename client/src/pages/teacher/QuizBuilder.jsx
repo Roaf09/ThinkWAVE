@@ -65,6 +65,7 @@ export default function QuizBuilder({ guestMode = false }) {
   const [loadError, setLoadError] = useState("");
   const [bankSavedOrders, setBankSavedOrders] = useState(() => new Set());
   const [overflowOpen, setOverflowOpen] = useState(false);
+const prevQuizStatusRef = useRef(null);
   const [overflowTitleEditing, setOverflowTitleEditing] = useState(false);
   const [qMenuOpen, setQMenuOpen] = useState(false);
   const touchStartXRef = useRef(null);
@@ -239,6 +240,22 @@ export default function QuizBuilder({ guestMode = false }) {
       if (!qMenuOpen && builderTutorialStage === "bank_menu") setBuilderTutorialStage("bank");
       else if (qMenuOpen && builderTutorialStage === "bank") setBuilderTutorialStage("bank_menu");
     }, [qMenuOpen, builderTutorialStage, setBuilderTutorialStage]);
+    // Mobile tutorial: auto-leave the ⋯ bottom sheet at the moment the quiz
+    // becomes PUBLISHED. Save/Publish never close it otherwise —
+    // the user taps out manually via the backdrop.
+    // Transition-only: without the previous-status check this effect refires
+    // on every render while published and slams the sheet shut, making ⋯
+    // unopenable after publishing.
+    useEffect(() => {
+      if (!isMobile) return undefined;
+      const status = String(quiz?.status || "").toUpperCase();
+      const was = prevQuizStatusRef.current;
+      prevQuizStatusRef.current = status;
+      if (status !== "PUBLISHED" || was === "PUBLISHED") return undefined;
+      if (!overflowOpen) return undefined;
+      setOverflowOpen(false);
+      setOverflowTitleEditing(false);
+    }, [quiz?.status, overflowOpen, isMobile]);
 
   useEffect(() => {
     load();

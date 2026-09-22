@@ -10,14 +10,12 @@ import { useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { consumeLastRoute } from "../lib/lastRoute";
-import { useColors, useTheme } from "../context/ThemeContext";
+import { useColors } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
-import ThemeIconButton from "../components/ThemeIconButton";
 
 export default function SuperadminLogin({ onLoginSuccess }) {
   const nav = useNavigate();
   const c = useColors();
-  const { dark, toggleTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -78,13 +76,12 @@ export default function SuperadminLogin({ onLoginSuccess }) {
           </form>
         </div>
       </main>
-      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }
 
 const s = {
-  page: (c) => ({ background: c.pageBg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text }),
+  page: (c) => ({ background: c.pageBg, fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif", color: c.text }),
   glow: { background: "radial-gradient(circle, rgba(239,68,68,0.08) 0%, transparent 70%)" },
   card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}` }),
   subtitle: (c) => ({ color: c.textMuted }),

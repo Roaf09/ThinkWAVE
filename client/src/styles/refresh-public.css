@@ -136,7 +136,7 @@ body.dark-mode .tw-hero-row {
     grid-template-columns: 1fr;
   }}
 html { scroll-behavior: smooth; }
-.tw-landing-page { min-height: 100vh; font-family: "Segoe UI", system-ui, sans-serif; overflow-x: hidden; }
+.tw-landing-page { min-height: 100vh; font-family: Inter, "Segoe UI", system-ui, sans-serif; overflow-x: hidden; }
 .tw-public-header { min-height: 72px; padding: 0 clamp(18px,4vw,54px); display:flex; align-items:center; justify-content:space-between; gap:22px; position:sticky; top:0; z-index:120; backdrop-filter:blur(18px); }
 .tw-public-logo,.tw-footer-logo { display:flex; align-items:baseline; text-decoration:none; font-size:22px; font-weight:950; letter-spacing:-.04em; }
 .tw-public-logo span:last-child,.tw-footer-logo span:last-child { color:var(--tw-brand); }
@@ -654,14 +654,14 @@ img,video,canvas,svg{max-width:100%}
 @media(max-width:760px){.tw-home-quick-metrics,.tw-home-performance{display:none!important}.tw-home-top-grid,.tw-home-mid-grid{grid-template-columns:1fr!important}.tw-mini-info-grid{grid-template-columns:repeat(2,1fr)!important}.tw-mini-info-card{aspect-ratio:1.6;display:flex!important;flex-direction:column;justify-content:center}.tw-session-card-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}.tw-session-card-desktop-row{display:none!important}.tw-session-card-mobile-square{display:flex!important;flex-direction:column;justify-content:center;gap:7px;aspect-ratio:1;padding:4px}.tw-session-card-mobile-title{font-weight:900;font-size:13.5px;line-height:1.28;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.tw-session-card-mobile-meta{font-size:11px;font-weight:750;display:flex;align-items:center;gap:5px}}
 /* Class tab, mobile: Add Folder / Share Code become icon-only buttons, and
    the whole live/assignment report card is clickable (not just the link). */
-@media(max-width:760px){[data-tutorial="class-add-folder"] .tw-press-label,[data-tutorial="class-share-code"] .tw-press-label{display:none!important}[data-tutorial="class-add-folder"],[data-tutorial="class-share-code"]{padding:0!important;width:40px!important;min-width:40px!important;height:40px!important;display:inline-grid!important;place-items:center!important}[data-tutorial="class-add-folder"]>span,[data-tutorial="class-share-code"]>span{padding:0!important;min-height:0!important}}
-/* Live Sessions tab, mobile: the ⋮ quick-actions menu opens to the LEFT of
-   the button (vertically centered on it) instead of dropping down below. */
+@media(max-width:760px){[data-tutorial="class-add-folder"] .tw-press-label,[data-tutorial="class-share-code"] .tw-press-label{display:none!important}[data-tutorial="class-add-folder"],[data-tutorial="class-share-code"]{padding:0!important;width:36px!important;min-width:36px!important;height:36px!important;display:inline-grid!important;place-items:center!important}[data-tutorial="class-add-folder"]>span,[data-tutorial="class-share-code"]>span{padding:0!important;min-height:0!important}}
+/* Live Sessions tab, mobile: the ⋮ quick-actions menu opens to the RIGHT of
+   the button (dropdown below, right-aligned) instead of to the left. */
 @media(max-width:760px){.tw-session-quick-menu{
-    right:calc(100% + 8px)!important;
+    right:0!important;
     left:auto!important;
-    top:50%!important;
-    transform:translateY(-50%)!important;
+    top:calc(100% + 8px)!important;
+    transform:none!important;
   }}
 /* Live Sessions tab, mobile: while the Quiz Preview modal or the Host Live
    setup modal is open, fully hide the pill-shaped bottom tab bar instead of
@@ -674,8 +674,8 @@ img,video,canvas,svg{max-width:100%}
 /* Analytics tab, mobile: icon-only + smaller Class Analytics button, smaller
    PDF/Excel export buttons, and a per-student/per-question toggle (with the
    four summary metric cards always shown first). */
-.tw-analytics-mobile-toggle-btn{display:none}
-.tw-analytics-panel-wrap{display:block}
+.tw-analytics-advanced-layout .tw-analytics-panel-wrap{display:none}
+.tw-analytics-advanced-layout .tw-analytics-panel-wrap.is-mobile-visible{display:block}
 @media(max-width:760px){.tw-analytics-class-btn .tw-press-label,.tw-class-analytics-btn .tw-press-label{display:none!important}.tw-class-analytics-btn{padding:0!important;width:36px!important;min-width:36px!important;height:36px!important;display:inline-grid!important;place-items:center!important}.tw-class-analytics-btn>span{padding:0!important;min-height:0!important}.tw-analytics-export-btn{min-width:0!important;padding:7px 12px!important;font-size:12px!important}.tw-analytics-export-btn>span{min-height:0!important;gap:5px!important}.tw-analytics-advanced-layout{display:flex!important;flex-direction:column!important;gap:14px!important}.tw-analytics-detail-column{display:contents!important}.tw-analytics-metrics-grid{order:-2!important}.tw-analytics-mobile-toggle-btn{order:-1!important;display:flex!important;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 16px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--tw-brand),var(--tw-gradient-end));color:var(--tw-on-brand);font:inherit;font-weight:900;font-size:13.5px;cursor:pointer;box-shadow:0 8px 20px rgba(43,108,255,.3)}.tw-analytics-mobile-toggle-btn:active{filter:brightness(.92)}.tw-analytics-panel-wrap{display:none!important;order:0!important}.tw-analytics-panel-wrap.is-mobile-visible{display:block!important}}
 /* Host Live window, mobile: keep the exact desktop layout/ratio (per spec)
    instead of reflowing to a single column - the whole stage is scaled down

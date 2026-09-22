@@ -19,7 +19,7 @@ function otpClientPayload(otpResult) {
   const payload = { emailSent: sent };
   if (!sent) {
     payload.deliveryWarning = String(otpResult?.delivery?.reason || "").includes("NOT_CONFIGURED")
-      ? "Email delivery is not configured. Add your Mailgun settings to server/.env for localhost."
+      ? "Email delivery is not configured. Add Mailgun or SMTP settings to server/.env, then restart the server."
       : "The OTP email could not be sent. Check the server email settings and logs.";
   }
   return payload;
@@ -75,6 +75,30 @@ export async function register(req, res) {
       { email: cleanEmail }
     );
     if (existing) {
+      // An existing verified TEACHER accepting an Admin invitation for the same
+      // email is upgraded in place instead of rejected: one login per email.
+      // The emailed invite link itself proves address ownership, so no OTP is needed.
+      if (invitation && existing.role === "TEACHER" && existing.is_verified) {
+        if (!existing.is_active) return res.status(403).json({ message: "Account deactivated" });
+        await pool.query(
+          `UPDATE users SET role='ADMIN', password_hash=:ph, first_name=:fn, last_name=:ln,
+            institution_name=:institution, approval_status='APPROVED', is_verified=1,
+            token_version=token_version+1 WHERE id=:id`,
+          { ph: passwordHash, fn: firstName.trim(), ln: lastName.trim(), institution: invitation.institution_name, id: existing.id }
+        );
+        await pool.query(`UPDATE admin_invitations SET used_at=NOW() WHERE id=:id`, { id: invitation.id });
+        const [[approvedPlan]] = await pool.query(`SELECT plan_expires_at FROM institution_applications WHERE id=:id`, { id: invitation.application_id });
+        await pool.query(`UPDATE users SET plan_code='INSTITUTION', plan_expires_at=:expiresAt WHERE id=:userId`, { expiresAt: approvedPlan?.plan_expires_at || null, userId: existing.id });
+        await pool.query(`UPDATE institution_applications SET status='ACTIVATED' WHERE id=:id`, { id: invitation.application_id });
+        try { await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_ACCOUNT_CREATED',:uid,:name,:email,'ADMIN',:inst,:payload)`,{uid:existing.id,name:`${firstName.trim()} ${lastName.trim()}`.trim(),email:cleanEmail,inst:invitation.institution_name,payload:JSON.stringify({applicationId:invitation.application_id,convertedFrom:'TEACHER'})}); } catch (_) {}
+        return res.status(200).json({
+          message: "Your teacher account is now an Administrator account. Please log in.",
+          role: "ADMIN",
+          approvalStatus: "APPROVED",
+          requiresVerification: false,
+          converted: true,
+        });
+      }
       if (!existing.is_verified && existing.role === role && !adminInviteToken) {
         if (!existing.is_active) return res.status(403).json({ message: "Account deactivated" });
         await pool.query(
@@ -244,6 +268,60 @@ export async function resendOtp(req, res) {
   if (rows[0].is_verified) return res.status(400).json({ message: "This account is already verified." });
   const otpResult = await sendOtpForUser(rows[0].id, cleanEmail);
   return res.json({ message: "A new verification code has been generated.", ...otpClientPayload(otpResult) });
+}
+
+// Lets a user fix a typo'd signup email from the OTP screen (e.g. gamil.com).
+// Only unverified accounts can move; password proves ownership of the pending
+// account so knowing someone else's unverified address is not enough to steal it.
+export async function changeEmail(req, res) {
+  const currentEmail = normalizeEmail(req.body.currentEmail);
+  const newEmail = normalizeEmail(req.body.newEmail);
+  const password = String(req.body.password ?? "");
+  if (!currentEmail || !newEmail) return res.status(400).json({ message: "Both the current and new email addresses are required." });
+  if (currentEmail === newEmail) return res.status(400).json({ message: "The new email address is the same as the current one." });
+  if (!password) return res.status(400).json({ message: "Enter your password to confirm this change." });
+
+  const [rows] = await pool.query(
+    `SELECT id, role, password_hash, is_verified, is_active
+     FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+    { email: currentEmail }
+  );
+  if (!rows.length) return res.status(404).json({ message: "Account not found." });
+  const user = rows[0];
+  if (user.is_verified) return res.status(400).json({ message: "This account is already verified." });
+  if (!user.is_active) return res.status(403).json({ message: "Account deactivated" });
+  // Admin addresses are pinned to their invitation; guest hosts have no password.
+  if (user.role === "ADMIN") return res.status(403).json({ message: "This email is tied to an admin invitation and cannot be changed here." });
+  if (user.role === "GUEST_HOST") return res.status(403).json({ message: "This account email cannot be changed." });
+
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) return res.status(401).json({ message: "Incorrect password." });
+
+  const [[taken]] = await pool.query(
+    `SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`,
+    { email: newEmail }
+  );
+  if (taken) return res.status(409).json({ message: "Email already in use." });
+
+  await pool.query(`UPDATE users SET email=:newEmail WHERE id=:id`, { newEmail, id: user.id });
+  // Retire codes sent to the old (possibly typo'd) address so none stay valid.
+  try { await pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE user_id=:uid AND used_at IS NULL`, { uid: user.id }); } catch (_) {}
+  try {
+    await pool.query(
+      `INSERT INTO activity_log (type, user_id, name, email, role)
+       VALUES ('EMAIL_CHANGED', :uid, '', :email, '')`,
+      { uid: user.id, email: newEmail }
+    );
+  } catch (_) {}
+
+  const otpResult = await sendOtpForUser(user.id, newEmail, { purpose: "ACCOUNT_VERIFICATION" });
+  return res.json({
+    message: otpResult?.delivery?.sent
+      ? "Email updated. A new code was sent."
+      : "Email updated. A new code was generated, but email delivery needs server setup.",
+    email: newEmail,
+    ...otpClientPayload(otpResult),
+  });
 }
 
 export async function requestPasswordReset(req, res) {

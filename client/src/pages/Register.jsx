@@ -8,9 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import PublicHeader from "../components/PublicHeader";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
-import ThemeIconButton from "../components/ThemeIconButton";
 
 // Auth pilot: colors via @theme tokens + `dark:` variant (see styles/tailwind.css).
 // Legacy `tw-auth-*` / `tw-pw-*` hooks stay for layout/animations only.
@@ -46,7 +44,6 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const adminInviteToken = searchParams.get("adminInvite") || "";
   const isAdminReg = !!adminInviteToken;
-  const { dark, toggleTheme } = useTheme();
 
   const [form, setForm] = useState({
     firstName: "", lastName: "",
@@ -94,6 +91,11 @@ export default function Register() {
       if (isAdminReg) payload.adminInviteToken = adminInviteToken;
 
       const { data } = await api.post("/auth/register", payload);
+      if (data.converted) {
+        setError(`✓ ${data.message || "Your account is now an Administrator account. Please log in."}`);
+        setTimeout(() => nav("/admin-login", { state: { email: form.email } }), 2200);
+        return;
+      }
       const label = data.role === "ADMIN" ? "Administrator" : "Teacher";
       const mode = data.role === "ADMIN" ? "admin" : "teacher";
       const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
@@ -108,11 +110,11 @@ export default function Register() {
   const isSuccess = error.startsWith("✓");
 
   if (isAdminReg && inviteState !== "valid") return (
-    <div className="tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}><PublicHeader compact hideSuper hideTheme/><main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9"><div className={`tw-auth-form-shell ${exitClass || enterClass} my-auto rounded-[20px] px-6 sm:px-[44px] pt-10 pb-9 w-full max-w-[800px] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-[16px] border border-solid bg-auth-card dark:bg-auth-card-dark border-auth-border dark:border-auth-border-dark`}><div className="mb-7 text-center"><h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main><ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} /></div>
+    <div className="tw-force-white tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "Inter,'Segoe UI',system-ui,sans-serif" }}><PublicHeader compact hideSuper hideTheme/><main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9"><div className={`tw-auth-form-shell ${exitClass || enterClass} my-auto rounded-[20px] px-6 sm:px-[44px] pt-10 pb-9 w-full max-w-[800px] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-[16px] border border-solid bg-auth-card dark:bg-auth-card-dark border-auth-border dark:border-auth-border-dark`}><div className="mb-7 text-center"><h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
   );
 
   return (
-    <div className="tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+    <div className="tw-force-white tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "Inter,'Segoe UI',system-ui,sans-serif" }}>
       <PublicHeader compact hideSuper hideTheme />
 
       <main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9">
@@ -241,7 +243,6 @@ export default function Register() {
           </div>}
         </div>
       </main>
-      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }

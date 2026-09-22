@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState}from"react";
 import{createPortal}from"react-dom";
 import{useLocation}from"react-router-dom";
 
-const PUBLIC_STAR_PATHS=["/","/plan","/login","/register","/student-login","/superadmin-login","/superadmin-register","/verify","/forgot-password"];
+const PUBLIC_STAR_PATHS=["/"];
 
 export default function StarField(){
  const loc=useLocation();

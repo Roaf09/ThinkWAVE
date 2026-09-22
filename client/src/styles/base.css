@@ -1,6 +1,6 @@
 /* ThinkWAVE styles — base.css (source styles.css lines 1-365). Import order in main.jsx must not change. */
 :root {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   /* Theme tokens — values taken verbatim from the rules below. */
   --tw-brand: #2b6cff;
   --tw-ink: #0f172a;

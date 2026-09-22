@@ -1,0 +1,432 @@
+/* ThinkWAVE fluid/responsive pass.
+ * - Type scales with the viewport (clamp) instead of fixed px that overflows
+ *   small phones or looks lost on wide screens.
+ * - Touch targets meet the 44px minimum on coarse pointers.
+ * - Media and wide components can never force horizontal scrolling.
+ * - Forced-white public pages flatten cream auth surfaces to pure white.
+ * Imported last in main.jsx so these rules win over earlier sheets.
+ */
+
+/* Fluid display type for public pages. */
+.tw-landing-hero-copy h1 {
+  font-size: clamp(30px, 4.6vw + 12px, 54px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.tw-centered-heading h2,
+.tw-section-intro h2 {
+  font-size: clamp(24px, 3vw + 12px, 36px);
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.tw-landing-hero-copy .tw-eyebrow,
+.tw-centered-heading .tw-eyebrow {
+  font-size: clamp(11px, 1.4vw + 8px, 13px);
+}
+
+/* Media never overflows its container. */
+.tw-landing-page img,
+.tw-plan-page img,
+.tw-auth-page img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Wide grids collapse gracefully instead of squeezing. */
+@media (max-width: 560px) {
+  .tw-benefit-grid,
+  .tw-plan-grid-three {
+    grid-template-columns: 1fr !important;
+  }
+  .tw-stat-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Minimal public header (landing, all widths): logo + Join Code + Login only, 8px outline buttons. */
+/* Stealth superadmin dot: invisible but tappable, left of Join Code. */
+.tw-public-header.is-minimal .tw-super-stealth {
+  width: 30px; min-width: 30px; height: 30px; padding: 0;
+  user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.tw-public-header.is-minimal .tw-header-joincode { display: inline-flex !important; }
+.tw-public-header.is-minimal .tw-header-joincode,
+.tw-public-header.is-minimal .tw-header-login {
+  border-radius: 8px !important; border-width: 2px !important; align-items: center;
+}
+body[data-theme="dark"] .tw-public-header.is-minimal .tw-header-joincode { color: #f1f5ff !important; border-color: rgba(255, 255, 255, 0.85) !important; }
+body[data-theme="light"] .tw-public-header.is-minimal .tw-header-joincode,
+body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #0f172a !important; border-color: #0f172a !important; }
+.tw-public-header.is-minimal .tw-header-login { color: #2b6cff !important; border-color: #2b6cff !important; }
+
+/* Mobile public header: logo + Join Code + Login only, 8px outline buttons. */
+.tw-header-joincode { display: none !important; }
+.tw-public-header .tw-public-logo { display: inline-flex; align-items: center; line-height: 1; }
+@media (max-width: 760px) {
+  .tw-public-header { align-items: center; }
+  .tw-public-header .tw-public-nav { display: none !important; }
+  .tw-public-header .tw-header-signup,
+  .tw-public-header .tw-super-dot,
+  .tw-public-actions .tw-theme-icon-button { display: none !important; }
+  .tw-public-actions .tw-header-joincode,
+  .tw-public-actions .tw-header-login { display: inline-flex !important; }
+  .tw-public-actions .tw-header-joincode,
+  .tw-public-actions .tw-header-login {
+    border-radius: 8px !important; border-width: 2px !important;
+    align-items: center;
+  }
+  body[data-theme="dark"] .tw-public-actions .tw-header-joincode {
+    color: #f1f5ff !important; border-color: rgba(255, 255, 255, 0.85) !important;
+  }
+  body[data-theme="light"] .tw-public-actions .tw-header-joincode,
+  body:not(.dark-mode) .tw-public-actions .tw-header-joincode {
+    color: #0f172a !important; border-color: #0f172a !important;
+  }
+  .tw-public-actions .tw-header-login {
+    color: #2b6cff !important; border-color: #2b6cff !important;
+  }
+}
+
+/* 44px minimum touch targets on touch devices. */
+@media (pointer: coarse) {
+  .tw-public-header button,
+  .tw-public-header a,
+  .tw-mobile-tabbar-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .tw-public-actions .tw-public-ghost,
+  .tw-public-actions .tw-public-signup {
+    min-height: 44px;
+  }
+}
+
+/* Small phones: keep primary CTAs full-width and thumb-reachable. */
+@media (max-width: 480px) {
+  .tw-landing-cta .tw-cta-primary,
+  .tw-landing-cta .tw-cta-secondary {
+    width: 100%;
+  }
+  .tw-auth-form-shell {
+    border-radius: 16px !important;
+  }
+}
+
+/* Enter chooser page (mobile-first, shared by desktop). */
+.tw-enter-header {
+  position: sticky; top: 0; z-index: 120;
+  min-height: 72px; padding: 0 clamp(18px,4vw,54px);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.tw-enter-header-actions { display: flex; align-items: center; gap: 9px; }
+.tw-enter-header-btn {
+  border: 1px solid #e2e8f0; background: #fff; color: #0f172a;
+  border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 800;
+  cursor: pointer; white-space: nowrap;
+}
+.tw-enter-header-btn.is-primary { background: #2b6cff; border-color: #2b6cff; color: #fff; }
+.tw-enter-main {
+  flex: 1; display: grid; place-items: start center;
+  padding: clamp(28px, 6vh, 64px) 18px 48px; width: 100%; box-sizing: border-box;
+}
+.tw-enter-card {
+  width: min(100%, 460px); border-radius: 20px;
+  padding: clamp(26px, 5vw, 40px) clamp(20px, 5vw, 36px);
+  text-align: center; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.1);
+}
+.tw-enter-card h1 { margin: 0 0 8px; font-size: clamp(22px, 5vw, 27px); font-weight: 900; letter-spacing: -0.02em; }
+.tw-enter-sub { margin: 0 0 22px; font-size: 13.5px; }
+.tw-enter-link {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: #2b6cff; font-size: 12.5px; font-weight: 700;
+}
+.tw-enter-link:hover { text-decoration: underline; }
+.tw-enter-roles { display: grid; gap: 12px; }
+.tw-enter-role {
+  display: flex; align-items: center; justify-content: flex-start; gap: 12px;
+  width: 100%; padding: 15px 18px; border: 0; border-radius: 8px;
+  color: #fff; font-size: 15px; font-weight: 900; cursor: pointer;
+  box-shadow: 0 5px 0 rgba(15, 23, 42, 0.35), 0 12px 24px rgba(15, 23, 42, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.15s ease;
+}
+.tw-enter-role:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(15, 23, 42, 0.35); }
+.tw-enter-role.is-blue { background: #2b6cff; }
+.tw-enter-role.is-green { background: #22c55e; }
+.tw-enter-role.is-admin { background: #7c3aed; }
+.tw-enter-role .tw-enter-chev { margin-left: auto; display: inline-flex; opacity: 0.9; }
+.tw-enter-role:disabled { opacity: 0.65; cursor: default; }
+.tw-enter-role.is-submit { justify-content: center; }
+.tw-enter-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 24px 0 18px; color: #64748b; font-size: 12.5px; font-weight: 400;
+}
+.tw-enter-divider::before, .tw-enter-divider::after {
+  content: ""; flex: 1; height: 1px; background: #e2e8f0;
+}
+.tw-enter-guest { display: grid; justify-items: center; gap: 6px; }
+.tw-enter-guest-btn {
+  width: 64px; height: 64px; border-radius: 8px; border: 1.5px solid;
+  background: #fff; display: grid; place-items: center; cursor: pointer;
+}
+.tw-enter-guest small { font-size: 12.5px; font-weight: 700; }
+.tw-enter-codeform { display: grid; gap: 10px; margin-top: 18px; max-width: 300px; margin-inline: auto; width: 100%; }
+.tw-enter-main > div { width: min(100%, 460px); }
+.tw-enter-codeform input {
+  padding: 13px 16px; border-radius: 8px; font-size: 15px; font-weight: 800;
+  text-align: left;
+  width: 100%; box-sizing: border-box;
+}
+.tw-enter-codeform button {
+  padding: 13px; border: 0; border-radius: 8px; background: #0f172a;
+  color: #fff; font-size: 14px; font-weight: 900; cursor: pointer;
+}
+.tw-enter-codetitle {
+  font-size: clamp(40px, 12vw, 56px); font-weight: 900; letter-spacing: -0.02em;
+  text-align: center; margin: 10px 0 34px; line-height: 1;
+}
+.tw-enter-codetitle .is-wave { color: #2b6cff; }
+.tw-enter-logolink { display: inline-flex; align-items: center; }
+.tw-enter-logoimg { height: 34px; width: auto; display: block; }
+.tw-enter-msg { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: #b91c1c; }
+.tw-enter-success { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: #166534; }
+.tw-enter-topswitch { margin-top: 14px; }
+
+/* Login error box, same language as the standalone login screen. */
+.tw-enter-errbox {
+  border-radius: 12px; padding: 12px 14px; border: 1px solid #f4d28a;
+  background: #fff9eb; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+.tw-enter-errbox-head { display: flex; justify-content: space-between; align-items: flex-start; }
+.tw-enter-errbox-head span { font-size: 14px; font-weight: 800; color: #92400e; }
+.tw-enter-errbox-head button {
+  background: none; border: 0; font-size: 18px; font-weight: 700;
+  cursor: pointer; padding: 0; line-height: 1; color: #92400e;
+}
+.tw-enter-errbox p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #78350f; }
+
+/* In-card auth forms. */
+.tw-enter-form { display: grid; gap: 13px; text-align: left; }
+.tw-enter-form h1 { text-align: center; }
+.tw-enter-formsub { margin: -4px 0 6px; font-size: 13px; text-align: center; }
+.tw-enter-field { display: grid; gap: 6px; font-size: 12.5px; font-weight: 800; }
+.tw-enter-field > span:first-child { opacity: 0.75; }
+.tw-enter-field input {
+  padding: 12px 14px; border-radius: 8px; font-size: 14px;
+  width: 100%; box-sizing: border-box;
+}
+.tw-enter-namerow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tw-enter-pwwrap { position: relative; display: block; }
+.tw-enter-pwwrap input { padding-right: 62px; }
+.tw-enter-pwwrap button {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; color: #2b6cff;
+  font-size: 12px; font-weight: 800; cursor: pointer; padding: 6px;
+}
+/* Icon show/hide buttons: no hover effects, steady icon swap only. */
+.tw-enter-iconbtn {
+  color: #2b6cff; display: inline-grid; place-items: center;
+}
+.tw-enter-iconbtn:hover, .tw-enter-iconbtn:active { transform: translateY(-50%); filter: none; }
+.tw-enter-formrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tw-enter-remember { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; }
+.tw-enter-remember input { width: 15px; height: 15px; accent-color: #2b6cff; }
+
+/* Single-row student/teacher picker under confirm password. */
+.tw-enter-rolepick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tw-enter-rolepick-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 8px; border-radius: 8px; border: 1.5px solid #cbd5e1;
+  background: #fff; color: #0f172a; font-size: 13.5px; font-weight: 800; cursor: pointer;
+}
+.tw-enter-rolepick-btn.is-selected.is-student { background: #2b6cff; border-color: #2b6cff; color: #fff; }
+.tw-enter-rolepick-btn.is-selected.is-teacher { background: #22c55e; border-color: #22c55e; color: #fff; }
+.tw-enter-rolepick-btn.is-selected { box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2); }
+
+/* Card swap animations: chooser exits left as the form enters from right. */
+@keyframes twEnterInRight { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes twEnterInLeft { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@keyframes twEnterOutLeft { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes twEnterOutRight { to { opacity: 0; transform: translateX(28px); } }
+.tw-enter-anim-enter-right { animation: twEnterInRight 0.25s ease both; }
+.tw-enter-anim-enter-left { animation: twEnterInLeft 0.25s ease both; }
+.tw-enter-anim-exit-left { animation: twEnterOutLeft 0.2s ease both; }
+.tw-enter-anim-exit-right { animation: twEnterOutRight 0.2s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .tw-enter-anim-enter-right, .tw-enter-anim-enter-left,
+  .tw-enter-anim-exit-left, .tw-enter-anim-exit-right { animation: none; }
+}
+
+/* Header logo <-> back swap (animation classes shared with the card). */
+.tw-enter-headswap { display: inline-flex; }
+.tw-enter-back {
+  width: 38px; height: 38px; border-radius: 8px; border: 1.5px solid;
+  background: #fff; display: grid; place-items: center; cursor: pointer;
+}
+
+/* Code mode: dark starry theme (hard-coded, independent of forced-white). */
+.tw-enter-page.is-code {
+  background: radial-gradient(circle at 12% 8%, rgba(54, 92, 180, 0.22), transparent 30%), linear-gradient(180deg, #030b1c 0%, #07142b 55%, #0a1832 100%);
+  color: #eef4ff;
+}
+.tw-enter-page.is-code .tw-enter-main,
+.tw-enter-page.is-code .tw-enter-header,
+.tw-enter-page.is-code .tw-enter-footer { position: relative; z-index: 1; }
+/* Code mode is intentionally dark inside a forced-white page, so re-enable
+   the shared starfield (the global light-theme rule would hide it). */
+.tw-enter-page.is-code .tw-star-field { display: block !important; }
+.tw-enter-page.is-code .tw-enter-header { background: transparent; border-bottom: 1px solid rgba(132, 167, 255, 0.16); }
+.tw-enter-page.is-code .tw-enter-header-btn { background: transparent; color: #eef4ff; border-color: rgba(132, 167, 255, 0.3); }
+.tw-enter-page.is-code .tw-enter-header-btn.is-primary { background: #2b6cff; border-color: #2b6cff; color: #fff; }
+.tw-enter-page.is-code .tw-enter-codeform input {
+  background: rgba(8, 18, 35, 0.88) !important;
+  border-color: rgba(132, 167, 255, 0.28) !important;
+  color: #eef4ff !important;
+}
+.tw-enter-page.is-code .tw-enter-msg { color: #fca5a5; }
+.tw-enter-footer { padding: 26px 20px calc(26px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(132, 167, 255, 0.16); }
+.tw-enter-footgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; max-width: 560px; margin: 0 auto; }
+.tw-enter-footgrid > div { display: grid; gap: 7px; align-content: start; }
+.tw-enter-footgrid b { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9aacd8; }
+.tw-enter-footgrid span, .tw-enter-footgrid button {
+  background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+  font-size: 11.5px; color: #eef4ff; font-family: inherit;
+}
+.tw-enter-footgrid button:hover { text-decoration: underline; }
+.tw-enter-footcopy { text-align: center; margin-top: 20px; font-size: 12px; color: #7f91c4; }
+
+/* History session cards: grid children must never force the card wider,
+// so template/participants cells can't protrude past the session card. */
+.tw-history-session-card, .tw-history-session-card > div, .tw-history-mini-grid > * { min-width: 0; }
+.tw-history-mini-grid > * { overflow-wrap: anywhere; }
+
+/* Folder action menus always pop above sibling folder cards. */
+.tw-folder-action-menu { z-index: 120 !important; }
+
+/* Forced-white public pages: flatten cream auth surfaces to pure white.
+   Beats the `!`-suffixed utilities used by the auth forms. */
+.tw-force-white.bg-auth-page,
+.tw-force-white .bg-auth-page {
+  background-image: none !important;
+  background-color: #fff !important;
+}
+.tw-force-white .bg-auth-card { background-color: #fff !important; }
+.tw-force-white .bg-auth-panel { background-color: #f6f8fc !important; }
+.tw-force-white .bg-auth-input { background-color: #fff !important; }
+.tw-force-white .border-auth-border,
+.tw-force-white .border-auth-input-border { border-color: #e2e8f0 !important; }
+
+/* Landing scroll wash: gradual dark -> white -> dark as you scroll.
+   NOTE: no background declaration here on purpose — the inline gradient
+   owns it, and any !important background would override it (opaque veil). */
+.tw-starry-page > .tw-landing-whitewash {
+  position: fixed !important; inset: 0 !important;
+  pointer-events: none !important; z-index: 0 !important;
+}
+
+/* Soften the token flip that rides along the wash: animatable properties
+   morph instead of snapping while the gradient underneath stays continuous. */
+.tw-landing-page header.tw-public-header,
+.tw-landing-page footer,
+.tw-landing-page section,
+.tw-landing-page article {
+  transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-landing-page header.tw-public-header,
+  .tw-landing-page footer,
+  .tw-landing-page section,
+  .tw-landing-page article { transition: none; }
+}
+
+/* Desktop grid descriptions read white while the zone behind them is dark. */
+body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
+
+/* Mobile templates carousel (desktop keeps the static grid). */
+.tw-template-carousel, .tw-template-dots { display: none; }
+
+/* Mobile landing refinements. */
+@media (max-width: 760px) {
+  /* Stat lead gets breathing room; stats stack in one vertical column. */
+  .tw-stat-section .tw-centered-heading { margin-top: 48px; margin-bottom: 8px; }
+  .tw-stat-section .tw-stat-grid { grid-template-columns: 1fr !important; }
+  .tw-stat-section .tw-stat-item { padding: 18px 12px; }
+  /* Hero CTAs stack vertically with 8px radius; admin goes plain white. */
+  .tw-landing-cta { flex-direction: column; align-items: stretch; }
+  .tw-landing-cta .tw-cta-primary,
+  .tw-landing-cta .tw-cta-secondary { border-radius: 8px !important; width: 100%; }
+  .tw-landing-cta .tw-cta-secondary {
+    background: #fff !important; border: 0 !important;
+    color: #1e3a8a !important; box-shadow: 0 12px 26px rgba(15, 23, 42, 0.16) !important;
+  }
+  /* Hero carousel: borderless, 8px, pulled off the edges. */
+  .tw-landing-carousel {
+    border: 0 !important; border-radius: 8px !important;
+    width: auto !important; margin: 0 16px; justify-self: stretch;
+  }
+  /* Breathing room around Why ThinkWAVE + Templates intro. */
+  .tw-landing-hero + .tw-rounded-section { margin-top: 72px; }
+  .tw-benefit-grid .tw-hover-card { padding: 18px 16px; }
+  .tw-benefit-grid .tw-hover-card h3 { font-size: 16px; }
+  .tw-benefit-grid .tw-hover-card p { font-size: 13px; }
+  #templates { padding-top: 40px; }
+  #templates .tw-centered-heading { margin-bottom: 26px; }
+  /* Static grid becomes an autoplay swipe carousel of solid cards. */
+  .tw-template-grid { display: none !important; }
+  .tw-template-carousel {
+    display: flex; gap: 12px; overflow-x: auto;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    padding: 4px 20px 14px; margin: 0 -20px; scrollbar-width: none;
+  }
+  .tw-template-carousel::-webkit-scrollbar { display: none; }
+  .tw-template-slide {
+    flex: 0 0 76%; scroll-snap-align: center;
+    border: 0; border-radius: 8px; padding: 22px 18px; color: #fff;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+  }
+  .tw-template-slide > span {
+    display: inline-grid; place-items: center;
+    width: 46px; height: 46px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.22); margin-bottom: 12px;
+  }
+  .tw-template-slide h3 { margin: 0 0 6px; font-size: 18px; font-weight: 900; }
+  .tw-template-slide p { margin: 0; font-size: 13.5px; line-height: 1.6; color: #fff; opacity: 1; }
+  /* Template dots reuse the hero carousel dot language, statically placed. */
+  .tw-template-dots.tw-carousel-dots {
+    position: static; transform: none; margin: 2px auto 0; display: flex;
+    width: fit-content; max-width: 100%;
+  }
+}
+
+/* Analytics results toggle: flat bordered button on all widths (no 3D). */
+.tw-analytics-mobile-toggle-btn.tw-analytics-back-press {
+  background: transparent !important; border: 2px solid var(--tw-brand) !important;
+  box-shadow: none !important; border-radius: 12px !important;
+  width: 100% !important; display: grid !important; padding: 0 !important;
+}
+.tw-analytics-mobile-toggle-btn.tw-analytics-back-press > span {
+  width: 100% !important; min-height: 46px !important; background: transparent !important;
+  border: 0 !important; border-radius: 0 !important; transform: none !important;
+  color: var(--tw-brand) !important; box-shadow: none !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  font-weight: 900 !important;
+}
+.tw-analytics-mobile-toggle-btn.tw-analytics-back-press:active > span { transform: none !important; filter: none !important; }
+
+/* Analytics icon buttons go flat on phones, like the class-tab icon buttons. */
+@media (max-width: 760px) {
+  .tw-analytics-export-btn.tw-analytics-export-icon-only,
+  button.tw-class-analytics-btn {
+    min-width: 44px !important; width: 44px !important; height: 44px !important;
+    padding: 0 !important; display: inline-grid !important; place-items: center !important;
+    background: var(--tw-on-brand) !important; color: var(--tw-ink) !important;
+    border: 2px solid var(--tw-line) !important; border-radius: 11px !important;
+    box-shadow: none !important;
+  }
+  .tw-analytics-export-btn.tw-analytics-export-icon-only > span,
+  button.tw-class-analytics-btn > span {
+    background: transparent !important; border: 0 !important; box-shadow: none !important;
+    transform: none !important; min-height: 0 !important; padding: 0 !important;
+    min-width: 0 !important; width: auto !important; height: auto !important;
+  }
+}

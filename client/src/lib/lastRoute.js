@@ -9,6 +9,7 @@ const KEY = "tw_last_route";
 
 // Public/auth pages are never resume targets.
 const SKIP_PREFIXES = [
+  "/enter",
   "/login",
   "/register",
   "/student-login",

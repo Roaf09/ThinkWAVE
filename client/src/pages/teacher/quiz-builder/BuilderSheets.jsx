@@ -71,8 +71,8 @@ export function BuilderOverflowSheet({
           </button>
         )}
         {!guestMode && <button type="button" className="tw-builder-overflow-row" disabled={tutorialLock} onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); setBankOpen(true); }}><TwIcon name="bank" size={18} /><span>Add from bank</span></button>}
-        <button type="button" data-tutorial="builder-overflow-save" className="tw-builder-overflow-row" disabled={isSaved || isSaving} onClick={() => { const keepOpen = builderTutorialStage === "save_menu" || (builderTutorialStage === "publish_menu" && !isSaved); if (!keepOpen) setOverflowOpen(false); setOverflowTitleEditing(false); requestSave(); }}><TwIcon name="check" size={18} /><span>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</span></button>
-        <button type="button" data-tutorial="builder-overflow-publish" className="tw-builder-overflow-row" disabled={publishDisabled || builderTutorialStage === "save_menu"} onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); publish(); }}><TwIcon name="spark" size={18} /><span>{publishLatched ? "Published" : "Publish"}</span></button>
+        <button type="button" data-tutorial="builder-overflow-save" className="tw-builder-overflow-row" disabled={isSaved || isSaving} onClick={() => { setOverflowTitleEditing(false); requestSave(); }}><TwIcon name="check" size={18} /><span>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</span></button>
+        <button type="button" data-tutorial="builder-overflow-publish" className="tw-builder-overflow-row" disabled={publishDisabled || builderTutorialStage === "save_menu"} onClick={() => { setOverflowTitleEditing(false); publish(); }}><TwIcon name="spark" size={18} /><span>{publishLatched ? "Published" : "Publish"}</span></button>
         <button type="button" className="tw-builder-overflow-row is-danger" disabled={tutorialLock} onClick={() => { setOverflowOpen(false); setOverflowTitleEditing(false); setModal("confirmDelete"); }}><TwIcon name="trash" size={18} /><span>Delete</span></button>
       </div>
     </div>

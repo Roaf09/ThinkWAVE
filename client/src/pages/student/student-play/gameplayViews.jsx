@@ -54,7 +54,7 @@ export function GameplayView({
   feedbackPulse,
 }) {
   return (
-    <div className={`sp-gameplay-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", "--sp-template-accent": gameplayAccent }}>
+    <div className={`sp-gameplay-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, display: "flex", flexDirection: "column", fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", "--sp-template-accent": gameplayAccent }}>
         {experienceControls}{antiCheatOverlay}{explanationOverlay}
       <LiveLeaderboardPanel leaderboard={liveLeaderboard} participantId={participantId} groupMode={isGroupMode} />
       {showFeedback && feedbackQ && (() => {

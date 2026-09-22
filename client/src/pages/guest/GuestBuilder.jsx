@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 

@@ -62,6 +62,15 @@ export const env = {
     process.env.SMTP_FROM ||
     "ThinkWAVE <no-reply@thinkwave.local>",
 
+  // Gmail/local-dev SMTP fallback (nodemailer). Production on Render uses
+  // Mailgun instead because outbound SMTP ports are restricted there.
+  SMTP_HOST: process.env.SMTP_HOST || "",
+  SMTP_PORT: Number(process.env.SMTP_PORT || 587),
+  SMTP_USER: process.env.SMTP_USER || "",
+  // Gmail app passwords are shown with spaces ("abcd efgh ...") — strip them.
+  SMTP_PASS: String(process.env.SMTP_PASS || "").replace(/\s+/g, ""),
+  SMTP_SERVICE: process.env.SMTP_SERVICE || "",
+
   // NOTE: some local .env files contain the typo TEACHER_GRACE_SEC7777.
   // Accept it as a fallback so those files keep working, but the documented
   // variable is TEACHER_GRACE_SEC.

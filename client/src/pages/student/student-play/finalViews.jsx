@@ -32,7 +32,7 @@ export function FinalLeaderboardView({
   const displayName = (row) => isGroupMode ? (row.group_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()) : `${row.first_name || ""} ${row.last_name || ""}`.trim();
   const isMe = (row) => isGroupMode ? (Number(row.group_id || 0) === Number(myGroupId || 0) || (myGroup?.display_name && row.group_name === myGroup.display_name)) : Number(row.participant_id) === Number(participantId);
   return (
-    <div className={`sp-final-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, "--sp-template-accent": gameplayAccent, "--host-accent": gameplayAccent, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
+    <div className={`sp-final-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, "--sp-template-accent": gameplayAccent, "--host-accent": gameplayAccent, fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
       {experienceControls}{antiCheatOverlay}
       <div className={`sp-final-wrap sp-page-enter columns-${leaderboardColumns}`}>
         <section className="sp-final-leaderboard-card" style={{ background: cardBg, borderColor: gameplayAccent }}>

@@ -82,7 +82,11 @@ const iconSet = {
   menu: [<path key="1" d="M4.5 7h15" />, <path key="2" d="M4.5 12h15" />, <path key="3" d="M4.5 17h15" />],
   swap: [<path key="1" d="M7 16V4M7 4 3 8M7 4l4 4" />, <path key="2" d="M17 8v12m0 0 4-4m-4 4-4-4" />],
   filter: [<path key="1" d="M4 5.5h16" />, <path key="2" d="M7.5 12h9" />, <path key="3" d="M10.5 18.5h3" />],
+  copy: [<rect key="1" x="9" y="9" width="11" height="11" rx="2" />, <path key="2" d="M5 15V6a2 2 0 0 1 2-2h9" />],
   help: [<path key="1" d="M9.4 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.1-2.5 3.7" />, <path key="2" d="M12 16.6v.05" />],
+  pdf: [<path key="1" d="M6 3.5h7l4 4v13H6v-17Z" />, <path key="2" d="M13 3.5v4h4" />, <path key="3" d="M9 13.5h6" />, <path key="4" d="M9 16.5h6" />],
+  xlsx: [<path key="1" d="M6 3.5h7l4 4v13H6v-17Z" />, <path key="2" d="M13 3.5v4h4" />, <path key="3" d="m9.5 13 5 5" />, <path key="4" d="m14.5 13-5 5" />],
+  send: [<path key="1" d="M20 4 4.5 11.5l6 2 2 6L20 4Z" />, <path key="2" d="M10.5 13.5 20 4" />],
 };
 
 export function TwIcon({ name = "spark", size = 20, strokeWidth = 2.6, style, title }) {

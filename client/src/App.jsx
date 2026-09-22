@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 
 import Landing             from "./pages/Landing.jsx";
+import Enter               from "./pages/Enter.jsx";
 import Plan                from "./pages/Plan.jsx";
 import Register            from "./pages/Register.jsx";
 import SuperadminRegister  from "./pages/SuperadminRegister.jsx";
@@ -33,6 +34,12 @@ import { saveLastRoute, clearLastRoute } from "./lib/lastRoute";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
 import StarField from "./components/StarField.jsx";
+import { ForcedTheme } from "./context/ThemeContext.jsx";
+
+// Public pages that always render white (no theme toggle, saved theme ignored).
+function White({ children }) {
+  return <ForcedTheme dark={false}><div className="tw-force-white">{children}</div></ForcedTheme>;
+}
 
 function Guard({ role, children }) {
   const token = getToken();
@@ -45,12 +52,12 @@ function Guard({ role, children }) {
 function WelcomeToast({ name, firstLogin = false, onDone }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
-    const f = setTimeout(() => setVisible(false), 1600);
-    const r = setTimeout(() => onDone(), 2200);
+    const f = setTimeout(() => setVisible(false), 4600);
+    const r = setTimeout(() => onDone(), 5200);
     return () => { clearTimeout(f); clearTimeout(r); };
   }, [onDone]);
   return (
-    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#0f2a1a", border:"1px solid #22c55e", color:"#86efac", padding:"12px 28px", borderRadius:12, fontSize:15, fontWeight:700, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", pointerEvents:"none", transition:"opacity 0.5s ease", opacity:visible?1:0, whiteSpace:"nowrap" }}>
+    <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#f0fdf4", border:"2px solid #22c55e", color:"#15803d", padding:"12px 28px", borderRadius:12, fontSize:15, fontWeight:700, boxShadow:"0 8px 30px rgba(34,197,94,0.18)", pointerEvents:"none", transition:"opacity 0.5s ease", opacity:visible?1:0, whiteSpace:"nowrap" }}>
       <span style={{ display:"inline-flex", alignItems:"center", gap:8 }}><TwIcon name="spark" size={17} /> {firstLogin ? "Welcome" : "Welcome back"}, {name}!</span>
     </div>
   );
@@ -73,6 +80,7 @@ function Shell({ children, toast, setToast }) {
   }, [loc]);
   const hideHeader =
     loc.pathname === "/" ||
+    loc.pathname === "/enter" ||
     loc.pathname === "/plan" ||
     loc.pathname === "/login" ||
     loc.pathname === "/forgot-password" ||
@@ -161,15 +169,16 @@ export default function App() {
     <Shell toast={toast} setToast={setToast}>
       <Routes>
         <Route path="/"                    element={<Landing />} />
-        <Route path="/plan"                 element={<Plan />} />
-        <Route path="/register"            element={<Register />} />
-        <Route path="/superadmin-register" element={<SuperadminRegister />} />
-        <Route path="/superadmin-login"    element={<SuperadminLogin onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/enter"                element={<White><Enter /></White>} />
+        <Route path="/plan"                 element={<White><Plan /></White>} />
+        <Route path="/register"            element={<White><Register /></White>} />
+        <Route path="/superadmin-register" element={<White><SuperadminRegister /></White>} />
+        <Route path="/superadmin-login"    element={<White><SuperadminLogin onLoginSuccess={handleLoginSuccess} /></White>} />
         <Route path="/admin-register"      element={<Navigate to="/register?role=admin" replace />} />
         <Route path="/admin-login"         element={<Navigate to="/login?role=admin" replace />} />
-        <Route path="/verify"              element={<VerifyOtp />} />
-        <Route path="/login"               element={<Login onLoginSuccess={handleLoginSuccess} />} />
-        <Route path="/forgot-password"     element={<ForgotPassword />} />
+        <Route path="/verify"              element={<White><VerifyOtp /></White>} />
+        <Route path="/login"               element={<White><Login onLoginSuccess={handleLoginSuccess} /></White>} />
+        <Route path="/forgot-password"     element={<White><ForgotPassword /></White>} />
 
         {/* Guest — no auth, session-based */}
         <Route path="/guest"                            element={<GuestDashboard />} />
@@ -191,7 +200,7 @@ export default function App() {
         <Route path="/teacher/async-analytics/:classId/:quizId" element={<Guard role="TEACHER"><Analytics /></Guard>} />
 
         {/* Student */}
-        <Route path="/student-login"    element={<StudentAuth onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/student-login"    element={<White><StudentAuth onLoginSuccess={handleLoginSuccess} /></White>} />
         <Route path="/student"          element={<Guard role="STUDENT"><StudentDashboard /></Guard>} />
         <Route path="/student/async/:quizId" element={<Guard role="STUDENT"><StudentAsyncPlay /></Guard>} />
         <Route path="/play"            element={<StudentJoin />} />

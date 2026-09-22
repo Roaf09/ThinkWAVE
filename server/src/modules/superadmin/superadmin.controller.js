@@ -48,6 +48,16 @@ export async function rejectAccount(req,res){const [[user]]=await pool.query(`SE
 export async function setActive(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});const active=req.body?.active?1:0;await pool.query(`UPDATE users SET is_active=:a WHERE id=:id AND deleted_at IS NULL`,{a:active,id:req.params.id});if(user&&!active){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_DEACTIVATED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
 export async function deleteAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id`,{id:req.params.id});await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id`,{id:req.params.id});if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name} ${user.last_name}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({deletedBy:'SUPERADMIN'})})}catch{}}res.json({ok:true})}
 
+export async function listUnlinkedTeachers(_req,res){
+  const [rows]=await pool.query(`SELECT u.id,u.email,u.first_name,u.last_name,u.is_active,u.contact_number,u.created_at,u.last_active_at,u.approval_status,u.plan_code,u.plan_expires_at,
+    (SELECT COUNT(*) FROM sessions s WHERE s.teacher_id=u.id) hosted_sessions_count,
+    (SELECT COUNT(*) FROM quizzes q WHERE q.teacher_id=u.id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) assigned_sessions_count,
+    (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s WHERE s.teacher_id=u.id) last_session_at,
+    (SELECT COUNT(*) FROM classes c WHERE c.teacher_id=u.id AND c.deleted_at IS NULL AND c.parent_id IS NOT NULL) classes_handled_count
+    FROM users u WHERE u.role='TEACHER' AND u.deleted_at IS NULL AND (u.institution_name IS NULL OR TRIM(u.institution_name)='') ORDER BY u.last_name,u.first_name`);
+  res.json(rows);
+}
+
 export async function getNotifications(req,res){
   const search=String(req.query.search||"").trim(); const type=String(req.query.type||"ALL").trim();
   const params={search:`%${search}%`,type};
@@ -83,6 +93,11 @@ export async function reviewApplication(req,res){
       const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
       const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan approved',title:'Create your ThinkWAVE Admin account',intro:`Your application for <strong>${app.institution_name}</strong> has been approved and the submitted GCash transaction has been confirmed.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Use the secure link below to create the first Admin account. The Institution plan is active for 30 days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link.'});
       const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was approved',text:`Your application was approved. Create your Admin account: ${registrationUrl}`,html});emailSent=mail.sent;
+      // Local-dev fallback (same as OTP codes): mail delivery is often
+      // unconfigured or spam-filtered, so print the link to the terminal.
+      if (env.NODE_ENV !== "production") {
+        console.info(`[ThinkWAVE ADMIN_INVITE] ${app.work_email}: ${registrationUrl}`);
+      }
     }
   }else{
     await pool.query(`UPDATE institution_applications SET status='DISAPPROVED',reviewed_by=:uid,reviewed_at=NOW() WHERE id=:id`,{uid:req.user.sub,id});
@@ -110,7 +125,32 @@ export async function confirmApplicationPayment(req,res){
   await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
   await pool.query(`INSERT INTO admin_invitations(application_id,institution_name,email,token_hash,expires_at,created_by) VALUES(:id,:institution,:email,:hash,DATE_ADD(NOW(),INTERVAL 7 DAY),:uid)`,{id,institution:app.institution_name,email:app.work_email,hash:tokenHash,uid:req.user.sub});
   await pool.query(`UPDATE system_notifications SET status='PAYMENT_CONFIRMED' WHERE type='PLAN_APPLICATION' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.applicationId'))=:idText`,{idText:String(id)});
+  if (env.NODE_ENV !== "production") {
+    console.info(`[ThinkWAVE ADMIN_INVITE] ${app.work_email}: ${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`);
+  }
   res.json({ok:true,status:'PAYMENT_CONFIRMED',adminInviteToken:rawToken,registrationPath:`/register?adminInvite=${rawToken}`});
+}
+
+export async function resendApplicationInvite(req,res){
+  const id=Number(req.params.id);
+  const [[app]]=await pool.query(`SELECT * FROM institution_applications WHERE id=:id`,{id});
+  if(!app)return res.status(404).json({message:'Application not found.'});
+  if(String(app.plan_type||'').toUpperCase()!=='INSTITUTION')return res.status(409).json({message:'Only institution applications use invitation links.'});
+  if(!['PAYMENT_CONFIRMED','ACTIVATED'].includes(app.status))return res.status(409).json({message:'The invitation can only be resent after approval.'});
+  const rawToken=crypto.randomBytes(32).toString('hex');
+  const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
+  await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
+  await pool.query(`INSERT INTO admin_invitations(application_id,institution_name,email,token_hash,expires_at,created_by) VALUES(:id,:institution,:email,:hash,DATE_ADD(NOW(),INTERVAL 7 DAY),:uid)`,{id,institution:app.institution_name,email:app.work_email,hash:tokenHash,uid:req.user.sub});
+  const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
+  const html=thinkwaveEmailTemplate({eyebrow:'Institution invitation link',title:'Your Admin invitation link',intro:`A fresh Admin account creation link for <strong>${app.institution_name}</strong> was issued.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Any previous link was retired. This link expires in 7 days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link.'});
+  const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Admin invitation link',text:`Create your Admin account: ${registrationUrl}`,html});
+  // Local-dev fallback (same as OTP codes): the invite email often never
+  // arrives (no mail provider / spam), so print the link to the terminal.
+  if (env.NODE_ENV !== "production") {
+    console.info(`[ThinkWAVE ADMIN_INVITE] ${app.work_email}: ${registrationUrl}`);
+  }
+  try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_INVITE_RESENT',NULL,:name,:email,'ADMIN',:inst,:payload)`,{name:`${app.first_name||''} ${app.last_name||''}`.trim(),email:app.work_email,inst:app.institution_name,payload:JSON.stringify({applicationId:id,resentBy:req.user.sub})})}catch{}
+  res.json({ok:true,emailSent:mail.sent});
 }
 
 export async function getHealth(_req,res){

@@ -7,6 +7,7 @@
 import http from "http";
 import { Server as IOServer } from "socket.io";
 import { env } from "./env.js";
+import { mailProvider } from "./utils/mailer.js";
 import { makeApp } from "./app.js";
 import { registerSessionSockets, closeOrphanedSessions } from "./modules/sessions/sessions.socket.js";
 import { registerAssignmentSockets } from "./modules/student/assignment.socket.js";
@@ -87,7 +88,7 @@ httpServer.listen(env.PORT, () => {
   // origin, wrong mode) is visible in the first lines of the log instead of
   // surfacing later as a CORS 403 or a silent connection to the wrong
   // database. Never log secrets here.
-  console.log(`[boot] NODE_ENV=${env.NODE_ENV} DB_HOST=${env.DB_HOST}:${env.DB_PORT} DB_NAME=${env.DB_NAME} DB_SSL=${env.DB_SSL} CLIENT_ORIGINS=${(env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN]).join(",")} MAIL=${env.MAILGUN_API_KEY && env.MAILGUN_DOMAIN ? "mailgun" : "not configured"}`);
+  console.log(`[boot] NODE_ENV=${env.NODE_ENV} DB_HOST=${env.DB_HOST}:${env.DB_PORT} DB_NAME=${env.DB_NAME} DB_SSL=${env.DB_SSL} CLIENT_ORIGINS=${(env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN]).join(",")} MAIL=${mailProvider()}`);
 });
 
 // Render (and Docker/K8s) send SIGTERM before stopping the process. Without

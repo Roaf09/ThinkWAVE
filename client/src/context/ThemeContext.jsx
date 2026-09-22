@@ -6,9 +6,9 @@
 
 
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-const ThemeContext = createContext({ dark: false, toggleTheme: () => {} });
+const ThemeContext = createContext({ dark: false, white: false, toggleTheme: () => {} });
 
 // Provides the global light/dark theme flag so every page can stay visually consistent.
 export function ThemeProvider({ children }) {
@@ -47,9 +47,40 @@ export function ThemeProvider({ children }) {
 
 export function useTheme() { return useContext(ThemeContext); }
 
+// Locks a subtree to one theme (public pages that are always dark or always
+// white regardless of the saved preference). Consumers of useTheme/useColors
+// inside see the forced value; the global preference is untouched. Body
+// classes are synced too so class-based `dark:` utilities follow, and are
+// restored when the subtree unmounts.
+export function ForcedTheme({ dark, children }) {
+  const forcedDark = !!dark;
+  const value = useMemo(() => ({ dark: forcedDark, white: !forcedDark, toggleTheme: () => {} }), [forcedDark]);
+  useEffect(() => {
+    document.body.classList.toggle("light-mode", !forcedDark);
+    document.body.classList.toggle("dark-mode", forcedDark);
+    document.body.dataset.theme = forcedDark ? "dark" : "light";
+    document.body.style.background = forcedDark ? "#07142b" : "#ffffff";
+    document.body.style.color = forcedDark ? "#e7e9ee" : "#0f172a";
+    return () => {
+      let saved = false;
+      try { saved = localStorage.getItem("tw_theme") === "dark"; } catch {}
+      document.body.classList.toggle("light-mode", !saved);
+      document.body.classList.toggle("dark-mode", saved);
+      document.body.dataset.theme = saved ? "dark" : "light";
+      document.body.style.background = saved ? "#07142b" : "#fbf1dd";
+      document.body.style.color = saved ? "#e7e9ee" : "#0f172a";
+    };
+  }, [forcedDark]);
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
 export function useColors() {
-  const { dark } = useTheme();
-  return dark ? DARK : LIGHT;
+  const { dark, white } = useTheme();
+  return white ? WHITE : dark ? DARK : LIGHT;
 }
 
 export const DARK = {
@@ -110,6 +141,19 @@ export const LIGHT = {
   yellowBorder: "#fcd34d",
   modalBg:      "#111e33",
   modalBorder:  "#1a2d4a",
+};
+
+// Always-white token set for forced-white public pages (auth, plan, entry).
+// Same shape as LIGHT, but page/card surfaces are pure white per design.
+export const WHITE = {
+  ...LIGHT,
+  pageBg:      "#ffffff",
+  cardBg:      "#ffffff",
+  cardBg2:     "#f6f8fc",
+  cardBg3:     "#ffffff",
+  border:      "#e2e8f0",
+  inputBg:     "#ffffff",
+  inputBorder: "#cbd5e1",
 };
 
 // Shared modal — always dark (login style), used by all dashboards

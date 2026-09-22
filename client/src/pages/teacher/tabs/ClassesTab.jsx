@@ -58,9 +58,14 @@ export default function ClassesTab({ tutorial }) {
     const previousOverscroll = document.body.style.overscrollBehavior;
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
+    // Analytics modals are full-screen on phones: hide the pill tab bar
+    // underneath (same mechanism as the other dashboard modals).
+    const hideTabs = Boolean(classAnalytics || studentAnalytics);
+    if (hideTabs) document.body.classList.add("tw-mobile-modal-open");
     return () => {
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
+      if (hideTabs) document.body.classList.remove("tw-mobile-modal-open");
     };
   }, [classAnalytics, studentAnalytics, folderModal, renameModal, removeConfirm, folderAction]);
 
@@ -325,10 +330,10 @@ export default function ClassesTab({ tutorial }) {
       <section className="tw-class-folders-shell" style={card(c)}>
         <div className="flex items-center justify-between gap-[12px] flex-wrap mb-[12px]">
           <div className="font-[900] text-[17px]" style={{ color: c.text }}>My Folders</div>
-          <div className="flex gap-[10px] flex-wrap">
-            {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
-            <TeacherPressButton tone="blue" icon="plus" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
-            {isSectionFolder && <TeacherPressButton tone="blue" icon="link" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
+          <div className="tw-class-header-actions flex gap-[10px] flex-wrap">
+            {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn tw-analytics-back-press" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
+            <TeacherPressButton tone="blue" icon="plus" className="tw-analytics-back-press" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
+            {isSectionFolder && <TeacherPressButton tone="blue" icon="link" className="tw-analytics-back-press" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
           </div>
         </div>
         <div className="flex items-center gap-[8px] flex-wrap mb-[16px]">
@@ -352,18 +357,18 @@ export default function ClassesTab({ tutorial }) {
             {children.map((folder) => <FolderCard key={folder.id} folder={folder} c={c} menuFor={menuFor} setMenuFor={setMenuFor} onOpen={() => setSelectedFolderId(folder.id)} onRename={() => { setFolderName(folder.name); setRenameModal(folder); setMenuFor(null); }} onDelete={() => { setFolderAction({ type: "delete", folder }); setMenuFor(null); }} onDuplicate={() => { setFolderAction({ type: "duplicate", folder }); setMenuFor(null); }} />)}
           </div>
         )}
-
-        {isSectionFolder && <div className="mt-[22px]">
-          <div className="tw-class-student-head">
-            <div className="font-[900]" style={{ color: c.text }}>Students</div>
-            {advancedPlan && <label className="tw-class-student-search" style={{ borderColor: c.inputBorder, background: c.inputBg, color: c.text }}>
-              <TwIcon name="search" size={17} />
-              <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search students" style={{ color: c.text }} />
-            </label>}
-          </div>
-          {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : filteredStudents.length === 0 ? <div style={{ color: c.textMuted }}>No students match your search.</div> : <div className="tw-class-student-list">{filteredStudents.map((st) => <div key={st.id} className={`flex items-center justify-between gap-[12px] p-[12px] rounded-[14px] mb-[8px] flex-wrap${advancedPlan ? " tw-class-student-clickable" : ""}`} onClick={() => openStudentAnalytics(st)} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={(event) => { event.stopPropagation(); setRemoveConfirm(st); }} style={{ ...btn(c), color: c.redFg, background: c.redBg, border: `3px solid ${c.redBorder}` }}>Remove</button></div>)}</div>}
-        </div>}
       </section>
+
+      {isSectionFolder && <section className="tw-class-students-shell" style={card(c)}>
+        <div className="tw-class-student-head">
+          <div className="font-[900]" style={{ color: c.text }}>Students</div>
+          {advancedPlan && <label className="tw-class-student-search" style={{ borderColor: c.inputBorder, background: c.inputBg, color: c.text }}>
+            <TwIcon name="search" size={17} />
+            <input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search students" style={{ color: c.text }} />
+          </label>}
+        </div>
+        {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : filteredStudents.length === 0 ? <div style={{ color: c.textMuted }}>No students match your search.</div> : <div className="tw-class-student-list">{filteredStudents.map((st) => <div key={st.id} className={`flex items-center justify-between gap-[12px] p-[12px] rounded-[14px] mb-[8px] flex-wrap${advancedPlan ? " tw-class-student-clickable" : ""}`} onClick={() => openStudentAnalytics(st)} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={(event) => { event.stopPropagation(); setRemoveConfirm(st); }} style={{ ...btn(c), color: c.redFg, background: c.redBg, border: `3px solid ${c.redBorder}` }}>Remove</button></div>)}</div>}
+      </section>}
 
       {isSectionFolder && <section className="tw-class-report-columns">
         <div className="tw-class-report-panel tw-class-live-report-shell" style={card(c)}>

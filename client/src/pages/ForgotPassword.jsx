@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import PublicHeader from "../components/PublicHeader";
-import ThemeIconButton from "../components/ThemeIconButton";
 import { IconBubble, TwIcon } from "../components/TwUI";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 
@@ -19,7 +17,7 @@ const checks = (p) => ({ len: p.length >= 8, upper: /[A-Z]/.test(p), lower: /[a-
 export default function ForgotPassword() {
   const nav = useNavigate();
   const c = useColors();
-  const { dark, toggleTheme } = useTheme();
+  const { dark } = useTheme();
   const [step, setStep] = useState("email");
   const [email, setEmail] = useState("");
   const [digits, setDigits] = useState(Array(BOX_COUNT).fill(""));
@@ -114,12 +112,18 @@ export default function ForgotPassword() {
   const title = step === "email" ? "Reset your password" : step === "otp" ? "Check your email" : "Create a new password";
   const intro = step === "email" ? "Enter your account email and we’ll send a 6-digit reset code." : step === "otp" ? <>We sent a 6-digit code to <b style={{ color: c.text }}>{email}</b>.</> : "Choose a strong new password for your ThinkWAVE account.";
 
-  return <div className="tw-otp-page min-h-screen flex flex-col relative overflow-hidden" style={{ background: c.pageBg, color: c.text }}>
+  return <div className="tw-otp-page h-[100dvh] flex flex-col relative overflow-hidden" style={{ background: c.pageBg, color: c.text }}>
     <div className="fixed w-[520px] h-[520px] rounded-full -top-[180px] -left-[110px] pointer-events-none" style={{ background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)` }} />
     <div className="fixed w-[420px] h-[420px] rounded-full -bottom-[120px] -right-[110px] pointer-events-none bg-[radial-gradient(circle,rgba(139,92,246,0.14)_0%,transparent_70%)]" />
-    <PublicHeader compact hideSuper hideTheme />
-    <main className="tw-otp-main grid place-items-center flex-1 px-5 pt-[34px] pb-[50px] z-[1]">
-      <section className={`tw-otp-card tw-forgot-modern-card${step === "password" ? " is-password" : ""} p-[38px_34px] rounded-[26px]`} style={{ width: step === "password" ? "min(100%,760px)" : "min(100%,470px)", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
+    <header className="tw-enter-header flex items-center justify-between" style={{ background: c.cardBg3 || c.cardBg, borderBottom: `1px solid ${c.border}` }}>
+      <span className="tw-enter-headswap tw-enter-anim-enter-left">
+        <button type="button" className="tw-enter-back" aria-label="Back" onClick={() => { if (window.history.length > 1) nav(-1); else nav("/enter?mode=login"); }} style={{ borderColor: c.inputBorder || c.border, color: c.text, background: c.inputBg || c.cardBg2 }}>
+          <TwIcon name="arrowLeft" size={18} />
+        </button>
+      </span>
+    </header>
+    <main className="tw-otp-main grid place-items-center flex-1 min-h-0 px-5 py-[20px] z-[1] overflow-y-auto">
+      <section className={`tw-otp-card tw-enter-anim-enter-right tw-forgot-modern-card${step === "password" ? " is-password" : ""} p-[38px_34px] rounded-[26px]`} style={{ width: step === "password" ? "min(100%,760px)" : "min(100%,470px)", background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
         <div className="text-center">
           <div className="flex justify-center mb-[14px]"><IconBubble name={step === "password" ? "lock" : "invitation"} c={c} size={58} iconSize={28} /></div>
           <h1 className="text-[27px] font-[950] m-[0_0_10px]" style={{ color: c.text }}>{title}</h1>
@@ -130,7 +134,7 @@ export default function ForgotPassword() {
 
         {step === "email" && <form onSubmit={send} className="grid gap-4">
           <label className="grid gap-[7px] text-xs font-extrabold" style={label(c)}>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="you@example.com" className="px-[14px] py-3 rounded-xl text-sm w-full box-border" style={input(c)} /></label>
-          <button className="tw-auth-primary w-full min-h-[51px] rounded-[14px] border-[3px] border-brand bg-brand text-white text-[15px] font-[950] shadow-[0_10px_24px_rgba(43,108,255,0.25)]" type="submit" disabled={busy} style={primary(c, busy)}>{busy ? "Sending…" : "Send OTP"}</button>
+          <button className="tw-enter-role is-blue is-submit" type="submit" disabled={busy}>{busy ? "Sending…" : "Send OTP"}</button>
         </form>}
 
         {step === "otp" && <form onSubmit={verify}>
@@ -154,10 +158,8 @@ export default function ForgotPassword() {
           </aside>
         </div>}
 
-        <p className="text-center m-[22px_0_0]"><Link to="/login" className="text-brand font-black no-underline" style={{ color: c.accent }}>Back to login</Link></p>
       </section>
     </main>
-    <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
   </div>;
 }
 

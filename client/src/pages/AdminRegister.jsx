@@ -6,7 +6,7 @@
 
 
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 
@@ -151,7 +151,7 @@ export default function AdminRegister() {
 }
 
 const s = {
-  page:    { minHeight:"100vh", background:PAGE_BG, display:"flex", flexDirection:"column", fontFamily:"'Segoe UI',system-ui,sans-serif", color:"#e7e9ee", position:"relative", overflow:"hidden" },
+  page:    { minHeight:"100vh", background:PAGE_BG, display:"flex", flexDirection:"column", fontFamily:"Inter,'Segoe UI',system-ui,sans-serif", color:"#e7e9ee", position:"relative", overflow:"hidden" },
   glow:    { position:"absolute", top:-200, left:"50%", transform:"translateX(-50%)", width:600, height:600, background:"radial-gradient(circle,rgba(22,78,99,0.2) 0%,transparent 70%)", pointerEvents:"none", zIndex:0 },
   header:  { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"18px 40px", zIndex:1, borderBottom:"1px solid #1a2540" },
   logo:    { display:"flex", alignItems:"baseline", gap:4, textDecoration:"none" },

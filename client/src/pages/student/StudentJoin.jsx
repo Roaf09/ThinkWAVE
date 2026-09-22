@@ -69,7 +69,7 @@ export default function StudentJoin() {
   const inputBor = dark ? "#2a3b73" : "#a5b8f5";
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-5 pt-5 pb-10" style={{ background: pageBg, transition: "background 0.3s", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-5 pt-5 pb-10" style={{ background: pageBg, transition: "background 0.3s", fontFamily: "Inter,'Segoe UI',system-ui,sans-serif" }}>
       <div className="fixed w-[500px] h-[500px] rounded-full -top-[150px] -left-[100px] pointer-events-none" style={s.blob1} />
       <div className="fixed w-[400px] h-[400px] rounded-full -bottom-[100px] -right-[100px] pointer-events-none" style={s.blob2} />
 

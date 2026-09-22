@@ -10,9 +10,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { consumeLastRoute } from "../lib/lastRoute";
-import { useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
-import ThemeIconButton from "../components/ThemeIconButton";
 
 // Auth pilot: colors via @theme tokens + `dark:` variant (see styles/tailwind.css).
 // Legacy `tw-auth-*` hooks stay for animations only. `useColors` is gone here —
@@ -24,12 +22,11 @@ export default function Login({ onLoginSuccess }) {
   const loc = useLocation();
   const [sp] = useSearchParams();
   const isAdminLogin = sp.get("role") === "admin";
-  const { dark, toggleTheme } = useTheme();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem("tw_remember_email") || ""; } catch { return ""; } });
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => { try { return !!localStorage.getItem("tw_remember_email"); } catch { return false; } });
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,6 +61,8 @@ export default function Login({ onLoginSuccess }) {
       setAuthToken(data.token);
       if (rememberMe) {
         try { localStorage.setItem("tw_remember_email", email); } catch {}
+      } else {
+        try { localStorage.removeItem("tw_remember_email"); } catch {}
       }
       if (data.role === "TEACHER") {
         try {
@@ -94,8 +93,8 @@ export default function Login({ onLoginSuccess }) {
 
   return (
     <div
-      className="tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark"
-      style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}
+      className="tw-force-white tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark"
+      style={{ fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif" }}
     >
       <PublicHeader compact hideSuper hideTheme />
 
@@ -207,7 +206,6 @@ export default function Login({ onLoginSuccess }) {
           </p>
         </div>
       </main>
-      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }

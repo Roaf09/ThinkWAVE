@@ -10,7 +10,6 @@ import { setRole, setToken } from "../../lib/auth";
 import { consumeLastRoute } from "../../lib/lastRoute";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
-import ThemeIconButton from "../../components/ThemeIconButton";
 
 const REQ_LABELS = {
   length: "At least 8 characters",
@@ -34,7 +33,7 @@ export default function StudentAuth({ onLoginSuccess }) {
   const nav = useNavigate();
   const loc = useLocation();
   const c = useColors();
-  const { dark, toggleTheme } = useTheme();
+  const { dark } = useTheme();
   // Arriving from the header's "Student Sign Up" option should land directly
   // on the register form instead of the default login view.
   const [mode, setMode] = useState(loc.state?.mode === "register" ? "register" : "login");
@@ -64,11 +63,11 @@ export default function StudentAuth({ onLoginSuccess }) {
       setNotFound(false);
     }, 210);
   }
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: (() => { try { return localStorage.getItem("tw_remember_email") || ""; } catch { return ""; } })(), password: "", confirmPassword: "" });
   const [showPw, setShowPw] = useState(false);
   const [showPwHelp, setShowPwHelp] = useState(false);
   const [showConfPw, setShowConfPw] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => { try { return !!localStorage.getItem("tw_remember_email"); } catch { return false; } });
   const [msg, setMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
 
@@ -107,6 +106,8 @@ export default function StudentAuth({ onLoginSuccess }) {
       setAuthToken(data.token);
       if (rememberMe) {
         try { localStorage.setItem("tw_remember_email", form.email); } catch {}
+      } else {
+        try { localStorage.removeItem("tw_remember_email"); } catch {}
       }
       onLoginSuccess?.(data.token, data.role, data);
       nav(consumeLastRoute(data.role) || "/student");
@@ -203,7 +204,6 @@ export default function StudentAuth({ onLoginSuccess }) {
           )}
         </div>
       </main>
-      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 
@@ -213,7 +213,7 @@ export default function StudentAuth({ onLoginSuccess }) {
 }
 
 const s = {
-  page: (c) => ({ background: c.pageBg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text }),
+  page: (c) => ({ background: c.pageBg, fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif", color: c.text }),
   glow: { background: "radial-gradient(circle, rgba(43,108,255,0.12) 0%, transparent 70%)" },
   card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}` }),
   registerCard: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}` }),

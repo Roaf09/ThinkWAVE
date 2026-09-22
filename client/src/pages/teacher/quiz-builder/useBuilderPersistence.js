@@ -267,6 +267,18 @@ export function useBuilderPersistence({
       setModal(null);
       if (!guestMode && tutorialUserId && builderTutorialStage) {
         markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
+        const mobileTutorial = typeof window !== "undefined" && window.innerWidth <= 760;
+        if (mobileTutorial) {
+          // Mobile tutorial: stay in the builder, let the overflow sheet
+          // auto-close on PUBLISHED, then point at Home. Tapping Home goes
+          // to the dashboard where the nav_sessions prompt takes over.
+          const state = readTutorialState(tutorialUserId);
+          if (state.mainStage === "builder_pending") {
+            writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
+          }
+          setBuilderTutorialStage("home_highlight");
+          return;
+        }
         setBuilderTutorialStage(null);
         const state = readTutorialState(tutorialUserId);
         if (state.mainStage === "builder_pending") {

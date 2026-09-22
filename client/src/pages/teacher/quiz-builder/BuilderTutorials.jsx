@@ -238,6 +238,29 @@ export function BuilderTutorials({
           <p>Your work is saved. Publish it when you are ready to use it in a session.</p>
         </ThinkBotTutorial>
       )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "home_highlight" && (isMobile ? overflowOpen ? null : (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-home"]'
+          placement="below"
+          dialogWidth={300}
+          highlightMode="target"
+          allowTargetInteraction={true}
+        >
+          <p>Published! Tap <strong>Home</strong> to go back.</p>
+          <p className="tw-tutorial-fade-line">Next, let&apos;s go to <strong>Sessions</strong>.</p>
+        </ThinkBotTutorial>
+      ) : (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+          target='[data-tutorial="builder-home"]'
+          placement="below"
+          dialogWidth={360}
+          highlightMode="target"
+          allowTargetInteraction={true}
+        >
+          <p>Published! Tap <strong>Home</strong> to go back.</p>
+          <p className="tw-tutorial-fade-line">Next, let&apos;s go to <strong>Sessions</strong>.</p>
+        </ThinkBotTutorial>
+      ))}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "save_review" && !["duplicates", "invalid", "confirmPublish", "confirmSave"].includes(modal) && (isMobile ? (!overflowOpen ? (
         <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
           target='[data-tutorial="builder-overflow-toggle"]'

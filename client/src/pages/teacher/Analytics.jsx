@@ -190,9 +190,9 @@ export default function Analytics({ guestMode = false }) {
             <div className="mt-[8px] text-[13px] font-[750] leading-[1.6]" style={{ color: C.muted }}>{guestMode ? formatDate(sessionDisplayTimestamp(session)) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(sessionDisplayTimestamp(session))}</>}</div>
           </div>
           {exportAllowed && <div className="tw-analytics-export-row flex gap-[8px] flex-wrap">
-            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
-            <TeacherPressButton type="button" tone="neutral" className="tw-analytics-export-btn" icon="download" disabled={!!exporting} onClick={() => downloadExport("pdf")}>{exporting === "pdf" ? "Exporting…" : "PDF"}</TeacherPressButton>
-            <TeacherPressButton type="button" tone="neutral" className="tw-analytics-export-btn" icon="download" disabled={!!exporting} onClick={() => downloadExport("xlsx")}>{exporting === "xlsx" ? "Exporting…" : "Excel"}</TeacherPressButton>
+            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn tw-analytics-back-press" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
+            <TeacherPressButton type="button" tone="blue" className="tw-analytics-export-btn tw-analytics-back-press tw-analytics-export-icon-only" icon="pdf" aria-label="Export PDF" title="Export PDF" disabled={!!exporting} onClick={() => downloadExport("pdf")} />
+            <TeacherPressButton type="button" tone="blue" className="tw-analytics-export-btn tw-analytics-back-press tw-analytics-export-icon-only" icon="xlsx" aria-label="Export Excel" title="Export Excel" disabled={!!exporting} onClick={() => downloadExport("xlsx")} />
           </div>}
         </div>
       </section>
@@ -297,9 +297,13 @@ function BasicAnalyticsPanel({ C, analytics, assigned, tone }) {
   const students = analytics.students || [];
   const questions = analytics.questions || [];
   const joinMode = analytics?.session?.join_mode || "SOLO";
+  const [expandedMetric, setExpandedMetric] = useState(null);
+  const highestNames = getScoreNames(analytics, "highest");
+  const lowestNames = getScoreNames(analytics, "lowest");
+  const toggleMetric = (key) => setExpandedMetric((cur) => (cur === key ? null : key));
   return <div className="grid gap-[16px]">
-    <div data-tutorial="analytics-summary" className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(118px,1fr))]">
-      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label="Lowest" value={summary.min_score ?? 0} /><MetricCard C={C} tone={tone} label="Highest" value={summary.max_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submitted" : joinMode === "GROUP" ? "Groups" : "Submitted"} value={summary.participant_count ?? students.length} />
+    <div data-tutorial="analytics-summary" className={`tw-analytics-metrics-grid${expandedMetric ? ` has-expanded-${expandedMetric}` : ""}`}>
+      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submitted" : joinMode === "GROUP" ? "Groups" : "Submitted"} value={summary.participant_count ?? students.length} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
     </div>
     <div style={subCard(C)}><div style={sectionTitle(C)}>Attendance</div><div className="flex flex-wrap gap-[8px]">{students.map((student) => <StudentChip key={student.participant_id} name={`${student.first_name || ""} ${student.last_name || ""}`.trim()} C={C} />)}{!students.length && <span style={{ color: C.muted }}>No submitted students yet.</span>}</div></div>
     <div data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>Per-question Results</div><LegacyQuestionRows C={C} tone={tone} questions={questions} /></div>
@@ -311,14 +315,15 @@ function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onTo
   const questions = analytics.questions || [];
   const tt = normalizeTemplateType(analytics?.session?.template_type);
   const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
+  const [expandedMetric, setExpandedMetric] = useState(null);
+  const highestNames = getScoreNames(analytics, "highest");
+  const lowestNames = getScoreNames(analytics, "lowest");
+  const toggleMetric = (key) => setExpandedMetric((cur) => (cur === key ? null : key));
   return <div className="tw-analytics-detail-column" style={{ display: "grid", gap: 16 }}>
-    <div className="tw-analytics-metrics-grid" data-tutorial="analytics-summary">
-      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label="Lowest" value={summary.min_score ?? 0} /><MetricCard C={C} tone={tone} label="Highest" value={summary.max_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : "Participants"} value={summary.participant_count ?? 0} />
+    <div className={`tw-analytics-metrics-grid${expandedMetric ? ` has-expanded-${expandedMetric}` : ""}`} data-tutorial="analytics-summary">
+      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : "Participants"} value={summary.participant_count ?? 0} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
     </div>
-    <button type="button" data-tutorial="analytics-mobile-toggle" className="tw-analytics-mobile-toggle-btn" onClick={onToggleMobileView}>
-      <span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span>
-      <TwIcon name="swap" size={15} />
-    </button>
+    <TeacherPressButton type="button" data-tutorial="analytics-mobile-toggle" tone="blue" className="tw-analytics-mobile-toggle-btn tw-analytics-back-press" onClick={onToggleMobileView}><span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span><TwIcon name="swap" size={15} /></TeacherPressButton>
     <div className={`tw-analytics-panel-wrap${mobileView === "questions" ? " is-mobile-visible" : ""}`}>
       <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} />
     </div>
@@ -716,5 +721,24 @@ function emptyCard(C) { return { color: C.muted, textAlign: "center", padding: 2
 function sectionTitle(C) { return { color: C.text, fontWeight: 950, marginBottom: 11 }; }
 function pill(C) { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "5px 9px", borderRadius: 999, border: `1px solid ${C.border}`, background: C.cardBg2, color: C.text, fontSize: 12, fontWeight: 850, whiteSpace: "nowrap" }; }
 
-function MetricCard({ C, tone, label, value }) { return <div style={{ ...subCard(C), background: tone.softBg, borderColor: tone.border }}><div className="text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: tone.accent }}>{label}</div><div className="text-[27px] font-[950] mt-[7px]" style={{ color: C.text }}>{value}</div></div>; }
+function MetricCard({ C, tone, label, value }) { return <div className="tw-metric-card" style={{ ...subCard(C), background: tone.softBg, borderColor: tone.border }}><div className="tw-metric-label text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: tone.accent }}>{label}</div><div className="tw-metric-value text-[27px] font-[950] mt-[7px]" style={{ color: C.text }}>{value}</div></div>; }
+function getScoreNames(analytics, kind) {
+  const students = analytics?.students || [];
+  if (!students.length) return [];
+  const scores = students.map((s) => Number(s.total_points || 0));
+  const target = kind === "highest" ? Math.max(...scores) : Math.min(...scores);
+  return students
+    .filter((s) => Number(s.total_points || 0) === target)
+    .map((s) => `${s.first_name || ""} ${s.last_name || ""}`.trim() || `Student ${s.participant_id}`)
+    .sort((a, b) => a.localeCompare(b));
+}
+function ExpandableScoreCard({ C, tone, label, value, names, expanded, shrunk, onToggle }) {
+  return <button type="button" onClick={onToggle} aria-expanded={expanded} title={expanded ? `Collapse ${label}` : `Expand ${label} top scorers`} className={`tw-metric-card tw-metric-expandable${expanded ? " is-expanded" : ""}${shrunk ? " is-shrunk" : ""}`} style={{ ...subCard(C), background: tone.softBg, borderColor: tone.border, cursor: "pointer", textAlign: "left", width: "100%" }}>
+    <div className="tw-metric-label text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: tone.accent }}>{label}</div>
+    <div className="tw-metric-value-wrap">
+      <div className="tw-metric-value text-[27px] font-[950] mt-[7px]" style={{ color: C.text }}>{value}</div>
+      <div className="tw-metric-names" aria-hidden={!expanded}>{names.length ? names.map((n) => <span key={n} className="tw-metric-name">{n}</span>) : <span className="tw-metric-name is-empty">No scores yet</span>}</div>
+    </div>
+  </button>;
+}
 function StudentChip({ name, C }) { return <span style={{ ...pill(C), padding: "8px 11px" }}><span className="w-[8px] h-[8px] rounded-[99px] bg-[#22c55e] shadow-[0_0_0_4px_rgba(34,197,94,0.12)]" />{name || "Student"}</span>; }

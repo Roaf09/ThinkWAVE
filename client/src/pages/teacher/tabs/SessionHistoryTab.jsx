@@ -9,7 +9,9 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
-import { TeacherPressButton, ThinkBotEmptyState } from "../TeacherUI";
+import { isInstitutionPlan } from "../../../lib/planLimits";
+import { TwIcon } from "../../../components/TwUI";
+import { TeacherPressButton, ThinkBotEmptyState, TeacherActionModal } from "../TeacherUI";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 import { manilaDateTime } from "../../../lib/dateFormat";
@@ -47,10 +49,17 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
   const [exporting, setExporting] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [historyTutorialStage, setHistoryTutorialStage] = useState(null);
+  const [advancedPlan, setAdvancedPlan] = useState(false);
   const c = useColors();
   const navigate = useNavigate();
   const hasActiveHistoryFilters = modeFilter !== "ALL" || sortBy !== "recent";
   const tutorialSessionId = tutorial?.userId ? Number(readTutorialState(tutorial.userId)?.tutorialDemoSessionId || 0) : 0;
+
+  useEffect(() => {
+    let alive = true;
+    api.get("/auth/me").then(({ data }) => { if (alive) setAdvancedPlan(isInstitutionPlan(data)); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -227,16 +236,16 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
                           ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}`
                           : `/teacher/analytics/${session.id}`)}
                       >Open Analytics</TeacherPressButton>
-                      <span className="tw-history-export-actions">
+                      {advancedPlan && <span className="tw-history-export-actions">
                         <span className="tw-history-export-text">
-                          <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
-                          <TeacherPressButton tone="neutral" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="pdf" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="xlsx" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
                         </span>
                         <span className="tw-history-export-icons">
-                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title="Export PDF" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>PDF</button>
-                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export Excel" title="Export Excel" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>XLSX</button>
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title="Export PDF" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}><TwIcon name="pdf" size={20} /></button>
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export Excel" title="Export Excel" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}><TwIcon name="xlsx" size={20} /></button>
                         </span>
-                      </span>
+                      </span>}
                     </div>
                   </div>
                 </div>
@@ -253,31 +262,48 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
 
 
 function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, navigate }) {
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [reuseTarget, setReuseTarget] = useState(null);
+  const [reuseBusy, setReuseBusy] = useState(false);
+  async function confirmReuse() {
+    if (!reuseTarget) return;
+    setReuseBusy(true);
+    try {
+      await api.post(`/quizzes/${reuseTarget.quiz_id}/reuse`, {});
+      setReuseTarget(null);
+      setReuseBusy(false);
+      navigate("/guest?tab=live");
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to reuse quiz.");
+      setReuseBusy(false);
+    }
+  }
   return <div className="container grid gap-[18px]">
     <section><h2 className="mb-[4px]" style={{ color: c.text }}>History</h2></section>
-    {sessions.length > 0 && <section className="grid grid-cols-[minmax(220px,1.3fr)_minmax(150px,.7fr)] gap-[12px]" style={{ ...card(c) }}>
-      <input className="tw-history-search-field w-full box-border px-[14px] py-[12px] rounded-[12px]" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
-      <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full box-border px-[14px] py-[12px] rounded-[12px]" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
+    {sessions.length > 0 && <section className="tw-bank-search-shell" style={{ ...card(c), position: "relative", overflow: "visible" }}>
+      <div className="tw-search-filter-row">
+        <input className="tw-history-search-field tw-search-filter-input w-full box-border px-[14px] py-[12px] rounded-[12px]" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+        <TeacherPressButton type="button" tone="neutral" icon="filter" className={`tw-filter-toggle-btn${filterOpen ? " is-selected" : ""}${sortBy !== "recent" ? " has-active-filters" : ""}`} onClick={() => setFilterOpen((v) => !v)}>Filter</TeacherPressButton>
+      </div>
+      {filterOpen && <div className="tw-filter-panel" style={{ ...card(c), position: "absolute", top: "calc(100% + 8px)", right: 12, left: 12, zIndex: 40, display: "grid", gap: 14 }}>
+        <div className="tw-filter-panel-group">
+          <label className="block text-[11px] font-[900] uppercase tracking-[0.06em] mb-[6px]" style={{ color: c.textMuted }}>Sort by</label>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full box-border px-[14px] py-[12px] rounded-[12px]" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }}><option value="recent">Newest first</option><option value="title">Title A–Z</option><option value="score">Highest average</option></select>
+        </div>
+      </div>}
     </section>}
     {!sessions.length ? <ThinkBotEmptyState c={c} title="You have not done any sessions yet." /> : sessions.map((session) => {
       const tone = templateTone(session.template_type, c, false);
-      async function reuseGuestQuiz() {
-        try {
-          await api.post(`/quizzes/${session.quiz_id}/reuse`, {});
-          alert("Quiz sent back to Sessions.");
-        } catch (e) {
-          alert(e?.response?.data?.message || "Failed to reuse quiz.");
-        }
-      }
       return <div key={session.id} style={{ ...card(c), ...templateCardChrome(session.template_type, c, false) }}>
         <div className="flex justify-between items-start gap-[14px] flex-wrap">
           <div><div className="font-[900] text-[17px]" style={{ color: c.text }}>{session.quiz_title}</div><div className="text-[13px] mt-[6px]" style={{ color: c.textMuted }}>{manilaDateTime(session.ended_at, { dateStyle: "medium", timeStyle: "short" })}</div></div>
           <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
         </div>
         <div className="grid grid-cols-[repeat(2,minmax(150px,1fr))] gap-[10px] mt-[14px]"><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
-        <div className="mt-[14px] flex gap-[10px] flex-wrap"><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton><TeacherPressButton tone="neutral" onClick={reuseGuestQuiz}>Reuse</TeacherPressButton></div>
+        <div className="mt-[14px] flex gap-[10px] flex-wrap"><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton><TeacherPressButton tone="neutral" onClick={() => setReuseTarget(session)}>Reuse</TeacherPressButton></div>
       </div>;
     })}
+    {reuseTarget && <TeacherActionModal c={c} tone="blue" icon="history" title="Send quiz back to Sessions?" message={`${reuseTarget.quiz_title} will return to Sessions.`} confirmLabel={reuseBusy ? "Sending…" : "Reuse Quiz"} textCancel onClose={() => !reuseBusy && setReuseTarget(null)} onConfirm={confirmReuse} />}
   </div>;
 }
 

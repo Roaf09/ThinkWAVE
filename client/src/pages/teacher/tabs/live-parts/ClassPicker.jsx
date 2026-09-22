@@ -36,11 +36,10 @@ export function ClassPicker({ c, dark, folders, selectedId, onClose, onSelect })
       <div className="tw-class-picker-header">
         <div>
           <h3>Choose a class</h3>
-          <p style={{ color: c.textMuted }}>{currentFolder ? currentFolder.name : folders.length ? "Choose a folder or class to continue." : ""}</p>
         </div>
-        <button type="button" onClick={onClose} style={{ color: c.text }}><TwIcon name="close" size={20} /></button>
+        <button type="button" aria-label="Close" onClick={onClose} style={{ color: c.text }}><TwIcon name="close" size={20} /></button>
       </div>
-      {parentId && <button type="button" className="tw-class-picker-back" onClick={() => setParentId(parentFolderId)} style={{ color: c.accent }}><TwIcon name="arrowRight" size={18} style={{ transform: "rotate(180deg)" }} /> Back</button>}
+      {parentId && <div className="tw-class-picker-back-row"><button type="button" className="tw-class-picker-back" aria-label="Back" onClick={() => setParentId(parentFolderId)} style={{ color: c.accent }}><TwIcon name="arrowLeft" size={18} /></button></div>}
       <div className="tw-class-picker-grid">
         {visibleFolders.map((folder) => {
           const hasChildren = (childrenByParent.get(Number(folder.id)) || []).length > 0;

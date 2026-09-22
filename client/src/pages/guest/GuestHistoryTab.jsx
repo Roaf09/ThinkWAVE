@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { manilaDateTime } from "../../lib/dateFormat";
 

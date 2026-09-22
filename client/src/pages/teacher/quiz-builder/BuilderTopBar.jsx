@@ -44,11 +44,11 @@ export function BuilderTopBar({
       {isMobile ? (
       <>
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-nowrap">
-          <button type="button" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={26} /></button>
+          <button type="button" data-tutorial="builder-home" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={26} /></button>
           <div className="min-w-0 flex-1">
-            <span className="tw-builder-title-button tw-builder-mobile-title" title={fullQuizTitle} style={{ color: "#fff" }}>
+            <button type="button" className="tw-builder-title-button tw-builder-mobile-title" title={fullQuizTitle} style={{ color: "#fff" }} onClick={() => { setTitleDraft(quiz?.title || ""); openOverflow(); setOverflowTitleEditing(true); }}>
               {truncatedQuizTitle}
-            </span>
+            </button>
           </div>
         </div>
         <div className="flex gap-0 items-center shrink-0 flex-nowrap">
@@ -59,7 +59,7 @@ export function BuilderTopBar({
       ) : (
       <>
       <div className="flex items-center gap-3 flex-wrap min-w-[280px] flex-1">
-        <button type="button" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={28} /></button>
+        <button type="button" data-tutorial="builder-home" className="tw-builder-settings-flat tw-builder-bare-icon" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate(guestMode ? "/guest" : "/teacher", { state: { tab: "live" } })}><TwIcon name="home" size={28} /></button>
         <div className="min-w-[220px] flex-[0_1_540px]">
           {titleEditing ? (
             <input

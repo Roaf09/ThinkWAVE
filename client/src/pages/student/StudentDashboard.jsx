@@ -386,7 +386,7 @@ function StudentProgressShowcase({c,dark,data,achievements,onOpenAchievements,on
       <div className="tw-level-track tw-level-track-compact" style={{background:c.cardBg2,borderColor:c.border}}><span style={{width:`${xpPct}%`}}/><b>{Number(gam.currentXp||0).toLocaleString()} / {Number(gam.xpNeeded||0).toLocaleString()} XP</b></div>
     </div>
     {favoriteItems.length>0&&<div className="tw-favorite-achievements">{favoriteItems.map((item)=><span key={item.id}><TwIcon name="trophy" size={14}/>{item.title}</span>)}</div>}
-        {mode==="weekly"&&<><div className="tw-goal-reset">4 Weekly Goals · refresh Monday at 6:00 AM</div><div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div></>}
+        {mode==="daily"&&<div className="tw-goal-grid">{(gam.dailyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div>}{mode==="weekly"&&<><div className="tw-goal-reset">4 Weekly Goals · refresh Monday at 6:00 AM</div><div className="tw-goal-grid">{(gam.weeklyGoals||[]).map((goal)=><GoalCard key={goal.key} c={c} dark={dark} goal={goal}/>)}</div></>}
     {mode==="achievements"&&<AchievementCarousel c={c} dark={dark} achievements={achievements}/>} 
   </div>;
 }

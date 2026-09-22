@@ -29,10 +29,18 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
   const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
 
-  // Mobile: hide the pill-shaped bottom tab bar while this setup modal is open.
+  // Mobile: hide the pill-shaped bottom tab bar while this setup modal is open + lock background scroll.
   useEffect(() => {
     document.body.classList.add("tw-mobile-modal-open");
-    return () => document.body.classList.remove("tw-mobile-modal-open");
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.classList.remove("tw-mobile-modal-open");
+      document.body.style.overflow = prevOverflow;
+      document.body.style.overscrollBehavior = prevOverscroll;
+    };
   }, []);
 
   return <div className="tw-host-launch-backdrop" onClick={() => { if (!tutorialStage) onClose?.(); }}>
@@ -43,9 +51,9 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
         <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
-      <div className={`tw-host-mode-row${!institutionPlan && !guestMode ? " tw-host-mode-row-basic" : ""}${guestMode ? " tw-host-mode-row-guest" : ""}`}>
-        <button type="button" className={`tw-host-mode-press${joinMode === "SOLO" ? " is-selected" : ""}`} title="Host a solo session" onClick={() => setJoinMode("SOLO")}><span>Solo</span></button>
-        <button type="button" className={`tw-host-mode-press${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={!institutionPlan && !guestMode} title={institutionPlan || guestMode ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => (institutionPlan || guestMode) && setJoinMode("GROUP")}><span>Group</span></button>
+      <div className="tw-host-mode-row tw-host-mode-row-fresh">
+        <TeacherPressButton type="button" tone="blue" className={joinMode === "SOLO" ? "is-selected is-muted-selected" : ""} disabled={joinMode === "SOLO"} title="Host a solo session" onClick={() => setJoinMode("SOLO")}>Solo</TeacherPressButton>
+        <TeacherPressButton type="button" tone="blue" className={joinMode === "GROUP" ? "is-selected is-muted-selected" : ""} disabled={joinMode === "GROUP" || (!institutionPlan && !guestMode)} title={institutionPlan || guestMode ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => (institutionPlan || guestMode) && setJoinMode("GROUP")}>Group</TeacherPressButton>
       </div>
       {launchError && <div role="alert" className="tw-host-launch-error" style={{ background: c.redBg, color: c.redFg, border: `1px solid ${c.redBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 800 }}>{launchError}</div>}
       <div className="tw-host-launch-controls" style={guestMode ? { gridTemplateColumns: "1fr auto" } : undefined}>

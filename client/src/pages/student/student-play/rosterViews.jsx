@@ -35,7 +35,7 @@ export function WaitingRoomView({
       ? "Groups update in real time as the teacher prepares the session."
       : isGuestHosted ? "The host will start the session soon." : "The teacher will start the session soon.";
   return (
-    <div className={`sp-waiting-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...waitExperienceBgStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
+    <div className={`sp-waiting-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...waitExperienceBgStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
       {experienceControls}{antiCheatOverlay}{explanationOverlay}
       <div className="sp-wait-card sp-page-enter" style={{ width: "min(100%, 820px)", background: cardBg, borderColor: cardBor }}>
         <div className="sp-wait-icon-wrap sp-thinkbot-loading" style={{ background: dark ? "rgba(8,22,50,.88)" : "rgba(255,255,255,.92)", borderColor: cardBor }}>
@@ -114,7 +114,7 @@ export function CountdownView({
   countdown,
 }) {
   return (
-    <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
+    <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
       {experienceControls}{antiCheatOverlay}{explanationOverlay}
       <div className="countdown-overlay" style={{ background: dark ? undefined : "radial-gradient(circle at center, rgba(255,255,255,0.86), rgba(219,230,255,0.95))" }}>
         <div className="countdown-card">

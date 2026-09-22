@@ -10,7 +10,6 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
-import ThemeIconButton from "../components/ThemeIconButton";
 
 function passwordChecks(p) {
   return {
@@ -32,7 +31,7 @@ const REQ_LABELS = {
 
 export default function SuperadminRegister() {
   const nav = useNavigate();
-  const { dark, toggleTheme } = useTheme();
+  const { dark } = useTheme();
   const c = useColors();
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "", bootstrapSecret: "" });
   const [showSecret, setShowSecret] = useState(false);
@@ -154,13 +153,12 @@ export default function SuperadminRegister() {
           </div>
         </div>
       </main>
-      <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-landing-fixed-theme" size={22} />
     </div>
   );
 }
 
 const s = {
-  page: (c) => ({ background: c.pageBg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: c.text }),
+  page: (c) => ({ background: c.pageBg, fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif", color: c.text }),
   glow: { background: "radial-gradient(circle, rgba(43,108,255,0.12) 0%, transparent 70%)" },
   card: (c) => ({ background: c.cardBg3, border: `1px solid ${c.border}` }),
   title: (c) => ({ color: c.text }),

@@ -2,17 +2,19 @@
  * server/src/utils/mailer.js
  * Purpose: Central email helper used by OTP and future transactional emails.
  *
- * MIGRATION NOTE (Gmail SMTP -> Mailgun):
- * Render blocks/limits outbound SMTP ports on some plans, which breaks
- * nodemailer + Gmail. Mailgun's HTTP API sends mail over normal HTTPS
- * (port 443), so it is not affected by that restriction. The exported
- * functions below (hasMailConfig, sendMail, thinkwaveEmailTemplate) keep the
- * exact same signatures as before, so nothing in otp.service.js or
- * superadmin.controller.js needs to change.
+ * PROVIDERS:
+ * - Mailgun HTTP API (production — Render blocks/limits outbound SMTP ports on
+ *   some plans, but HTTPS port 443 always works).
+ * - SMTP via nodemailer (local dev — your Gmail app-password .env still works).
+ * sendMail() prefers Mailgun when configured, otherwise falls back to SMTP.
+ * The exported signatures (hasMailConfig, sendMail, thinkwaveEmailTemplate)
+ * are unchanged, so callers in otp.service.js / superadmin.controller.js work
+ * with either provider.
  */
 
 import FormData from "form-data";
 import Mailgun from "mailgun.js";
+import nodemailer from "nodemailer";
 import { env } from "../env.js";
 
 const mailgun = new Mailgun(FormData);
@@ -29,36 +31,102 @@ const mg = env.MAILGUN_API_KEY
     })
   : null;
 
-export function hasMailConfig() {
+export function hasMailgunConfig() {
   return Boolean(env.MAILGUN_API_KEY && env.MAILGUN_DOMAIN);
+}
+
+export function hasSmtpConfig() {
+  return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+}
+
+export function hasMailConfig() {
+  return hasMailgunConfig() || hasSmtpConfig();
+}
+
+export function mailProvider() {
+  if (hasMailgunConfig()) return "mailgun";
+  if (hasSmtpConfig()) return "smtp";
+  return "not configured";
+}
+
+let smtpTransporter = null;
+function getSmtpTransporter() {
+  if (smtpTransporter) return smtpTransporter;
+  const secure = Number(env.SMTP_PORT) === 465;
+  smtpTransporter = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: Number(env.SMTP_PORT) || 587,
+    secure,
+    // Port 587 (STARTTLS) — require the upgrade; port 465 uses implicit TLS.
+    requireTLS: !secure,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    // Local dev machines can have odd DNS/timeouts — fail fast instead of
+    // hanging the OTP request for a minute.
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+  });
+  return smtpTransporter;
+}
+
+async function sendViaSmtp({ to, subject, text, html }) {
+  const info = await getSmtpTransporter().sendMail({
+    from: env.MAIL_FROM,
+    to,
+    subject,
+    text,
+    html,
+  });
+  return { sent: true, messageId: info?.messageId };
 }
 
 export async function sendMail({ to, subject, text, html }) {
   if (!hasMailConfig()) {
-    console.warn("[EMAIL NOT SENT] Mailgun is not configured.", { to, subject });
-    return { sent: false, reason: "MAILGUN_NOT_CONFIGURED" };
+    console.warn("[EMAIL NOT SENT] No mail provider configured (Mailgun or SMTP).", { to, subject });
+    return { sent: false, reason: "MAIL_NOT_CONFIGURED" };
+  }
+
+  // Production path first — HTTPS, unaffected by SMTP port blocks.
+  if (hasMailgunConfig()) {
+    try {
+      const info = await mg.messages.create(env.MAILGUN_DOMAIN, {
+        from: env.MAIL_FROM || env.SMTP_FROM,
+        to,
+        subject,
+        text,
+        html,
+      });
+      return { sent: true, messageId: info?.id };
+    } catch (error) {
+      console.error("[EMAIL FAILED] via mailgun", {
+        to,
+        subject,
+        status: error?.status,
+        message: error?.message || String(error),
+        details: error?.details,
+      });
+      // If SMTP is also configured (local dev with both), try it before giving up.
+      if (!hasSmtpConfig()) {
+        return {
+          sent: false,
+          reason: "MAILGUN_SEND_FAILED",
+          error: error?.message || String(error),
+        };
+      }
+    }
   }
 
   try {
-    const info = await mg.messages.create(env.MAILGUN_DOMAIN, {
-      from: env.MAIL_FROM || env.SMTP_FROM,
-      to,
-      subject,
-      text,
-      html,
-    });
-    return { sent: true, messageId: info?.id };
+    return await sendViaSmtp({ to, subject, text, html });
   } catch (error) {
-    console.error("[EMAIL FAILED]", {
+    console.error("[EMAIL FAILED] via smtp", {
       to,
       subject,
-      status: error?.status,
       message: error?.message || String(error),
-      details: error?.details,
     });
     return {
       sent: false,
-      reason: "MAILGUN_SEND_FAILED",
+      reason: "SMTP_SEND_FAILED",
       error: error?.message || String(error),
     };
   }

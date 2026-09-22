@@ -11,7 +11,7 @@ import crypto     from "crypto";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, checkAdminInvitation, verifyOtp, resendOtp, login, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
+import { register, checkAdminInvitation, verifyOtp, resendOtp, changeEmail, login, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
@@ -34,6 +34,11 @@ const RegisterSchema = z.object({
 });
 
 const VerifySchema = z.object({ email: z.string().email(), code: z.string().length(6).regex(/^\d{6}$/) });
+const ChangeEmailSchema = z.object({
+  currentEmail: z.string().email(),
+  newEmail: z.string().email(),
+  password: z.string().min(1).max(256),
+});
 const PasswordResetRequestSchema = z.object({ email: z.string().email() });
 const PasswordResetVerifySchema = z.object({ email: z.string().email(), code: z.string().length(6).regex(/^\d{6}$/) });
 const PasswordResetConfirmSchema = z.object({ resetToken: z.string().min(20), newPassword: strongPassword });
@@ -162,7 +167,7 @@ const clientIp = (req) => String(req.ip || req.socket?.remoteAddress || "unknown
 // everyone else. Per-account keys keep the brute-force protection while
 // letting distinct users share an IP.
 const accountKey = (req) =>
-  `${clientIp(req)}:${String(req.body?.email || req.params?.token || "").toLowerCase().slice(0, 120)}`;
+  `${clientIp(req)}:${String(req.body?.email || req.body?.currentEmail || req.body?.newEmail || req.params?.token || "").toLowerCase().slice(0, 120)}`;
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: accountKey });
 const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, keyGenerator: accountKey });
 
@@ -170,6 +175,7 @@ authRouter.get("/admin-invitation/:token", authLimiter, asyncHandler(checkAdminI
 authRouter.post("/register", authLimiter, validateBody(RegisterSchema), asyncHandler(register));
 authRouter.post("/verify-otp", otpLimiter, validateBody(VerifySchema), asyncHandler(verifyOtp));
 authRouter.post("/resend-otp", otpLimiter, validateBody(PasswordResetRequestSchema), asyncHandler(resendOtp));
+authRouter.post("/change-email", otpLimiter, validateBody(ChangeEmailSchema), asyncHandler(changeEmail));
 authRouter.post("/password/request-reset", otpLimiter, validateBody(PasswordResetRequestSchema), asyncHandler(requestPasswordReset));
 authRouter.post("/password/verify-reset", otpLimiter, validateBody(PasswordResetVerifySchema), asyncHandler(verifyPasswordResetOtp));
 authRouter.post("/password/confirm-reset", otpLimiter, validateBody(PasswordResetConfirmSchema), asyncHandler(confirmPasswordReset));
