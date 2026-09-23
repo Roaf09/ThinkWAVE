@@ -429,7 +429,7 @@ export default function StudentAsyncPlay() {
       <div className={`sp-assignment-intro sp-page-enter${entryStage==="beware-exit"?" is-leaving":""}`} style={{background:cardBg,borderColor:cardBor,color:textC}}>
         <div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div>
         <p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p>
-        <div className="sp-assignment-warning">BEWARE: CHEATING IS NOT PROHIBITED</div>
+        <div className="sp-assignment-warning">BEWARE: CHEATING IS PROHIBITED</div>
       </div>
     </div>}
     {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" className="tw-dialog-press is-blue" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}><span>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</span></button></div></div>}
