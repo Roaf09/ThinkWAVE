@@ -11,7 +11,7 @@ import crypto     from "crypto";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, checkAdminInvitation, verifyOtp, resendOtp, changeEmail, login, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
+import { register, checkAdminInvitation, verifyOtp, resendOtp, changeEmail, login, loginHistory, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
@@ -181,4 +181,5 @@ authRouter.post("/password/verify-reset", otpLimiter, validateBody(PasswordReset
 authRouter.post("/password/confirm-reset", otpLimiter, validateBody(PasswordResetConfirmSchema), asyncHandler(confirmPasswordReset));
 authRouter.post("/login", authLimiter, validateBody(LoginSchema), asyncHandler(login));
 authRouter.get( "/me", requireAuth, asyncHandler(me));
+authRouter.get("/login-history", requireAuth, asyncHandler(loginHistory));
 authRouter.patch("/me", requireAuth, requireRole("TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"), validateBody(ProfileSchema), asyncHandler(updateMe));

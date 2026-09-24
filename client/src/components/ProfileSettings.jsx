@@ -63,8 +63,38 @@ export function ProfileSettingsModal({ roleLabel="User", profile, setProfile, on
       {showInstitution && <label className="tw-profile-field-wide col-span-full grid gap-[7px] text-xs font-[850]">Institution<input disabled value={profile.institutionName||"Not linked"} style={{...fieldStyle(c),opacity:.72}}/></label>}
     </div>
     {error&&<div className="tw-profile-error mt-3.5 p-3 border border-solid rounded-xl font-extrabold" style={{background:c.redBg,borderColor:c.redBorder,color:c.redFg}}>{error}</div>}
+    <RecentLogins c={c} />
     <div className="tw-profile-submit-row flex justify-end mt-5"><button className="btn" disabled={saving}>{saving?"Saving…":"Save"}</button></div>
   </form></div>;
+}
+
+function friendlyDevice(ua) {
+  const s = String(ua || "");
+  const os = /Android/i.test(s) ? "Android" : /iPhone|iPad/i.test(s) ? "iOS" : /Windows/i.test(s) ? "Windows" : /Macintosh|Mac OS/i.test(s) ? "Mac" : /Linux/i.test(s) ? "Linux" : "Unknown device";
+  const browser = /Edg\//i.test(s) ? "Edge" : /Chrome\//i.test(s) ? "Chrome" : /Safari\//i.test(s) && !/Chrome/i.test(s) ? "Safari" : /Firefox\//i.test(s) ? "Firefox" : "Browser";
+  return `${browser} on ${os}`;
+}
+
+function RecentLogins({ c }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.get("/auth/login-history").then(({ data }) => { if (alive) setRows(Array.isArray(data) ? data : []); }).catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, []);
+  if (rows === null || rows.length === 0) return null;
+  return <div className="mt-5">
+    <h4 style={{ margin: "0 0 8px" }}>Recent logins</h4>
+    <p style={{ margin: "0 0 10px", fontSize: 12, color: c.textMuted, lineHeight: 1.6 }}>Your account can stay signed in on multiple devices. If you see a login you don&apos;t recognize, change your password to sign out all devices.</p>
+    <div className="grid gap-2">
+      {rows.slice(0, 5).map((row, i) => (
+        <div key={row.id || i} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-solid" style={{ borderColor: c.border, background: c.cardBg2 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{i === 0 ? "This session (most recent)" : friendlyDevice(row.user_agent)}</span>
+          <span style={{ fontSize: 11, color: c.textMuted }}>{row.created_at ? new Date(row.created_at).toLocaleString() : ""}{row.ip ? ` · ${row.ip}` : ""}</span>
+        </div>
+      ))}
+    </div>
+  </div>;
 }
 
 export function ProfileSavedOverlay(){return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4}/></div></div>}

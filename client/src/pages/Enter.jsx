@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { consumeLastRoute } from "../lib/lastRoute";
@@ -33,11 +33,14 @@ function friendlyLoginError(message) {
     : msg;
 }
 
-function LoginForm({ c, role, onForgot }) {
+function LoginForm({ c, role, onForgot, initialEmail }) {
   const nav = useNavigate();
   const isStudent = role === "student";
   const isAdmin = role === "admin";
-  const [email, setEmail] = useState(() => { try { return localStorage.getItem("tw_remember_email") || ""; } catch { return ""; } });
+  const [email, setEmail] = useState(() => {
+    if (initialEmail) return initialEmail;
+    try { return localStorage.getItem("tw_remember_email") || ""; } catch { return ""; }
+  });
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => { try { return !!localStorage.getItem("tw_remember_email"); } catch { return false; } });
@@ -424,8 +427,14 @@ function EnterStars() {
 
 export default function Enter() {
   const nav = useNavigate();
+  const loc = useLocation();
   const c = useColors();
   const [sp] = useSearchParams();
+  // After OTP verification we land back here so the user picks
+  // student / teacher / admin themselves (see VerifyOtp.jsx).
+  const justVerified = loc.state?.justVerified || sp.get("verified") || "";
+  const verifiedEmail = loc.state?.email || "";
+  const verifiedRoleLabel = justVerified === "student" ? "Student" : justVerified === "teacher" ? "Teacher" : justVerified === "admin" ? "Admin" : "";
   const startMode = sp.get("mode") === "signup" ? "signup" : sp.get("mode") === "code" ? "code" : "login";
   const [mode, setMode] = useState(startMode);
   const [loginRole, setLoginRole] = useState(null);
@@ -583,10 +592,16 @@ export default function Enter() {
             forgot ? (
               <EnterForgotForm c={c} onDone={closeForgot} />
             ) : (
-              <LoginForm c={c} role={loginRole} onForgot={openForgot} />
+              <LoginForm c={c} role={loginRole} onForgot={openForgot} initialEmail={verifiedEmail} />
             )
           ) : (
             <>
+              {justVerified && verifiedRoleLabel && (
+                <div role="status" className="tw-enter-errbox" style={{ borderColor: "#22c55e", background: "#f0fdf4" }}>
+                  <div className="tw-enter-errbox-head"><span style={{ color: "#15803d" }}>Verified!</span></div>
+                  <p style={{ color: "#15803d" }}>Your {verifiedRoleLabel.toLowerCase()} account is verified. Choose how to log in below.</p>
+                </div>
+              )}
               <h1>Choose how you want to enter ThinkWAVE</h1>
               <p className="tw-enter-sub" style={{ color: c.textMuted }}>
                 New to ThinkWAVE? <button type="button" className="tw-enter-link" onClick={() => switchMode("signup")}>Create an account</button>

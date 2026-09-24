@@ -54,7 +54,7 @@ export function TemplateBadge({ label, tone }) {
 
 export function normalizeBankTemplate(value) {
   if (value === "FOUR_PICS_ONE_WORD") return "GUESS_WORD_4PICS";
-  if (value === "THINK_AND_SPELL") return "THINK_SPELL";
+  if (value === "THINK_AND_SPELL" || value === "THINK_SPELL") return "CROSSWORD";
   return value;
 }
 

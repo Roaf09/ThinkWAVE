@@ -22,7 +22,10 @@ export function GameMcq({ options, mcqMode, answerMode, value, onChange, disable
   function toggleChoice(choice) {
     if (!twoMode) return onChange({ choice });
     if (selectedList.includes(choice)) return onChange({ choices: selectedList.filter((x) => x !== choice) });
-    if (selectedList.length >= 2) return onChange({ choices: [selectedList[1], choice] });
+    // Both slots filled: ignore further taps instead of dropping the oldest
+    // pick, so the order of tapping can never silently swap which answers
+    // get submitted. Deselect one first to change the selection.
+    if (selectedList.length >= 2) return;
     return onChange({ choices: [...selectedList, choice] });
   }
 

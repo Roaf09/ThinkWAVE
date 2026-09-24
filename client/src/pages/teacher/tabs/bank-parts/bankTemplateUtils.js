@@ -27,8 +27,8 @@ export function getBankAnswers(tt, cfg, correct) {
     }).filter(Boolean);
   }
   if (tt === "TRUE_FALSE") return [correct.choice].filter(Boolean);
-  if (tt === "TYPE_ANSWER" || tt === "DRAW_IT" || tt === "GRIP_GUESS" || tt === "GUESS_WORD_4PICS") return [correct.text || cfg.target, ...(Array.isArray(correct.answers) ? correct.answers : [])].filter(Boolean);
-  if (tt === "THINK_SPELL") return [...(Array.isArray(correct.answers) ? correct.answers : Array.isArray(cfg.answers) ? cfg.answers : []), ...(!correct.answers?.length && correct.text ? [correct.text] : [])].filter(Boolean);
+  if (tt === "TYPE_ANSWER" || tt === "GUESS_WORD_4PICS") return [correct.text || cfg.target, ...(Array.isArray(correct.answers) ? correct.answers : [])].filter(Boolean);
+  if (tt === "CROSSWORD") return [...(Array.isArray(correct.answers) ? correct.answers : Array.isArray(cfg.answers) ? cfg.answers : []), ...(!correct.answers?.length && correct.text ? [correct.text] : [])].filter(Boolean);
   if (tt === "MATCHING") {
     const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
     const colB = Array.isArray(cfg.colB) ? cfg.colB : [];

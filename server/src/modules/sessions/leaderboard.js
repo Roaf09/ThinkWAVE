@@ -1,14 +1,13 @@
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 
 const SIMPLE_SPEED_TEMPLATES = new Set([
-  TEMPLATE_TYPES.MCQ,
   TEMPLATE_TYPES.TRUE_FALSE,
   TEMPLATE_TYPES.TYPE_ANSWER,
   TEMPLATE_TYPES.GUESS_WORD_4PICS,
 ]);
 const PARTIAL_SPEED_TEMPLATES = new Set([
   TEMPLATE_TYPES.MATCHING,
-  TEMPLATE_TYPES.THINK_SPELL,
+  TEMPLATE_TYPES.CROSSWORD,
 ]);
 
 export function competitiveSpeedMultiplier(remainingRatio) {
@@ -25,6 +24,17 @@ export function calculateCompetitivePoints({ templateType, scored, basePoints, e
   const speed = competitiveSpeedMultiplier(remainingRatio);
   const tt = normalizeTemplateType(templateType);
 
+  if (tt === TEMPLATE_TYPES.MCQ) {
+    // Proportional share of one unit (base*1000, base capped 1..3) scaled by
+    // speed. Full credit earns exactly what the old all-or-nothing branch
+    // gave (unit x speed); each correct pick earns its fraction — including
+    // partials that mixed in a wrong pick. E.g. points=2 at 0.8 speed:
+    // 2-of-2 => 1600, 1-of-2 => 800.
+    const correctCount = Number(scored?.correctCount || 0);
+    const totalCorrect = Math.max(1, Number(scored?.totalCorrect || 1));
+    if (!(correctCount > 0)) return 0;
+    return Math.round(maxCompetitive * (correctCount / totalCorrect) * speed);
+  }
   if (SIMPLE_SPEED_TEMPLATES.has(tt)) {
     return scored?.isCorrect ? Math.round(maxCompetitive * speed) : 0;
   }

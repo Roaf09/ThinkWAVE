@@ -19,6 +19,7 @@ import { tabCard as card, tabInputStyle as inputStyle, normalizeBankTemplate as 
 import { LiveQuizCard } from "./live-parts/LiveQuizCard";
 import { HostLaunchModal } from "./live-parts/HostLaunchModal";
 import { AssignModal } from "./live-parts/AssignSetupModal";
+import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 const labelStyleSmall = (c) => ({ display: "block", fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", color: c.textMuted, marginBottom: 6 });
 
@@ -217,7 +218,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   async function addToQuizBank(quiz) { try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.", "error"); } }
   async function duplicateQuiz(quiz) { try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); await load(); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); } catch (error) { showFlash(error?.response?.data?.message || "Failed to duplicate quiz.", "error"); } }
 
-  if (loading) return <div className="container"><div style={card(c)}>Loading sessions…</div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
 
   return <>
     <div className="container tw-live-sessions-page grid gap-[18px]" style={{ overflow: "visible", background: c.pageBg, alignContent: "start", gridAutoRows: "max-content" }}>

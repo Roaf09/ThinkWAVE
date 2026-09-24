@@ -122,7 +122,7 @@ export function defaultConfig(t, c) {
       };
     case "GUESS_WORD_4PICS":
       return { images: ["", "", "", ""], dummyLetters: 6, target: "", explanation: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
-    case "THINK_SPELL":
+    case "CROSSWORD":
       return { gridSize: 5, answers: [], gridSeed: 1, gridFilled: false, promptImage: "", showPromptImage: false, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0, showWordList: true, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
     case "TYPE_ANSWER":
       return { explanation: "", promptImage: "", showPromptImage: false, voiceRecord: false, textToSpeech: false, voicePrompt: "", voiceAnswers: [] };
@@ -138,7 +138,7 @@ export function defaultCorrect(t) {
       return { choice: "" };
     case "MATCHING":
       return { pairs: [{ aIndex: 0, bIndex: 0 }] };
-    case "THINK_SPELL":
+    case "CROSSWORD":
       return { text: "", answers: [] };
     default:
       return { text: "" };
@@ -160,8 +160,15 @@ export function trimText(v) {
   return String(v || "").trim();
 }
 
-export function clampQuestionPoints(value, max = 3) {
-  return Math.min(max, Math.max(1, Number(value) || 1));
+// Question points only ever take 1, 2, or 3. Anything else (floats like 2.5
+// from legacy rows, 0, negatives, oversized values) snaps to the nearest
+// valid choice so MCQ fractions stay clean (0.5 / 1 / 1.5 for 2-answer).
+export function clampQuestionPoints(value) {
+  const n = Math.round(Number(value));
+  if (n === 2 || n === 3) return n;
+  if (n === 1) return 1;
+  if (Number.isFinite(n) && n > 3) return 3;
+  return 1;
 }
 
 export function displayTemplateName(value) {
@@ -281,12 +288,12 @@ export function validateQuestion(q, templateType) {
     if (!trimText(cor.choice)) issues.push("correct answer is not selected");
   }
 
-  if (["TYPE_ANSWER", "DRAW_IT", "GRIP_GUESS"].includes(tt)) {
+  if (tt === "TYPE_ANSWER") {
     if (!trimText(cor.text)) issues.push("correct answer is empty");
     if (trimText(cor.text).length > 255) issues.push("answer must be 255 characters or fewer");
   }
 
-  if (tt === "THINK_SPELL") {
+  if (tt === "CROSSWORD") {
     const answers = Array.isArray(cor.answers) && cor.answers.length
       ? cor.answers
       : Array.isArray(cfg.answers)
@@ -333,6 +340,7 @@ export function validateQuestion(q, templateType) {
     const pairs = Array.isArray(cor.pairs) ? cor.pairs : [];
     const usedB = new Set();
     if (colA.length < 2) issues.push("matching needs at least 2 completed pairs");
+    else if (colA.length > 15) issues.push("matching supports a maximum of 15 pairs");
     else if (colB.length < colA.length) issues.push("matching needs a completed answer for every pair");
     if (dummyB.length > 2) issues.push("matching supports a maximum of 2 dummy answers");
     if (colA.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column A items are empty");

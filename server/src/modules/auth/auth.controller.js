@@ -181,17 +181,22 @@ export async function checkAdminInvitation(req, res) {
   // clock/timezone that created them. Parsing a MySQL timestamp with `new Date()`
   // can shift it by the server runtime timezone and incorrectly report a fresh
   // invitation as expired.
+  // The admin signup form is the same shared teacher/admin form, isolated to
+  // this token link. Prefill names from the institution application so the
+  // client can show first name / last name / email without retyping.
   const [[invitation]] = await pool.query(
-    `SELECT id,email,institution_name,expires_at,used_at,(expires_at > NOW()) AS is_unexpired
-     FROM admin_invitations
-     WHERE token_hash=:tokenHash
+    `SELECT i.id,i.email,i.institution_name,i.expires_at,i.used_at,(i.expires_at > NOW()) AS is_unexpired,
+            a.first_name AS app_first_name,a.last_name AS app_last_name
+     FROM admin_invitations i
+     LEFT JOIN institution_applications a ON a.id=i.application_id
+     WHERE i.token_hash=:tokenHash
      LIMIT 1`,
     { tokenHash }
   );
   if (!invitation) return res.status(404).json({ message: "This Admin invitation is invalid." });
   if (invitation.used_at) return res.status(409).json({ message: "This Admin invitation has already been used and cannot create another account." });
   if (!Number(invitation.is_unexpired)) return res.status(410).json({ message: "This Admin invitation has expired." });
-  res.json({ valid: true, email: invitation.email, institutionName: invitation.institution_name, expiresAt: invitation.expires_at });
+  res.json({ valid: true, email: invitation.email, institutionName: invitation.institution_name, expiresAt: invitation.expires_at, firstName: invitation.app_first_name || "", lastName: invitation.app_last_name || "" });
 }
 
 export async function verifyOtp(req, res) {
@@ -255,7 +260,50 @@ export async function login(req, res) {
   const firstLogin = !u.last_active_at;
   await pool.query(`UPDATE users SET last_active_at=NOW() WHERE id=:id`, { id: u.id });
   const token = jwt.sign({ sub: u.id, role: u.role, ver: Number(u.token_version || 0) }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN });
+  // Same account on multiple gadgets is allowed — only record where the login
+  // came from so the user can review recent access. Never blocks login.
+  recordLoginEvent(u.id, req).catch(() => {});
   res.json({ token, role: u.role, firstLogin });
+}
+
+const LOGIN_HISTORY_DDL = `CREATE TABLE IF NOT EXISTS login_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  ip VARCHAR(80) NULL,
+  user_agent VARCHAR(500) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_login_history_user_created (user_id, created_at)
+)`;
+
+async function recordLoginEvent(userId, req) {
+  const ip = String(req?.ip || req?.socket?.remoteAddress || "").slice(0, 80) || null;
+  const userAgent = String(req?.headers?.["user-agent"] || "").slice(0, 500) || null;
+  try {
+    await pool.query(`INSERT INTO login_history (user_id, ip, user_agent) VALUES (:uid, :ip, :ua)`, { uid: userId, ip, ua: userAgent });
+  } catch (err) {
+    if (err?.code !== "ER_NO_SUCH_TABLE") return;
+    try {
+      await pool.query(LOGIN_HISTORY_DDL);
+      await pool.query(`INSERT INTO login_history (user_id, ip, user_agent) VALUES (:uid, :ip, :ua)`, { uid: userId, ip, ua: userAgent });
+    } catch {}
+  }
+  // Keep the per-user trail bounded; best-effort only.
+  try {
+    await pool.query(`DELETE FROM login_history WHERE user_id=:uid AND id NOT IN (SELECT id FROM (SELECT id FROM login_history WHERE user_id=:uid2 ORDER BY id DESC LIMIT 30) keep_ids)`, { uid: userId, uid2: userId });
+  } catch {}
+}
+
+export async function loginHistory(req, res) {
+  try {
+    await pool.query(LOGIN_HISTORY_DDL);
+    const [rows] = await pool.query(
+      `SELECT id, ip, user_agent, created_at FROM login_history WHERE user_id=:uid ORDER BY id DESC LIMIT 10`,
+      { uid: req.user.sub }
+    );
+    res.json(rows || []);
+  } catch {
+    res.json([]);
+  }
 }
 
 export async function resendOtp(req, res) {

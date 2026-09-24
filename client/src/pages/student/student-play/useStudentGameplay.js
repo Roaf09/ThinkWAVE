@@ -2,9 +2,9 @@ import { useEffect, useMemo } from "react";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateAccent } from "../../../lib/templatePalette";
 import {
-  isThinkSpellRoundComplete,
-  resolveThinkSpellWordBank,
-} from "../../../lib/thinkSpell";
+  isCrosswordRoundComplete,
+  resolveCrosswordWordBank,
+} from "../../../lib/crossword";
 
 export function useStudentGameplay({
   state,
@@ -96,28 +96,28 @@ export function useStudentGameplay({
   const isMatchingIncomplete = state?.template_type === "MATCHING" && Object.keys(matchingMap).length < matchingRequired;
   const ttNormalized = normalizeTemplateType(state?.template_type);
   const gameplayAccent = templateAccent(ttNormalized);
-  const thinkSpellWordBank = ttNormalized === "THINK_SPELL"
+  const crosswordWordBank = ttNormalized === "CROSSWORD"
     ? (Array.isArray(spell.wordBank) && spell.wordBank.length
       ? spell.wordBank
-      : resolveThinkSpellWordBank({ config: currentQ?.config_json || {}, correct: currentQ?.correct_json || {} }))
+      : resolveCrosswordWordBank({ config: currentQ?.config_json || {}, correct: currentQ?.correct_json || {} }))
     : [];
-  const thinkSpellAllWordsFound = ttNormalized === "THINK_SPELL" && isThinkSpellRoundComplete({
+  const crosswordAllWordsFound = ttNormalized === "CROSSWORD" && isCrosswordRoundComplete({
     foundWords: spell.foundWords || [],
-    wordBank: thinkSpellWordBank,
+    wordBank: crosswordWordBank,
   });
-  const thinkSpellRoundOver = ttNormalized === "THINK_SPELL" && (
-    thinkSpellAllWordsFound || timer.remainingSec === 0
+  const crosswordRoundOver = ttNormalized === "CROSSWORD" && (
+    crosswordAllWordsFound || timer.remainingSec === 0
   );
   const interactionLocked = !currentQ
     || (submittedQId === currentQ?.id)
-    || thinkSpellRoundOver
-    || (timer.remainingSec === 0 && ttNormalized !== "THINK_SPELL")
+    || crosswordRoundOver
+    || (timer.remainingSec === 0 && ttNormalized !== "CROSSWORD")
     || state?.status !== "LIVE"
     || countdown > 0
     || postAnswerPhase === "complete"
     || postAnswerPhase === "wait";
   const choiceMissing = ["MCQ", "TRUE_FALSE"].includes(ttNormalized) && (Array.isArray(selectedChoice) ? selectedChoice.length === 0 : !selectedChoice);
-  const isLocked = interactionLocked || isMatchingIncomplete || choiceMissing || (ttNormalized === "THINK_SPELL" && !(Array.isArray(spell.foundEntries) && spell.foundEntries.length));
+  const isLocked = interactionLocked || isMatchingIncomplete || choiceMissing || (ttNormalized === "CROSSWORD" && !(Array.isArray(spell.foundEntries) && spell.foundEntries.length));
 
   // Identification should be ready for keyboard input as soon as the question appears.
   // Guess Word already listens at the window level, so no click/focus is needed there either.
@@ -130,9 +130,9 @@ export function useStudentGameplay({
     return () => window.cancelAnimationFrame(frame);
   }, [ttNormalized, currentQ?.id, interactionLocked, state?.status]);
 
-  const thinkSpellTimeUp = ttNormalized === "THINK_SPELL" && timer.remainingSec === 0 && state?.status === "LIVE";
-  const thinkSpellAllFound = ttNormalized === "THINK_SPELL" && thinkSpellAllWordsFound && !thinkSpellTimeUp;
-  const thinkSpellSubmitLabel = ttNormalized === "THINK_SPELL" ? "Submit Answers" : submitLabel;
+  const crosswordTimeUp = ttNormalized === "CROSSWORD" && timer.remainingSec === 0 && state?.status === "LIVE";
+  const crosswordAllFound = ttNormalized === "CROSSWORD" && crosswordAllWordsFound && !crosswordTimeUp;
+  const crosswordSubmitLabel = ttNormalized === "CROSSWORD" ? "Submit Answers" : submitLabel;
   const completedLiveCount = Math.min(questions.length, answeredQuestionIds.size);
   const liveQuestionProgress = questions.length ? Math.round((completedLiveCount / questions.length) * 100) : 0;
 
@@ -148,9 +148,9 @@ export function useStudentGameplay({
     gameplayAccent,
     interactionLocked,
     isLocked,
-    thinkSpellTimeUp,
-    thinkSpellAllFound,
-    thinkSpellSubmitLabel,
+    crosswordTimeUp,
+    crosswordAllFound,
+    crosswordSubmitLabel,
     completedLiveCount,
     liveQuestionProgress,
   };

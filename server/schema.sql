@@ -68,6 +68,22 @@ CREATE TABLE otp_codes (
 );
 
 -- -----------------------------------------------------------
+-- 2a. login_history (recent-login visibility across devices)
+-- Concurrent logins on multiple gadgets are allowed; this table only records
+-- where/when each login happened so users can spot unfamiliar access.
+-- -----------------------------------------------------------
+CREATE TABLE login_history (
+  id         BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id    BIGINT NOT NULL,
+  ip         VARCHAR(80) NULL,
+  user_agent VARCHAR(500) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_login_history_user
+    FOREIGN KEY (user_id) REFERENCES users(id),
+  INDEX idx_login_history_user_created (user_id, created_at)
+);
+
+-- -----------------------------------------------------------
 -- 2b. rate_limit_hits (shared HTTP rate limiter store)
 -- Rows are short-lived (pruned after ~2h by the app). No FK: hits must be
 -- recordable even for unauthenticated requests.
@@ -174,6 +190,7 @@ CREATE TABLE sessions (
   end_reason               ENUM('NORMAL','TEACHER_DISCONNECTED') NOT NULL DEFAULT 'NORMAL',
   questions_snapshot_json  JSON NULL,
   background_key            VARCHAR(80) NOT NULL DEFAULT 'background-01', -- Session gameplay background snapshot
+  is_tutorial               TINYINT(1) NOT NULL DEFAULT 0, -- ThinkBOT-only tutorial demo session: guests/students cannot join
   created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_sessions_quiz
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id),

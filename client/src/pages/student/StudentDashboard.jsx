@@ -7,6 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { clearRole, clearToken } from "../../lib/auth";
 import { clearLastRoute } from "../../lib/lastRoute";
+import { clearPersistentTabs, usePersistentTab } from "../../lib/persistentTab";
+import { TwLogoLoader } from "../../components/TwLogoLoader";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 import { sidebarStyle as sidebar, dashboardNavButtonStyle as navBtn } from "../../components/DashboardShell";
@@ -16,13 +18,14 @@ import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../t
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import { manilaDateTime, manilaDate } from "../../lib/dateFormat";
 
+const STUDENT_TABS = ["home", "classes"];
 
 export default function StudentDashboard() {
   const c = useColors();
   const { dark, toggleTheme } = useTheme();
   const nav = useNavigate();
   const fileRef = useRef(null);
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = usePersistentTab("tw_student_tab", "home", STUDENT_TABS);
   const [data, setData] = useState({ assignments: [], classes: [], recentAssigned: [], recentLive: [], openLiveSessions: [], profile: null, weekStats: {}, achievementStats: {}, removalNotices: [] });
   const [joinOpen, setJoinOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -208,6 +211,7 @@ export default function StudentDashboard() {
     clearRole();
     setAuthToken("");
     clearLastRoute();
+    clearPersistentTabs();
     nav("/");
   }
 
@@ -673,7 +677,7 @@ function StudentAnalyticsModal({ c, target, onClose }) {
   const questions = payload?.questions || [];
   const question = questions[index];
   const tone = templateTone(payload?.session?.template_type, c);
-  return <div style={modalBackdrop}><div className="w-[min(94vw,680px)] max-h-[88vh] overflow-y-auto relative" style={card(c)}><button onClick={onClose} className="absolute top-[14px] right-[14px]" style={iconBtn(c)}><TwIcon name="close" size={18} /></button><div className="font-[950] uppercase text-[12px]" style={{ color: tone.accent }}>{templateLabel(payload?.session?.template_type)}</div><h3 className="pr-[45px]" style={{ color: c.text }}>{payload?.session?.title || target.title || "Session Analytics"}</h3>{error ? <div style={notice(c, "error")}>{error}</div> : !payload ? <div className="p-[30px] text-center" style={{ color: c.textMuted }}>Loading analytics…</div> : !question ? <div style={empty(c)}>No question details are available.</div> : <div><div className="p-[18px] rounded-[18px]" style={{ border: `2px solid ${tone.border}`, background: tone.softBg }}><div className="font-[950] mb-[10px]" style={{ color: tone.accent }}>Question {question.number || index + 1}</div><div className="text-[18px] font-[950] leading-[1.55]" style={{ color: c.text }}>{question.prompt || "Untitled question"}</div></div><div className="flex items-center gap-[12px] mt-[18px] p-[15px] rounded-[16px]" style={{ background: question.isCorrect ? c.greenBg : c.redBg, color: question.isCorrect ? c.greenFg : c.redFg, border: `1px solid ${question.isCorrect ? c.greenBorder : c.redBorder}` }}><span className="text-[25px] font-[950]">{question.isCorrect ? "✓" : "✕"}</span><div><div className="font-[950]">{question.isCorrect ? "You answered right" : "You answered wrong"}</div>{question.isCorrect && <div className="mt-[5px] text-[13px]">Answer: {formatAnswer(question.correctAnswer ?? question.answer)}</div>}</div></div><div className="flex justify-between gap-[12px] mt-[20px]">{index > 0 ? <button onClick={() => setIndex((value) => value - 1)} style={secondary(c)}>← Previous</button> : <span />}{index < questions.length - 1 && <button onClick={() => setIndex((value) => value + 1)} style={primary(c)}>Next →</button>}</div></div>}</div></div>;
+  return <div style={modalBackdrop}><div className="w-[min(94vw,680px)] max-h-[88vh] overflow-y-auto relative" style={card(c)}><button onClick={onClose} className="absolute top-[14px] right-[14px]" style={iconBtn(c)}><TwIcon name="close" size={18} /></button><div className="font-[950] uppercase text-[12px]" style={{ color: tone.accent }}>{templateLabel(payload?.session?.template_type)}</div><h3 className="pr-[45px]" style={{ color: c.text }}>{payload?.session?.title || target.title || "Session Analytics"}</h3>{error ? <div style={notice(c, "error")}>{error}</div> : !payload ? <TwLogoLoader minHeight="20vh" /> : !question ? <div style={empty(c)}>No question details are available.</div> : <div><div className="p-[18px] rounded-[18px]" style={{ border: `2px solid ${tone.border}`, background: tone.softBg }}><div className="font-[950] mb-[10px]" style={{ color: tone.accent }}>Question {question.number || index + 1}</div><div className="text-[18px] font-[950] leading-[1.55]" style={{ color: c.text }}>{question.prompt || "Untitled question"}</div></div><div className="flex items-center gap-[12px] mt-[18px] p-[15px] rounded-[16px]" style={{ background: question.isCorrect ? c.greenBg : c.redBg, color: question.isCorrect ? c.greenFg : c.redFg, border: `1px solid ${question.isCorrect ? c.greenBorder : c.redBorder}` }}><span className="text-[25px] font-[950]">{question.isCorrect ? "✓" : "✕"}</span><div><div className="font-[950]">{question.isCorrect ? "You answered right" : "You answered wrong"}</div>{question.isCorrect && <div className="mt-[5px] text-[13px]">Answer: {formatAnswer(question.correctAnswer ?? question.answer)}</div>}</div></div><div className="flex justify-between gap-[12px] mt-[20px]">{index > 0 ? <button onClick={() => setIndex((value) => value - 1)} style={secondary(c)}>← Previous</button> : <span />}{index < questions.length - 1 && <button onClick={() => setIndex((value) => value + 1)} style={primary(c)}>Next →</button>}</div></div>}</div></div>;
 }
 
 function ClassRemovalModal({ c, notice, onClose }) {
@@ -717,7 +721,7 @@ function JoinClassModal({ c, classCode, setClassCode, profile, setProfile, profi
   return <div style={modalBackdrop} onClick={onClose}><form onSubmit={onSubmit} onClick={(event) => event.stopPropagation()} className="w-[min(94vw,620px)]" style={{ ...card(c), padding: 28 }}>
     <h2 style={{ marginTop: 0, color: c.text }}>Join a Class</h2>
     <p className="mt-[-4px]" style={{ color: c.textMuted }}>Enter the class code provided by your teacher.</p>
-    <Field c={c} label="Class code"><input value={classCode} onChange={(e) => setClassCode(e.target.value.toUpperCase())} placeholder="Enter class code" required style={input(c)} /></Field>
+    <Field c={c} label="Class code"><input value={classCode} onChange={(e) => setClassCode(e.target.value.toUpperCase())} placeholder="Enter class code" required style={{ ...input(c), textAlign: "center" }} /></Field>
     {profileStep && <div className="grid gap-[10px] mt-[16px] p-[16px] rounded-[16px]" style={{ background: c.cardBg2, border: `1px solid ${c.border}` }}><p className="text-[13px] m-0" style={{ color: c.textMuted }}>Complete your student details before joining your first class.</p><div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-[10px]"><input required value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} placeholder="First name" style={input(c)} /><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} placeholder="Last name" style={input(c)} /></div><input value={profile.middleInitial} onChange={(e) => setProfile({ ...profile, middleInitial: e.target.value })} placeholder="Middle initial (optional)" style={input(c)} /><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} placeholder="Student ID" style={input(c)} /><div className="text-[12px]" style={{ color: c.textMuted }}>Join unlocks in {Math.max(0, countdown - 5)}s.</div></div>}
     <div className="flex justify-end items-center gap-[16px] mt-[22px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="submit" tone="blue" disabled={profileStep && countdown > 5}>{profileStep && countdown > 5 ? "Please wait…" : "Join"}</TeacherPressButton></div>
   </form></div>;

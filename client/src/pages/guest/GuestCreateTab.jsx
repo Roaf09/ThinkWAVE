@@ -13,7 +13,7 @@ const TEMPLATES = [
   { value: "TYPE_ANSWER", label: "Identification", icon: "identification" },
   { value: "MATCHING", label: "Matching", icon: "matching" },
   { value: "GUESS_WORD_4PICS", label: "Guess Word", icon: "image" },
-  { value: "THINK_SPELL", label: "Crossword", icon: "spell" },
+  { value: "CROSSWORD", label: "Crossword", icon: "spell" },
 ];
 
 export default function GuestCreateTab() {
@@ -93,7 +93,7 @@ function templateInk(value, dark) {
     TYPE_ANSWER: dark ? "#ede9fe" : "#5b21b6",
     MATCHING: dark ? "#ffedd5" : "#9a4d00",
     GUESS_WORD_4PICS: dark ? "#dcfce7" : "#166534",
-    THINK_SPELL: dark ? "#bae6fd" : "#0369a1",
+    CROSSWORD: dark ? "#bae6fd" : "#0369a1",
   };
   return palette[normalizeTemplateType(value)] || (dark ? "#f8fafc" : "#0f172a");
 }

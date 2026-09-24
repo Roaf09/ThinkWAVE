@@ -32,7 +32,7 @@ export function WaitingRoomView({
   const waitingSubtitle = state?.status === "PAUSED"
     ? "The teacher will resume shortly."
     : isGroupMode
-      ? "Groups update in real time as the teacher prepares the session."
+      ? ""
       : isGuestHosted ? "The host will start the session soon." : "The teacher will start the session soon.";
   return (
     <div className={`sp-waiting-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...waitExperienceBgStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", padding: 20 }}>
@@ -49,7 +49,7 @@ export function WaitingRoomView({
             <ThemeTogglePill dark={dark} onClick={toggleTheme} />
           </div> */}
         </div>
-        <p className="sp-wait-subtitle" style={{ color: mutedC }}>{waitingSubtitle}</p>
+        {waitingSubtitle ? <p className="sp-wait-subtitle" style={{ color: mutedC }}>{waitingSubtitle}</p> : null}
         {msg && <p style={{ color: "#ef4444", fontWeight: 800 }}>{msg}</p>}
 
         {!isGroupMode && (

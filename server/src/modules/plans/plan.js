@@ -5,9 +5,9 @@ export const BASIC_LIMITS = Object.freeze({
   MCQ: { maxItems: 20, maxTimeSec: 120, maxChoices: 4, minChoices: 3, allowModified: false, allowImages: false },
   TRUE_FALSE: { maxItems: 20, maxTimeSec: 120, allowImages: false },
   TYPE_ANSWER: { maxItems: 20, maxTimeSec: 120, allowImages: false },
-  MATCHING: { maxItems: 10, maxTimeSec: 300, maxPairs: 5, maxDummyAnswers: 1, allowImages: true },
+  MATCHING: { maxItems: 10, maxTimeSec: 300, maxPairs: 15, maxDummyAnswers: 1, allowImages: true },
   GUESS_WORD_4PICS: { maxItems: 10, maxTimeSec: 300, allowImages: false },
-  THINK_SPELL: { maxItems: 5, maxTimeSec: 300, maxWords: 4, allowImages: false },
+  CROSSWORD: { maxItems: 5, maxTimeSec: 300, maxWords: 4, allowImages: false },
   questionBankPerTemplate: 5,
   live: { allowGroupMode: false, maxStudents: 45 },
 });
@@ -40,7 +40,7 @@ export async function getTeacherPlan(userId) {
 export function validateBasicQuestionPayload(templateType, questions = []) {
   const template = normalizeTemplateType(templateType);
   const limit = BASIC_LIMITS[template] || { maxItems: 20, maxTimeSec: 120, allowImages: false };
-  if (questions.length > limit.maxItems) return `Basic plan allows only ${limit.maxItems} ${template === "MATCHING" || template === "THINK_SPELL" ? "batches" : "questions"} for this template.`;
+  if (questions.length > limit.maxItems) return `Basic plan allows only ${limit.maxItems} ${template === "MATCHING" || template === "CROSSWORD" ? "batches" : "questions"} for this template.`;
 
   for (const question of questions) {
     const config = question?.config || {};
@@ -61,10 +61,10 @@ export function validateBasicQuestionPayload(templateType, questions = []) {
     if (template === "MATCHING") {
       const pairs = Array.isArray(config.colA) ? config.colA.length : 0;
       const dummy = Array.isArray(config.dummyB) ? config.dummyB.length : 0;
-      if (pairs > 5) return "Basic plan matching batches support up to 5 pairs.";
+      if (pairs > 15) return "Basic plan matching batches support up to 15 pairs.";
       if (dummy > 1) return "Basic plan matching batches support only 1 dummy answer.";
     }
-    if (template === "THINK_SPELL") {
+    if (template === "CROSSWORD") {
       const words = Array.isArray(config.answers) ? config.answers.filter(Boolean).length : 0;
       if (words > 4) return "Basic plan Crossword supports up to 4 valid words per batch.";
     }

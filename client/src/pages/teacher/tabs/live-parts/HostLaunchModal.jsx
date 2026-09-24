@@ -13,7 +13,7 @@ const TEMPLATE_IMAGES = {
   TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.webp", mobile: "/media/templates/previews/identification-mobile.webp" },
   MATCHING: { landscape: "/media/templates/previews/matching-landscape.webp", mobile: "/media/templates/previews/matching-mobile.webp" },
   GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.webp", mobile: "/media/templates/previews/guess-word-mobile.webp" },
-  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.webp", mobile: "/media/templates/previews/think-spell-mobile.webp" },
+  CROSSWORD: { landscape: "/media/templates/previews/crossword-landscape.webp", mobile: "/media/templates/previews/crossword-mobile.webp" },
 };
 
 // Extracted verbatim from LiveSessionsTab.jsx (no behavior change).
@@ -26,7 +26,7 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
   const [zoomedPreview, setZoomedPreview] = useState(null);
   const isMobile = useIsMobileViewport();
   const template = normalizeLiveTemplate(quiz.template_type);
-  const isCrossword = template === "THINK_SPELL";
+  const isCrossword = template === "CROSSWORD";
   const groupLocked = !institutionPlan && !guestMode;
   const groupTitle = isCrossword
     ? "Group mode isn't available for Crossword quizzes."

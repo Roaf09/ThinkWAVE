@@ -50,7 +50,7 @@ export function TemplateBody({
   setMatchingMap,
   spell,
   setSpell,
-  thinkSpellTimeUp = false,
+  crosswordTimeUp = false,
   shuffleChoices = false,
   participantSeed = 0,
   onSubmitGuess,
@@ -91,7 +91,7 @@ export function TemplateBody({
 
   if (templateType === "MATCHING") return <MatchingTemplate disabled={disabled} q={q} cfg={cfg} matchingMap={matchingMap} setMatchingMap={setMatchingMap} participantSeed={participantSeed} />;
   if (templateType === "GUESS_WORD_4PICS") return <GuessWord4PicsTemplate disabled={disabled} cfg={cfg} spell={spell} setSpell={setSpell} onSubmit={onSubmitGuess} submitDisabled={guessSubmitDisabled} />;
-  if (templateType === "THINK_SPELL") {
+  if (templateType === "CROSSWORD") {
     return (
       <GameCrossword
         config={cfg}
@@ -100,7 +100,7 @@ export function TemplateBody({
         onStore={setSpell}
         disabled={disabled}
         questionId={q?.id}
-        timeUp={thinkSpellTimeUp}
+        timeUp={crosswordTimeUp}
         initExtra={{ totalPoints: 0 }}
         summaryHint="Wait for the teacher to continue."
         totalPoints={Number(spell.totalPoints || 0)}

@@ -101,7 +101,7 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
       } else if (tt === "GUESS_WORD_4PICS") {
         const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
         if (images.length === 4 && images.every((x) => trimText(x))) next = "guess_images_done";
-      } else if (tt === "THINK_SPELL") {
+      } else if (tt === "CROSSWORD") {
         // Crossword waits for the teacher to press Done after entering at least four words.
       }
       if (next) {
@@ -139,7 +139,7 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
     // Crossword recovery: editing words after Fill resets gridFilled upstream,
     // which would strand crossword_shuffle (needs gridFilled) pointing at
     // Shuffle while Fill is the required action. Fall back instead.
-    if (tt === "THINK_SPELL" && ["crossword_fill", "crossword_shuffle", "crossword_word_controls"].includes(builderTutorialStage)) {
+    if (tt === "CROSSWORD" && ["crossword_fill", "crossword_shuffle", "crossword_word_controls"].includes(builderTutorialStage)) {
       const corAns = Array.isArray(cor.answers) && cor.answers.length ? cor.answers : (Array.isArray(cfg.answers) ? cfg.answers : []);
       const wordCount = corAns.filter((word) => trimText(word)).length;
       if (wordCount < 4 && builderTutorialStage !== "specific") {
@@ -156,7 +156,7 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
     // that case, so advance instead of stranding the tutorial.
     if ((builderTutorialStage === "bank" || builderTutorialStage === "bank_menu") && bankSavedOrders?.has?.(Number((q?.order ?? qIndex)))) {
       const timer = window.setTimeout(() => {
-        if (["MATCHING", "THINK_SPELL"].includes(tt)) {
+        if (["MATCHING", "CROSSWORD"].includes(tt)) {
           window.scrollTo({ top: 0, behavior: "smooth" });
           setBuilderTutorialStage("save");
         } else {

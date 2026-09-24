@@ -31,7 +31,7 @@ export function GameplayView({
   liveQuestionProgress,
   myGroup,
   currentQ,
-  thinkSpellTimeUp,
+  crosswordTimeUp,
   ttNormalized,
   selectedChoice,
   onSelectedChoice,
@@ -44,8 +44,8 @@ export function GameplayView({
   onSubmit,
   isLocked,
   interactionLocked,
-  thinkSpellSubmitLabel,
-  thinkSpellAllFound,
+  crosswordSubmitLabel,
+  crosswordAllFound,
   msg,
   isMatchingIncomplete,
   isLastQuestion,
@@ -111,7 +111,6 @@ export function GameplayView({
               <div style={{ color: textC, fontWeight: 900 }}>{myGroup.display_name}</div>
               <div style={{ color: mutedC, fontSize: 12 }}>{myGroup.members?.map((m) => `${m.first_name} ${m.last_name}`.trim()).join(" · ")}</div>
             </div>
-            <div style={{ color: mutedC, fontSize: 12 }}>One final answer per group · majority confirms it</div>
           </div>
         )}
         <div className="qn-prompt-box">
@@ -119,8 +118,8 @@ export function GameplayView({
           <span className="qn-prompt-text">{currentQ.prompt}</span>
           <QuestionAudioButton config={currentQ?.config_json} prompt={currentQ?.prompt} templateType={ttNormalized}/>
         </div>
-        <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={onSelectedChoice} answerText={answerText} setAnswerText={onAnswerText} matchingMap={matchingMap} setMatchingMap={onMatchingMap} spell={spell} setSpell={onSpell} thinkSpellTimeUp={thinkSpellTimeUp} shuffleChoices={!!state?.shuffle_answers} participantSeed={participantId} onSubmitGuess={onSubmit} guessSubmitDisabled={isLocked} />
-        {thinkSpellAllFound && (
+        <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={onSelectedChoice} answerText={answerText} setAnswerText={onAnswerText} matchingMap={matchingMap} setMatchingMap={onMatchingMap} spell={spell} setSpell={onSpell} crosswordTimeUp={crosswordTimeUp} shuffleChoices={!!state?.shuffle_answers} participantSeed={participantId} onSubmitGuess={onSubmit} guessSubmitDisabled={isLocked} />
+        {crosswordAllFound && (
           <div className="bword-summary">
             <div className="bword-summary-title">All words found!</div>
             <div className="bword-summary-meta">
@@ -144,13 +143,13 @@ export function GameplayView({
               boxShadow: isLocked ? "none" : undefined,
             }}
           >
-            {thinkSpellSubmitLabel}
+            {crosswordSubmitLabel}
           </button>
         </div>
         {msg && <div style={{ textAlign: "center", color: "#ef4444", fontWeight: 700, marginTop: 12 }}>{msg}</div>}
         {state?.template_type === "MATCHING" && isMatchingIncomplete && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>Match every question with an answer to unlock Submit.</div>}
 
-        {isLastQuestion && submittedQId === currentQ?.id && ttNormalized !== "THINK_SPELL" && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>You have reached the end.</div>}
+        {isLastQuestion && submittedQId === currentQ?.id && ttNormalized !== "CROSSWORD" && <div style={{ textAlign: "center", color: mutedC, fontWeight: 700, marginTop: 12 }}>You have reached the end.</div>}
         </div>
       </div>
     </div>

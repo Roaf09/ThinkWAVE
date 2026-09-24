@@ -18,6 +18,7 @@ import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome"
 import { useIsMobileViewport } from "./tabs/teacherTabShared";
 import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState, pullTutorialState } from "../../lib/tutorialState";
 import { TEMPLATE_TYPES } from "../../lib/templateTypes";
+import { clearPersistentTabs, usePersistentTab } from "../../lib/persistentTab";
 
 import HomeTab           from "./tabs/HomeTab";
 import CreateTab         from "./tabs/CreateTab";
@@ -25,6 +26,8 @@ import QuestionBankTab   from "./tabs/QuestionBankTab";
 import LiveSessionsTab   from "./tabs/LiveSessionsTab";
 import ClassesTab        from "./tabs/ClassesTab";
 import SessionHistoryTab from "./tabs/SessionHistoryTab";
+
+const TEACHER_TABS = ["home", "classes", "create", "live", "bank", "history"];
 
 const blankProfile = { firstName: "", lastName: "", contactNumber: "", email: "", institutionName: "", profileImage: "" };
 
@@ -53,7 +56,7 @@ function tutorialTabForStage(stage) {
 }
 
 export default function TeacherDashboard() {
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = usePersistentTab("tw_teacher_tab", "home", TEACHER_TABS);
   const [showLogout, setShowLogout] = useState(false);
   const [bankLabel, setBankLabel] = useState("Quiz Bank");
   const [profileOpen, setProfileOpen] = useState(false);
@@ -128,7 +131,7 @@ export default function TeacherDashboard() {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => { if (location.state?.tab) setActiveTab(location.state.tab); }, [location.state]);
+  useEffect(() => { if (location.state?.tab && TEACHER_TABS.includes(location.state.tab)) setActiveTab(location.state.tab); }, [location.state]);
 
 
   function setTutorialStage(stage, extra = {}) {
@@ -175,27 +178,12 @@ export default function TeacherDashboard() {
     patch: patchTutorial,
   };
 
-  // A burned one-shot used to need console surgery (localStorage key +
-  // session flag) to recover. Replaying restarts only the main tour from the
-  // welcome dialog; per-template / host-panel / analytics seen-flags are left
-  // alone so those don't nag again.
-  function replayMainTutorial() {
-    if (!tutorialUserId) return;
-    const next = writeTutorialState(tutorialUserId, {
-      mainStarted: true,
-      mainComplete: false,
-      mainStage: "home_welcome",
-    });
-    setTutorialState(next);
-    setActiveTab("home");
-    setProfileOpen(false);
-  }
-
   function doLogout() {
     clearToken();
     clearRole();
     setAuthToken("");
     clearLastRoute();
+    clearPersistentTabs();
     navigate("/");
   }
 
@@ -321,7 +309,7 @@ export default function TeacherDashboard() {
         <ThinkBotTutorial target='[data-tutorial="nav-live"]' placement="right" dialogWidth={285} className="tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>
       ))}
 
-      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} saving={profileSaving} onSubmit={saveProfile} onReplayTutorial={replayMainTutorial} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
+      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} saving={profileSaving} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the teacher dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
@@ -329,7 +317,7 @@ export default function TeacherDashboard() {
   );
 }
 
-function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, onClose, onUpload, onReplayTutorial }) {
+function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, onClose, onUpload }) {
   return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...modalCard(c), width: "min(94vw,600px)", position: "relative" }}>
     <button type="button" onClick={onClose} style={{ ...iconButton(c), position: "absolute", right: 14, top: 14 }}><TwIcon name="close" size={18} /></button>
     <h3 style={{ marginTop: 0, color: c.text }}>Teacher Info</h3>
@@ -347,7 +335,6 @@ function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, 
       <Field label="Contact number" c={c}><input value={profile.contactNumber} onChange={(e) => setProfile({ ...profile, contactNumber: e.target.value })} style={input(c)} /></Field>
       <Field label="Institution" c={c}><input disabled value={profile.institutionName || "Basic plan"} style={{ ...input(c), opacity: .72 }} /></Field>
     </div>
-    <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}><button type="button" onClick={onReplayTutorial} style={{ ...sideAction(c), width: "auto" }}><TwIcon name="spark" size={16} /><span>Replay onboarding tour</span></button></div>
     {error && <div style={{ marginTop: 14, padding: 12, borderRadius: 12, color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, fontWeight: 850 }}>{error}</div>}
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button disabled={!!saving} style={{ ...primary(c), opacity: saving ? .6 : 1, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
   </form></div>;

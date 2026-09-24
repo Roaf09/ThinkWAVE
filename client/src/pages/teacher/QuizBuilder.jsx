@@ -13,11 +13,13 @@ import { useQuestionStrip } from "./quiz-builder/useQuestionStrip";
 import { useBuilderTutorial } from "./quiz-builder/useBuilderTutorial";
 import { useBuilderQuestions } from "./quiz-builder/useBuilderQuestions";
 import { useBuilderPersistence } from "./quiz-builder/useBuilderPersistence";
+import { useBuilderAutosave } from "./quiz-builder/useBuilderAutosave";
 import { BuilderWorkspace } from "./quiz-builder/BuilderWorkspace";
 import { BuilderHeader } from "./quiz-builder/BuilderHeader";
 import { BuilderTutorials } from "./quiz-builder/BuilderTutorials";
 import { BuilderModals } from "./quiz-builder/BuilderModals";
 import { getBuilderDisplay } from "./quiz-builder/builderDisplay";
+import { TwLogoLoader } from "../../components/TwLogoLoader";
 
 export default function QuizBuilder({ guestMode = false }) {
   const { id } = useParams();
@@ -192,6 +194,27 @@ const prevQuizStatusRef = useRef(null);
     savePromiseRef,
   });
 
+  const builderReady = !!quiz && !!settings && questions.length > 0;
+  const { pendingDraft, restoreDraft, discardDraft } = useBuilderAutosave({
+    id,
+    guestMode,
+    ready: builderReady,
+    questions,
+    qIndex,
+    titleDraft,
+    settings,
+    isSaved,
+    modal,
+    editVersionRef,
+    setQuestions,
+    setQIndex,
+    setTitleDraft,
+    setSettings,
+    setIsSaved,
+    setModal,
+    doServerSave: () => _doSave(),
+  });
+
   const {
     questionStripOpen,
     questionStripClosing,
@@ -282,7 +305,7 @@ const prevQuizStatusRef = useRef(null);
   }
 
   if (!quiz || !settings) {
-    return <div className="container"><div className="card">Loading Quiz Builder…</div></div>;
+    return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
   }
 
   const {
@@ -497,6 +520,9 @@ const prevQuizStatusRef = useRef(null);
         confirmPublish={confirmPublish}
         doSaveToBank={doSaveToBank}
         _doSave={_doSave}
+        pendingDraft={pendingDraft}
+        restoreDraft={restoreDraft}
+        discardDraft={discardDraft}
       />
     </>
   );

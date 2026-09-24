@@ -1,7 +1,7 @@
 import { templateCardChrome, templateLabel, templateTone } from "../../../../lib/templatePalette";
 import { TwIcon } from "../../../../components/TwUI";
 import { TeacherPressButton } from "../../TeacherUI";
-import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature } from "../../../../lib/thinkSpell";
+import { buildCrosswordGrid, buildCrosswordSeed, buildCrosswordSignature } from "../../../../lib/crossword";
 import { manilaDate } from "../../../../lib/dateFormat";
 import { tabCard as card, TemplateBadge, normalizeBankTemplate } from "../teacherTabShared";
 import { getBankAnswers, optionLabel, optionMatchesBankValue } from "./bankTemplateUtils";
@@ -12,7 +12,7 @@ export function QuestionCard({ question: q, onRemove, c }) {
   const tone = templateTone(tt, c, false);
   const cfg = q.config_json || {};
   const correct = q.correct_json || {};
-  const isAlwaysOpen = ["GUESS_WORD_4PICS", "MATCHING", "THINK_SPELL"].includes(tt);
+  const isAlwaysOpen = ["GUESS_WORD_4PICS", "MATCHING", "CROSSWORD"].includes(tt);
   const answers = getBankAnswers(tt, cfg, correct);
 
   return (
@@ -24,12 +24,12 @@ export function QuestionCard({ question: q, onRemove, c }) {
 
         {tt === "MCQ" ? <McqBankAnswers cfg={cfg} correct={correct} c={c} />
           : tt === "TRUE_FALSE" ? <TrueFalseBankAnswers correct={correct} c={c} />
-          : !isAlwaysOpen ? <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${tt === "THINK_SPELL" ? " is-think-spell" : ""}`}>
+          : !isAlwaysOpen ? <div className={`tw-bank-answer-summary${answers.length === 1 ? " is-single" : ""}${tt === "CROSSWORD" ? " is-crossword" : ""}`}>
               {answers.length ? answers.map((answer, index) => <TemplateAnswer key={`${answer}-${index}`} value={answer} c={c} />) : <span className="text-[13px]" style={{ color: c.textMuted }}>No answer saved.</span>}
             </div> : null}
 
         {isAlwaysOpen && <div className="tw-bank-expanded-preview is-default-open" style={{ borderColor: tone.border, background: tone.softBg }}>
-          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : tt === "THINK_SPELL" ? <ThinkSpellBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
+          {tt === "GUESS_WORD_4PICS" ? <GuessWordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : tt === "CROSSWORD" ? <CrosswordBankPreview cfg={cfg} correct={correct} c={c} tone={tone} /> : <MatchingBankPreview cfg={cfg} c={c} tone={tone} />}
         </div>}
 
         <div className="tw-bank-saved-date" style={{ color: c.textSub }}>Saved {manilaDate(q.saved_at)}</div>
@@ -74,16 +74,16 @@ function GuessWordBankPreview({ cfg, correct, c, tone }) {
   </div>;
 }
 
-function ThinkSpellBankPreview({ cfg, correct, c, tone }) {
+function CrosswordBankPreview({ cfg, correct, c, tone }) {
   const words = (Array.isArray(correct?.answers) && correct.answers.length ? correct.answers : Array.isArray(cfg?.answers) ? cfg.answers : []).map((word) => String(word || "").toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
   const gridSize = Math.min(12, Math.max(5, Number(cfg?.gridSize || Math.max(5, ...words.map((word) => word.length), 5))));
-  const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize, words })}-${Number(cfg?.gridSeed || 1)}`;
-  const generated = buildThinkSpellGrid({ gridSize, words, seed: buildThinkSpellSeed(signature) });
+  const signature = `${buildCrosswordSignature({ questionId: 0, gridSize, words })}-${Number(cfg?.gridSeed || 1)}`;
+  const generated = buildCrosswordGrid({ gridSize, words, seed: buildCrosswordSeed(signature) });
   const preview = Array.isArray(cfg?.grid) && cfg.grid.length === gridSize * gridSize
     ? { gridSize, grid: cfg.grid.map((letter) => String(letter || "").toUpperCase()) }
     : generated;
   return <div className="tw-bank-crossword-expanded">
-    <div className="tw-bank-thinkspell-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
+    <div className="tw-bank-crossword-preview" style={{ borderColor: tone.border, gridTemplateColumns: `repeat(${preview.gridSize}, minmax(0,1fr))` }}>
       {preview.grid.map((letter, index) => <span key={index} style={{ background: c.cardBg, borderColor: tone.border, color: tone.accent }}>{letter}</span>)}
     </div>
     <div className="tw-bank-crossword-word-list">

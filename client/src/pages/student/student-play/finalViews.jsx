@@ -48,18 +48,18 @@ export function FinalLeaderboardView({
             {myScore && <p style={{ color: mutedC }}>You scored <b style={{ color: gameplayAccent }}>{Math.round(Number(myScore.competitive_points || 0)).toLocaleString()} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
           </div>
           <h3 className="sp-final-heading" style={{ color: textC }}><TwIcon name="trophy" size={21}/> Leaderboard</h3>
-          <div className="tw-host-podium sp-final-host-podium sp-final-avatar-podium">
+          <div className="tw-host-podium sp-final-host-podium">
             {podiumOrder.map((row) => {
               const rank = rankOf(row);
               return <div key={row.participant_id || row.group_id || rank} className={`tw-host-podium-place place-${rank}${isMe(row) ? " is-me" : ""}`}>
                 <div className="tw-host-trophy"><TwIcon name="trophy" size={54} strokeWidth={2.2}/><span>{rank}</span></div>
-                <div className="tw-host-podium-platform sp-final-avatar-only">
+                <div className="tw-host-podium-platform">
                   <div className="tw-host-podium-person">
                     <div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={isGroupMode ? "users" : "user"} size={18}/>}</div>
+                    <b title={displayName(row)}>{shortDisplayName(row)}</b>
                   </div>
+                  <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</div>
                 </div>
-                <div className="sp-final-podium-name" title={displayName(row)}>{shortDisplayName(row)}</div>
-                <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</div>
               </div>;
             })}
           </div>

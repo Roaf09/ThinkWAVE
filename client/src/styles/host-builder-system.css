@@ -34,7 +34,7 @@ body.dark-mode .tw-host-floating-theme{
 }
 
 /* Keep Crossword bank content long, while pulling the word side slightly toward the grid. */
-.tw-bank-answer-summary.is-think-spell{width:min(100%,720px)!important}
+.tw-bank-answer-summary.is-crossword{width:min(100%,720px)!important}
 .tw-bank-crossword-expanded{grid-template-columns:minmax(300px,1.05fr) minmax(300px,.95fr)!important;gap:16px!important}
 .tw-bank-crossword-word-list{width:100%!important;max-width:600px!important;transform:translateX(-12px)}
 .tw-bank-crossword-word{border-width:2px!important}

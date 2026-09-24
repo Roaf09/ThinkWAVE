@@ -1,5 +1,5 @@
 import { normalizeTemplateType } from "../../../lib/templateTypes";
-import { ThinkSpellEditor } from "./ThinkSpellEditor";
+import { CrosswordEditor } from "./CrosswordEditor";
 import { McqEditor } from "./McqEditor";
 import { MatchingEditor } from "./MatchingEditor";
 import { TrueFalseEditor, TypeAnswerEditor, GuessWordEditor } from "./SimpleEditors";
@@ -7,7 +7,7 @@ import { TrueFalseEditor, TypeAnswerEditor, GuessWordEditor } from "./SimpleEdit
 export { BuilderModal, BankModal } from "./builderDialogs";
 export { MediaInput, ImageUploadTile } from "./builderMedia";
 export { voiceAnswerRows, VoiceRecordingPanel, CorrectAnswerExplanation } from "./builderVoice";
-export { ThinkSpellEditor } from "./ThinkSpellEditor";
+export { CrosswordEditor } from "./CrosswordEditor";
 export { McqEditor } from "./McqEditor";
 export { MatchingEditor } from "./MatchingEditor";
 export { TrueFalseEditor, TypeAnswerEditor, GuessWordEditor } from "./SimpleEditors";
@@ -24,7 +24,7 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isM
     return <TrueFalseEditor q={q} onChange={onChange} ui={ui} c={c} />;
   }
 
-  if (["TYPE_ANSWER", "DRAW_IT", "GRIP_GUESS"].includes(tt)) {
+  if (tt === "TYPE_ANSWER") {
     return <TypeAnswerEditor templateType={tt} q={q} onChange={onChange} ui={ui} c={c} />;
   }
 
@@ -36,11 +36,11 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isM
     return <MatchingEditor q={q} onChange={onChange} ui={ui} c={c} isMobile={isMobile} />;
   }
 
-  if (tt === "THINK_SPELL") {
-    // key=q.order ensures ThinkSpellEditor remounts when the user switches batches,
+  if (tt === "CROSSWORD") {
+    // key=q.order ensures CrosswordEditor remounts when the user switches batches,
     // resetting its local compact word-field draft to that batch's saved words.
     return (
-      <ThinkSpellEditor
+      <CrosswordEditor
         key={q.order}
         cor={cor}
         cfg={cfg}

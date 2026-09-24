@@ -23,7 +23,7 @@ const TEMPLATE_IMAGES = {
   TYPE_ANSWER: { landscape: "/media/templates/previews/identification-landscape.webp", mobile: "/media/templates/previews/identification-mobile.webp" },
   MATCHING: { landscape: "/media/templates/previews/matching-landscape.webp", mobile: "/media/templates/previews/matching-mobile.webp" },
   GUESS_WORD_4PICS: { landscape: "/media/templates/previews/guess-word-landscape.webp", mobile: "/media/templates/previews/guess-word-mobile.webp" },
-  THINK_SPELL: { landscape: "/media/templates/previews/think-spell-landscape.webp", mobile: "/media/templates/previews/think-spell-mobile.webp" },
+  CROSSWORD: { landscape: "/media/templates/previews/crossword-landscape.webp", mobile: "/media/templates/previews/crossword-mobile.webp" },
 };
 
 const benefits = [
@@ -35,10 +35,10 @@ const benefits = [
 const templateCopy = {
   MCQ:"Create quick checks with one or two correct answers.", TRUE_FALSE:"Make quick understanding checks with two clear choices.",
   TYPE_ANSWER:"Let learners recall and type the answer themselves.", MATCHING:"Connect ideas, images, terms, and meanings side by side.",
-  GUESS_WORD_4PICS:"Use four visual clues to reveal one meaningful word.", THINK_SPELL:"Crossword-style word hunts challenge learners to connect valid words inside a letter grid.",
+  GUESS_WORD_4PICS:"Use four visual clues to reveal one meaningful word.", CROSSWORD:"Crossword-style word hunts challenge learners to connect valid words inside a letter grid.",
 };
 
-const TEMPLATE_ORDER = ["MCQ", "TRUE_FALSE", "TYPE_ANSWER", "MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"];
+const TEMPLATE_ORDER = ["MCQ", "TRUE_FALSE", "TYPE_ANSWER", "MATCHING", "GUESS_WORD_4PICS", "CROSSWORD"];
 
 export default function Landing(){
   const nav=useNavigate(); const [searchParams]=useSearchParams();

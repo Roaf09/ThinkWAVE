@@ -29,6 +29,9 @@ export function BuilderModals({
   confirmPublish,
   doSaveToBank,
   _doSave,
+  pendingDraft,
+  restoreDraft,
+  discardDraft,
 }) {
   return (
     <>
@@ -62,6 +65,23 @@ export function BuilderModals({
             <>
               <button type="button" className="tw-teacher-text-cancel" onClick={() => setModal(null)}>Cancel</button>
               <TeacherPressButton tone="red" onClick={performDeleteCurrentQuestion}>Yes, delete</TeacherPressButton>
+            </>
+          )}
+        />
+      )}
+      {modal === "recoverDraft" && pendingDraft && (
+        <BuilderModal
+          tone="blue"
+          icon="history"
+          title="Recover unsaved work?"
+          message={`We found unsaved quiz-builder changes from ${pendingDraft.updatedAt ? new Date(pendingDraft.updatedAt).toLocaleString() : "a recent session"}. Restore them or discard and keep the last saved version.`}
+          onClose={discardDraft}
+          ui={ui}
+          c={c}
+          actions={(
+            <>
+              <button type="button" className="tw-teacher-text-cancel" onClick={discardDraft}>Discard</button>
+              <TeacherPressButton tone="blue" style={builderDialogActionStyle} onClick={restoreDraft}>Restore work</TeacherPressButton>
             </>
           )}
         />

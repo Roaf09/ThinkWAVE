@@ -559,6 +559,7 @@ export async function joinStudentLiveSession(req, res) {
     { uid, sid:sessionId }
   );
   if (!session) return res.status(404).json({ message:"Live session not found for your classes." });
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message:"Tutorial demo sessions are for ThinkBOTs only." });
   if (!['LOBBY','LIVE','PAUSED'].includes(session.status)) return res.status(400).json({ message: 'Session has ended.' });
   const profile = await getProfile(uid);
   if (!profile) return res.status(400).json({ message:"Complete your Student Info first." });
@@ -618,7 +619,7 @@ function questionCorrectDisplay(templateType, correct, config) {
     return display.length > 1 ? display : display[0] || '';
   }
   if (tt === 'MATCHING') return correct?.pairs || [];
-  if (tt === 'THINK_SPELL') return correct?.answers || config?.answers || [];
+  if (tt === 'CROSSWORD') return correct?.answers || config?.answers || [];
   return correct?.text ?? correct?.answer ?? correct;
 }
 
@@ -749,11 +750,11 @@ export async function submitStudentQuiz(req, res) {
     const correct = safeJson(q.correct_json) || {};
     const basePoints = Math.min(3, Math.max(1, Number(config.points || quiz.points_per_question || 1)));
     const template = normalizeTemplateType(quiz.template_type);
-    const wordBank = template === "THINK_SPELL"
+    const wordBank = template === "CROSSWORD"
       ? (Array.isArray(correct.answers) && correct.answers.length ? correct.answers : Array.isArray(config.answers) ? config.answers : [])
       : [];
     const matchingPairs = template === "MATCHING" && Array.isArray(correct.pairs) ? correct.pairs.length : 0;
-    maxScore += template === "THINK_SPELL"
+    maxScore += template === "CROSSWORD"
       ? basePoints * wordBank.length
       : template === "MATCHING"
         ? basePoints * matchingPairs

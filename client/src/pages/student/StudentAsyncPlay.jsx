@@ -502,7 +502,7 @@ export default function StudentAsyncPlay() {
       <div className={`qn-progress qn-timer-progress${!activeLocked && (remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : !activeLocked && (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><div className="qn-progress-bar" style={{width:`${Math.round(activeLocked?0:((remainingSec??activeTimeLimit)/activeTimeLimit)*100)}%`}}/></div>
       <div className="qn-body" style={{flex:1}}>
         <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
-        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx} timeUp={tt === TEMPLATE_TYPES.THINK_SPELL && idx === activeIdx && remainingSec === 0}/>
+        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx} timeUp={tt === TEMPLATE_TYPES.CROSSWORD && idx === activeIdx && remainingSec === 0}/>
         {msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
         <div className="sp-assigned-navigation">
           <button type="button" className={`sp-assigned-nav-btn is-prev${prevHidden?" is-hidden":""}`} aria-label="Previous question" aria-hidden={prevHidden} onClick={goPrevious} disabled={!canGoPrevious||prevHidden} tabIndex={prevHidden?-1:0}><TwIcon name="arrow" size={16}/><span>Previous</span></button>
@@ -521,7 +521,7 @@ function hasAnswer(templateType,answer,q){
   if(tt==="MCQ") return !!answer.choice || (Array.isArray(answer.choices)&&answer.choices.length>0);
   if(tt==="TRUE_FALSE") return answer.choice!==undefined&&answer.choice!==null&&answer.choice!=="";
   if(tt==="MATCHING") return Array.isArray(answer.pairs)&&answer.pairs.length>=Number(q?.config_json?.colA?.length||1);
-  if(tt==="THINK_SPELL") return Array.isArray(answer.words||answer.foundEntries)&&(answer.words||answer.foundEntries).length>0;
+  if(tt==="CROSSWORD") return Array.isArray(answer.words||answer.foundEntries)&&(answer.words||answer.foundEntries).length>0;
   return String(answer.text||"").trim().length>0;
 }
 function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
@@ -545,7 +545,7 @@ function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = fal
   if (templateType === TEMPLATE_TYPES.TRUE_FALSE) return <TrueFalseTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.MATCHING) return <MatchingTemplate q={q} cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.GUESS_WORD_4PICS) return <GuessWord4PicsTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
-  if (templateType === TEMPLATE_TYPES.THINK_SPELL) return <GameCrossword config={cfg} correct={{}} store={value} onStore={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} initExtra={{ words: [] }} summaryHint="Continue when the next question unlocks." totalPoints={null} />;
+  if (templateType === TEMPLATE_TYPES.CROSSWORD) return <GameCrossword config={cfg} correct={{}} store={value} onStore={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} initExtra={{ words: [] }} summaryHint="Continue when the next question unlocks." totalPoints={null} />;
   return <TypeAnswerTemplate value={value} onChange={onChange} disabled={disabled} />;
 }
 

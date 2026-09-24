@@ -402,7 +402,7 @@ export async function exportClassAsyncPdf(req, res) {
     }
   }
   const asyncTemplate = String(data.quiz.template_type || "").toUpperCase();
-  const asyncIsBatch = asyncTemplate === "MATCHING" || asyncTemplate === "THINK_SPELL" || asyncTemplate === "THINK_AND_SPELL";
+  const asyncIsBatch = asyncTemplate === "MATCHING" || asyncTemplate === "CROSSWORD" || asyncTemplate === "THINK_SPELL" || asyncTemplate === "THINK_AND_SPELL";
   const asyncDetails = buildDetailedQuestionAnalytics(data.quiz.template_type, asyncQuestions, asyncResponseRows);
 
   drawTable(doc, {
@@ -455,7 +455,7 @@ function asyncCorrectAnswerText(templateType, correct = {}, config = {}) {
     const count = Array.isArray(correct?.pairs) ? correct.pairs.length : 0;
     return `${count} pair${count === 1 ? "" : "s"}`;
   }
-  if (tt === "THINK_SPELL" || tt === "THINK_AND_SPELL") {
+  if (tt === "CROSSWORD" || tt === "THINK_SPELL" || tt === "THINK_AND_SPELL") {
     const words = Array.isArray(correct?.answers) && correct.answers.length
       ? correct.answers
       : Array.isArray(config?.answers) ? config.answers : [];

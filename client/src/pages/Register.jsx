@@ -54,6 +54,9 @@ export default function Register() {
   const [showConfPw, setShowConfPw] = useState(false);
   const [error, setError] = useState("");
   const [inviteState, setInviteState] = useState(isAdminReg ? "checking" : "valid");
+  // Same shared signup form as teacher registration; for admin it is isolated
+  // to this invitation link and prefilled from the application.
+  const [inviteInstitution, setInviteInstitution] = useState("");
   const [exitClass, setExitClass] = useState("");
   const enterClass = (loc.state?.authFrom || sessionStorage.getItem("tw_auth_from")) === "right" ? "from-right" : "from-left";
   function moveToLogin() {
@@ -64,7 +67,15 @@ export default function Register() {
   useEffect(() => {
     if (!isAdminReg) return;
     api.get(`/auth/admin-invitation/${encodeURIComponent(adminInviteToken)}`)
-      .then(({data}) => { setForm(f=>({...f,email:data.email||f.email})); setInviteState("valid"); })
+      .then(({data}) => {
+        setForm(f=>({...f,
+          email: data.email || f.email,
+          firstName: data.firstName || f.firstName,
+          lastName: data.lastName || f.lastName,
+        }));
+        setInviteInstitution(data.institutionName || "");
+        setInviteState("valid");
+      })
       .catch((err) => {
         setInviteState("invalid");
         setError(err?.response?.data?.message || "This Admin invitation is invalid, already used, or expired.");
@@ -122,7 +133,7 @@ export default function Register() {
           <div className="mb-7 text-center">
             <h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{isAdminReg ? "Create your admin account" : "Create your teacher account"}</h1>
             <p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">
-              {isAdminReg ? "Register an admin account for your institution." : "Register a teacher account for ThinkWAVE."}
+              {isAdminReg ? `Register an admin account${inviteInstitution ? ` for ${inviteInstitution}` : " for your institution"}. Your name and email from the application are already filled in.` : "Register a teacher account for ThinkWAVE."}
             </p>
           </div>
 

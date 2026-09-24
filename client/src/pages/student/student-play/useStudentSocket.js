@@ -3,7 +3,7 @@ import { makeSocket } from "../../../lib/socket";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { getRole } from "../../../lib/auth";
 import soundManager from "../../../utils/soundmanager";
-import { explanationHeading, feedbackStatus, thinkSpellRejectLabel } from "./studentPlayUtils";
+import { explanationHeading, feedbackStatus, crosswordRejectLabel } from "./studentPlayUtils";
 
 export function useStudentSocket({
   sessionId,
@@ -130,12 +130,12 @@ export function useStudentSocket({
       if (payload?.approved) {
         setProposalStatus("Your group answer has been submitted.");
       } else {
-        const rejectedThinkSpell = normalizeTemplateType(stateRef.current?.template_type) === "THINK_SPELL";
-        setProposalStatus(payload?.message || (rejectedThinkSpell
+        const rejectedCrossword = normalizeTemplateType(stateRef.current?.template_type) === "CROSSWORD";
+        setProposalStatus(payload?.message || (rejectedCrossword
           ? "Your group rejected that word. Try another one."
           : "Your group rejected that answer."));
         setSubmittedQId(null);
-        setSubmitLabel(rejectedThinkSpell ? "Submit Word" : "Submit");
+        setSubmitLabel(rejectedCrossword ? "Submit Word" : "Submit");
       }
       setTimeout(() => {
         setGroupProposal(null);
@@ -144,7 +144,7 @@ export function useStudentSocket({
     });
     s.on("answer:ack", (a) => {
       const tt = normalizeTemplateType(stateRef.current?.template_type);
-      const isThinkSpell = tt === "THINK_SPELL" || normalizeTemplateType(a.templateType) === "THINK_SPELL";
+      const isCrossword = tt === "CROSSWORD" || normalizeTemplateType(a.templateType) === "CROSSWORD";
 
       if (a?.locked && currentQRef.current?.id) {
         const answeredId = Number(currentQRef.current.id);
@@ -156,7 +156,7 @@ export function useStudentSocket({
         });
       }
 
-      if (a.message && !isThinkSpell) {
+      if (a.message && !isCrossword) {
         setSubmitLabel(a.message);
         return;
       }
@@ -165,20 +165,20 @@ export function useStudentSocket({
       clearTimeout(feedbackPulseTimer.current);
       clearTimeout(antiRemovalTimer.current);
 
-      if (isThinkSpell) {
-        if (a.thinkSpell) {
+      if (isCrossword) {
+        if (a.crossword) {
           setSpell((s) => ({
             ...s,
-            foundWords: Array.isArray(a.thinkSpell.words) ? a.thinkSpell.words : s.foundWords || [],
-            totalPoints: Number(a.thinkSpell.totalPoints ?? s.totalPoints ?? 0),
-            streak: Number(a.thinkSpell.streak ?? 0),
-            grid: Array.isArray(a.thinkSpell.grid) ? a.thinkSpell.grid : s.grid,
-            gridSize: Number(a.thinkSpell.gridSize ?? s.gridSize) || s.gridSize,
-            refillCounter: Number(a.thinkSpell.refillCounter ?? s.refillCounter ?? 0),
+            foundWords: Array.isArray(a.crossword.words) ? a.crossword.words : s.foundWords || [],
+            totalPoints: Number(a.crossword.totalPoints ?? s.totalPoints ?? 0),
+            streak: Number(a.crossword.streak ?? 0),
+            grid: Array.isArray(a.crossword.grid) ? a.crossword.grid : s.grid,
+            gridSize: Number(a.crossword.gridSize ?? s.gridSize) || s.gridSize,
+            refillCounter: Number(a.crossword.refillCounter ?? s.refillCounter ?? 0),
             refillTick: a.isCorrect ? (s.refillTick || 0) + 1 : s.refillTick,
             selected: [],
             built: "",
-            lastReason: a.thinkSpell.reason || null,
+            lastReason: a.crossword.reason || null,
           }));
         } else {
           setSpell((s) => ({ ...s, selected: [], built: "", streak: 0 }));
@@ -205,22 +205,22 @@ export function useStudentSocket({
             if (a?.locked) setPostAnswerPhase("wait");
           }, 1750);
           feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
-          const effectPromise = feedbackStatus(a) === "correct" ? soundManager.play("correct") : soundManager.play("wrong");
+          const effectPromise = feedbackStatus(a) === "wrong" ? soundManager.play("wrong") : soundManager.play("correct");
           void effectPromise;
         }
 
-        if (a.locked && !a.thinkSpell) {
+        if (a.locked && !a.crossword) {
           setSubmitLabel(feedbackStatus(a) === "correct" ? "Submitted ✓" : feedbackStatus(a) === "almost" ? "Partially correct" : "Submitted");
           return;
         }
 
-        if (a.thinkSpell?.remainingWords === 0 && Number(a.thinkSpell?.requiredWords || 0) > 0) {
+        if (a.crossword?.remainingWords === 0 && Number(a.crossword?.requiredWords || 0) > 0) {
           setSubmitLabel(a.message || "All words found!");
         } else if (a.isCorrect) {
-          const combo = Number(a.thinkSpell?.streak || 0);
+          const combo = Number(a.crossword?.streak || 0);
           setSubmitLabel(combo >= 2 ? `+${a.points || 0} pts · ${combo}x combo!` : `+${a.points || 0} pts — keep going!`);
         } else {
-          setSubmitLabel(thinkSpellRejectLabel(a.thinkSpell?.reason));
+          setSubmitLabel(crosswordRejectLabel(a.crossword?.reason));
         }
         return;
       }
@@ -250,7 +250,7 @@ export function useStudentSocket({
 
       setSubmitLabel(a.viaGroup ? "Group Submitted ✓" : a.isCorrect ? "Submitted ✓" : "Submitted");
       const isLast = currentQRef.current && stateRef.current && Number(stateRef.current.current_question_index || 0) >= Math.max(0, questionCountRef.current - 1);
-      const effectPromise = feedbackStatus(a) === "correct" ? soundManager.play("correct") : soundManager.play("wrong");
+      const effectPromise = feedbackStatus(a) === "wrong" ? soundManager.play("wrong") : soundManager.play("correct");
 
       if (isLast) {
         setWaitingForFinalFx(true);

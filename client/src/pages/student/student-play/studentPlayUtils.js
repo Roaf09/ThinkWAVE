@@ -19,7 +19,7 @@ export function feedbackCopy(payload) {
   if (status === "almost") {
     const count = Number(payload?.correctCount || 0);
     const total = Number(payload?.totalCorrect || 0);
-    const title = timedOut || (payload?.templateType === "MCQ" && total === 2 && count === 1) ? "Almost!" : `Almost! +${payload.points || 0} pts`;
+    const title = `Almost! +${payload.points || 0} pts`;
     const subtitle = total > 0 ? `${count} of ${total} correct${timedOut ? " before time ran out" : ""}` : "Some of your answers were correct.";
     return { title, subtitle, icon: "warning" };
   }
@@ -36,7 +36,7 @@ export function renderAnswerPreview(answer) {
 
 export function fmtTime(sec) { const s = Math.max(0, Number(sec || 0)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
 
-export function thinkSpellRejectLabel(reason) {
+export function crosswordRejectLabel(reason) {
   switch (reason) {
     case "duplicate": return "Already found — try another";
     case "not_in_bank": return "Not on the word list";

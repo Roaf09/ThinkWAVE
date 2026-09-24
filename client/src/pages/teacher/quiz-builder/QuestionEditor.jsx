@@ -1,4 +1,5 @@
 import { TwIcon } from "../../../components/TwUI";
+import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { MediaInput, TemplateEditor, VoiceRecordingPanel } from "./QuizBuilderParts";
 import { clampQuestionPoints } from "./quizBuilderUtils";
 
@@ -19,17 +20,25 @@ export function QuestionEditor({ ui, c, quiz, currentQ, updateQ, isMobile }) {
         <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
           <div style={ui.metaLabel}>⭐ Points</div>
           <div style={ui.metaRow}>
-            <input
-              type="number"
-              min={1}
-              max={3}
-              value={currentQ.points ?? 1}
-              onChange={(e) => updateQ({
-                points: clampQuestionPoints(e.target.value, 3),
+            <div role="radiogroup" aria-label="Question points" style={{ display: "flex", gap: 6 }}>
+              {[1, 2, 3].map((value) => {
+                const active = clampQuestionPoints(currentQ.points) === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    title={`${value} point${value === 1 ? "" : "s"}`}
+                    onClick={() => updateQ({ points: value })}
+                    style={{ ...ui.metaInput, width: 40, textAlign: "center", cursor: "pointer", fontWeight: 900, borderWidth: active ? 3 : 1, opacity: active ? 1 : 0.65 }}
+                  >
+                    {value}
+                  </button>
+                );
               })}
-              style={ui.metaInput}
-            />
-            <span style={ui.metaSuffix}>{quiz.template_type === "THINK_SPELL" ? "per word" : quiz.template_type === "MATCHING" ? "per pair" : "per question"}</span>
+            </div>
+            <span style={ui.metaSuffix}>{normalizeTemplateType(quiz.template_type) === "CROSSWORD" ? "per word" : normalizeTemplateType(quiz.template_type) === "MATCHING" ? "per pair" : "per question"}</span>
           </div>
         </div>
       </div>

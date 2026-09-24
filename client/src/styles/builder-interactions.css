@@ -191,7 +191,7 @@ body.dark-mode .tw-builder-question-form,
 }
 .tw-builder-question-form.is-dragging.is-template-mcq,
 .tw-builder-question-form.is-dragging.is-template-matching,
-.tw-builder-question-form.is-dragging.is-template-think-spell{
+.tw-builder-question-form.is-dragging.is-template-crossword{
   transform:translate(var(--tw-question-drag-x,0px),var(--tw-question-drag-y,0px)) scale(.41)!important;
   transform-origin:center top!important;
 }

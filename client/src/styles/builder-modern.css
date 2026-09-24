@@ -317,7 +317,7 @@ body.dark-mode .tw-host-preview-zoom-card{
   gap:20px;
   align-items:center;
 }
-.tw-bank-crossword-expanded .tw-bank-thinkspell-preview{
+.tw-bank-crossword-expanded .tw-bank-crossword-preview{
   width:min(100%,470px)!important;
   margin-left:max(0px,2%)!important;
   margin-right:0!important;
@@ -367,7 +367,7 @@ body.dark-mode .tw-host-preview-zoom-card{
 }
 @media(max-width:720px){
   .tw-bank-crossword-expanded{grid-template-columns:1fr;gap:14px}
-  .tw-bank-crossword-expanded .tw-bank-thinkspell-preview{margin-inline:auto!important;justify-self:center}
+  .tw-bank-crossword-expanded .tw-bank-crossword-preview{margin-inline:auto!important;justify-self:center}
   .tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
 }
 
@@ -391,15 +391,15 @@ body.dark-mode .tw-host-preview-zoom-card{
 @media(max-width:900px){.tw-analytics-advanced-layout{grid-template-columns:1fr!important}.tw-analytics-question-toggle{grid-template-columns:auto minmax(0,1fr) 22px}.tw-analytics-summary-badges{grid-column:1/-1;justify-content:flex-start}}
 
 /* Question Bank: more compact two-column Crossword answers and centered template answers. */
-.tw-bank-answer-summary.is-think-spell{width:min(100%,650px)!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
-.tw-bank-answer-summary.is-think-spell .tw-bank-correct-answer{width:100%!important}
+.tw-bank-answer-summary.is-crossword{width:min(100%,650px)!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.tw-bank-answer-summary.is-crossword .tw-bank-correct-answer{width:100%!important}
 .tw-bank-expand-button{margin-top:8px!important;margin-bottom:8px!important}
 .tw-bank-template-answer{justify-content:center!important;text-align:center!important;margin-inline:auto!important}
 .tw-bank-crossword-expanded{grid-template-columns:minmax(300px,1.12fr) minmax(260px,.88fr)!important;gap:28px!important;align-items:center!important}
 .tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-content:center!important;justify-content:center!important;gap:10px 12px!important;width:100%!important}
 .tw-bank-crossword-word{font-size:15px!important;min-height:48px!important;display:grid!important;place-items:center!important;text-align:center!important}
 .tw-bank-guess-answer{margin-inline:auto!important;text-align:center!important;justify-self:center!important;width:min(100%,340px)!important}
-@media(max-width:760px){.tw-bank-answer-summary.is-think-spell{grid-template-columns:1fr!important}.tw-bank-crossword-expanded{grid-template-columns:1fr!important}.tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:760px){.tw-bank-answer-summary.is-crossword{grid-template-columns:1fr!important}.tw-bank-crossword-expanded{grid-template-columns:1fr!important}.tw-bank-crossword-word-list{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 
 /* Guest join entry polish. */
 .tw-guest-join-theme{position:fixed!important;left:18px!important;bottom:18px!important;z-index:20!important;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important}
@@ -416,6 +416,6 @@ body.dark-mode .tw-host-preview-zoom-card{
   width:min(100%,310px)!important;
   justify-self:center!important;
 }
-.tw-bank-answer-summary.is-think-spell{padding-bottom:6px!important}
+.tw-bank-answer-summary.is-crossword{padding-bottom:6px!important}
 .tw-bank-crossword-word-list{justify-self:center!important;max-width:520px!important}
 

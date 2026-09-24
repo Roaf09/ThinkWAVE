@@ -120,7 +120,7 @@ export function buildDetailedQuestionAnalytics(templateType, questions = [], res
       });
     }
 
-    if (tt === "THINK_SPELL") {
+    if (tt === "CROSSWORD") {
       const words = (Array.isArray(correct.answers) && correct.answers.length ? correct.answers : Array.isArray(config.answers) ? config.answers : []).map(String).filter(Boolean);
       const expectedKeys = words.map(normWord);
       detail.word_stats = words.map((word, index) => {

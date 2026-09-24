@@ -15,6 +15,7 @@ import { TeacherPressButton, ThinkBotEmptyState, TeacherActionModal } from "../T
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
 import { manilaDateTime } from "../../../lib/dateFormat";
+import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 const card = (c, extra = {}) => ({
   background: c.cardBg,
@@ -69,7 +70,11 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
           const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
           setSessions((data || []).filter((session) => {
             const endedAt = new Date(session?.ended_at || 0).getTime();
-            return Number.isFinite(endedAt) && endedAt >= cutoff;
+            if (Number.isFinite(endedAt) && endedAt >= cutoff) return true;
+            // Never silently drop a completed live session just because its
+            // end timestamp is missing (older rows) — it sorts last via the
+            // sort_at fallback instead of vanishing from history.
+            return session?.session_type !== "ASSIGNED" && String(session?.status || "").toUpperCase() === "ENDED";
           }));
         }
       } catch (e) {
@@ -141,7 +146,7 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
     }
   }
 
-  if (loading) return <div className="container"><div style={card(c)}>Loading session history…</div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
 
   if (guestMode) {
     return <GuestHistoryView c={c} sessions={filtered} query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy} navigate={navigate} />;

@@ -84,7 +84,7 @@ export function useBuilderPersistence({
           config: nextCfg,
           correct,
           timeLimitSec: nextCfg.timeLimitSec ?? data.quiz.time_limit_sec ?? 30,
-          points: nextCfg.points ?? data.quiz.points_per_question ?? 1,
+          points: clampQuestionPoints(nextCfg.points ?? data.quiz.points_per_question ?? 1),
         };
       });
 
@@ -340,7 +340,7 @@ export function useBuilderPersistence({
           return next;
         });
         if (["bank", "bank_menu"].includes(builderTutorialStage)) {
-          setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
+          setBuilderTutorialStage(["MATCHING", "CROSSWORD"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
         }
       } catch (error) {
         const message = error?.response?.data?.message || "";
@@ -348,7 +348,7 @@ export function useBuilderPersistence({
           setMsg("");
           setBankSavedOrders((current) => new Set([...current, Number(q?.order ?? qIndex)]));
           if (["bank", "bank_menu"].includes(builderTutorialStage)) {
-            setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
+            setBuilderTutorialStage(["MATCHING", "CROSSWORD"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
           }
           return;
         }

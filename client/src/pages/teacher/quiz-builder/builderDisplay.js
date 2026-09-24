@@ -31,7 +31,7 @@ export function getBuilderDisplay({
   const isLast = totalQ === 0 || qIndex === totalQ - 1;
   const publishLatched = ["PUBLISHED", "BANKED"].includes(String(quiz.status || "").toUpperCase());
   const publishDisabled = isSaving || !isSaved || publishLatched;
-  const isBatchTemplate = ["MATCHING", "GUESS_WORD_4PICS", "THINK_SPELL"].includes(quiz.template_type);
+  const isBatchTemplate = ["MATCHING", "GUESS_WORD_4PICS", "CROSSWORD"].includes(normalizeTemplateType(quiz.template_type));
   const tutorialHighlightColor = lightenTutorialColor(templateAccent(quiz.template_type), dark ? 0.24 : 0.36);
   const builderTemplateAccent = templateAccent(quiz.template_type);
   const builderTemplateDragClass = `is-template-${normalizeTemplateType(quiz.template_type).toLowerCase().replace(/_/g, "-")}`;
@@ -48,7 +48,7 @@ export function getBuilderDisplay({
   const truncatedQuizTitle = truncateBuilderTitle(quiz?.title || "Untitled quiz", builderTitleLimit);
   const fullQuizTitle = String(quiz?.title || "Untitled quiz");
   const crosswordShowWordList = (questions[qIndex] || questions[0])?.config?.showWordList !== false;
-  const isCrossword = normalizeTemplateType(quiz?.template_type) === "THINK_SPELL";
+  const isCrossword = normalizeTemplateType(quiz?.template_type) === "CROSSWORD";
 
   const builderSettingsRows = [];
   if (!guestMode) builderSettingsRows.push({ key: "randomize", label: "Randomize question order", help: "randomizes question order for assignments", active: !!settings?.randomizeQuestions, onToggle: () => saveSettings({ randomizeQuestions: !settings.randomizeQuestions }) });

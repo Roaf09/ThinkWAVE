@@ -437,10 +437,43 @@
 }
 @keyframes twSheetDown{from{opacity:1;transform:none}to{opacity:0;transform:translateY(64px)}}
 @keyframes twSheetFadeOut{from{opacity:1}to{opacity:0}}
+  /* Bottom sheet: fixed 80dvh canvas, snap detents at 25/50/80% driven by
+     translateY (see HostLive.jsx). Transitions stay off mid-drag
+     (.is-dragging) so the sheet tracks the finger 1:1, then spring on
+     release. Body scrolls internally with chained scroll contained. */
+  .tw-host-mobile-sheet{height:80vh!important;height:80dvh!important;max-height:80vh!important;max-height:80dvh!important;transition:transform .32s cubic-bezier(.32,.72,0,1)!important;will-change:transform;animation:twHostSheetIn .28s ease both!important}
+  .tw-host-mobile-sheet.is-dragging{transition:none!important}
+  .tw-host-mobile-sheet.is-closing{animation:none!important;opacity:0}
+  .tw-host-mobile-sheet-body{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .tw-host-mobile-sheet.is-code{overflow-y:auto!important;max-height:80vh!important;max-height:80dvh!important}
+  @keyframes twHostSheetIn{from{opacity:0}to{opacity:1}}
+  /* Groupings (GROUP mode replaces Student Attendance). Single-expand mirrors
+     the analytics per-question pattern: opening one group fades the rest. */
+  .tw-host-groupings{display:grid;gap:10px;align-content:start;align-items:start;min-height:0}
+  .tw-host-group-list{display:grid;gap:10px;align-content:start;align-items:start;grid-auto-rows:auto;min-height:0}
+  .tw-host-group-list.has-expanded{gap:0}
+  .tw-host-group-card{border:1px solid;border-radius:12px;overflow:hidden;min-height:auto;transition:opacity .22s ease,transform .22s ease,max-height .28s ease,margin .28s ease,padding .28s ease}
+  .tw-host-group-card.is-hidden{opacity:0;transform:scale(.985);max-height:0!important;margin:0!important;padding:0!important;border-width:0!important;pointer-events:none}
+  .tw-host-group-toggle{width:100%;display:flex;align-items:center;gap:10px;padding:16px 14px;cursor:pointer;background:transparent;border:0;font:inherit;font-weight:900;min-width:0;font-size:22px}
+  .tw-host-group-toggle .tw-host-group-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:15ch;min-width:0;font-size:22px}
+  .tw-host-group-toggle .tw-host-group-count{font-weight:800;flex:none;font-size:20px}
+  .tw-host-group-toggle svg{flex:none;margin-left:0}
+  .tw-host-group-delete-icon{margin-left:auto;display:inline-grid;place-items:center;width:40px;height:40px;border-radius:10px;cursor:pointer;flex:none}
+  .tw-host-group-members{margin:0 12px 14px;padding:12px 14px;border:1px solid;border-radius:10px;display:grid;gap:6px}
+  .tw-host-group-member{display:flex;align-items:center;gap:12px;font-size:22px;padding:8px 0;min-width:0}
+  .tw-host-group-member .tw-host-student-name{font-size:26px;font-weight:900}
+  .tw-host-group-member .text-\[12px\]{font-size:20px!important}
+  .tw-host-mobile-sheet .tw-host-group-member .tw-host-online-dot{width:12px;height:12px}
+  .tw-host-group-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border:1px dashed;border-radius:12px;background:transparent;font:inherit;font-size:19px;font-weight:900;cursor:pointer;margin-top:8px}
+  .tw-host-group-waiting-title{font-size:15px;font-weight:900;margin-bottom:2px}
+  .tw-host-group-collapse{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .32s cubic-bezier(.2,.8,.2,1),opacity .24s ease}
+  .tw-host-group-collapse>div{min-height:0;overflow:hidden}
+  .tw-host-group-collapse.is-open{grid-template-rows:1fr;opacity:1}
+  .tw-host-group-waiting{border:1px dashed;border-radius:12px;padding:10px 12px;display:grid;gap:2px;margin-top:8px}
   .tw-host-mobile-sheet-tabs{display:flex;gap:8px;margin:6px 0 4px}
-  .tw-host-mobile-sheet-tabs button{flex:1;padding:10px;border-radius:12px;border:1.5px solid var(--tw-line);background:var(--tw-on-brand);font:inherit;font-weight:900;cursor:pointer}
-  .tw-host-mobile-sheet-tabs button.is-active{background:var(--tw-brand);border-color:var(--tw-brand);color:var(--tw-on-brand)}
-  .tw-host-mobile-sheet-body{display:grid;gap:12px}
+  .tw-host-mobile-sheet-tabs button{flex:1;padding:10px;border-radius:12px;border:1.5px solid var(--tw-brand);background:var(--tw-brand);color:var(--tw-on-brand);font:inherit;font-weight:900;cursor:pointer;opacity:.62}
+  .tw-host-mobile-sheet-tabs button.is-active{background:var(--tw-brand);border-color:var(--tw-brand);color:var(--tw-on-brand);opacity:1}
+  .tw-host-mobile-sheet-body{display:grid;gap:12px;min-height:0}
   .tw-host-mobile-sheet.is-code{overflow-y:visible!important;max-height:none!important}
   .tw-host-mobile-sheet .tw-builder-sheet-handle{cursor:grab;touch-action:none}
   .tw-host-mobile-sheet .tw-host-section-title h3{font-size:24px!important}
@@ -718,9 +751,12 @@ body.dark-mode .tw-session-assign-btn>span{color:#fff!important}
 .tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn>span{min-height:44px!important;padding:0 20px!important;box-sizing:border-box!important;border:1px solid var(--tw-press-border)!important;border-radius:10px!important;background:var(--tw-press-face)!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:4px!important;transform:translateY(-5px)!important;white-space:nowrap!important}
 .tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:hover>span{filter:brightness(.9)!important;transform:translateY(-6px)!important}
 .tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:active>span{transform:translateY(0)!important;filter:brightness(.86)!important}
-.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:disabled{cursor:not-allowed!important;opacity:1!important;filter:none!important}
-.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:disabled>span{filter:brightness(.86)!important;transform:translateY(0)!important}
-.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:not(:disabled){opacity:.72!important;filter:saturate(.7)!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:not(.is-selected){opacity:1!important;filter:none!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn.is-selected{cursor:default!important;opacity:1!important;filter:none!important;--tw-press-face:#dbeafe!important;--tw-press-base:#bfdbfe!important;--tw-press-border:#93c5fd!important;background:var(--tw-press-base)!important;box-shadow:0 6px 16px rgba(43,108,255,.16)!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn.is-selected>span{background:var(--tw-press-face)!important;border-color:var(--tw-press-border)!important;color:#1d4ed8!important;filter:none!important;transform:none!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn.is-selected>span svg{color:#1d4ed8!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn:disabled:not(.is-selected){cursor:not-allowed!important;opacity:.55!important;filter:saturate(.6)!important}
+.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn.is-selected:hover>span{filter:none!important;transform:none!important}
 .tw-host-mode-trio{display:inline-flex!important;align-items:center!important;gap:2px!important}
 @media(max-width:760px){.tw-host-mode-row.tw-host-mode-simple{gap:10px!important;margin-bottom:12px!important}.tw-host-mode-row.tw-host-mode-simple .tw-host-mode-simple-btn>span{min-height:48px!important}}
 
@@ -866,3 +902,12 @@ body.dark-mode .tw-session-assign-btn>span{color:#fff!important}
   .dashboard-tab-panel{scroll-margin-top:78px!important}
   .tw-section-title-action{flex-wrap:wrap!important;gap:10px!important;align-items:center!important}
 }
+
+/* Class header: Add Folder + Share Code are icon-only blue icons (no text label),
+   bigger than the Class Analytics button icon. Analytics keeps its full pill. */
+.tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue{width:48px!important;min-width:48px!important;height:48px!important;min-height:0!important;padding:0 0 5px!important;background:#1749bd!important;border:0!important;border-radius:10px!important;box-shadow:0 10px 22px rgba(43,108,255,.22)!important;display:inline-grid!important;place-items:center!important}
+.tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue>span{width:100%!important;min-height:42px!important;padding:0!important;background:#2b6cff!important;border:1px solid #5b8cff!important;border-radius:10px!important;color:#fff!important;transform:translateY(-5px)!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue .tw-press-label{display:none!important}
+.tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue svg{width:30px!important;height:30px!important}
+.tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue:active>span{transform:translateY(0)!important}
+body.dark-mode .tw-class-header-actions .tw-admin-press.tw-class-icon-only-blue>span{color:#fff!important}

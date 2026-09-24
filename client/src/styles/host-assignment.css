@@ -63,20 +63,20 @@ body.dark-mode .tw-builder-dialog-icon-plain{color:var(--tw-on-brand)!important}
 .tw-host-media-choice img{width:54px!important;height:54px!important;border-radius:9px!important;object-fit:cover!important;flex:0 0 56px;order:2;margin-left:auto!important;min-width:54px!important}
 .tw-host-pics{width:min(100%,720px);gap:14px!important;width:min(100%,310px)!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:min(100%,360px)!important}
 .tw-host-pics>div{aspect-ratio:1!important;border-width:3px!important;width:100%!important;max-height:none!important}
-.tw-host-thinkspell-grid{display:grid;gap:8px;width:min(100%,520px);padding:14px;border:3px solid color-mix(in srgb,var(--host-accent) 60%,transparent);border-radius:18px;background:color-mix(in srgb,var(--host-accent) 10%,transparent)}
-.tw-host-thinkspell-grid span{aspect-ratio:1;display:grid;place-items:center;border-radius:10px;background:color-mix(in srgb,var(--host-accent) 22%,white);border:2px solid color-mix(in srgb,var(--host-accent) 62%,transparent);font-weight:1000;font-size:clamp(13px,1.6vw,22px);color:var(--tw-ink)}
-body.dark-mode .tw-host-thinkspell-grid span{background:color-mix(in srgb,var(--host-accent) 28%,#101a31);color:var(--tw-on-brand)}
+.tw-host-crossword-grid{display:grid;gap:8px;width:min(100%,520px);padding:14px;border:3px solid color-mix(in srgb,var(--host-accent) 60%,transparent);border-radius:18px;background:color-mix(in srgb,var(--host-accent) 10%,transparent)}
+.tw-host-crossword-grid span{aspect-ratio:1;display:grid;place-items:center;border-radius:10px;background:color-mix(in srgb,var(--host-accent) 22%,white);border:2px solid color-mix(in srgb,var(--host-accent) 62%,transparent);font-weight:1000;font-size:clamp(13px,1.6vw,22px);color:var(--tw-ink)}
+body.dark-mode .tw-host-crossword-grid span{background:color-mix(in srgb,var(--host-accent) 28%,#101a31);color:var(--tw-on-brand)}
 .tw-host-attendance,.tw-host-join{border-color:var(--host-side-border)!important;border-width:3px!important}
 .tw-host-action-button svg{color:var(--host-action-icon)!important}
 .tw-host-floating-theme{position:fixed!important;left:18px!important;bottom:18px!important;z-index:4100!important;width:44px!important;height:44px!important;border:0!important;background:rgba(255,255,255,.82)!important;color:var(--tw-ink)!important;box-shadow:0 10px 30px rgba(15,23,42,.24)!important;backdrop-filter:blur(10px)}
 body.dark-mode .tw-host-floating-theme{background:rgba(8,18,39,.82)!important;color:var(--tw-on-brand)!important}
-.tw-bank-thinkspell-preview{display:grid;gap:7px!important;padding:12px!important;border-radius:16px;width:min(100%,520px);margin-inline:auto;border:3px solid}
-.tw-bank-thinkspell-preview .tw-host-thinkspell-grid{margin-inline:auto}
+.tw-bank-crossword-preview{display:grid;gap:7px!important;padding:12px!important;border-radius:16px;width:min(100%,520px);margin-inline:auto;border:3px solid}
+.tw-bank-crossword-preview .tw-host-crossword-grid{margin-inline:auto}
 @media(max-width:1100px){.tw-host-launch-backdrop{padding-left:96px!important}.tw-host-launch-modal{width:min(calc(100vw - 124px),760px)!important}}
 @media(max-width:760px){.tw-host-launch-backdrop{padding:12px!important}.tw-host-launch-modal{width:min(100%,760px)!important}.tw-host-preview-dual{grid-template-columns:minmax(0,1fr) 76px!important}.tw-host-preview-mobile{width:76px!important}/* Background picker: swipe instead of arrow buttons, and stay a single
      row (show 3 at a time, scaled up) rather than wrapping into a grid. */
 .tw-session-background-carousel{grid-template-columns:minmax(0,1fr)!important}.tw-session-background-arrow{display:none!important}.tw-session-background-track{grid-template-columns:repeat(3,minmax(0,1fr))!important;touch-action:pan-y}.tw-session-background-track-inner{grid-template-columns:repeat(3,minmax(0,1fr))!important}.tw-session-background-card:nth-child(n+4){display:none!important}.tw-host-options>div.is-odd-last{width:100%}.tw-host-floating-theme{left:12px!important;bottom:12px!important}}
-.tw-bank-thinkspell-preview>span{aspect-ratio:1;display:grid;place-items:center;border:2px solid;border-radius:9px;font-weight:1000;font-size:clamp(12px,1.4vw,19px)}
+.tw-bank-crossword-preview>span{aspect-ratio:1;display:grid;place-items:center;border:2px solid;border-radius:9px;font-weight:1000;font-size:clamp(12px,1.4vw,19px)}
 .quiz-shell-new.has-session-background{background:transparent!important;border:0!important;box-shadow:none!important}
 .quiz-shell-new.has-session-background.theme-light .qn-body{background:rgba(255,255,255,.30)!important;backdrop-filter:blur(2px)}
 .quiz-shell-new.has-session-background.theme-dark .qn-body{background:rgba(5,18,48,.42)!important;backdrop-filter:blur(2px)}

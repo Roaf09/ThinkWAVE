@@ -22,7 +22,7 @@ export function summarizeBuilderQuestion(question, templateType) {
   const tt = normalizeTemplateType(templateType); const cfg = question?.config || {}; const cor = question?.correct || {};
   if (tt === "MCQ") return (cfg.options || []).map((o) => typeof o === "object" ? (o.text || o.label || "Image") : o).filter(Boolean).slice(0,4).join(" · ");
   if (tt === "MATCHING") return (cfg.colA || []).slice(0,3).map((a,i) => `${typeof a === "object" ? a.text : a} ↔ ${typeof cfg.colB?.[i] === "object" ? cfg.colB[i].text : cfg.colB?.[i] || ""}`).join(" · ");
-  if (tt === "THINK_SPELL") return (cor.answers || cfg.answers || []).slice(0,4).join(" · ");
+  if (tt === "CROSSWORD") return (cor.answers || cfg.answers || []).slice(0,4).join(" · ");
   if (tt === "GUESS_WORD_4PICS") return cor.text || cfg.target || "4 images";
   return cor.text || cor.choice || (cor.answers || []).join(" · ") || "Answer";
 }

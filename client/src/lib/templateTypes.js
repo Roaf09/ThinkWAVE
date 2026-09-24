@@ -5,14 +5,17 @@ export const TEMPLATE_TYPES = {
   MATCHING: "MATCHING",
   TYPE_ANSWER: "TYPE_ANSWER",
   GUESS_WORD_4PICS: "GUESS_WORD_4PICS",
-  DRAW_IT: "DRAW_IT",
-  GRIP_GUESS: "GRIP_GUESS",
-  THINK_SPELL: "THINK_SPELL",
+  CROSSWORD: "CROSSWORD",
 };
 
+// Legacy values still accepted so quizzes created before the Crossword
+// standardization keep working (see server/scripts/migrate_templates_points.mjs).
 const ALIASES = {
   FOUR_PICS_ONE_WORD: TEMPLATE_TYPES.GUESS_WORD_4PICS,
-  THINK_AND_SPELL: TEMPLATE_TYPES.THINK_SPELL,
+  THINK_AND_SPELL: TEMPLATE_TYPES.CROSSWORD,
+  THINK_SPELL: TEMPLATE_TYPES.CROSSWORD,
+  DRAW_IT: TEMPLATE_TYPES.TYPE_ANSWER,
+  GRIP_GUESS: TEMPLATE_TYPES.TYPE_ANSWER,
 };
 
 export function normalizeTemplateType(templateType) {

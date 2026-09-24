@@ -20,14 +20,14 @@ const ALL_TEMPLATES = [
   { value: "TYPE_ANSWER", label: "Identification", icon: "identification", tone: "purple" },
   { value: "MATCHING", label: "Matching", icon: "matching", tone: "orange" },
   { value: "GUESS_WORD_4PICS", label: "Guess Word", icon: "image", tone: "green" },
-  { value: "THINK_SPELL", label: "Crossword", icon: "spell", tone: "purple" },
+  { value: "CROSSWORD", label: "Crossword", icon: "spell", tone: "purple" },
 ];
 
 // Which templates get pulled to the front of the grid (and get the
 // "Recommended" badge) once a category is chosen.
 const RECOMMENDED_TEMPLATES_BY_CATEGORY = {
   K12: ["MCQ", "TRUE_FALSE", "GUESS_WORD_4PICS"],
-  COLLEGE: ["MATCHING", "TYPE_ANSWER", "THINK_SPELL"],
+  COLLEGE: ["MATCHING", "TYPE_ANSWER", "CROSSWORD"],
 };
 
 function orderTemplatesForCategory(category) {
@@ -48,6 +48,8 @@ const card = (c, extra = {}) => ({
   ...extra,
 });
 
+const CREATE_DRAFT_KEY = "tw_create_draft";
+
 export default function CreateTab({ guestMode = false, tutorial }) {
   const navigate = useNavigate();
   const c = useColors();
@@ -57,6 +59,47 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   const [form, setForm] = useState({ title: "", category: "", templateType: "", classId: null });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // Autosave the setup form so an unexpected crash/refresh keeps the title,
+  // category, and template choice instead of losing the whole setup.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(guestMode ? `${CREATE_DRAFT_KEY}:guest` : CREATE_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft && (draft.title || draft.category || draft.templateType)) {
+        setForm((prev) => ({
+          ...prev,
+          title: draft.title || "",
+          category: draft.category || "",
+          templateType: draft.templateType || "",
+        }));
+        setDraftRestored(true);
+      }
+    } catch {}
+  }, [guestMode]);
+
+  useEffect(() => {
+    if (!form.title && !form.category && !form.templateType) {
+      try { localStorage.removeItem(guestMode ? `${CREATE_DRAFT_KEY}:guest` : CREATE_DRAFT_KEY); } catch {}
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(guestMode ? `${CREATE_DRAFT_KEY}:guest` : CREATE_DRAFT_KEY, JSON.stringify({
+          title: form.title, category: form.category, templateType: form.templateType, updatedAt: Date.now(),
+        }));
+      } catch {}
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [form.title, form.category, form.templateType, guestMode]);
+
+  function discardCreateDraft() {
+    try { localStorage.removeItem(guestMode ? `${CREATE_DRAFT_KEY}:guest` : CREATE_DRAFT_KEY); } catch {}
+    setForm({ title: "", category: "", templateType: "", classId: null });
+    setDraftRestored(false);
+  }
 
   useEffect(() => {
     if (tutorial?.stage !== "create_intro_delay") return undefined;
@@ -133,6 +176,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
         return;
       }
       if (!guestMode && tutorial?.stage === "create_open_builder") tutorial.setStage?.("builder_pending", { tutorialTemplateType: form.templateType });
+      try { localStorage.removeItem(guestMode ? `${CREATE_DRAFT_KEY}:guest` : CREATE_DRAFT_KEY); } catch {}
       navigate(guestMode ? `/guest/quizzes/${newId}/builder` : `/teacher/quizzes/${newId}/builder`);
     } catch (err) {
       setMsg(err?.response?.data?.message || "Failed to create quiz.");
@@ -143,6 +187,12 @@ export default function CreateTab({ guestMode = false, tutorial }) {
 
   return <div className="container grid gap-[20px]">
     <section><h2 className="mb-[4px]" style={{ color: c.text }}>Create</h2></section>
+    {draftRestored && (
+      <div className="px-[14px] py-[12px] rounded-[14px] text-[13px] flex items-center justify-between gap-[12px] flex-wrap" style={{ background: `${c.accent}14`, border: `1px solid ${c.accent}`, color: c.text }}>
+        <span>Restored your unfinished setup from before the interruption.</span>
+        <button type="button" onClick={discardCreateDraft} className="tw-enter-link">Discard draft</button>
+      </div>
+    )}
 
     <section className="w-full box-border" style={card(c)}>
       <form onSubmit={handleSubmit} className="grid gap-[22px]">
@@ -212,7 +262,7 @@ function templateInk(value, dark) {
     TYPE_ANSWER: dark ? "#ede9fe" : "#5b21b6",
     MATCHING: dark ? "#ffedd5" : "#9a4d00",
     GUESS_WORD_4PICS: dark ? "#dcfce7" : "#166534",
-    THINK_SPELL: dark ? "#bae6fd" : "#0369a1",
+    CROSSWORD: dark ? "#bae6fd" : "#0369a1",
   };
   return palette[normalized] || (dark ? "#f8fafc" : "#0f172a");
 }

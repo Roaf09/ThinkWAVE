@@ -13,6 +13,8 @@ import ThemeIconButton from "../../components/ThemeIconButton";
 import { TeacherPressButton } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { useIsMobileViewport } from "./tabs/teacherTabShared";
+import { TwLogoLoader } from "../../components/TwLogoLoader";
+import { BOT_SKILLS, sampleBotAnswer, scoreBotAnswer } from "../../lib/tutorialBots";
 import { readTutorialState, writeTutorialState } from "../../lib/tutorialState";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { manilaDateTime } from "../../lib/dateFormat";
@@ -96,7 +98,10 @@ export default function Analytics({ guestMode = false }) {
         } else {
           const analyticsResponse = await api.get(`/sessions/${sessionId}/full-analytics`);
           const tutorialState = uid ? readTutorialState(uid) : {};
-          const isTutorialDemo = !guestMode && Number(tutorialState?.tutorialDemoSessionId) === Number(sessionId);
+          // No group-mode bot tutorials: demo bots stay solo-style only.
+          const isTutorialDemo = !guestMode
+            && Number(tutorialState?.tutorialDemoSessionId) === Number(sessionId)
+            && String(analyticsResponse.data?.session?.join_mode || "SOLO").toUpperCase() !== "GROUP";
           let analyticsData = analyticsResponse.data || null;
           let tabs = [];
           if (isTutorialDemo) {
@@ -226,7 +231,7 @@ export default function Analytics({ guestMode = false }) {
           <h3 className="m-0 font-[950] flex items-center gap-[9px]" style={{ color: C.text }}><TwIcon name="trophy" size={21} /> Performance Overview</h3>
           <ParticipantBadges analytics={analytics} assigned={assigned} guestMode={guestMode} C={C} tone={tone} />
         </div>
-        {loading ? <div className="text-center p-[42px] font-[850]" style={{ color: C.muted }}>Loading analytics…</div> : showAdvanced ? (
+        {loading ? <TwLogoLoader minHeight="24vh" /> : showAdvanced ? (
           <div className="tw-analytics-advanced-layout">
             <div className={`tw-analytics-panel-wrap${mobileResultsView === "students" ? " is-mobile-visible" : ""}`}>
               <Scoreboard C={C} scores={scores} tone={tone} analytics={analytics || {}} tabMonitoring={tabMonitoring} expandedStudentId={expandedStudentId} setExpandedStudentId={setExpandedStudentId} />
@@ -258,9 +263,9 @@ export default function Analytics({ guestMode = false }) {
       </ThinkBotTutorial>
     )}
     {analyticsTutorialStage === "students" && (isMobile ? (
-      <ThinkBotTutorial accentColor={tone.accent} target='[data-tutorial="analytics-mobile-toggle"]' placement="above" square highlightMode="target"><p>Students are listed here in order of highest to lowest.</p><p>Select a student whenever you want to look more closely at their performance.</p></ThinkBotTutorial>
+      <ThinkBotTutorial accentColor={tone.accent} target='[data-tutorial="analytics-mobile-toggle"]' placement="above" square highlightMode="target"><p>{session.join_mode === "GROUP" ? "Groups are listed here in order of highest to lowest." : "Students are listed here in order of highest to lowest."}</p><p>Select {session.join_mode === "GROUP" ? "a group" : "a student"} whenever you want to look more closely at their performance.</p></ThinkBotTutorial>
     ) : (
-      <ThinkBotTutorial accentColor={tone.accent} target='[data-tutorial="analytics-students"]' placement="right" square clickAnywhere={tutorialStudentNextReady} onClickAnywhere={() => { setExpandedStudentId(null); setAnalyticsTutorialStage("questions"); }}><p>Students are listed here in order of highest to lowest.</p><p>Select a student whenever you want to look more closely at their performance.</p></ThinkBotTutorial>
+      <ThinkBotTutorial accentColor={tone.accent} target='[data-tutorial="analytics-students"]' placement="right" square clickAnywhere={tutorialStudentNextReady} onClickAnywhere={() => { setExpandedStudentId(null); setAnalyticsTutorialStage("questions"); }}><p>{session.join_mode === "GROUP" ? "Groups are listed here in order of highest to lowest." : "Students are listed here in order of highest to lowest."}</p><p>Select {session.join_mode === "GROUP" ? "a group" : "a student"} whenever you want to look more closely at their performance.</p></ThinkBotTutorial>
     ))}
     {analyticsTutorialStage === "questions" && (
       <ThinkBotTutorial accentColor={tone.accent} target='[data-tutorial="analytics-question-results"]' placement="screen-left" square dialogWidth={390} highlightMode="target" clickAnywhere onClickAnywhere={finishAnalyticsTutorial}>
@@ -274,6 +279,8 @@ export default function Analytics({ guestMode = false }) {
 
 function ParticipantBadges({ analytics, assigned, guestMode, C, tone }) {
   const summary = analytics?.summary || {};
+  const isGroup = analytics?.session?.join_mode === "GROUP" && Array.isArray(analytics?.groups);
+  const groupCount = Number(summary.group_count ?? analytics?.groups?.length ?? 0);
   const total = Number(summary.participant_count ?? analytics?.students?.length ?? 0);
   const guests = Number(summary.guest_count || 0);
   const students = Number(summary.student_count || Math.max(0, total - guests));
@@ -282,27 +289,37 @@ function ParticipantBadges({ analytics, assigned, guestMode, C, tone }) {
   return <div className="flex gap-[7px] flex-wrap">
     <span style={{ ...pill(C), color: tone.accent, borderColor: tone.border, background: tone.softBg }}>{students} students</span>
     {guests > 0 && <span style={pill(C)}>{guests} guests</span>}
+    {isGroup && <span style={pill(C)}>{groupCount} groups</span>}
   </div>;
 }
 
 function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedStudentId, setExpandedStudentId, basic = false }) {
   if (!scores.length) return <div style={emptyCard(C)}>No scores have been submitted yet.</div>;
+  const isGroup = analytics?.session?.join_mode === "GROUP" && Array.isArray(analytics?.groups);
+  const sameKey = (a, b) => String(a) === String(b);
   const visibleScores = !basic && expandedStudentId !== null
-    ? scores.map((score, index) => ({ score, index })).filter(({ score }) => Number(score.participant_id) === Number(expandedStudentId))
+    ? scores.map((score, index) => ({ score, index })).filter(({ score }) => sameKey(score.key, expandedStudentId))
     : scores.map((score, index) => ({ score, index }));
+  const statusColor = (label) => label === "Online" ? "#22c55e" : label === "Kicked" ? "#ef4444" : label === "Offline" ? "#f59e0b" : "#94a3b8";
   return <div className={`tw-analytics-scoreboard${!basic && expandedStudentId !== null ? " has-expanded-student" : ""}`} data-tutorial="analytics-students" style={{ display: "grid", gap: 10 }}>
     {visibleScores.map(({ score, index }) => {
-      const expanded = !basic && Number(expandedStudentId) === Number(score.participant_id);
-      const student = (analytics.students || []).find((row) => Number(row.participant_id) === Number(score.participant_id));
-      const tabRow = (tabMonitoring || []).find((row) => Number(row.participant_id) === Number(score.participant_id));
-      const tabOutCount = Number(tabRow?.tab_out_count ?? student?.tab_out_count ?? 0);
+      const expanded = !basic && sameKey(expandedStudentId, score.key);
+      const group = isGroup ? (analytics.groups || []).find((row) => String(row.group_key) === String(score.key)) : null;
+      const student = !isGroup ? (analytics.students || []).find((row) => Number(row.participant_id) === Number(score.participant_id)) : null;
+      const memberIds = group ? (group.member_ids || []).map(Number) : [];
+      const tabOutCount = isGroup
+        ? (tabMonitoring || []).filter((row) => memberIds.includes(Number(row.participant_id))).reduce((sum, row) => sum + Number(row.tab_out_count || 0), 0)
+        : Number(((tabMonitoring || []).find((row) => Number(row.participant_id) === Number(score.participant_id))?.tab_out_count) ?? student?.tab_out_count ?? 0);
+      const presenceLabel = isGroup ? group?.presence_status : presenceStatus(student).label;
+      const presenceColor = isGroup ? statusColor(presenceLabel) : presenceStatus(student).color;
+      const detailStudent = isGroup ? { responses: group?.responses || [] } : student;
       return <article key={score.key} className={`tw-analytics-student-card${expanded ? " is-expanded" : ""}`} style={{ borderColor: index === 0 ? tone.border : C.border, background: index === 0 ? tone.softBg : C.cardBg2, color: C.text }}>
-        <button type="button" className="tw-analytics-student-button" disabled={basic} onClick={() => !basic && setExpandedStudentId(expanded ? null : score.participant_id)} aria-expanded={expanded}>
-          <span className="tw-analytics-student-identity"><RankIcon rank={index + 1} /><span className="tw-analytics-student-name">{score.label}</span>{student?.participant_type === "GUEST" && <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>Guest</span>}</span>
+        <button type="button" className="tw-analytics-student-button" disabled={basic} onClick={() => !basic && setExpandedStudentId(expanded ? null : score.key)} aria-expanded={expanded}>
+          <span className="tw-analytics-student-identity"><RankIcon rank={index + 1} /><span className="tw-analytics-student-name">{score.label}</span>{isGroup ? <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>{score.member_count} member{Number(score.member_count) === 1 ? "" : "s"}</span> : student?.participant_type === "GUEST" && <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>Guest</span>}{(() => { return presenceLabel !== "Online" ? <span title={presenceLabel} style={{ ...pill(C), padding: "3px 7px", fontSize: 10, color: presenceColor, borderColor: presenceColor }}>{presenceLabel}</span> : null; })()}</span>
           <span className="tw-analytics-tab-out-badge" style={{ ...pill(C), color: tabOutCount > 0 ? C.redFg : C.muted, borderColor: tabOutCount > 0 ? C.redBorder : C.border, background: tabOutCount > 0 ? C.redBg : C.cardBg }}>{tabOutCount} tab out</span>
           <span className="tw-analytics-student-points" style={{ color: tone.accent, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>{score.total_points} pts</span> {!basic && <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={16} />}</span>
         </button>
-        {!basic && student && <div className={`tw-student-analytics-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><StudentQuestionAnalytics C={C} tone={tone} templateType={analytics?.session?.template_type} student={student} questions={analytics.questions || []} /></div></div>}
+        {!basic && detailStudent && <div className={`tw-student-analytics-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div>{isGroup && group?.members?.length ? <div className="flex flex-wrap gap-[8px]" style={{ marginBottom: 10 }}>{group.members.map((m) => <span key={m.participant_id} style={{ ...pill(C), padding: "8px 11px" }} title={m.presence_status}><span className="w-[8px] h-[8px] rounded-[99px]" style={{ background: statusColor(m.presence_status), boxShadow: `0 0 0 4px ${statusColor(m.presence_status)}1f` }} />{`${m.first_name || ""} ${m.last_name || ""}`.trim() || "Member"}</span>)}</div> : null}<StudentQuestionAnalytics C={C} tone={tone} templateType={analytics?.session?.template_type} student={detailStudent} questions={analytics.questions || []} /></div></div>}
       </article>;
     })}
   </div>;
@@ -325,9 +342,9 @@ function BasicAnalyticsPanel({ C, analytics, assigned, tone }) {
   const toggleMetric = (key) => setExpandedMetric((cur) => (cur === key ? null : key));
   return <div className="grid gap-[16px]">
     <div data-tutorial="analytics-summary" className={`tw-analytics-metrics-grid${expandedMetric ? ` has-expanded-${expandedMetric}` : ""}`}>
-      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submitted" : joinMode === "GROUP" ? "Groups" : "Submitted"} value={summary.participant_count ?? students.length} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
+      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submitted" : joinMode === "GROUP" ? "Groups" : "Submitted"} value={joinMode === "GROUP" ? (summary.group_count ?? summary.participant_count ?? students.length) : (summary.participant_count ?? students.length)} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
     </div>
-    <div style={subCard(C)}><div style={sectionTitle(C)}>Attendance</div><div className="flex flex-wrap gap-[8px]">{students.map((student) => <StudentChip key={student.participant_id} name={`${student.first_name || ""} ${student.last_name || ""}`.trim()} C={C} />)}{!students.length && <span style={{ color: C.muted }}>No submitted students yet.</span>}</div></div>
+    <div style={subCard(C)}><div style={sectionTitle(C)}>Attendance</div><div className="flex flex-wrap gap-[8px]">{students.map((student) => <StudentChip key={student.participant_id} name={`${student.first_name || ""} ${student.last_name || ""}`.trim()} C={C} student={student} />)}{!students.length && <span style={{ color: C.muted }}>No submitted students yet.</span>}</div></div>
     <div data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>Per-question Results</div><LegacyQuestionRows C={C} tone={tone} questions={questions} /></div>
   </div>;
 }
@@ -335,23 +352,25 @@ function BasicAnalyticsPanel({ C, analytics, assigned, tone }) {
 function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onToggleMobileView, isDesktop = false }) {
   const summary = analytics.summary || {};
   const questions = analytics.questions || [];
+  const isGroup = analytics?.session?.join_mode === "GROUP";
+  const groupCount = summary.group_count ?? analytics?.groups?.length ?? 0;
   const tt = normalizeTemplateType(analytics?.session?.template_type);
-  const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
+  const batchMode = tt === "MATCHING" || tt === "CROSSWORD";
   const [expandedMetric, setExpandedMetric] = useState(null);
   const highestNames = getScoreNames(analytics, "highest");
   const lowestNames = getScoreNames(analytics, "lowest");
   const toggleMetric = (key) => setExpandedMetric((cur) => (cur === key ? null : key));
   return <div className="tw-analytics-detail-column" style={{ display: "grid", gap: 16 }}>
     <div className={`tw-analytics-metrics-grid${expandedMetric ? ` has-expanded-${expandedMetric}` : ""}`} data-tutorial="analytics-summary">
-      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : "Participants"} value={summary.participant_count ?? 0} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
+      <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : isGroup ? "Groups" : "Participants"} value={isGroup ? groupCount : (summary.participant_count ?? 0)} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
     </div>
     {isDesktop ? (
       <div className="tw-analytics-results-label" aria-hidden="true">{batchMode ? "Per-batch results" : "Per-question results"}</div>
     ) : (
-      <TeacherPressButton type="button" data-tutorial="analytics-mobile-toggle" tone="blue" className="tw-analytics-mobile-toggle-btn tw-analytics-back-press" onClick={onToggleMobileView}><span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span><TwIcon name="swap" size={15} /></TeacherPressButton>
+      <TeacherPressButton type="button" data-tutorial="analytics-mobile-toggle" tone="blue" className="tw-analytics-mobile-toggle-btn tw-analytics-back-press" onClick={onToggleMobileView}><span>{mobileView === "students" ? (isGroup ? "Per-group results" : "Per-student results") : batchMode ? "Per-batch results" : "Per-question results"}</span><TwIcon name="swap" size={15} /></TeacherPressButton>
     )}
     <div className={`tw-analytics-panel-wrap${mobileView === "questions" ? " is-mobile-visible" : ""}${isDesktop ? " is-desktop-visible" : ""}`}>
-      <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} alwaysExpanded={isDesktop} />
+      <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} alwaysExpanded={isDesktop} isGroup={isGroup} />
     </div>
   </div>;
 }
@@ -360,13 +379,13 @@ function LegacyQuestionRows({ C, tone, questions }) {
   return <div className="grid gap-[10px]">{questions.map((question, index) => <div key={question.question_id || index} className="grid gap-[10px] items-center p-[11px_12px] rounded-[14px] grid-cols-[minmax(46px,auto)_minmax(150px,1fr)_repeat(2,minmax(92px,auto))]" style={{ background: C.cardBg, border: `1px solid ${C.border}` }}><span className="font-[950]" style={{ color: tone.accent }}>Q{index + 1}</span><span className="font-[750] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: C.text }}>{question.prompt || "Untitled question"}</span><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} /></div>)}{!questions.length && <div style={emptyCard(C)}>No question-level results are available yet.</div>}</div>;
 }
 
-function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = false }) {
+function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = false, isGroup = false }) {
   const tt = normalizeTemplateType(templateType);
   const [expandedIndex, setExpandedIndex] = useState(null);
   const [batchIndex, setBatchIndex] = useState(0);
   const [batchExpanded, setBatchExpanded] = useState(false);
   const [showCounts, setShowCounts] = useState(false);
-  const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
+  const batchMode = tt === "MATCHING" || tt === "CROSSWORD";
   const toggleCounts = (event) => { event?.stopPropagation?.(); setShowCounts((value) => !value); };
   if (!questions.length) return <div className="tw-analytics-results-card" data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>{batchMode ? "Per-batch Results" : "Per-question Results"}</div><div style={emptyCard(C)}>No question-level results are available yet.</div></div>;
 
@@ -382,10 +401,10 @@ function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = 
           <div role="button" tabIndex={0} className="tw-analytics-question-toggle" aria-expanded={batchExpanded} onClick={() => setBatchExpanded((value) => !value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBatchExpanded((value) => !value); } }}>
             <span className="font-[950]" style={{ color: tone.accent }}>B{index + 1}</span>
             <span className="tw-analytics-question-prompt">{question.prompt || "Untitled batch"}</span>
-            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /></span>
             <TwIcon name={batchExpanded ? "chevronUp" : "chevronDown"} size={18} />
           </div>
-          <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+          <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} isGroup={isGroup} /></div></div>
         </div>
       </div>;
     }
@@ -397,10 +416,10 @@ function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = 
           <div role="button" className="tw-analytics-question-toggle" aria-expanded={expanded} tabIndex={hidden ? -1 : 0} onClick={() => !hidden && setExpandedIndex(expanded ? null : index)} onKeyDown={(event) => { if (!hidden && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setExpandedIndex(expanded ? null : index); } }}>
             <span className="font-[950]" style={{ color: tone.accent }}>Q{index + 1}</span>
             <span className="tw-analytics-question-prompt">{question.prompt || "Untitled question"}</span>
-            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /></span>
             <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={18} />
           </div>
-          <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+          <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} isGroup={isGroup} /></div></div>
         </div>;
       })}</div>
     </div>;
@@ -418,10 +437,10 @@ function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = 
         <div role="button" tabIndex={0} className="tw-analytics-question-toggle" aria-expanded={batchExpanded} onClick={() => setBatchExpanded((value) => !value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBatchExpanded((value) => !value); } }}>
           <span className="font-[950]" style={{ color: tone.accent }}>B{index + 1}</span>
           <span className="tw-analytics-question-prompt">{question.prompt || "Untitled batch"}</span>
-          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /></span>
           <TwIcon name={batchExpanded ? "chevronUp" : "chevronDown"} size={18} />
         </div>
-        <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+        <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} isGroup={isGroup} /></div></div>
       </div>
     </div>;
   }
@@ -435,34 +454,35 @@ function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = 
         <div role="button" className="tw-analytics-question-toggle" aria-expanded={expanded} tabIndex={hidden ? -1 : 0} onClick={() => !hidden && setExpandedIndex(expanded ? null : index)} onKeyDown={(event) => { if (!hidden && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setExpandedIndex(expanded ? null : index); } }}>
           <span className="font-[950]" style={{ color: tone.accent }}>Q{index + 1}</span>
           <span className="tw-analytics-question-prompt">{question.prompt || "Untitled question"}</span>
-          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+          <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} countUnit={isGroup ? "groups" : ""} /></span>
           <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={18} />
         </div>
-        <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+        <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} isGroup={isGroup} /></div></div>
       </div>;
     })}</div>
   </div>;
 }
 
-function ExpandedQuestionDetail({ C, tt, question, showCounts, onToggleCounts }) {
+function ExpandedQuestionDetail({ C, tt, question, showCounts, onToggleCounts, isGroup = false }) {
   return <div className="tw-analytics-expanded-detail"><div className="tw-analytics-full-prompt">{question.prompt || "Untitled question"}</div>
-    {tt === "MCQ" && <AggregateChoices C={C} question={question} showLetters imageOnly={String(question.config_json?.mcqMode || "").toUpperCase() === "MODIFIED"} showCounts={showCounts} onToggleCounts={onToggleCounts} />}
-    {tt === "TRUE_FALSE" && <AggregateChoices C={C} question={question} showCounts={showCounts} onToggleCounts={onToggleCounts} />}
+    {tt === "MCQ" && <AggregateChoices C={C} question={question} showLetters imageOnly={String(question.config_json?.mcqMode || "").toUpperCase() === "MODIFIED"} showCounts={showCounts} onToggleCounts={onToggleCounts} isGroup={isGroup} />}
+    {tt === "TRUE_FALSE" && <AggregateChoices C={C} question={question} showCounts={showCounts} onToggleCounts={onToggleCounts} isGroup={isGroup} />}
     {tt === "TYPE_ANSWER" && <AnswerOnly C={C} text={question.correct_json?.text || question.config_json?.answer || "No answer set"} />}
     {tt === "GUESS_WORD_4PICS" && <><AnalyticsImages images={question.config_json?.images || []} /><AnswerOnly C={C} text={question.correct_json?.text || question.config_json?.target || "No answer set"} /></>}
   </div>;
 }
 
-function AggregateChoices({ question, showLetters = false, imageOnly = false, showCounts = false, onToggleCounts }) {
-  return <div className="tw-analytics-choice-grid">{(question.choice_stats || []).map((choice, index) => <div key={choice.id || index} className={`tw-analytics-choice-row ${choice.is_correct ? "is-correct" : "is-wrong"}${showLetters ? "" : " no-letter"}`}>{showLetters && <span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span>}<span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}{!choice.image && !choice.text && <b>Choice {index + 1}</b>}</span><ChoiceStatToggle choice={choice} showCount={showCounts} onToggle={onToggleCounts} /></div>)}</div>;
+function AggregateChoices({ question, showLetters = false, imageOnly = false, showCounts = false, onToggleCounts, isGroup = false }) {
+  return <div className="tw-analytics-choice-grid">{(question.choice_stats || []).map((choice, index) => <div key={choice.id || index} className={`tw-analytics-choice-row ${choice.is_correct ? "is-correct" : "is-wrong"}${showLetters ? "" : " no-letter"}`}>{showLetters && <span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span>}<span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}{!choice.image && !choice.text && <b>Choice {index + 1}</b>}</span><ChoiceStatToggle choice={choice} showCount={showCounts} onToggle={onToggleCounts} unit={isGroup ? "groups" : "students"} /></div>)}</div>;
 }
 
-function ChoiceStatToggle({ choice, showCount, onToggle }) {
-  return <button type="button" className="tw-analytics-choice-stat" onClick={(event) => { event.stopPropagation(); onToggle?.(event); }}>{showCount ? `${choice.selected_count || 0} students` : `${choice.selected_pct || 0}%`}</button>;
+function ChoiceStatToggle({ choice, showCount, onToggle, unit = "students" }) {
+  return <button type="button" className="tw-analytics-choice-stat" onClick={(event) => { event.stopPropagation(); onToggle?.(event); }}>{showCount ? `${choice.selected_count || 0} ${unit}` : `${choice.selected_pct || 0}%`}</button>;
 }
 
-function BatchDetail({ C, tone, tt, question, index, showCounts, onToggleCounts }) {
-  return <div className="tw-analytics-batch-detail"><div className="tw-analytics-expanded-head"><span className="font-[950]" style={{ color: tone.accent }}>B{index + 1}</span></div><div className="tw-analytics-full-prompt">{question.prompt || "Untitled batch"}</div>{tt === "MATCHING" ? <div className="tw-analytics-pair-list"><div className="tw-analytics-pair-head"><span>Column A</span><span>Column B</span><span>Results</span></div>{(question.pair_stats || []).map((pair, pairIndex) => <div key={pairIndex} className="tw-analytics-pair-row"><AnalyticsMedia item={pair.a} fallback={`Item ${pairIndex + 1}`} /><AnalyticsMedia item={pair.b} fallback={`Choice ${pairIndex + 1}`} /><span className="tw-analytics-result-pair"><ResultBadge C={C} kind="correct" pct={pair.pct_correct} count={pair.correct_count} toggle showCount={showCounts} onToggle={onToggleCounts} /><ResultBadge C={C} kind="wrong" pct={pair.pct_incorrect} count={pair.incorrect_count} toggle showCount={showCounts} onToggle={onToggleCounts} /></span></div>)}</div> : <div className="tw-analytics-word-list">{(question.word_stats || []).map((word, wordIndex) => <div key={word.word || wordIndex} className="tw-analytics-word-row"><b>{word.word}</b><span><ResultBadge C={C} kind="correct" pct={word.pct_correct} count={word.correct_count} toggle showCount={showCounts} onToggle={onToggleCounts} /><ResultBadge C={C} kind="wrong" pct={word.pct_incorrect} count={word.incorrect_count} toggle showCount={showCounts} onToggle={onToggleCounts} /></span></div>)}</div>}</div>;
+function BatchDetail({ C, tone, tt, question, index, showCounts, onToggleCounts, isGroup = false }) {
+  const unit = isGroup ? "groups" : "";
+  return <div className="tw-analytics-batch-detail"><div className="tw-analytics-expanded-head"><span className="font-[950]" style={{ color: tone.accent }}>B{index + 1}</span></div><div className="tw-analytics-full-prompt">{question.prompt || "Untitled batch"}</div>{tt === "MATCHING" ? <div className="tw-analytics-pair-list"><div className="tw-analytics-pair-head"><span>Column A</span><span>Column B</span><span>Results</span></div>{(question.pair_stats || []).map((pair, pairIndex) => <div key={pairIndex} className="tw-analytics-pair-row"><AnalyticsMedia item={pair.a} fallback={`Item ${pairIndex + 1}`} /><AnalyticsMedia item={pair.b} fallback={`Choice ${pairIndex + 1}`} /><span className="tw-analytics-result-pair"><ResultBadge C={C} kind="correct" pct={pair.pct_correct} count={pair.correct_count} toggle showCount={showCounts} onToggle={onToggleCounts} countUnit={unit} /><ResultBadge C={C} kind="wrong" pct={pair.pct_incorrect} count={pair.incorrect_count} toggle showCount={showCounts} onToggle={onToggleCounts} countUnit={unit} /></span></div>)}</div> : <div className="tw-analytics-word-list">{(question.word_stats || []).map((word, wordIndex) => <div key={word.word || wordIndex} className="tw-analytics-word-row"><b>{word.word}</b><span><ResultBadge C={C} kind="correct" pct={word.pct_correct} count={word.correct_count} toggle showCount={showCounts} onToggle={onToggleCounts} countUnit={unit} /><ResultBadge C={C} kind="wrong" pct={word.pct_incorrect} count={word.incorrect_count} toggle showCount={showCounts} onToggle={onToggleCounts} countUnit={unit} /></span></div>)}</div>}</div>;
 }
 
 function StudentQuestionAnalytics({ C, tone, templateType, student, questions }) {
@@ -471,7 +491,7 @@ function StudentQuestionAnalytics({ C, tone, templateType, student, questions })
   const question = questions[index];
   const response = (student.responses || []).find((row) => Number(row.question_id) === Number(question?.question_id));
   if (!question) return <div className="p-[16px]" style={{ color: C.muted }}>No question responses are available.</div>;
-  return <div className="tw-student-analytics-detail"><div className="tw-student-analytics-nav"><ArrowButton C={C} direction="left" disabled={index <= 0} onClick={() => setIndex((v) => Math.max(0, v - 1))} /><b style={{ color: tone.accent }}>{["MATCHING", "THINK_SPELL"].includes(tt) ? `B${index + 1}` : `Q${index + 1}`} of {questions.length}</b><ArrowButton C={C} direction="right" disabled={index >= questions.length - 1} onClick={() => setIndex((v) => Math.min(questions.length - 1, v + 1))} /></div><div className="tw-analytics-full-prompt">{question.prompt || "Untitled question"}</div><StudentTemplateAnswer C={C} tt={tt} question={question} response={response} /></div>;
+  return <div className="tw-student-analytics-detail"><div className="tw-student-analytics-nav"><ArrowButton C={C} direction="left" disabled={index <= 0} onClick={() => setIndex((v) => Math.max(0, v - 1))} /><b style={{ color: tone.accent }}>{["MATCHING", "CROSSWORD"].includes(tt) ? `B${index + 1}` : `Q${index + 1}`} of {questions.length}</b><ArrowButton C={C} direction="right" disabled={index >= questions.length - 1} onClick={() => setIndex((v) => Math.min(questions.length - 1, v + 1))} /></div><div className="tw-analytics-full-prompt">{question.prompt || "Untitled question"}</div><StudentTemplateAnswer C={C} tt={tt} question={question} response={response} /></div>;
 }
 
 function StudentTemplateAnswer({ C, tt, question, response }) {
@@ -496,7 +516,7 @@ function StudentTemplateAnswer({ C, tt, question, response }) {
     const colA = question.config_json?.colA || []; const colB = question.config_json?.colB || [];
     return <div className="tw-analytics-pair-list">{Array.from(expected.entries()).map(([aIndex, correctB], rowIndex) => { const submittedB = submitted.get(aIndex); const ok = submittedB === correctB; return <div key={aIndex} className={`tw-analytics-pair-row tw-student-pair ${ok ? "is-correct" : "is-wrong"}`}><AnalyticsMedia item={colA[aIndex]} fallback={`Item ${rowIndex + 1}`} /><AnalyticsMedia item={colB[submittedB]} fallback={submittedB === undefined ? "No pair" : `Choice ${submittedB + 1}`} /><b>{ok ? "Correct" : "Incorrect"}</b></div>; })}</div>;
   }
-  if (tt === "THINK_SPELL") {
+  if (tt === "CROSSWORD") {
     const found = foundWordSet(answer);
     const words = Array.isArray(question.correct_json?.answers) && question.correct_json.answers.length ? question.correct_json.answers : question.config_json?.answers || [];
     return <div className="tw-analytics-word-list">{words.map((word) => <div key={word} className={`tw-analytics-word-row ${found.has(normalizeWord(word)) ? "is-correct" : "is-wrong"}`}><b>{word}</b><span>{found.has(normalizeWord(word)) ? "Found" : "Not found"}</span></div>)}</div>;
@@ -504,14 +524,14 @@ function StudentTemplateAnswer({ C, tt, question, response }) {
   return <StudentTypedAnswer C={C} text={answer.text || "No answer submitted"} correct={!!response?.is_correct} />;
 }
 
-function ResultBadge({ C, kind, pct = 0, count = 0, toggle = false, showCount, onToggle }) {
+function ResultBadge({ C, kind, pct = 0, count = 0, toggle = false, showCount, onToggle, countUnit = "" }) {
   const [localShowCount, setLocalShowCount] = useState(false);
   const controlled = typeof showCount === "boolean";
   const visibleCount = controlled ? showCount : localShowCount;
   const good = kind === "correct";
   const Component = toggle ? "button" : "span";
   const handleClick = toggle ? (event) => { event.stopPropagation(); if (controlled) onToggle?.(event); else setLocalShowCount((value) => !value); } : undefined;
-  return <Component className={`tw-analytics-result-badge${toggle ? " tw-analytics-stat-toggle" : ""}`} type={toggle ? "button" : undefined} onClick={handleClick} style={{ ...pill(C), color: good ? C.greenFg : C.redFg, borderColor: good ? C.greenBorder : C.redBorder, background: good ? C.greenBg : C.redBg, cursor: toggle ? "pointer" : "default" }}>{good ? "✓" : "✕"} {visibleCount ? count : `${pct ?? 0}%`}</Component>;
+  return <Component className={`tw-analytics-result-badge${toggle ? " tw-analytics-stat-toggle" : ""}`} type={toggle ? "button" : undefined} onClick={handleClick} style={{ ...pill(C), color: good ? C.greenFg : C.redFg, borderColor: good ? C.greenBorder : C.redBorder, background: good ? C.greenBg : C.redBg, cursor: toggle ? "pointer" : "default" }}>{good ? "✓" : "✕"} {visibleCount ? (countUnit ? `${count} ${countUnit}` : count) : `${pct ?? 0}%`}</Component>;
 }
 function AnswerOnly({ C, text }) { return <div className="tw-analytics-answer-only" style={{ borderColor: C.greenBorder, background: C.greenBg, color: C.greenFg }}><b>Correct answer</b><span>{String(text || "")}</span></div>; }
 function StudentTypedAnswer({ C, text, correct }) { return <div className="tw-analytics-answer-only" style={{ borderColor: correct ? C.greenBorder : C.redBorder, background: correct ? C.greenBg : C.redBg, color: correct ? C.greenFg : C.redFg }}><b>{correct ? "Correct" : "Incorrect"}</b><span>{String(text || "")}</span></div>; }
@@ -543,12 +563,25 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
   const rawQuestions = sourceQuestions.length ? sourceQuestions : (base?.questions || []);
   const realBaseQuestions = Array.isArray(base?.questions) ? base.questions : [];
   const realQuestionsById = new Map(realBaseQuestions.map((q) => [Number(q?.question_id ?? q?.id), q]));
+  // Each bot samples a student-like answer at its skill level, scored by the
+  // REAL scorer — no hardcoded bot0-full / bot1-half / bot2-zero split.
+  const basePointsDefault = Number(session.points_per_question ?? 1);
+  const botPlays = BOT_SKILLS.map((bot) => rawQuestions.map((source) => {
+    const config = parseMaybeJson(source?.config_json) || {};
+    const correct = parseMaybeJson(source?.correct_json) || {};
+    const timeLimitMs = Math.max(1, Number(config?.timeLimitSec ?? session.time_limit_sec ?? 30)) * 1000;
+    const elapsedMs = timeLimitMs * (0.15 + Math.random() * 0.7);
+    const { answer, selectedIndexes } = sampleBotAnswer({ templateType: session.template_type, config, correct, skill: bot?.hitRate ?? 0.6 });
+    const result = scoreBotAnswer({ templateType: session.template_type, config, correct, answer, basePoints: Number(config?.points ?? basePointsDefault), elapsedMs, timeLimitMs });
+    const earned = result.timeExpired ? 0 : Number(result.pointsAwarded || 0);
+    return { answer, selectedIndexes, result, elapsedMs, earned, competitive: Number(result.competitivePoints || 0) };
+  }));
   const questions = rawQuestions.map((source, index) => {
     const config = parseMaybeJson(source?.config_json) || {};
     const correct = parseMaybeJson(source?.correct_json) || {};
-    const thinkBot2Correct = rawQuestions.length > 1 && index === 0;
-    const correctCount = 1 + (thinkBot2Correct ? 1 : 0);
-    const incorrectCount = 3 - correctCount;
+    const plays = botPlays.map((bot) => bot[index]);
+    const correctCount = plays.filter((play) => play.result.isCorrect).length;
+    const incorrectCount = plays.length - correctCount;
     const detail = {
       ...source,
       question_id: Number(source?.question_id ?? source?.id ?? index + 1),
@@ -566,43 +599,57 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
       const options = tt === "TRUE_FALSE"
         ? [{ id: "true", text: "True", image: "" }, { id: "false", text: "False", image: "" }]
         : (Array.isArray(config.options) ? config.options : []).map((option, optionIndex) => normalizeDemoOption(option, optionIndex));
-      const correctIndexes = demoCorrectChoiceIndexes(tt, correct, options);
-      const correctIndex = correctIndexes[0] ?? 0;
-      const twoAnswerMcq = tt === "MCQ" && (String(config.answerMode || "").toUpperCase() === "TWO" || correctIndexes.length > 1);
-      const wrongIndex = options.findIndex((_, optionIndex) => !correctIndexes.includes(optionIndex));
+      const correctIds = (() => {
+        const values = tt === "TRUE_FALSE"
+          ? [String(correct?.choice ?? "true").toLowerCase() === "false" ? "false" : "true"]
+          : (Array.isArray(correct?.choices) && correct.choices.length ? correct.choices : [correct?.choice].filter((value) => value !== undefined && value !== null && value !== ""));
+        const normValue = (value) => String(value ?? "").trim().toLowerCase();
+        const ids = values.map((value) => {
+          const hit = options.find((option) => normValue(option.id) === normValue(value) || normValue(option.text) === normValue(value));
+          return hit ? hit.id : null;
+        }).filter(Boolean);
+        return ids.length ? Array.from(new Set(ids)) : [options[0]?.id].filter(Boolean);
+      })();
       detail.choice_stats = options.map((option, optionIndex) => {
-        let selectedCount = 0;
-        if (twoAnswerMcq) {
-          if (optionIndex === correctIndex) selectedCount = 3;
-          else if (correctIndexes.includes(optionIndex)) selectedCount = correctCount;
-          else if (optionIndex === wrongIndex) selectedCount = incorrectCount;
-        } else if (optionIndex === correctIndex) selectedCount = correctCount;
-        else if (optionIndex === wrongIndex) selectedCount = incorrectCount;
+        const selectedCount = plays.filter((play) => (play.selectedIndexes || []).includes(optionIndex)).length;
         return {
           index: optionIndex,
           ...normalizeDemoOption(option, optionIndex),
-          is_correct: correctIndexes.includes(optionIndex),
+          is_correct: correctIds.includes(option.id),
           selected_count: selectedCount,
-          selected_pct: Number(((selectedCount / 3) * 100).toFixed(2)),
+          selected_pct: Number(((selectedCount / Math.max(1, plays.length)) * 100).toFixed(2)),
         };
       });
     }
     if (tt === "MATCHING") {
-      detail.pair_stats = (Array.isArray(correct.pairs) ? correct.pairs : []).map((pair, pairIndex) => ({
-        index: pairIndex,
-        aIndex: Number(pair.aIndex),
-        bIndex: Number(pair.bIndex),
-        a: (config.colA || [])[Number(pair.aIndex)] ?? null,
-        b: (config.colB || [])[Number(pair.bIndex)] ?? null,
-        correct_count: 2,
-        incorrect_count: 1,
-        pct_correct: 66.67,
-        pct_incorrect: 33.33,
-      }));
+      const expectedPairs = Array.isArray(correct.pairs) ? correct.pairs : [];
+      detail.pair_stats = expectedPairs.map((pair, pairIndex) => {
+        const correctCount = plays.filter((play) => {
+          const submitted = (play.answer?.pairs || []).find((candidate) => Number(candidate?.aIndex) === Number(pair.aIndex));
+          return submitted && Number(submitted.bIndex) === Number(pair.bIndex);
+        }).length;
+        const totalPair = plays.length;
+        return {
+          index: pairIndex,
+          aIndex: Number(pair.aIndex),
+          bIndex: Number(pair.bIndex),
+          a: (config.colA || [])[Number(pair.aIndex)] ?? null,
+          b: (config.colB || [])[Number(pair.bIndex)] ?? null,
+          correct_count: correctCount,
+          incorrect_count: totalPair - correctCount,
+          pct_correct: totalPair ? Number(((correctCount / totalPair) * 100).toFixed(2)) : 0,
+          pct_incorrect: totalPair ? Number((((totalPair - correctCount) / totalPair) * 100).toFixed(2)) : 0,
+        };
+      });
     }
-    if (tt === "THINK_SPELL") {
+    if (tt === "CROSSWORD") {
       const words = Array.isArray(correct.answers) && correct.answers.length ? correct.answers : (Array.isArray(config.answers) ? config.answers : []);
-      detail.word_stats = words.map((word, wordIndex) => ({ index: wordIndex, word, correct_count: 2, incorrect_count: 1, pct_correct: 66.67, pct_incorrect: 33.33 }));
+      detail.word_stats = words.map((word, wordIndex) => {
+        const key = String(word || "").trim().toLowerCase();
+        const correctCount = plays.filter((play) => ((play.result.words || []).map((found) => String(found || "").trim().toLowerCase()).includes(key))).length;
+        const totalWord = plays.length;
+        return { index: wordIndex, word, correct_count: correctCount, incorrect_count: totalWord - correctCount, pct_correct: totalWord ? Number(((correctCount / totalWord) * 100).toFixed(2)) : 0, pct_incorrect: totalWord ? Number((((totalWord - correctCount) / totalWord) * 100).toFixed(2)) : 0 };
+      });
     }
 
     // Blend in any real (guest/student) responses to this question instead of
@@ -646,20 +693,14 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
     return detail;
   });
 
-  const botStudents = [0, 1, 2].map((botIndex) => {
+  const botStudents = BOT_SKILLS.map((bot, botIndex) => {
     const responses = questions.map((question, questionIndex) => {
-      const maxPoints = tutorialQuestionMaxPoints(question, tt, session.points_per_question);
-      const correctForBot = botIndex === 0 || (botIndex === 1 && questions.length > 1 && questionIndex === 0);
-      const awarded = botIndex === 0
-        ? maxPoints
-        : botIndex === 1
-          ? (questions.length > 1 ? (questionIndex === 0 ? maxPoints : 0) : Math.max(0, maxPoints - 1))
-          : 0;
+      const play = botPlays[botIndex][questionIndex];
       return {
         question_id: question.question_id,
-        answer: demoAnswerForQuestion(tt, question, correctForBot),
-        is_correct: correctForBot,
-        points_awarded: Math.max(0, Math.round(awarded)),
+        answer: play.answer,
+        is_correct: !!play.result.isCorrect,
+        points_awarded: Math.max(0, Number(play.earned || 0)),
         answered_at: session.display_date || new Date().toISOString(),
       };
     });
@@ -669,7 +710,7 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
       last_name: String(botIndex + 1),
       participant_type: "STUDENT",
       joined_at: session.display_date || new Date().toISOString(),
-      total_points: Math.max(0, Math.round(responses.reduce((sum, response) => sum + Number(response.points_awarded || 0), 0))),
+      total_points: Math.max(0, responses.reduce((sum, response) => sum + Number(response.points_awarded || 0), 0)),
       completion_ms: 25000 + botIndex * 9000,
       responses,
     };
@@ -697,20 +738,6 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
     },
   };
 }
-function tutorialQuestionMaxPoints(question, templateType, fallbackPoints = 1) {
-  const perUnit = Math.max(1, Math.round(Number(question?.config_json?.points ?? fallbackPoints ?? 1)));
-  if (templateType === "MATCHING") {
-    const pairs = Array.isArray(question?.correct_json?.pairs) ? question.correct_json.pairs.length : 0;
-    return Math.max(perUnit, perUnit * Math.max(1, pairs));
-  }
-  if (templateType === "THINK_SPELL") {
-    const words = Array.isArray(question?.correct_json?.answers) && question.correct_json.answers.length
-      ? question.correct_json.answers.length
-      : (Array.isArray(question?.config_json?.answers) ? question.config_json.answers.length : 0);
-    return Math.max(perUnit, perUnit * Math.max(1, words));
-  }
-  return perUnit;
-}
 function buildTutorialDemoTabs(realTabMonitoring) {
   const botRows = [1, 2, 3].map((number) => ({ participant_id: -100 - number, first_name: "ThinkBOT", last_name: String(number), tab_out_count: 0 }));
   const realRows = Array.isArray(realTabMonitoring) ? realTabMonitoring : [];
@@ -718,53 +745,11 @@ function buildTutorialDemoTabs(realTabMonitoring) {
 }
 function parseMaybeJson(value) { if (!value) return {}; if (typeof value === "object") return value; try { return JSON.parse(value); } catch { return {}; } }
 function normalizeDemoOption(option, index) { if (option && typeof option === "object") return { id: String(option.id || `option-${index + 1}`), text: String(option.text ?? option.label ?? ""), image: String(option.image ?? "") }; return { id: `option-${index + 1}`, text: String(option ?? ""), image: "" }; }
-function demoCorrectChoiceIndexes(templateType, correct, options) {
-  if (templateType === "TRUE_FALSE") return [String(correct?.choice || "").toLowerCase() === "false" ? 1 : 0];
-  const values = Array.isArray(correct?.choices) && correct.choices.length ? correct.choices : [correct?.choice].filter((value) => value !== undefined && value !== null && value !== "");
-  const indexes = values.map((value) => options.findIndex((option, index) => [String(index), option.id, option.text].some((candidate) => String(candidate || "").trim().toLowerCase() === String(value || "").trim().toLowerCase()))).filter((index) => index >= 0);
-  return indexes.length ? Array.from(new Set(indexes)) : [0];
-}
-function demoAnswerForQuestion(templateType, question, correct) {
-  const cfg = question.config_json || {};
-  const key = question.correct_json || {};
-  if (templateType === "MCQ") {
-    const options = (Array.isArray(cfg.options) ? cfg.options : []).map((option, index) => normalizeDemoOption(option, index));
-    const correctIndexes = demoCorrectChoiceIndexes(templateType, key, options);
-    const answerModeTwo = String(cfg.answerMode || "").toUpperCase() === "TWO" || correctIndexes.length > 1;
-    if (answerModeTwo) {
-      const correctSelections = correctIndexes.slice(0, 2).map((index) => options[index]?.id || options[index]?.text || String(index));
-      if (correct) return { choices: correctSelections };
-      const wrongIndex = Math.max(0, options.findIndex((_, index) => !correctIndexes.includes(index)));
-      const firstCorrect = correctIndexes[0] ?? 0;
-      return { choices: [options[firstCorrect]?.id || options[firstCorrect]?.text || String(firstCorrect), options[wrongIndex]?.id || options[wrongIndex]?.text || String(wrongIndex)] };
-    }
-    const correctIndex = correctIndexes[0] ?? 0;
-    const selectedIndex = correct ? correctIndex : Math.max(0, options.findIndex((_, index) => index !== correctIndex));
-    return { choice: options[selectedIndex]?.id || options[selectedIndex]?.text || String(selectedIndex) };
-  }
-  if (templateType === "TRUE_FALSE") {
-    const expected = String(key.choice || "true").toLowerCase() === "false" ? "false" : "true";
-    return { choice: correct ? expected : expected === "true" ? "false" : "true" };
-  }
-  if (templateType === "TYPE_ANSWER" || templateType === "GUESS_WORD_4PICS") return { text: correct ? String(key.text || cfg.answer || "Correct answer") : "Sample response" };
-  if (templateType === "MATCHING") {
-    const pairs = (Array.isArray(key.pairs) ? key.pairs : []).map((pair) => ({ aIndex: Number(pair.aIndex), bIndex: Number(pair.bIndex) }));
-    if (correct || pairs.length < 2) return { pairs };
-    const wrong = pairs.map((pair) => ({ ...pair }));
-    wrong[0].bIndex = pairs[1].bIndex;
-    return { pairs: wrong };
-  }
-  if (templateType === "THINK_SPELL") {
-    const words = Array.isArray(key.answers) && key.answers.length ? key.answers : (Array.isArray(cfg.answers) ? cfg.answers : []);
-    const selected = correct ? words : words.slice(0, Math.max(1, Math.floor(words.length / 2)));
-    return { words: selected.map((word) => ({ text: word })) };
-  }
-  return { text: correct ? "Correct" : "Incorrect" };
-}
 
 function buildScores(analytics, advancedPlan = false) {
+  const isGroup = analytics?.session?.join_mode === "GROUP" && Array.isArray(analytics?.groups);
+  if (isGroup) return (analytics.groups || []).map((group) => ({ key: group.group_key, group_key: group.group_key, label: group.display_name, total_points: Number(group.total_points || 0), competitive_points: Number(group.competitive_points || 0), completion_ms: group.completion_ms, member_count: group.member_count })).sort(sortScore);
   const students = analytics?.students || [];
-  if (!advancedPlan && analytics?.session?.join_mode === "GROUP") return Object.values(students.reduce((acc, student) => { const key = student.group_name || `${student.first_name || ""} ${student.last_name || ""}`.trim() || `Group ${student.participant_id}`; if (!acc[key]) acc[key] = { key, label: key, total_points: 0, competitive_points: 0, participant_id: student.participant_id }; acc[key].total_points = Math.max(acc[key].total_points, Number(student.total_points || 0)); acc[key].competitive_points = Math.max(acc[key].competitive_points, Number(student.competitive_points || 0)); return acc; }, {})).sort(sortScore);
   return students.map((student) => ({ key: student.participant_id, participant_id: student.participant_id, label: `${student.first_name || ""} ${student.last_name || ""}`.trim() || `Student ${student.participant_id}`, total_points: Number(student.total_points || 0), competitive_points: Number(student.competitive_points || 0), completion_ms: student.completion_ms })).sort(sortScore);
 }
 function sortScore(a, b) { return Number(b.total_points || 0) - Number(a.total_points || 0) || Number(a.completion_ms ?? Number.MAX_SAFE_INTEGER) - Number(b.completion_ms ?? Number.MAX_SAFE_INTEGER) || String(a.label).localeCompare(String(b.label)); }
@@ -785,6 +770,14 @@ function pill(C) { return { display: "inline-flex", alignItems: "center", justif
 
 function MetricCard({ C, tone, label, value }) { return <div className="tw-metric-card" style={{ ...subCard(C), background: tone.softBg, borderColor: tone.border }}><div className="tw-metric-label text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: tone.accent }}>{label}</div><div className="tw-metric-value text-[27px] font-[950] mt-[7px]" style={{ color: C.text }}>{value}</div></div>; }
 function getScoreNames(analytics, kind) {
+  if (analytics?.session?.join_mode === "GROUP" && Array.isArray(analytics?.groups) && analytics.groups.length) {
+    const scores = analytics.groups.map((g) => Number(g.total_points || 0));
+    const target = kind === "highest" ? Math.max(...scores) : Math.min(...scores);
+    return analytics.groups
+      .filter((g) => Number(g.total_points || 0) === target)
+      .map((g) => g.display_name)
+      .sort((a, b) => a.localeCompare(b));
+  }
   const students = analytics?.students || [];
   if (!students.length) return [];
   const scores = students.map((s) => Number(s.total_points || 0));
@@ -799,8 +792,17 @@ function ExpandableScoreCard({ C, tone, label, value, names, expanded, shrunk, o
     <div className="tw-metric-label text-[11px] uppercase tracking-[.08em] font-[900]" style={{ color: tone.accent }}>{label}</div>
     <div className="tw-metric-value-wrap">
       <div className="tw-metric-value text-[27px] font-[950] mt-[7px]" style={{ color: C.text }}>{value}</div>
-      <div className="tw-metric-names" aria-hidden={!expanded}>{names.length ? names.map((n) => <span key={n} className="tw-metric-name">{n}</span>) : <span className="tw-metric-name is-empty">No scores yet</span>}</div>
+      <div className="tw-metric-names" aria-hidden={!expanded} style={{ color: C.text }}>{names.length ? names.map((n) => <span key={n} className="tw-metric-name" style={{ color: C.text }}>{n}</span>) : <span className="tw-metric-name is-empty" style={{ color: C.text }}>No scores yet</span>}</div>
     </div>
   </button>;
 }
-function StudentChip({ name, C }) { return <span style={{ ...pill(C), padding: "8px 11px" }}><span className="w-[8px] h-[8px] rounded-[99px] bg-[#22c55e] shadow-[0_0_0_4px_rgba(34,197,94,0.12)]" />{name || "Student"}</span>; }
+function presenceStatus(student = {}) {
+  if (student?.kicked_at) return { label: "Kicked", color: "#ef4444" };
+  if (Number(student?.response_count || 0) === 0) return { label: "Never answered", color: "#94a3b8" };
+  if (Number(student?.connected) === 1) return { label: "Online", color: "#22c55e" };
+  return { label: "Offline", color: "#f59e0b" };
+}
+function StudentChip({ name, C, student }) {
+  const status = presenceStatus(student);
+  return <span style={{ ...pill(C), padding: "8px 11px" }} title={status.label}><span className="w-[8px] h-[8px] rounded-[99px]" style={{ background: status.color, boxShadow: `0 0 0 4px ${status.color}1f` }} />{name || "Student"}</span>;
+}

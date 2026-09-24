@@ -140,7 +140,7 @@ export default function StudentPlay() {
   const {
     timer, myGroupId, myGroup, isGuestHosted, isGroupMode, isLastQuestion,
     isMatchingIncomplete, ttNormalized, gameplayAccent, interactionLocked, isLocked,
-    thinkSpellTimeUp, thinkSpellAllFound, thinkSpellSubmitLabel,
+    crosswordTimeUp, crosswordAllFound, crosswordSubmitLabel,
     completedLiveCount, liveQuestionProgress,
   } = useStudentGameplay({
     state, questions, nowMs, clockOffsetMs, currentQ, roster, groups,
@@ -156,7 +156,7 @@ export default function StudentPlay() {
       : { choice: Array.isArray(selectedChoice) ? selectedChoice[0] : selectedChoice };
     if (tt === "TRUE_FALSE") return { choice: selectedChoice };
     if (tt === "MATCHING") return { pairs: Object.keys(matchingMap).map(k => ({ aIndex: Number(k), bIndex: Number(matchingMap[k]) })).sort((a, b) => a.aIndex - b.aIndex) };
-    if (tt === "THINK_SPELL") return { words: Array.isArray(spell.foundEntries) ? spell.foundEntries : [] };
+    if (tt === "CROSSWORD") return { words: Array.isArray(spell.foundEntries) ? spell.foundEntries : [] };
     if (tt === "GUESS_WORD_4PICS") return { text: spell.built || "" };
     return { text: answerText || "" };
   }
@@ -275,13 +275,13 @@ export default function StudentPlay() {
       cardBor={cardBor} textC={textC} mutedC={mutedC}
       state={state} questions={questions} timer={timer}
       completedLiveCount={completedLiveCount} liveQuestionProgress={liveQuestionProgress}
-      myGroup={myGroup} currentQ={currentQ} thinkSpellTimeUp={thinkSpellTimeUp} ttNormalized={ttNormalized}
+      myGroup={myGroup} currentQ={currentQ} crosswordTimeUp={crosswordTimeUp} ttNormalized={ttNormalized}
       selectedChoice={selectedChoice} onSelectedChoice={setSelectedChoice}
       answerText={answerText} onAnswerText={setAnswerText}
       matchingMap={matchingMap} onMatchingMap={setMatchingMap}
       spell={spell} onSpell={setSpell} onSubmit={submit}
       isLocked={isLocked} interactionLocked={interactionLocked}
-      thinkSpellSubmitLabel={thinkSpellSubmitLabel} thinkSpellAllFound={thinkSpellAllFound}
+      crosswordSubmitLabel={crosswordSubmitLabel} crosswordAllFound={crosswordAllFound}
       msg={msg} isMatchingIncomplete={isMatchingIncomplete}
       isLastQuestion={isLastQuestion} submittedQId={submittedQId}
       selectedBackground={selectedBackground} feedbackPulse={feedbackPulse}

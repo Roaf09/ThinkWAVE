@@ -3,7 +3,8 @@ import { api } from "../lib/api";
 import { useColors, useTheme } from "../context/ThemeContext";
 import { normalizeTemplateType } from "../lib/templateTypes";
 import { templateTone } from "../lib/templatePalette";
-import { buildThinkSpellGrid, buildThinkSpellSeed, buildThinkSpellSignature, resolveThinkSpellWordBank } from "../lib/thinkSpell";
+import { buildCrosswordGrid, buildCrosswordSeed, buildCrosswordSignature, resolveCrosswordWordBank } from "../lib/crossword";
+import { TwLogoLoader } from "./TwLogoLoader";
 
 function safeJson(v) {
   if (!v) return {};
@@ -68,7 +69,7 @@ export default function QuizPreviewModal({ quiz, onClose }) {
           <button onClick={onClose} className="tw-preview-close-press"><span>Close</span></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-          {loading && <div style={{ textAlign: "center", padding: 40, color: c.textMuted }}>Loading questions…</div>}
+          {loading && <TwLogoLoader minHeight="20vh" />}
           {!loading && questions.length === 0 && <div style={{ textAlign: "center", padding: 40, color: c.textMuted }}>No questions yet.</div>}
           {!loading && currentQ && <div>
             <div style={{ background: tone.softBg, borderRadius: 12, padding: "10px 16px", marginBottom: 12, display: "flex", justifyContent: "flex-end" }}><span style={{ color: c.textMuted, fontSize: 13 }}>Q {qIndex + 1} of {questions.length}</span></div>
@@ -105,7 +106,7 @@ function PreviewBody({ templateType, cfg, correct, c, tone }) {
     </div>;
   }
 
-  if (tt === "TYPE_ANSWER" || tt === "DRAW_IT" || tt === "GRIP_GUESS") {
+  if (tt === "TYPE_ANSWER") {
     const answers = [correct.text, ...(Array.isArray(correct.answers) ? correct.answers : [])].filter(Boolean);
     return <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>{answers.length ? answers.map((answer, i) => <AnswerChip key={i}>{answer}</AnswerChip>) : <span style={{ color: c.textMuted }}>No answer set.</span>}</div>;
   }
@@ -126,11 +127,11 @@ function PreviewBody({ templateType, cfg, correct, c, tone }) {
     return <div style={{ display: "grid", placeItems: "center", gap: 14 }}><div style={{ width: "min(100%, 330px)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{[0,1,2,3].map((i) => <div key={i} style={{ aspectRatio: "1", borderRadius: 12, overflow: "hidden", background: tone.softBg, border: `1.5px solid ${tone.border}`, display: "grid", placeItems: "center" }}>{images[i] ? <img src={images[i]} alt={`Clue ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ color: tone.accent, fontWeight: 900 }}>?</span>}</div>)}</div>{answer ? <AnswerChip>{answer}</AnswerChip> : null}</div>;
   }
 
-  if (tt === "THINK_SPELL") {
-    const words = resolveThinkSpellWordBank({ config: cfg, correct });
+  if (tt === "CROSSWORD") {
+    const words = resolveCrosswordWordBank({ config: cfg, correct });
     const size = Math.min(12, Math.max(5, Number(cfg.gridSize || 8)));
-    const signature = `${buildThinkSpellSignature({ questionId: 0, gridSize: size, words })}-${Number(cfg.gridSeed || 0)}`;
-    const generated = buildThinkSpellGrid({ gridSize: size, words, seed: buildThinkSpellSeed(signature) });
+    const signature = `${buildCrosswordSignature({ questionId: 0, gridSize: size, words })}-${Number(cfg.gridSeed || 0)}`;
+    const generated = buildCrosswordGrid({ gridSize: size, words, seed: buildCrosswordSeed(signature) });
     const built = Array.isArray(cfg.grid) && cfg.grid.length === size * size ? { gridSize: size, grid: cfg.grid.map((ch) => String(ch || "").toUpperCase()) } : generated;
     return <div style={{ display: "grid", placeItems: "center", gap: 14 }}><div style={{ width: "min(100%, 390px)", display: "grid", gridTemplateColumns: `repeat(${built.gridSize}, minmax(0,1fr))`, gap: 4, padding: 10, borderRadius: 16, background: tone.softBg, border: `1.5px solid ${tone.border}` }}>{built.grid.map((ch, i) => <div key={i} style={{ aspectRatio: "1", display: "grid", placeItems: "center", borderRadius: 7, background: c.cardBg, border: `1px solid ${tone.border}`, color: tone.accent, fontWeight: 900, fontSize: built.gridSize > 9 ? 11 : 14 }}>{ch}</div>)}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>{words.map((word) => <AnswerChip key={word}>{word}</AnswerChip>)}</div></div>;
   }

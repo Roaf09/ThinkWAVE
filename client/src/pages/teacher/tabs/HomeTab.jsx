@@ -11,6 +11,7 @@ import { EmptyState, TwIcon } from "../../../components/TwUI";
 import { TeacherMetricCard, TeacherPressButton } from "../TeacherUI";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { manilaDateTime } from "../../../lib/dateFormat";
+import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 const shellCard = (c, extra = {}) => ({
   background: c.cardBg,
@@ -138,7 +139,7 @@ export default function HomeTab({ setActiveTab }) {
   }, [analyticsMap]);
 
   if (loading) {
-    return <div className="container"><div className="tw-home-performance-shell rounded-[18px] p-[18px]" style={shellCard(c)}>Loading your dashboard…</div></div>;
+    return <div className="container"><div className="tw-home-performance-shell rounded-[18px] p-[18px]" style={shellCard(c)}><TwLogoLoader /></div></div>;
   }
 
   return (

@@ -15,6 +15,7 @@ import { readTutorialState, writeTutorialState } from "../../../lib/tutorialStat
 import { tabCard as card, tabInputStyle as inputStyle, normalizeBankTemplate, useIsMobileViewport } from "./teacherTabShared";
 import { QuizBankCard } from "./bank-parts/QuizBankCard";
 import { QuestionCard } from "./bank-parts/QuestionCard";
+import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 export default function QuestionBankTab({ setBankLabel, tutorial }) {
   const [view, setView] = useState("quiz");
@@ -143,7 +144,7 @@ export default function QuestionBankTab({ setBankLabel, tutorial }) {
 
   const currentHasItems = view === "quiz" ? quizBankItems.length > 0 : questions.length > 0;
 
-  if (loading) return <div className="container"><div style={card(c)}>Loading bank content…</div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
 
   return (
     <>

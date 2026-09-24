@@ -174,8 +174,11 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 .tw-enter-main > div { width: min(100%, 460px); }
 .tw-enter-codeform input {
   padding: 13px 16px; border-radius: 8px; font-size: 15px; font-weight: 800;
-  text-align: left;
+  text-align: center;
   width: 100%; box-sizing: border-box;
+}
+.tw-enter-codeform input::placeholder {
+  text-align: center;
 }
 .tw-enter-codeform button {
   padding: 13px; border: 0; border-radius: 8px; background: #0f172a;
@@ -355,10 +358,12 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
   background: #ffffff !important;
   border-color: rgba(15, 23, 42, 0.14) !important;
   color: #0f172a !important;
+  text-align: center !important;
 }
 .tw-enter-page.is-code .tw-enter-codeform input::placeholder {
   color: #64748b !important;
   opacity: 1 !important;
+  text-align: center !important;
 }
 /* Mobile code form sits slightly lower while staying centered. */
 @media (max-width: 760px) {

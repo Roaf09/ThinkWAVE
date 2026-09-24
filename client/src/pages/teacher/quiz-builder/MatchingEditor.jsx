@@ -21,7 +21,7 @@ export function MatchingEditor({ q, onChange, ui, c, isMobile = false }) {
   const allB = Array.isArray(cfg.colB) && cfg.colB.length ? cfg.colB.map((item) => ({ text: item?.text || "", image: item?.image || "" })) : [{ text: "", image: "" }];
   const dummyB = Array.isArray(cfg.dummyB) && cfg.dummyB.length ? cfg.dummyB.map((item) => ({ text: item?.text || "", image: item?.image || "" })) : allB.slice(colA.length, colA.length + 2);
   const pairB = Array.from({ length: colA.length }, (_, i) => ({ text: allB[i]?.text || "", image: allB[i]?.image || "" }));
-  const maxPairs = 999;
+  const maxPairs = 15;
   const maxDummies = 2;
   const activeDummy = dummyB.slice(0, maxDummies);
   const activePair = Math.min(matchingPairIndex, colA.length - 1);

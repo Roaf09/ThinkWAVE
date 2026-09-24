@@ -634,11 +634,11 @@ body.dark-mode .tw-bank-tf-option.is-false{color:#fca5a5;background:rgba(239,68,
   width:calc(50% - 6px);
   justify-self:center;
 }
-.tw-bank-answer-summary.is-think-spell{
+.tw-bank-answer-summary.is-crossword{
   width:min(100%,304px)!important;
   grid-template-columns:1fr!important;
 }
-.tw-bank-answer-summary.is-think-spell .tw-bank-correct-answer{
+.tw-bank-answer-summary.is-crossword .tw-bank-correct-answer{
   width:100%!important;
   grid-column:auto!important;
 }
@@ -682,7 +682,7 @@ body.dark-mode .tw-bank-correct-answer{
   .tw-bank-question-inner{padding:64px 14px 14px!important}
   .tw-bank-answer-summary{grid-template-columns:1fr!important}
   .tw-bank-answer-summary.is-single .tw-bank-correct-answer{width:100%}
-  .tw-bank-answer-summary.is-think-spell{width:100%!important}
+  .tw-bank-answer-summary.is-crossword{width:100%!important}
 }
 /* Alpha revision: class tab sections, report actions bottom-right, host-like analytics modals. */
 .tw-class-students-shell{margin-top:0!important}

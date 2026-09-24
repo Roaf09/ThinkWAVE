@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react";
 import {
-  buildThinkSpellSignature,
+  buildCrosswordSignature,
   getPathLinePoints,
-  loadThinkSpellGridState,
-  matchThinkSpellWord,
-  normalizeThinkWordKey,
-  resolveThinkSpellWordBank,
+  loadCrosswordGridState,
+  matchCrosswordWord,
+  normalizeCrosswordWordKey,
+  resolveCrosswordWordBank,
   validatePathSpellsWord,
-} from "../../lib/thinkSpell";
+} from "../../lib/crossword";
 
-function straightThinkSpellPath(startIndex, endIndex, gridSize) {
+function straightCrosswordPath(startIndex, endIndex, gridSize) {
   const size = Math.max(1, Number(gridSize || 1));
   const start = Number(startIndex);
   const end = Number(endIndex);
@@ -40,8 +40,8 @@ function straightThinkSpellPath(startIndex, endIndex, gridSize) {
 export function GameCrossword({ config: cfg, correct = {}, store, onStore, disabled, questionId, timeUp = false, initExtra = {}, summaryHint = "", totalPoints = null }) {
   const gridSize = Math.min(12, Math.max(5, Number(cfg.gridSize ?? 8) || 8));
   const minWordLength = Math.min(8, Math.max(2, Number(cfg.minWordLength ?? 3) || 3));
-  const wordBank = resolveThinkSpellWordBank({ config: cfg, correct });
-  const sig = buildThinkSpellSignature({ questionId, gridSize, words: wordBank });
+  const wordBank = resolveCrosswordWordBank({ config: cfg, correct });
+  const sig = buildCrosswordSignature({ questionId, gridSize, words: wordBank });
   const draggingRef = useRef(false);
   const gridShellRef = useRef(null);
   const pointerIdRef = useRef(null);
@@ -52,7 +52,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
 
   useEffect(() => {
     if (store?.mode === "wordhunt-batch" && store.sig === sig && Array.isArray(store.grid) && store.grid.length) return;
-    const initial = loadThinkSpellGridState({ config: cfg, correct, questionId, priorPayload: null });
+    const initial = loadCrosswordGridState({ config: cfg, correct, questionId, priorPayload: null });
     onStore({ mode: "wordhunt-batch", sig, grid: initial.grid, gridSize: initial.gridSize, wordBank, words: [], foundEntries: [], selected: [], built: "", ...initExtra });
   }, [sig]);
 
@@ -61,7 +61,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
   const selected = Array.isArray(store?.selected) ? store.selected : [];
   const selectedSet = new Set(selected);
   const foundEntries = Array.isArray(store?.foundEntries) ? store.foundEntries : [];
-  const foundSet = new Set(foundEntries.map((entry) => normalizeThinkWordKey(entry.text || entry.word || "")));
+  const foundSet = new Set(foundEntries.map((entry) => normalizeCrosswordWordKey(entry.text || entry.word || "")));
   const foundPathSet = new Set(foundEntries.flatMap((entry) => Array.isArray(entry.path) ? entry.path.map(Number) : []));
   const built = selected.map((cell) => grid[cell] || "").join("");
   const cellGap = 8;
@@ -76,7 +76,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
     if (disabled || !grid[cell]) return;
     const currentSelected = Array.isArray(storeRef.current?.selected) ? storeRef.current.selected : [];
     if (!currentSelected.length) return patch({ selected: [cell], built: String(grid[cell] || "") });
-    const nextSelected = straightThinkSpellPath(currentSelected[0], cell, activeGridSize);
+    const nextSelected = straightCrosswordPath(currentSelected[0], cell, activeGridSize);
     if (!nextSelected || nextSelected.some((cellIndex) => !grid[cellIndex])) return;
     patch({ selected: nextSelected, built: nextSelected.map((n) => grid[n] || "").join("") });
   }
@@ -90,10 +90,10 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
     draggingRef.current = false;
     const path = Array.isArray(storeRef.current?.selected) ? [...storeRef.current.selected] : [];
     const text = path.map((cell) => grid[cell] || "").join("");
-    const matchedKey = matchThinkSpellWord(text, wordBank);
+    const matchedKey = matchCrosswordWord(text, wordBank);
     const pathValid = text.length >= minWordLength && validatePathSpellsWord({ grid, gridSize: activeGridSize, path, word: text });
     const latestFound = Array.isArray(storeRef.current?.foundEntries) ? storeRef.current.foundEntries : [];
-    const latestFoundSet = new Set(latestFound.map((entry) => normalizeThinkWordKey(entry.text || entry.word || "")));
+    const latestFoundSet = new Set(latestFound.map((entry) => normalizeCrosswordWordKey(entry.text || entry.word || "")));
     if (matchedKey && pathValid && !latestFoundSet.has(matchedKey)) {
       const nextFound = [...latestFound, { text, path }];
       return patch({ foundEntries: nextFound, words: nextFound, selected: [], built: "" });
@@ -122,7 +122,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
   const foundLines = foundEntries
     .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
     .filter((points) => points.length > 1);
-  const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchThinkSpellWord(built, wordBank)) ? "Already found" : matchThinkSpellWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
+  const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchCrosswordWord(built, wordBank)) ? "Already found" : matchCrosswordWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
 
   return (
     <div className="bword-wrap">
@@ -135,7 +135,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
             <div className="bword-quest-title">Word goals</div>
             <div className="bword-quest-list">
               {wordBank.map((word) => {
-                const key = normalizeThinkWordKey(word);
+                const key = normalizeCrosswordWordKey(word);
                 const done = foundSet.has(key);
                 return <span key={key} className={`bword-quest-chip${done ? " done" : ""}`}>{done ? "✓ " : ""}{word.toUpperCase()}</span>;
               })}

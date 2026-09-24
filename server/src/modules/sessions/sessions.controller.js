@@ -6,7 +6,7 @@
 
 import { pool, queryRetryingDeadlock } from "../../db.js";
 import { makeJoinCode, makeReconnectKey } from "../../utils/codes.js";
-import { resolveThinkSpellWordBank } from "../quizzes/templates/thinkspell/thinkSpell.js";
+import { resolveCrosswordWordBank } from "../quizzes/templates/crossword/crossword.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
 import { buildFullAnalyticsData } from "../analytics/analytics.controller.js";
 import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
@@ -59,7 +59,7 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
     `SELECT template_type FROM quizzes WHERE id=:qid AND deleted_at IS NULL`,
     { qid: quizId }
   );
-  const isThinkSpell = normalizeTemplateType(quizMeta?.template_type) === "THINK_SPELL";
+  const isCrossword = normalizeTemplateType(quizMeta?.template_type) === "CROSSWORD";
 
   const [rows] = await pool.query(
     `SELECT id, question_order, prompt, config_json, correct_json
@@ -70,8 +70,8 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
   let questions = rows.map((q) => {
     const config_json = safeJson(q.config_json) || {};
     const correct_json = safeJson(q.correct_json) || {};
-    if (isThinkSpell) {
-      const answers = resolveThinkSpellWordBank({ config: config_json, correct: correct_json });
+    if (isCrossword) {
+      const answers = resolveCrosswordWordBank({ config: config_json, correct: correct_json });
       if (answers.length) {
         config_json.answers = answers;
         correct_json.answers = answers;
@@ -94,7 +94,7 @@ async function buildQuestionsSnapshot(quizId, randomizeQuestions, shuffleAnswers
 
 // Creates a live session from one published quiz. This is the main bridge between the builder and real-time gameplay.
 export async function createSession(req, res) {
-  const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null } = req.body;
+  const { quizId, joinMode = "SOLO", classId = null, backgroundKey = null, tutorialDemo = false } = req.body;
   const hasRequestedBackground = SESSION_BACKGROUND_KEY_PATTERN.test(String(backgroundKey || ""));
   const safeBackgroundKey = normalizeSessionBackgroundKey(backgroundKey);
   const plan = await getTeacherPlan(req.user.sub);
@@ -118,8 +118,12 @@ export async function createSession(req, res) {
   // would silently fail with a confusing error instead of just re-hosting it.
   if (quiz.status !== "PUBLISHED" && quiz.status !== "BANKED") return res.status(400).json({ message: "Only published live-session quizzes can be hosted." });
   if (quiz.delivery_mode === "ASYNCHRONOUS") return res.status(400).json({ message: "Asynchronous quizzes appear in the student dashboard instead of live sessions." });
-  if (joinMode === "GROUP" && ["THINK_SPELL", "THINK_AND_SPELL"].includes(String(quiz.template_type || "").toUpperCase())) {
+  if (joinMode === "GROUP" && ["CROSSWORD", "THINK_SPELL", "THINK_AND_SPELL"].includes(String(quiz.template_type || "").toUpperCase())) {
     return res.status(400).json({ message: "Group mode isn't available for Crossword quizzes." });
+  }
+  // ThinkBOT-only tutorial demos are solo-style only (no group-mode bots).
+  if (tutorialDemo === true && joinMode === "GROUP") {
+    return res.status(400).json({ message: "Tutorial demos are not available in group mode." });
   }
 
   const [[active]] = await pool.query(
@@ -161,13 +165,16 @@ export async function createSession(req, res) {
   // Capacity is now automatic instead of being exposed as a teacher-facing field.
   const maxCap = plan.code === "BASIC" ? BASIC_LIMITS.live.maxStudents : null;
 
-  const insertSql = sessionsHaveBackground
-    ? `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json, background_key)
-       VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot,:backgroundKey)`
-    : `INSERT INTO sessions(quiz_id, teacher_id, class_id, join_code, join_mode, max_participants, status, questions_snapshot_json)
-       VALUES(:qid,:tid,:cid,:code,:mode,:maxCap,'LOBBY',:snapshot)`;
-  const [r] = await pool.query(insertSql,
-    { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot), backgroundKey: safeBackgroundKey }
+  // ThinkBOT-only tutorial flag. Probed via hasDatabaseColumn so upgraded
+  // endpoints keep working against a deployed DB until migrate_tutorial_sessions runs.
+  const sessionsHaveTutorial = await hasDatabaseColumn("sessions", "is_tutorial");
+  const tutorialFlag = tutorialDemo === true ? 1 : 0;
+  const insertCols = ["quiz_id", "teacher_id", "class_id", "join_code", "join_mode", "max_participants", "status", "questions_snapshot_json"];
+  const insertVals = [":qid", ":tid", ":cid", ":code", ":mode", ":maxCap", "'LOBBY'", ":snapshot"];
+  if (sessionsHaveBackground) { insertCols.push("background_key"); insertVals.push(":backgroundKey"); }
+  if (sessionsHaveTutorial) { insertCols.push("is_tutorial"); insertVals.push(":tutorial"); }
+  const [r] = await pool.query(`INSERT INTO sessions(${insertCols.join(",")}) VALUES(${insertVals.join(",")})`,
+    { qid: quizId, tid: req.user.sub, cid: selectedClassId, code, mode: joinMode, maxCap, snapshot: JSON.stringify(snapshot), backgroundKey: safeBackgroundKey, tutorial: tutorialFlag }
   );
   rememberSessionBackground(r.insertId, safeBackgroundKey);
 
@@ -438,9 +445,9 @@ export async function getTeacherSessionHistory(req, res) {
             WHEN s.join_mode = 'GROUP' THEN (SELECT COUNT(*) FROM session_groups sg WHERE sg.session_id = s.id)
             ELSE (SELECT COUNT(*) FROM session_participants sp WHERE sp.session_id = s.id)
           END) AS participant_count,
-         JSON_LENGTH(s.questions_snapshot_json) AS question_count,
-         'LIVE' AS session_type,
-         s.ended_at AS sort_at
+          JSON_LENGTH(s.questions_snapshot_json) AS question_count,
+          'LIVE' AS session_type,
+          COALESCE(s.ended_at, s.started_at) AS sort_at
        FROM sessions s
        JOIN quizzes q ON q.id = s.quiz_id
        LEFT JOIN classes c ON c.id = s.class_id
@@ -513,10 +520,11 @@ export async function validateJoinCode(req, res) {
   const code = String(req.body?.code || "").trim().toUpperCase();
   if (code.length < 4) return res.status(400).json({ message: "Please enter a valid session code first." });
   const [[session]] = await pool.query(
-    `SELECT status FROM sessions WHERE join_code=:code`,
+    `SELECT status${(await hasDatabaseColumn("sessions", "is_tutorial")) ? ", is_tutorial" : ""} FROM sessions WHERE join_code=:code`,
     { code }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Tutorial demo sessions are for ThinkBOTs only." });
   if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
     const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
     return res.status(400).json({ message });
@@ -537,6 +545,9 @@ export async function joinSession(req, res) {
     { code: code.toUpperCase() }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
+  // s.* already carries is_tutorial once migrate_tutorial_sessions has run;
+  // undefined on older DBs reads as non-tutorial, keeping those open.
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Tutorial demo sessions are for ThinkBOTs only." });
   if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
     const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
     return res.status(400).json({ message });

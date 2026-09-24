@@ -36,6 +36,26 @@ async function ensureCompetitivePointsColumn() {
 }
 await ensureCompetitivePointsColumn();
 
+// Safety net: ThinkBOT-only tutorial sessions gate on sessions.is_tutorial.
+// Same pattern as above — runs on its own after deploy so nobody has to
+// remember the migration script. Safe/idempotent: checks first, only alters
+// if genuinely missing. Endpoints also probe via hasDatabaseColumn, so the
+// app keeps working even if this fails (column simply reads as non-tutorial).
+async function ensureTutorialColumn() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) AS c FROM information_schema.columns
+       WHERE table_schema = DATABASE() AND table_name = 'sessions' AND column_name = 'is_tutorial'`
+    );
+    if (Number(rows?.[0]?.c || 0) > 0) return;
+    await pool.query(`ALTER TABLE sessions ADD COLUMN is_tutorial TINYINT(1) NOT NULL DEFAULT 0`);
+    console.log("[startup] Added missing sessions.is_tutorial column.");
+  } catch (err) {
+    console.warn("[startup] Could not verify/add is_tutorial column automatically:", err?.message || err);
+  }
+}
+await ensureTutorialColumn();
+
 // Create the Express app first so REST routes and middleware exist before sockets attach.
 const app = makeApp();
 // HTTP server is shared by REST and Socket.IO so both run on the same port.

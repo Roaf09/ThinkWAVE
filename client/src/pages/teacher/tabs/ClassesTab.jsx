@@ -15,6 +15,7 @@ import { tabCard as card, tabBtn as btn, useIsMobileViewport } from "./teacherTa
 import { buildTree, buildPath, findNode } from "./classes-parts/classTreeUtils";
 import { AssignmentResultRow, ClassReportCard, ClassAnalyticsModal, StudentAnalyticsModal } from "./classes-parts/ClassReportsAndAnalytics";
 import { RemoveStudentModal, FolderCard, FolderModal } from "./classes-parts/FolderDialogs";
+import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 function row(c) { return { background: c.cardBg2, border: `3px solid ${c.border}` }; }
 function crumbBtn(c, active) { return { ...btn(c, active), borderRadius: 999, borderWidth: 3 }; }
@@ -332,8 +333,8 @@ export default function ClassesTab({ tutorial }) {
           <div className="font-[900] text-[17px]" style={{ color: c.text }}>My Folders</div>
           <div className="tw-class-header-actions flex gap-[10px] flex-wrap">
             {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn tw-analytics-back-press" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
-            <TeacherPressButton tone="blue" icon="plus" className="tw-analytics-back-press" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
-            {isSectionFolder && <TeacherPressButton tone="blue" icon="link" className="tw-analytics-back-press" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
+            <TeacherPressButton tone="blue" icon="plus" title="Add Folder" aria-label="Add Folder" className="tw-analytics-back-press tw-class-icon-only-blue" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
+            {isSectionFolder && <TeacherPressButton tone="blue" icon="link" title="Share Code" aria-label="Share Code" className="tw-analytics-back-press tw-class-icon-only-blue" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
           </div>
         </div>
         <div className="flex items-center gap-[8px] flex-wrap mb-[16px]">
@@ -352,7 +353,7 @@ export default function ClassesTab({ tutorial }) {
           <div className="font-[900]" style={{ color: c.text }}>{selectedFolderId ? current?.name || "Folder" : "Folders"}</div>
         </div>
 
-        {loading ? <div style={{ color: c.textMuted }}>Loading folders…</div> : (
+        {loading ? <TwLogoLoader minHeight="24vh" /> : (
           <div className="grid gap-[12px] grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {children.map((folder) => <FolderCard key={folder.id} folder={folder} c={c} menuFor={menuFor} setMenuFor={setMenuFor} onOpen={() => setSelectedFolderId(folder.id)} onRename={() => { setFolderName(folder.name); setRenameModal(folder); setMenuFor(null); }} onDelete={() => { setFolderAction({ type: "delete", folder }); setMenuFor(null); }} onDuplicate={() => { setFolderAction({ type: "duplicate", folder }); setMenuFor(null); }} />)}
           </div>

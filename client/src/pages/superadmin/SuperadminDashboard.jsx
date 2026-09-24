@@ -3,13 +3,16 @@ import {useNavigate} from "react-router-dom";
 import {api,setAuthToken} from "../../lib/api";
 import {clearRole,clearToken} from "../../lib/auth";
 import {clearLastRoute} from "../../lib/lastRoute";
+import {clearPersistentTabs,usePersistentTab} from "../../lib/persistentTab";
 import {ThemedModal,useColors,useTheme} from "../../context/ThemeContext";
 import {TwIcon} from "../../components/TwUI";
 import DashboardShell from "../../components/DashboardShell";
 import {ProfileSettingsModal,ProfileSavedOverlay,useDashboardProfile} from "../../components/ProfileSettings";
 import {LineChart,DonutChart,BarChart,DualLineChart} from "../../components/SimpleCharts";
 import {manilaDateTime,manilaDate} from "../../lib/dateFormat";
+import { TwLogoLoader } from "../../components/TwLogoLoader";
 
+const SUPERADMIN_TABS=["overview","teachers","institutions","notifications","health"];
 const NAV=[{id:"overview",label:"Overview",icon:"home"},{id:"teachers",label:"Teachers",icon:"teacher"},{id:"institutions",label:"Institutions",icon:"classes"},{id:"notifications",label:"Notifications",icon:"bell"},{id:"health",label:"System Health",icon:"health"}];
 const FILTERS=["ALL","PLAN_APPLICATION","USER_REGISTERED","PASSWORD_CHANGED","INSTITUTION_SETUP","ADMIN_DEACTIVATED","ACCOUNT_DELETED","ADMIN_APPROVED","ADMIN_DISAPPROVED","ADMIN_ACCOUNT_CREATED","ADMIN_INVITE_RESENT","FEEDBACK"];
 const SUPER_METRIC_PALETTES={
@@ -26,8 +29,8 @@ const superMetricPalette=(tone,dark)=>{const palette=SUPER_METRIC_PALETTES[Strin
 function SuperPressButton({tone="blue",className="",children,...props}){return <button {...props} className={`tw-admin-press tw-admin-press-${tone} ${className}`.trim()}><span>{children}</span></button>}
 
 export default function SuperadminDashboard(){
-  const nav=useNavigate();const c=useColors();const {dark,toggleTheme}=useTheme();const [activeTab,setActiveTab]=useState("overview");const [logout,setLogout]=useState(false);const profileState=useDashboardProfile();const[instFocus,setInstFocus]=useState(null);function handleViewInstitution(name){if(!name)return;setInstFocus({name:String(name),ts:Date.now()});setActiveTab("institutions");}
-  function doLogout(){clearToken();clearRole();setAuthToken("");clearLastRoute();nav("/")}
+  const nav=useNavigate();const c=useColors();const {dark,toggleTheme}=useTheme();const [activeTab,setActiveTab]=usePersistentTab("tw_superadmin_tab","overview",SUPERADMIN_TABS);const [logout,setLogout]=useState(false);const profileState=useDashboardProfile();const[instFocus,setInstFocus]=useState(null);function handleViewInstitution(name){if(!name)return;setInstFocus({name:String(name),ts:Date.now()});setActiveTab("institutions");}
+  function doLogout(){clearToken();clearRole();setAuthToken("");clearLastRoute();clearPersistentTabs();nav("/")}
   return <><DashboardShell navItems={NAV} activeTab={activeTab} setActiveTab={setActiveTab} dark={dark} toggleTheme={toggleTheme} onLogout={()=>setLogout(true)} profile={profileState.profile} onProfile={()=>profileState.setProfileOpen(true)} mobileTabIconsOnly>{activeTab==="overview"&&<Overview onOpenNotifications={()=>setActiveTab("notifications")} onOpenInstitutions={()=>setActiveTab("institutions")}/>}{activeTab==="teachers"&&<Teachers/>}{activeTab==="institutions"&&<Institutions focus={instFocus} onFocusDone={()=>setInstFocus(null)}/>}{activeTab==="notifications"&&<Notifications onViewInstitution={handleViewInstitution}/>}{activeTab==="health"&&<Health/>}</DashboardShell>{profileState.profileOpen&&<ProfileSettingsModal roleLabel="Superadmin" showInstitution={false} profile={profileState.profile} setProfile={profileState.setProfile} onClose={()=>profileState.setProfileOpen(false)} onSaved={()=>{profileState.setSaved(true);setTimeout(()=>profileState.setSaved(false),2000)}}/>}{profileState.saved&&<ProfileSavedOverlay/>}{logout&&<><div className="tw-admin-logout-backdrop" onClick={()=>setLogout(false)}/><div className="tw-admin-logout-layer" onClick={()=>setLogout(false)}><section className="tw-admin-logout-modal is-compact-confirm" onClick={event=>event.stopPropagation()} style={{background:c.cardBg,borderColor:c.border,color:c.text}}><header><TwIcon name="logout" size={24}/><strong>Logout</strong></header><p style={{color:c.textMuted}}>Are you sure you want to log out of the superadmin dashboard?</p><div className="tw-admin-logout-actions"><SuperPressButton tone="red" onClick={doLogout}>Yes, Logout</SuperPressButton></div></section></div></>}</>;
 }
 function Heading({title}){const c=useColors();return <h2 style={{margin:"0 0 22px",color:c.text,fontSize:28,letterSpacing:"-.035em"}}>{title}</h2>}
@@ -36,7 +39,7 @@ function ChartTitle({title,icon}){const c=useColors();return <div style={{displa
 function Info({label,value}){const c=useColors();return <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0",borderBottom:`1px solid ${c.border}`}}><span style={{color:c.textMuted}}>{label}</span><b style={{color:c.text,textAlign:"right"}}>{value??"—"}</b></div>}
 function Empty({text,action}){const c=useColors();return <div style={{...quiet(c),color:c.textMuted,textAlign:"center"}}>{text}{action&&<div style={{marginTop:12}}>{action}</div>}</div>}
 function ApiMessage({text}){const c=useColors();return <div style={{...quiet(c),color:c.redFg,borderColor:c.redBorder,marginBottom:16}}>{text}</div>}
-function LoadingCard({text}){const c=useColors();return <div style={{...card(c),color:c.textMuted,textAlign:"center"}}>{text}</div>}
+function LoadingCard({text}){return <TwLogoLoader minHeight="20vh" label={text || "Loading"} />}
 
 function Overview({onOpenNotifications,onOpenInstitutions}){
   const c=useColors();const [stats,setStats]=useState(null);const [activity,setActivity]=useState([]);

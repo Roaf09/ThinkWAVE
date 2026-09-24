@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE } from "../../lib/api";
 import { manilaDateTime } from "../../lib/dateFormat";
+import { TwLogoLoader } from "../../components/TwLogoLoader";
 
 const ALL_TEMPLATES = [
   { value:"MCQ",              label:"Multiple-choice", icon:"🔤" },
@@ -16,9 +17,7 @@ const ALL_TEMPLATES = [
   { value:"MATCHING",         label:"Matching",        icon:"🔗" },
   { value:"TYPE_ANSWER",      label:"Identification",     icon:"✏️" },
   { value:"GUESS_WORD_4PICS", label:"4Pics 1Word",     icon:"🖼️" },
-  { value:"DRAW_IT",          label:"Draw-it",         icon:"🎨" },
-  { value:"GRIP_GUESS",       label:"Grip-and-Guess",  icon:"🤝" },
-  { value:"THINK_SPELL",      label:"Crossword", icon:"🔡" },
+  { value:"CROSSWORD",      label:"Crossword", icon:"🔡" },
 ];
 
 // Get or create a guest API client with a temporary token
@@ -130,7 +129,7 @@ export function GuestLiveTab({ setActiveTab }) {
     } catch (err) { setMsg(err?.response?.data?.message || "Failed."); }
   }
 
-  if (loading) return <div className="container"><div className="card">Loading…</div></div>;
+  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
 
   return (
     <div className="container">
@@ -200,7 +199,7 @@ export function GuestHistoryTab() {
 
   const fmtDate=(d)=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
 
-  if (loading) return <div className="container"><div className="card">Loading…</div></div>;
+  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
 
   return (
     <div className="container">

@@ -23,7 +23,7 @@ export function voiceAnswerRows(question, templateType) {
     return rows;
   }
   if (tt === "GUESS_WORD_4PICS") return [{ key: "guess-word", label: clean(cfg.target || correct.text, "Correct word") }];
-  if (tt === "THINK_SPELL") {
+  if (tt === "CROSSWORD") {
     const words = Array.isArray(cfg.answers) && cfg.answers.length ? cfg.answers : (Array.isArray(correct.answers) ? correct.answers : []);
     return words.map((word, index) => ({ key: `word-${index}`, label: clean(word, `Word ${index + 1}`) }));
   }

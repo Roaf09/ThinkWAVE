@@ -45,7 +45,7 @@ export async function listQuizzes(req, res) {
             WHEN q.template_type='MATCHING' THEN
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
               * COALESCE(JSON_LENGTH(JSON_EXTRACT(qq.correct_json, '$.pairs')), 0)
-            WHEN q.template_type IN ('THINK_SPELL','THINK_AND_SPELL') THEN
+            WHEN q.template_type IN ('CROSSWORD','THINK_SPELL','THINK_AND_SPELL') THEN
               COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
               * COALESCE(JSON_LENGTH(JSON_EXTRACT(qq.correct_json, '$.answers')), JSON_LENGTH(JSON_EXTRACT(qq.config_json, '$.answers')), 0)
             ELSE COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(qq.config_json, '$.points')) AS UNSIGNED), q.points_per_question)
@@ -114,13 +114,28 @@ export async function upsertQuestions(req, res) {
   );
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
+  // Question points only ever take 1, 2, or 3. Coerce here (in addition to
+  // route validation) so crafted/legacy payloads with floats, zeros, or
+  // oversized values can never persist — MCQ fractions stay clean
+  // (0.5 / 1 / 1.5 per correct pick on 2-answer questions).
+  const coerceQuestionPoints = (value) => {
+    const n = Math.round(Number(value));
+    if (n === 2 || n === 3) return n;
+    if (n === 1) return 1;
+    if (Number.isFinite(n) && n > 3) return 3;
+    return 1;
+  };
   // The array position is the authoritative builder order. Normalizing it here
   // also prevents a malformed/retried client request from creating duplicate
   // active question_order values.
-  const items = (Array.isArray(req.body.questions) ? req.body.questions : []).map((item, index) => ({
-    ...item,
-    order: index,
-  }));
+  const items = (Array.isArray(req.body.questions) ? req.body.questions : []).map((item, index) => {
+    const next = { ...item, order: index };
+    if (next?.config && typeof next.config === "object") {
+      next.config = { ...next.config, points: coerceQuestionPoints(next.config.points ?? next.points) };
+    }
+    if (next?.points !== undefined) next.points = coerceQuestionPoints(next.points);
+    return next;
+  });
   // This handler always soft-deletes every existing question for the quiz
   // before inserting the submitted set (below). An empty/missing `questions`
   // payload - a malformed request, a stale client state, anything - would
@@ -136,9 +151,9 @@ export async function upsertQuestions(req, res) {
     const invalidMatching = items.some((item) => {
       const colA = Array.isArray(item?.config?.colA) ? item.config.colA : [];
       const colB = Array.isArray(item?.config?.colB) ? item.config.colB : [];
-      return colA.length < 2 || colB.length < colA.length;
+      return colA.length < 2 || colA.length > 15 || colB.length < colA.length;
     });
-    if (invalidMatching) return res.status(400).json({ message: "Matching questions require at least 2 completed pairs." });
+    if (invalidMatching) return res.status(400).json({ message: "Matching questions require at least 2 and at most 15 completed pairs." });
   }
   // No plan restrictions: all users get full template features.
 

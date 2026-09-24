@@ -6,8 +6,8 @@
 
 import { pool } from "../../db.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
-import { scoreAnswer, scoreThinkSpellWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
-import { resolveThinkSpellWordBank, isThinkSpellRoundComplete } from "../quizzes/templates/thinkspell/thinkSpell.js";
+import { scoreAnswer, scoreCrosswordWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
+import { resolveCrosswordWordBank, isCrosswordRoundComplete } from "../quizzes/templates/crossword/crossword.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
 import { attachCompetitiveTotals, calculateCompetitivePoints, competitiveSpeedMultiplier, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
 
@@ -300,7 +300,7 @@ export function registerSessionSockets(io) {
 
       if (status === "LIVE" && session.join_mode === "GROUP") {
         const [[quizTpl]] = await pool.query(`SELECT template_type FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
-        if (["THINK_SPELL", "THINK_AND_SPELL"].includes(String(quizTpl?.template_type || "").toUpperCase())) {
+        if (["CROSSWORD", "THINK_SPELL", "THINK_AND_SPELL"].includes(String(quizTpl?.template_type || "").toUpperCase())) {
           return socket.emit("teacher:error", { message: "Group mode isn't available for Crossword quizzes." });
         }
         const [[counts]] = await pool.query(
@@ -390,6 +390,14 @@ export function registerSessionSockets(io) {
         return socket.emit("antiCheat:kicked", {
           message: p.kick_reason || "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher."
         });
+      }
+      // ThinkBOT-only tutorial demos: block even previously minted seats from
+      // (re)connecting. The host path (teacher:join) stays allowed.
+      if (await hasDatabaseColumn("sessions", "is_tutorial")) {
+        const [[tutorialRow]] = await pool.query(`SELECT is_tutorial FROM sessions WHERE id=:sid`, { sid: sessionId });
+        if (Number(tutorialRow?.is_tutorial || 0) === 1) {
+          return socket.emit("student:error", { message: "Tutorial demo sessions are for ThinkBOTs only." });
+        }
       }
 
       // Reconnecting inside the grace window means the earlier disconnect
@@ -618,7 +626,7 @@ export function registerSessionSockets(io) {
         const groupId = membership.group_id;
         const tt = normalizeTemplateType(session.template_type);
 
-        if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
+        if (tt === TEMPLATE_TYPES.CROSSWORD && !Array.isArray(answer?.words)) {
           const timeUp = await isQuestionTimeUp(session, questionId);
           if (timeUp) {
             return socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up", templateType: tt });
@@ -808,8 +816,8 @@ async function isQuestionTimeUp(session, questionId = null) {
 
 async function handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer, timeExpired = false }) {
   const tt = normalizeTemplateType(session.template_type);
-  if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
-    await handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
+  if (tt === TEMPLATE_TYPES.CROSSWORD && !Array.isArray(answer?.words)) {
+    await handleCrosswordSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer });
     return;
   }
 
@@ -877,14 +885,14 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   await broadcastScores(io, sessionId);
 }
 
-async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
+async function handleCrosswordSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer }) {
   if (await isQuestionTimeUp(session, questionId)) {
     socket.emit("answer:ack", {
       isCorrect: false,
       points: 0,
       locked: true,
       message: "Time's up",
-      templateType: TEMPLATE_TYPES.THINK_SPELL,
+      templateType: TEMPLATE_TYPES.CROSSWORD,
     });
     return;
   }
@@ -907,7 +915,7 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
   const priorWords = Array.isArray(priorPayload?.words) ? priorPayload.words : [];
   const priorPoints = Number(existing?.points_awarded || 0);
 
-  const scored = scoreThinkSpellWord({
+  const scored = scoreCrosswordWord({
     correct,
     answer,
     config,
@@ -955,8 +963,8 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
     },
   };
   const nextPoints = priorPoints + points;
-  const wordBank = resolveThinkSpellWordBank({ config, correct });
-  const allFound = isThinkSpellRoundComplete({ foundWords: nextWords, wordBank });
+  const wordBank = resolveCrosswordWordBank({ config, correct });
+  const allFound = isCrosswordRoundComplete({ foundWords: nextWords, wordBank });
   const requiredWords = wordBank.length;
   const remainingWords = Math.max(0, requiredWords - nextWords.length);
 
@@ -966,8 +974,8 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
     competitivePoints: isCorrect ? wordCompetitive : 0,
     locked: allFound,
     message: allFound ? "All words found!" : undefined,
-    templateType: TEMPLATE_TYPES.THINK_SPELL,
-    thinkSpell: {
+    templateType: TEMPLATE_TYPES.CROSSWORD,
+    crossword: {
       totalWords: nextWords.length,
       totalPoints: nextPoints,
       requiredWords,
@@ -1026,7 +1034,7 @@ async function handleThinkSpellSoloAnswer(io, socket, { session, sessionId, part
     isCorrect,
     points,
     competitivePoints: isCorrect ? wordCompetitive : 0,
-    thinkSpell: { totalWords: nextWords.length, totalPoints: nextPoints },
+    crossword: { totalWords: nextWords.length, totalPoints: nextPoints },
   });
   await broadcastScores(io, sessionId);
 }
@@ -1123,8 +1131,8 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
   const tt = normalizeTemplateType(session.template_type);
 
-  if (tt === TEMPLATE_TYPES.THINK_SPELL && !Array.isArray(answer?.words)) {
-    const wordBank = resolveThinkSpellWordBank({ config, correct });
+  if (tt === TEMPLATE_TYPES.CROSSWORD && !Array.isArray(answer?.words)) {
+    const wordBank = resolveCrosswordWordBank({ config, correct });
     let groupWords = [];
     let groupPoints = 0;
 
@@ -1136,7 +1144,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     groupWords = Array.isArray(priorPayload?.words) ? priorPayload.words : [];
     groupPoints = Number(sampleExisting?.points_awarded || 0);
 
-    const scored = scoreThinkSpellWord({
+  const scored = scoreCrosswordWord({
       correct,
       answer,
       config,
@@ -1159,7 +1167,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       streak: isCorrect ? Number(scored.streak || 0) : 0,
     };
     const nextPoints = groupPoints + points;
-    const allFound = isThinkSpellRoundComplete({ foundWords: nextWords, wordBank });
+    const allFound = isCrosswordRoundComplete({ foundWords: nextWords, wordBank });
     const requiredWords = wordBank.length;
     const remainingWords = Math.max(0, requiredWords - nextWords.length);
     const memberAck = {
@@ -1169,7 +1177,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       viaGroup: true,
       message: allFound ? "All words found!" : undefined,
       templateType: tt,
-      thinkSpell: {
+      crossword: {
         totalWords: nextWords.length,
         totalPoints: nextPoints,
         requiredWords,
@@ -1229,7 +1237,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       isCorrect,
       points,
       viaGroup: true,
-      thinkSpell: { totalWords: nextWords.length, totalPoints: nextPoints },
+      crossword: { totalWords: nextWords.length, totalPoints: nextPoints },
     });
     await broadcastScores(io, sessionId);
     return;

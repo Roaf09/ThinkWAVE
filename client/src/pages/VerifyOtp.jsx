@@ -154,8 +154,13 @@ export default function VerifyOtp() {
     try {
       await api.post("/auth/verify-otp", { email, code });
       setSuccess(true);
-      const nextLogin = mode === "admin" ? "/login?role=admin" : mode === "superadmin" ? "/superadmin-login" : mode === "student" ? "/student-login" : "/login";
-      setTimeout(() => nav(nextLogin), 2000);
+      // After verification, return to the Enter role chooser so users pick
+      // student / teacher / admin themselves. Superadmin stays separate.
+      const verifiedRole = mode === "admin" ? "admin" : mode === "student" ? "student" : mode === "superadmin" ? "superadmin" : "teacher";
+      const next = verifiedRole === "superadmin"
+        ? { path: "/superadmin-login", state: undefined }
+        : { path: `/enter?verified=${verifiedRole}`, state: { justVerified: verifiedRole, email } };
+      setTimeout(() => nav(next.path, next.state ? { state: next.state } : undefined), 1600);
     } catch (error) {
       flash(error?.response?.data?.message || "Invalid or expired OTP.");
     } finally {
@@ -216,7 +221,8 @@ export default function VerifyOtp() {
 
 function SuccessContent({ mode, c }) {
   const label = mode === "admin" ? "admin" : mode === "superadmin" ? "superadmin" : mode === "student" ? "student" : "teacher";
-  return <><div className="flex justify-center mb-[15px]"><span className="w-[70px] h-[70px] rounded-[22px] grid place-items-center" style={{ color: c.greenFg, background: c.greenBg, border: `2px solid ${c.greenBorder}` }}><TwIcon name="check" size={38} strokeWidth={3.2} /></span></div><h2 className="text-[27px] font-[950] m-[0_0_10px]" style={{ color: c.text }}>Verified!</h2><p className="leading-[1.7] m-0" style={{ color: c.textMuted }}>Your {label} account is verified. Redirecting you to login…</p></>;
+  const dest = mode === "superadmin" ? "login" : "the entry page to choose how to log in";
+  return <><div className="flex justify-center mb-[15px]"><span className="w-[70px] h-[70px] rounded-[22px] grid place-items-center" style={{ color: c.greenFg, background: c.greenBg, border: `2px solid ${c.greenBorder}` }}><TwIcon name="check" size={38} strokeWidth={3.2} /></span></div><h2 className="text-[27px] font-[950] m-[0_0_10px]" style={{ color: c.text }}>Verified!</h2><p className="leading-[1.7] m-0" style={{ color: c.textMuted }}>Your {label} account is verified. Redirecting you to {dest}…</p></>;
 }
 
 function input(c) { return { border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }; }

@@ -31,9 +31,11 @@ import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
 
 import { getRole, getToken, getTabToken, clearToken, clearRole } from "./lib/auth";
 import { saveLastRoute, clearLastRoute } from "./lib/lastRoute";
+import { clearPersistentTabs } from "./lib/persistentTab";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
 import StarField from "./components/StarField.jsx";
+import ActionDialog from "./components/ActionDialog.jsx";
 import { ForcedTheme } from "./context/ThemeContext.jsx";
 
 // Public pages that always render white (no theme toggle, saved theme ignored).
@@ -129,27 +131,36 @@ function Shell({ children, toast, setToast }) {
 // Main client router. When someone asks "where is this page mounted?" this is the first file to inspect.
 export default function App() {
   const [toast, setToast] = useState(null);
+  const [sessionConflict, setSessionConflict] = useState(null);
   useEffect(() => { setAuthToken(getToken()); }, []);
 
   // The auth token lives in localStorage, which every tab of this browser
   // shares. If a different account (or role) logs in on another tab, it
   // silently overwrites the token this tab is using, and this tab breaks on
   // its next request with no explanation. Detect that swap the moment it
-  // happens and send this tab back to a safe, logged-out state instead.
+  // happens and show the same confirmation popup style as logout instead
+  // of a native browser alert.
   useEffect(() => {
     function handleStorage(event) {
       if (event.key !== "qz_token") return;
       const tabToken = getTabToken();
       if (!tabToken || event.newValue === tabToken) return;
+      const signedOutElsewhere = !event.newValue;
       clearToken();
       clearRole();
       clearLastRoute();
-      window.alert("You were signed out because a different account signed in from another tab in this browser.");
-      window.location.href = "/";
+      clearPersistentTabs();
+      setAuthToken("");
+      setSessionConflict(signedOutElsewhere ? "signed-out" : "swapped");
     }
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  function dismissSessionConflict() {
+    setSessionConflict(null);
+    try { window.location.href = "/"; } catch {}
+  }
 
   async function handleLoginSuccess(token, role, loginMeta = {}) {
     setAuthToken(token);
@@ -167,6 +178,22 @@ export default function App() {
 
   return (
     <Shell toast={toast} setToast={setToast}>
+      {sessionConflict && (
+        <ActionDialog
+          open
+          tone="yellow"
+          icon="logout"
+          title={sessionConflict === "signed-out" ? "Signed out in another tab" : "Another account signed in"}
+          message={sessionConflict === "signed-out"
+            ? "You were signed out because this account was signed out from another tab in this browser. Please log in again to continue."
+            : "You were signed out because a different account signed in from another tab in this browser. Please log in again to continue."}
+          confirmLabel="OK, got it"
+          cancelLabel="Cancel"
+          closeOnBackdrop={false}
+          onClose={dismissSessionConflict}
+          onConfirm={dismissSessionConflict}
+        />
+      )}
       <Routes>
         <Route path="/"                    element={<Landing />} />
         <Route path="/enter"                element={<White><Enter /></White>} />

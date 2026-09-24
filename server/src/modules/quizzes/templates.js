@@ -5,15 +5,15 @@
  */
 
 import {
-  computeThinkSpellPoints,
+  computeCrosswordPoints,
   hashSeed,
-  loadThinkSpellGridState,
-  matchThinkSpellWord,
-  normalizeThinkWordKey,
+  loadCrosswordGridState,
+  matchCrosswordWord,
+  normalizeCrosswordWordKey,
   removeTilesAndRefill,
-  resolveThinkSpellWordBank,
+  resolveCrosswordWordBank,
   validatePathSpellsWord,
-} from "./templates/thinkspell/thinkSpell.js";
+} from "./templates/crossword/crossword.js";
 
 export const TEMPLATE_TYPES = {
   // K-12
@@ -23,14 +23,17 @@ export const TEMPLATE_TYPES = {
   TYPE_ANSWER: "TYPE_ANSWER",
   // College
   GUESS_WORD_4PICS: "GUESS_WORD_4PICS",
-  DRAW_IT: "DRAW_IT",
-  GRIP_GUESS: "GRIP_GUESS",
-  THINK_SPELL: "THINK_SPELL"
+  CROSSWORD: "CROSSWORD"
 };
 
+// Legacy values still accepted so quizzes created before the Crossword
+// standardization keep working (see server/scripts/migrate_templates_points.mjs).
 const TEMPLATE_ALIASES = {
   FOUR_PICS_ONE_WORD: TEMPLATE_TYPES.GUESS_WORD_4PICS,
-  THINK_AND_SPELL: TEMPLATE_TYPES.THINK_SPELL,
+  THINK_AND_SPELL: TEMPLATE_TYPES.CROSSWORD,
+  THINK_SPELL: TEMPLATE_TYPES.CROSSWORD,
+  DRAW_IT: TEMPLATE_TYPES.TYPE_ANSWER,
+  GRIP_GUESS: TEMPLATE_TYPES.TYPE_ANSWER,
 };
 
 export function normalizeTemplateType(templateType) {
@@ -46,15 +49,19 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       const correctChoices = Array.isArray(correct?.choices) && correct.choices.length
         ? correct.choices
         : [correct?.choice].filter(Boolean);
-      const totalCorrect = Math.max(1, correctChoices.length);
+      // Hardened: at most 2 correct answers are scorable (builder cap) and the
+      // base is an integer 1..3, so awards are always X.0/X.5 even for
+      // legacy or hand-crafted payloads with 3+ correct choices.
+      const scorableChoices = correctChoices.slice(0, 2);
+      const totalCorrect = Math.max(1, scorableChoices.length);
       let correctSelectedCount = 0;
-      for (const choice of correctChoices) {
+      for (const choice of scorableChoices) {
         if (selected.some((sel) => isChoiceCorrect(sel, choice, config))) correctSelectedCount += 1;
       }
-      const hasWrongSelected = selected.some((sel) => !correctChoices.some((cor) => isChoiceCorrect(sel, cor, config)));
-      const cappedBase = clamp(Number(basePoints) || 1, 1, 3);
+      const hasWrongSelected = selected.some((sel) => !scorableChoices.some((cor) => isChoiceCorrect(sel, cor, config)));
+      const cappedBase = Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1)));
       const pointsAwarded = (cappedBase / totalCorrect) * correctSelectedCount;
-      const isCorrect = correctSelectedCount === correctChoices.length && !hasWrongSelected;
+      const isCorrect = correctSelectedCount === scorableChoices.length && !hasWrongSelected;
       const partial = !isCorrect && correctSelectedCount > 0;
       return {
         isCorrect,
@@ -70,7 +77,7 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
     case TEMPLATE_TYPES.TRUE_FALSE:
       {
         const isCorrect = isChoiceCorrect(answer?.choice, correct?.choice, config);
-        return { isCorrect, pointsAwarded: isCorrect ? basePoints : 0 };
+        return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
       }
 
     case TEMPLATE_TYPES.TYPE_ANSWER: {
@@ -79,31 +86,16 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
         .map(norm)
         .filter(Boolean);
       const isCorrect = actual.length > 0 && expectedAny.some((expected) => actual === expected);
-      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, basePoints) : 0 };
+      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
     }
 
     case TEMPLATE_TYPES.GUESS_WORD_4PICS: {
       const isCorrect = normWord(answer?.text) === normWord(correct?.text);
-      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, basePoints) : 0 };
+      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
     }
 
-    case TEMPLATE_TYPES.DRAW_IT:
-    case TEMPLATE_TYPES.GRIP_GUESS: {
-      const actual = normWord(answer?.text);
-      const normalizeList = (list) => (Array.isArray(list) ? list.map(normWord).filter(Boolean) : []);
-      const cfgAnswers = normalizeList(config?.answers);
-      const corAnswers = normalizeList(correct?.answers);
-      const fallback = [normWord(correct?.horizontal), normWord(correct?.vertical), normWord(correct?.diagonal), normWord(correct?.text)].filter(Boolean);
-      const expectedAny = Array.from(new Set([...cfgAnswers, ...corAnswers, ...fallback]));
-
-      const reverse = (s) => s.split("").reverse().join("");
-      const isMatchExpected = (exp) => actual.length > 0 && !!exp && (actual === exp || actual === reverse(exp));
-      const isCorrect = expectedAny.some(isMatchExpected);
-      return { isCorrect, pointsAwarded: isCorrect ? basePoints : 0 };
-    }
-
-    case TEMPLATE_TYPES.THINK_SPELL:
-      return scoreThinkSpellBatch({ correct, answer, config, basePoints, questionId: config?.questionId });
+    case TEMPLATE_TYPES.CROSSWORD:
+      return scoreCrosswordBatch({ correct, answer, config, basePoints, questionId: config?.questionId });
 
     case TEMPLATE_TYPES.MATCHING: {
       const submitted = Array.isArray(answer?.pairs) ? answer.pairs : [];
@@ -114,7 +106,7 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
         if (expectedMap.get(Number(pair.aIndex)) === Number(pair.bIndex)) correctCount += 1;
       }
       const totalPairs = expectedMap.size;
-      const base = clamp(Number(basePoints) || 1, 1, 3);
+      const base = Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1)));
       const isCorrect = totalPairs > 0 && correctCount === totalPairs;
       const partial = correctCount > 0 && correctCount < totalPairs;
       return {
@@ -132,16 +124,16 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
   }
 }
 
-export function scoreThinkSpellBatch({
+export function scoreCrosswordBatch({
   correct,
   answer,
   config = {},
   basePoints = 1,
   questionId = 0,
 }) {
-  const wordBank = resolveThinkSpellWordBank({ config, correct });
-  const expectedKeys = new Set(wordBank.map(normalizeThinkWordKey).filter(Boolean));
-  const gridState = loadThinkSpellGridState({ config, correct, questionId, priorPayload: null });
+  const wordBank = resolveCrosswordWordBank({ config, correct });
+  const expectedKeys = new Set(wordBank.map(normalizeCrosswordWordKey).filter(Boolean));
+  const gridState = loadCrosswordGridState({ config, correct, questionId, priorPayload: null });
   const entries = Array.isArray(answer?.words) ? answer.words : [];
   const accepted = [];
   const acceptedKeys = new Set();
@@ -150,7 +142,7 @@ export function scoreThinkSpellBatch({
   for (const entry of entries) {
     const text = entry?.text || entry?.word || "";
     const path = Array.isArray(entry?.path) ? entry.path.map(Number).filter(Number.isInteger) : [];
-    const canonical = matchThinkSpellWord(text, wordBank);
+    const canonical = matchCrosswordWord(text, wordBank);
     if (!canonical || acceptedKeys.has(canonical) || !expectedKeys.has(canonical)) continue;
     if (!validatePathSpellsWord({ grid: gridState.grid, gridSize: gridState.gridSize, path, word: text })) continue;
     acceptedKeys.add(canonical);
@@ -173,7 +165,7 @@ export function scoreThinkSpellBatch({
   };
 }
 
-export function scoreThinkSpellWord({
+export function scoreCrosswordWord({
   correct,
   answer,
   config = {},
@@ -183,14 +175,14 @@ export function scoreThinkSpellWord({
   priorPayload = null,
 }) {
   const minLen = clamp(Number(config?.minWordLength ?? 3) || 3, 2, 8);
-  const spelled = normalizeThinkWordKey(answer?.text);
+  const spelled = normalizeCrosswordWordKey(answer?.text);
   const path = Array.isArray(answer?.path)
     ? answer.path.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0)
     : [];
-  const wordBank = resolveThinkSpellWordBank({ config, correct });
-  const foundKeys = new Set((priorWords || []).map(normalizeThinkWordKey).filter(Boolean));
+  const wordBank = resolveCrosswordWordBank({ config, correct });
+  const foundKeys = new Set((priorWords || []).map(normalizeCrosswordWordKey).filter(Boolean));
 
-  const state = loadThinkSpellGridState({ config, correct, questionId, priorPayload });
+  const state = loadCrosswordGridState({ config, correct, questionId, priorPayload });
   const { grid, gridSize, refillCounter, streak } = state;
 
   if (!spelled || spelled.length < minLen) {
@@ -200,7 +192,7 @@ export function scoreThinkSpellWord({
     return { isCorrect: false, pointsAwarded: 0, reason: "not_in_grid", streak: 0, grid, gridSize, refillCounter };
   }
 
-  const canonical = matchThinkSpellWord(answer?.text, wordBank);
+  const canonical = matchCrosswordWord(answer?.text, wordBank);
   if (!canonical) {
     return { isCorrect: false, pointsAwarded: 0, reason: "not_in_bank", streak: 0, grid, gridSize, refillCounter };
   }
@@ -209,7 +201,7 @@ export function scoreThinkSpellWord({
   }
 
   const nextStreak = streak + 1;
-  const points = computeThinkSpellPoints(path.length, config, basePoints, nextStreak);
+  const points = computeCrosswordPoints(path.length, config, basePoints, nextStreak);
   const refillSeed = hashSeed(`${questionId}-${refillCounter}`);
   const newGrid = removeTilesAndRefill(grid, gridSize, path, refillSeed);
 

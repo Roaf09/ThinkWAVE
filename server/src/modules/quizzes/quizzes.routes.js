@@ -31,7 +31,7 @@ const QuizSchema = z.object({
   templateType:       z.string().min(1),
   classId:            z.coerce.number().optional().nullable(),
   timeLimitSec:       z.coerce.number().int().min(5).max(600).default(30),
-  pointsPerQuestion:  z.coerce.number().int().min(1).max(100).default(1),
+  pointsPerQuestion:  z.coerce.number().int().min(1).max(3).default(1),
   randomizeQuestions: z.boolean().default(false),
   shuffleAnswers:     z.boolean().default(false),
   deliveryMode:       z.enum(["SYNCHRONOUS","ASYNCHRONOUS"]).default("SYNCHRONOUS"),
@@ -51,7 +51,7 @@ const QuestionsSchema = z.object({
 
 const SettingsSchema = z.object({
   timeLimitSec:       z.coerce.number().int().min(5).max(600),
-  pointsPerQuestion:  z.coerce.number().int().min(1).max(100),
+  pointsPerQuestion:  z.coerce.number().int().min(1).max(3),
   randomizeQuestions: z.boolean(),
   shuffleAnswers:     z.boolean(),
 });
