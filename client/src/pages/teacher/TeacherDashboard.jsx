@@ -16,7 +16,7 @@ import { TeacherActionModal } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import { useIsMobileViewport } from "./tabs/teacherTabShared";
-import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState } from "../../lib/tutorialState";
+import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState, pullTutorialState } from "../../lib/tutorialState";
 import { TEMPLATE_TYPES } from "../../lib/templateTypes";
 
 import HomeTab           from "./tabs/HomeTab";
@@ -60,6 +60,7 @@ export default function TeacherDashboard() {
   const [profile, setProfile] = useState(blankProfile);
   const [profileError, setProfileError] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [tutorialUserId, setTutorialUserId] = useState(null);
   const [tutorialState, setTutorialState] = useState({});
   const isMobileViewport = useIsMobileViewport();
@@ -74,7 +75,9 @@ export default function TeacherDashboard() {
       setProfile(profileFromUser(data));
       if (!data?.id) return;
       setTutorialUserId(data.id);
-      let saved = readTutorialState(data.id);
+      // Cross-device resume: prefer the freshest tour snapshot between this
+      // browser and the server before deciding which step to show.
+      let saved = await pullTutorialState(data.id);
       // A recreated database restarts AUTO_INCREMENT, so a brand-new account
       // can reuse an id whose tour is already marked complete in this
       // browser. The account creation timestamp tells the two apart: on a
@@ -198,6 +201,9 @@ export default function TeacherDashboard() {
 
   async function saveProfile(event) {
     event.preventDefault();
+    // One save per change: ignore repeat submits while a save is in flight.
+    if (profileSaving) return;
+    setProfileSaving(true);
     setProfileError("");
     try {
       const { data } = await api.patch("/auth/me", {
@@ -212,6 +218,8 @@ export default function TeacherDashboard() {
       setTimeout(() => setProfileSaved(false), 2000);
     } catch (error) {
       setProfileError(error?.response?.data?.message || "Unable to save profile settings.");
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -313,7 +321,7 @@ export default function TeacherDashboard() {
         <ThinkBotTutorial target='[data-tutorial="nav-live"]' placement="right" dialogWidth={285} className="tw-tutorial-nav-flow" highlight highlightMode="target"><p>Next, let’s go to <strong>Sessions</strong>.</p></ThinkBotTutorial>
       ))}
 
-      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} onSubmit={saveProfile} onReplayTutorial={replayMainTutorial} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
+      {profileOpen && <TeacherProfileModal c={c} profile={profile} setProfile={setProfile} error={profileError} saving={profileSaving} onSubmit={saveProfile} onReplayTutorial={replayMainTutorial} onClose={() => { setProfileOpen(false); setProfileError(""); }} onUpload={() => profileFileRef.current?.click()} />}
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the teacher dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
@@ -321,7 +329,7 @@ export default function TeacherDashboard() {
   );
 }
 
-function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose, onUpload, onReplayTutorial }) {
+function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, onClose, onUpload, onReplayTutorial }) {
   return <div style={modalBackdrop}><form onSubmit={onSubmit} style={{ ...modalCard(c), width: "min(94vw,600px)", position: "relative" }}>
     <button type="button" onClick={onClose} style={{ ...iconButton(c), position: "absolute", right: 14, top: 14 }}><TwIcon name="close" size={18} /></button>
     <h3 style={{ marginTop: 0, color: c.text }}>Teacher Info</h3>
@@ -341,7 +349,7 @@ function TeacherProfileModal({ c, profile, setProfile, error, onSubmit, onClose,
     </div>
     <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 14 }}><button type="button" onClick={onReplayTutorial} style={{ ...sideAction(c), width: "auto" }}><TwIcon name="spark" size={16} /><span>Replay onboarding tour</span></button></div>
     {error && <div style={{ marginTop: 14, padding: 12, borderRadius: 12, color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, fontWeight: 850 }}>{error}</div>}
-    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button style={primary(c)}>Save</button></div>
+    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button disabled={!!saving} style={{ ...primary(c), opacity: saving ? .6 : 1, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
   </form></div>;
 }
 

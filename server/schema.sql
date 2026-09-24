@@ -536,6 +536,16 @@ CREATE TABLE IF NOT EXISTS student_favorite_achievements (
   INDEX idx_student_favorite_user (student_user_id)
 );
 
+-- -----------------------------------------------------------
+-- 20. user_tutorial_state (cross-device walkthrough progress)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_tutorial_state (
+  user_id    BIGINT PRIMARY KEY,
+  state_json JSON NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_user_tutorial_state_user FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS student_competitive_overtakes (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   student_user_id BIGINT NOT NULL,

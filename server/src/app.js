@@ -20,6 +20,7 @@ import { questionBankRouter }   from "./modules/question_bank/question_bank.rout
 import { superadminRouter }     from "./modules/superadmin/superadmin.routes.js";
 import { adminDashboardRouter } from "./modules/admin/admin_dashboard.routes.js";
 import { studentRouter }        from "./modules/student/student.routes.js";
+import { tutorialStateRouter }  from "./modules/tutorial_state/tutorial_state.routes.js";
 import { publicRouter }         from "./modules/public/public.routes.js";
 import { metricsMiddleware }     from "./metrics.js";
 import { rateLimit }             from "./middleware/rateLimit.js";
@@ -101,6 +102,7 @@ export function makeApp() {
   app.use("/api/superadmin",      superadminRouter);
   app.use("/api/admin-dashboard", adminDashboardRouter);
   app.use("/api/student",         studentRouter);
+  app.use("/api/tutorial-state",  tutorialStateRouter);
 
   // Unknown API route — JSON 404 instead of the default HTML page
   // (avoids leaking stack traces / framework fingerprinting).

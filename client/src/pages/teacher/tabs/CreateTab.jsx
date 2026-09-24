@@ -9,7 +9,7 @@ import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import { IconBubble, TwIcon } from "../../../components/TwUI";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
-import { templateTone, templateCardChrome, templateAccent } from "../../../lib/templatePalette";
+import { templateTone, templateAccent } from "../../../lib/templatePalette";
 import { TeacherPressButton } from "../TeacherUI";
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { useIsMobileViewport } from "./teacherTabShared";
@@ -186,9 +186,9 @@ export default function CreateTab({ guestMode = false, tutorial }) {
       <div className="tw-teacher-shortcut-grid">
         {recentTemplates.length === 0 ? <div style={card(c, { color: c.textMuted })}>Recent templates will appear here after you create a few quizzes.</div> : recentTemplates.map((quiz) => {
           const tone = templateTone(quiz.template_type, c, false);
-          return <button key={quiz.id} type="button" className="tw-teacher-shortcut-card" onClick={() => navigate(guestMode ? `/guest/quizzes/${quiz.id}/builder` : `/teacher/quizzes/${quiz.id}/builder`)} style={{ ...templateCardChrome(quiz.template_type, c, false), color: c.text, borderWidth: 4, borderRadius: 18 }}>
-            <IconBubble name={templateIcon(quiz.template_type)} c={c} size={40} iconSize={20} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: tone.accent }} />
-            <b style={{ color: tone.accent }}>{templateLabel(quiz.template_type)}</b><small style={{ color: c.textMuted }}>{quiz.title}</small>
+          const ink = templateInk(quiz.template_type, dark);
+          return <button key={quiz.id} type="button" className="tw-teacher-template-press tw-teacher-shortcut-press" onClick={() => navigate(guestMode ? `/guest/quizzes/${quiz.id}/builder` : `/teacher/quizzes/${quiz.id}/builder`)} style={{ "--template-face": tone.softBg, "--template-base": tone.border, "--template-border": tone.accent, "--template-ink": ink, color: ink }}>
+            <span><IconBubble name={templateIcon(quiz.template_type)} c={c} size={44} iconSize={22} style={{ background: tone.iconBg, borderColor: tone.iconBorder, color: ink }} /><span className="tw-teacher-template-labelstack tw-teacher-shortcut-labelstack"><b style={{ color: ink }}>{templateLabel(quiz.template_type)}</b><small style={{ color: c.textMuted }}>{quiz.title}</small></span></span>
           </button>;
         })}
       </div>

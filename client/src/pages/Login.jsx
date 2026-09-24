@@ -36,7 +36,7 @@ export default function Login({ onLoginSuccess }) {
     const incoming = direction === "left" ? "right" : "left";
     sessionStorage.setItem("tw_auth_from", incoming);
     setExitClass(direction === "left" ? "exit-left" : "exit-right");
-    window.setTimeout(() => nav(to, { state: { authFrom: incoming } }), 190);
+    window.setTimeout(() => nav(to, { state: { authFrom: incoming } }), 200);
   }
 
   async function submit(e) {

@@ -4,10 +4,10 @@
  */
 
 import { useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import PublicHeader from "../components/PublicHeader";
 import { IconBubble, TwIcon } from "../components/TwUI";
 import { useColors, useTheme } from "../context/ThemeContext";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 
 const BOX_COUNT = 6;
@@ -164,12 +164,10 @@ export default function VerifyOtp() {
   }
 
   return (
-    <div className="tw-otp-page min-h-screen flex flex-col relative overflow-hidden" style={{ background: c.pageBg, color: c.text }}>
-      <div className="fixed w-[520px] h-[520px] rounded-full -top-[180px] -left-[110px] pointer-events-none" style={{ background: `radial-gradient(circle,${c.accent}24 0%,transparent 70%)` }} />
-      <div className="fixed w-[420px] h-[420px] rounded-full -bottom-[120px] -right-[110px] pointer-events-none bg-[radial-gradient(circle,rgba(139,92,246,0.14)_0%,transparent_70%)]" />
+    <div className="tw-otp-page tw-enter-otp-page min-h-screen flex flex-col relative overflow-hidden" style={{ background: "#fff", color: c.text }}>
       <PublicHeader compact hideSuper hideTheme />
 
-      <div className="tw-otp-main grid place-items-center flex-1 px-5 pt-[34px] pb-[50px] z-[1]">
+      <div className="tw-otp-main grid place-items-center flex-1 min-h-0 overflow-hidden px-5 py-[20px] z-[1]">
         <div className="tw-otp-card w-[min(100%,470px)] p-[38px_34px] rounded-[26px] text-center" style={{ background: c.cardBg3 || c.cardBg, border: `1px solid ${c.border}`, boxShadow: dark ? "0 28px 90px rgba(0,0,0,.45)" : "0 28px 80px rgba(43,108,255,.16)" }}>
           {success ? <SuccessContent mode={mode} c={c} /> : <>
             <div className="tw-otp-icon-wrap flex justify-center mb-[14px]"><IconBubble name="invitation" c={c} size={58} iconSize={28} /></div>
@@ -196,7 +194,7 @@ export default function VerifyOtp() {
                 </label>
                 <p className="m-0 text-xs leading-[1.6]" style={{ color: c.textMuted }}>We&apos;ll move your pending account to the new address and send a fresh code. Old codes stop working.</p>
                 {msg && <div className="rounded-[11px] p-[10px_13px] text-[13px] font-extrabold m-0" style={msgType === "success" ? { color: c.greenFg, background: c.greenBg, border: `1px solid ${c.greenBorder}` } : { color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}` }}>{msg}</div>}
-                <button type="submit" disabled={savingEmail} className="w-full min-h-[51px] rounded-[14px] border-0 text-white text-[15px] font-[950] cursor-pointer" style={{ background: c.accent, opacity: savingEmail ? .55 : 1, boxShadow: `0 13px 30px ${c.accent}35` }}>{savingEmail ? "Updating…" : "Save and resend code"}</button>
+                <button type="submit" disabled={savingEmail} className="tw-auth-primary w-full p-[14px] rounded-[8px] border-[3px] border-brand bg-brand text-white text-base font-extrabold cursor-pointer shadow-[0_10px_24px_rgba(43,108,255,0.25)] disabled:opacity-70">{savingEmail ? "Updating…" : "Save and resend code"}</button>
                 <button type="button" onClick={() => { setIsEditingEmail(false); setMsg(""); }} disabled={savingEmail} className="border-0 bg-transparent font-black cursor-pointer" style={{ color: c.textMuted }}>Cancel</button>
               </form>
             ) : (
@@ -205,8 +203,8 @@ export default function VerifyOtp() {
                 {digits.map((digit, index) => <input key={index} ref={(element) => { refs.current[index] = element; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(event) => handleDigit(index, event.target.value)} onKeyDown={(event) => handleKeyDown(index, event)} autoFocus={index === 0} className="w-[50px] h-[62px] box-border rounded-[14px] text-[27px] font-[950] text-center outline-none caret-transparent transition-[border-color,transform] duration-150 ease-[ease]" style={{ border: `2px solid ${digit ? c.accent : c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text }} />)}
               </div>
               {msg && <div className="rounded-[11px] p-[10px_13px] text-[13px] font-extrabold mb-4" style={msgType === "success" ? { color: c.greenFg, background: c.greenBg, border: `1px solid ${c.greenBorder}` } : { color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}` }}>{msg}</div>}
-              <button type="submit" disabled={loading || digits.join("").length < BOX_COUNT} className="w-full min-h-[51px] rounded-[14px] border-0 text-white text-[15px] font-[950] cursor-pointer" style={{ background: c.accent, opacity: loading || digits.join("").length < BOX_COUNT ? .55 : 1, boxShadow: `0 13px 30px ${c.accent}35` }}>{loading ? "Verifying…" : "Verify"}</button>
-              <button type="button" onClick={resend} disabled={resending} className="mt-3 border-0 bg-transparent font-black cursor-pointer" style={{color:c.accent,opacity:resending?.6:1}}>{resending?"Sending new code…":"Resend code"}</button>
+              <button type="submit" disabled={loading || digits.join("").length < BOX_COUNT} className="tw-auth-primary w-full p-[14px] rounded-[8px] border-[3px] border-brand bg-brand text-white text-base font-extrabold cursor-pointer shadow-[0_10px_24px_rgba(43,108,255,0.25)] disabled:opacity-70">{loading ? "Verifying…" : "Verify"}</button>
+              <button type="button" onClick={resend} disabled={resending} className="tw-enter-link" style={{ justifySelf: "center", marginTop: 12, opacity: resending ? .6 : 1 }}>{resending?"Sending new code…":"Resend code"}</button>
             </form>
             )}
           </>}

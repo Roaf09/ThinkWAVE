@@ -14,6 +14,36 @@ import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
 import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
 
+// Assignment tab-out store (mirrors live sessions' tab_events 3-strike rule).
+// Created lazily so databases predating this feature keep working.
+let assignmentTabTableReady = false;
+async function ensureAssignmentTabTable() {
+  if (assignmentTabTableReady) return;
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS assignment_tab_events (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      quiz_id BIGINT NOT NULL,
+      student_user_id BIGINT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_assignment_tab_quiz_student (quiz_id, student_user_id)
+    )`);
+  } catch {}
+  assignmentTabTableReady = true;
+}
+async function loadAssignmentTabCounts(quizId) {
+  try {
+    await ensureAssignmentTabTable();
+    const [rows] = await pool.query(
+      `SELECT student_user_id, COUNT(*) AS tab_out_count
+       FROM assignment_tab_events WHERE quiz_id=:qid GROUP BY student_user_id`,
+      { qid: Number(quizId) }
+    );
+    return new Map(rows.map((r) => [Number(r.student_user_id), Number(r.tab_out_count || 0)]));
+  } catch {
+    return new Map();
+  }
+}
+
 // Same Asia/Manila pinning as analytics.controller.js's fmtDate - without an
 // explicit timeZone this renders in whatever zone the Node process runs in
 // (UTC on Render), not Philippine time.
@@ -227,14 +257,14 @@ export async function listClassAsyncResults(req, res) {
 
 async function getAsyncExportData(classId, quizId, teacherId) {
   const [[quiz]] = await pool.query(
-    `SELECT q.id, q.title, q.available_from, q.available_until, c.name AS class_name
+    `SELECT q.id, q.title, q.template_type, q.available_from, q.available_until, c.name AS class_name
      FROM quizzes q JOIN classes c ON c.id=q.class_id
      WHERE q.id=:qid AND q.class_id=:cid AND q.teacher_id=:tid AND q.delivery_mode='ASYNCHRONOUS'`,
     { qid: quizId, cid: classId, tid: teacherId }
   );
   if (!quiz) return null;
   const [rows] = await pool.query(
-    `SELECT e.last_name, e.first_name, e.middle_initial, e.student_id,
+    `SELECT e.last_name, e.first_name, e.middle_initial, e.student_id, e.student_user_id,
             a.score, a.max_score, a.submitted_at
      FROM class_enrollments e
      LEFT JOIN async_quiz_submissions a ON a.student_user_id=e.student_user_id AND a.quiz_id=:qid
@@ -242,6 +272,8 @@ async function getAsyncExportData(classId, quizId, teacherId) {
      ORDER BY e.last_name ASC, e.first_name ASC, e.student_id ASC`,
     { qid: quizId, cid: classId, tid: teacherId }
   );
+  const tabCounts = await loadAssignmentTabCounts(quizId);
+  for (const r of rows) r.tab_out_count = tabCounts.get(Number(r.student_user_id)) || 0;
   return { quiz, rows };
 }
 
@@ -269,13 +301,13 @@ export async function exportClassAsyncXlsx(req, res) {
   ]);
   sheet.getRow(1).font = { bold: true, size: 16 };
   sheet.columns = [
-    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 28 },
+    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 28 },
   ];
-  sheet.addRow(["Last Name", "First Name", "M.I.", "Student ID", "Score", "Max", "Submitted At"]).font = { bold: true };
+  sheet.addRow(["Last Name", "First Name", "M.I.", "Student ID", "Score", "Max", "Tab outs", "Submitted At"]).font = { bold: true };
   // Pre-format submitted_at rather than handing exceljs a raw Date - it
   // serializes date cells on its own UTC/local convention, which is the same
   // timezone mismatch fmtExportDate exists to avoid.
-  data.rows.forEach((r) => sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]));
+  data.rows.forEach((r) => sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", Number(r.tab_out_count || 0), r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]));
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.xlsx"`);
   await workbook.xlsx.write(res);
@@ -314,17 +346,18 @@ export async function exportClassAsyncPdf(req, res) {
     ],
   });
 
-  drawTable(doc, {
+  const yAfterStudents = drawTable(doc, {
     x: left,
     y,
     title: "Student Results",
     columns: [
-      { label: "Last Name", width: 92 },
-      { label: "First Name", width: 86 },
-      { label: "M.I.", width: 30 },
-      { label: "Student ID", width: 76 },
-      { label: "Score", width: 42, align: "right" },
-      { label: "Max", width: 37, align: "right" },
+      { label: "Last Name", width: 84 },
+      { label: "First Name", width: 78 },
+      { label: "M.I.", width: 28 },
+      { label: "Student ID", width: 68 },
+      { label: "Score", width: 38, align: "right" },
+      { label: "Max", width: 34, align: "right" },
+      { label: "Tab", width: 30, align: "right" },
       { label: "Submitted At", width: 152 },
     ],
     rows: data.rows.map((r) => [
@@ -334,11 +367,101 @@ export async function exportClassAsyncPdf(req, res) {
       r.student_id,
       r.score ?? "—",
       r.max_score ?? "—",
+      Number(r.tab_out_count || 0),
       r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted",
     ]),
   });
 
+  const classId = Number(req.params.id);
+  const quizId = Number(req.params.quizId);
+  const [asyncQuestions] = await pool.query(
+    `SELECT id AS question_id, question_order, prompt, config_json, correct_json
+     FROM quiz_questions
+     WHERE quiz_id=:qid AND deleted_at IS NULL
+     ORDER BY question_order ASC`,
+    { qid: quizId }
+  );
+  const [asyncSubmissions] = await pool.query(
+    `SELECT student_user_id, answers_json, submitted_at
+     FROM async_quiz_submissions
+     WHERE quiz_id=:qid AND class_id=:cid AND teacher_id=:tid`,
+    { qid: quizId, cid: classId, tid: req.user.sub }
+  );
+  const asyncResponseRows = [];
+  for (const submission of asyncSubmissions) {
+    const checked = safeAnalyticsJson(submission.answers_json);
+    for (const answer of Array.isArray(checked) ? checked : []) {
+      asyncResponseRows.push({
+        participant_id: Number(submission.student_user_id),
+        question_id: Number(answer?.questionId),
+        answer_json: answer?.answer ?? null,
+        is_correct: answer?.isCorrect ? 1 : 0,
+        points_awarded: Number(answer?.points || 0),
+        answered_at: submission.submitted_at,
+      });
+    }
+  }
+  const asyncTemplate = String(data.quiz.template_type || "").toUpperCase();
+  const asyncIsBatch = asyncTemplate === "MATCHING" || asyncTemplate === "THINK_SPELL" || asyncTemplate === "THINK_AND_SPELL";
+  const asyncDetails = buildDetailedQuestionAnalytics(data.quiz.template_type, asyncQuestions, asyncResponseRows);
+
+  drawTable(doc, {
+    x: left,
+    y: yAfterStudents,
+    title: asyncIsBatch ? "Batch Results" : "Question Results",
+    columns: [
+      { label: "#", width: 30, align: "right" },
+      { label: asyncIsBatch ? "Batch" : "Question", width: 205 },
+      { label: "Correct Answer(s)", width: 160 },
+      { label: "% Correct", width: 60, align: "right" },
+      { label: "% Incorrect", width: 60, align: "right" },
+    ],
+    rows: asyncDetails.map((q, idx) => [
+      Number(q.question_order ?? idx) + 1,
+      q.prompt || (asyncIsBatch ? `Batch ${idx + 1}` : `Question ${idx + 1}`),
+      asyncCorrectAnswerText(data.quiz.template_type, q.correct_json, q.config_json),
+      `${q.pct_correct ?? 0}% (${q.correct_answers ?? 0})`,
+      `${q.pct_incorrect ?? 0}% (${q.incorrect_answers ?? 0})`,
+    ]),
+  });
+
   doc.end();
+}
+
+function asyncCorrectAnswerText(templateType, correct = {}, config = {}) {
+  const tt = String(templateType || "").toUpperCase();
+  if (tt === "TRUE_FALSE") return String(correct?.choice ?? "—");
+  if (tt === "TYPE_ANSWER" || tt === "GUESS_WORD_4PICS") {
+    const extra = Array.isArray(correct?.answers) ? correct.answers : [];
+    return [correct?.text, ...extra].filter(Boolean).join(" / ") || "—";
+  }
+  if (tt === "MCQ") {
+    const values = Array.isArray(correct?.choices) && correct.choices.length
+      ? correct.choices
+      : [correct?.choice].filter(Boolean);
+    const options = (Array.isArray(config?.options) ? config.options : []).map((option, index) => (
+      option && typeof option === "object"
+        ? { id: String(option.id || `option-${index + 1}`), text: String(option.text ?? option.label ?? "") }
+        : { id: `option-${index + 1}`, text: String(option ?? "") }
+    ));
+    const resolved = values.map((value) => {
+      const actual = String(value ?? "").trim().toLowerCase();
+      const match = options.find((option) => [option.id, option.text].some((candidate) => String(candidate ?? "").trim().toLowerCase() === actual));
+      return match?.text || String(value ?? "");
+    }).filter(Boolean);
+    return resolved.join(", ") || "—";
+  }
+  if (tt === "MATCHING") {
+    const count = Array.isArray(correct?.pairs) ? correct.pairs.length : 0;
+    return `${count} pair${count === 1 ? "" : "s"}`;
+  }
+  if (tt === "THINK_SPELL" || tt === "THINK_AND_SPELL") {
+    const words = Array.isArray(correct?.answers) && correct.answers.length
+      ? correct.answers
+      : Array.isArray(config?.answers) ? config.answers : [];
+    return words.map(String).filter(Boolean).join(", ") || "—";
+  }
+  return String(correct?.text ?? "—");
 }
 
 export async function getClassAsyncAnalytics(req, res) {
@@ -399,6 +522,7 @@ export async function getClassAsyncAnalytics(req, res) {
   const avg = scores.length ? Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(2)) : 0;
   const min = scores.length ? Math.min(...scores) : 0;
   const max = scores.length ? Math.max(...scores) : 0;
+  const tabCounts = await loadAssignmentTabCounts(quizId);
 
   const sessionPayload = {
     ...quiz,
@@ -420,10 +544,17 @@ export async function getClassAsyncAnalytics(req, res) {
       total_points: Number(row.total_points || 0),
       max_score: Number(row.max_score || 0),
       joined_at: row.submitted_at,
+      tab_out_count: tabCounts.get(Number(row.student_user_id)) || 0,
       responses: buildStudentResponseDetails(responsesByStudent[Number(row.student_user_id)] || []),
     })),
     questions: detailedQuestions,
-    tabMonitoring: [],
+    tabMonitoring: submissions.map((row) => ({
+      participant_id: row.student_user_id,
+      student_user_id: row.student_user_id,
+      first_name: row.first_name || "Student",
+      last_name: row.last_name || row.student_id || "",
+      tab_out_count: tabCounts.get(Number(row.student_user_id)) || 0,
+    })),
   });
 }
 

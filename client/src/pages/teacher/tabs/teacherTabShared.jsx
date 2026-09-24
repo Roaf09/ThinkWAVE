@@ -35,7 +35,7 @@ export function tabInputStyle(c) {
 }
 
 export function solidModalBg(c) {
-  return String(c.text || "").toLowerCase() === "#eef4ff" ? "#07142b" : "#fffaf0";
+  return String(c.text || "").toLowerCase() === "#eef4ff" ? "#07142b" : "#ffffff";
 }
 
 export function Badge({ label, c, tone = "neutral" }) {

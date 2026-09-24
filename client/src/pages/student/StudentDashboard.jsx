@@ -39,6 +39,7 @@ export default function StudentDashboard() {
   const [msg, setMsg] = useState("");
   const [profileMsg, setProfileMsg] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [joiningSession, setJoiningSession] = useState(null);
   const [analyticsTarget, setAnalyticsTarget] = useState(null);
   const [profile, setProfile] = useState(emptyProfile());
@@ -129,6 +130,9 @@ export default function StudentDashboard() {
 
   async function saveProfile(event) {
     event.preventDefault();
+    // One save per change: ignore repeat submits while a save is in flight.
+    if (profileSaving) return;
+    setProfileSaving(true);
     setProfileMsg("");
     try {
       // The form keeps empty strings for the optional fields, but the server
@@ -147,6 +151,8 @@ export default function StudentDashboard() {
       setTimeout(() => setProfileSaved(false), 2000);
     } catch (error) {
       setProfileMsg(error?.response?.data?.message || "Unable to save Student Info.");
+    } finally {
+      setProfileSaving(false);
     }
   }
 
@@ -250,7 +256,7 @@ export default function StudentDashboard() {
       <MobileTabBar c={c} items={navItems} activeId={activeTab} onSelect={setActiveTab} iconsOnly />
 
       {joinOpen && <JoinClassModal c={c} classCode={classCode} setClassCode={setClassCode} profile={profile} setProfile={setProfile} profileStep={joinProfileStep} countdown={countdown} onSubmit={joinClass} onClose={() => { setJoinOpen(false); setJoinProfileStep(false); setClassCode(""); }} />}
-      {profileOpen && <ProfileModal c={c} profile={profile} setProfile={setProfile} message={profileMsg} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileMsg(""); }} onUpload={() => fileRef.current?.click()} onDelete={deleteProfileImage} onBirth={() => setBirthPickerOpen(true)} />}
+      {profileOpen && <ProfileModal c={c} profile={profile} setProfile={setProfile} message={profileMsg} saving={profileSaving} onSubmit={saveProfile} onClose={() => { setProfileOpen(false); setProfileMsg(""); }} onUpload={() => fileRef.current?.click()} onDelete={deleteProfileImage} onBirth={() => setBirthPickerOpen(true)} />}
       <input ref={fileRef} type="file" accept="image/*" onChange={uploadProfile} className="hidden" />
       {birthPickerOpen && <BirthDateModal c={c} value={profile.birthDate} onSelect={(birthDate) => { setProfile((current) => ({ ...current, birthDate })); setBirthPickerOpen(false); }} onClose={() => setBirthPickerOpen(false)} />}
       {analyticsTarget && <StudentAnalyticsModal c={c} target={analyticsTarget} onClose={() => setAnalyticsTarget(null)} />}
@@ -681,7 +687,7 @@ function ClassRemovalModal({ c, notice, onClose }) {
   </div>;
 }
 
-function ProfileModal({ c, profile, setProfile, message, onSubmit, onClose, onUpload, onDelete, onBirth }) {
+function ProfileModal({ c, profile, setProfile, message, saving, onSubmit, onClose, onUpload, onDelete, onBirth }) {
   return <div style={modalBackdrop}><form onSubmit={onSubmit} className="w-[min(94vw,600px)] max-h-[90vh] overflow-y-auto relative" style={card(c)}>
     <button type="button" onClick={onClose} className="absolute top-[14px] right-[14px]" style={iconBtn(c)}><TwIcon name="close" size={18} /></button>
     <h3 style={{ marginTop: 0, color: c.text }}>Student Info</h3>
@@ -701,7 +707,7 @@ function ProfileModal({ c, profile, setProfile, message, onSubmit, onClose, onUp
       <Field c={c} label="Student ID *"><input required value={profile.studentId} onChange={(e) => setProfile({ ...profile, studentId: e.target.value })} style={input(c)} /></Field>
     </div>
     {message && <div className="mt-[14px]" style={notice(c, "error")}>{message}</div>}
-    <div className="flex justify-end mt-[20px]"><button style={primary(c)}>Save</button></div>
+    <div className="flex justify-end mt-[20px]"><button disabled={!!saving} style={{ ...primary(c), opacity: saving ? .6 : 1, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
   </form></div>;
 }
 
@@ -717,12 +723,16 @@ function JoinClassModal({ c, classCode, setClassCode, profile, setProfile, profi
   </form></div>;
 }
 
+const BIRTH_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const BIRTH_YEARS = (() => { const current = new Date().getFullYear(); const years = []; for (let y = current; y >= 1900; y -= 1) years.push(y); return years; })();
+
 function BirthDateModal({ c, value, onSelect, onClose }) {
   const initial = value ? new Date(`${value}T12:00:00`) : new Date(2010, 0, 1);
   const [view, setView] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
   const [selected, setSelected] = useState(initial);
   const days = calendarDays(view);
-  return <div style={{ ...modalBackdrop, zIndex: 4000 }}><div className="w-[min(94vw,430px)]" style={card(c)}><div style={sectionHeader(c)}><h3 style={{ margin: 0 }}>Select Birth Date</h3><button onClick={onClose} style={iconBtn(c)}><TwIcon name="close" size={18} /></button></div><div className="flex justify-between items-center mt-[18px] mb-[12px]"><button onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))} style={secondary(c)}>‹</button><b>{view.toLocaleString("en-PH", { month: "long", year: "numeric" })}</b><button onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))} style={secondary(c)}>›</button></div><div className="grid grid-cols-[repeat(7,1fr)] text-center gap-[5px]">{["Su","Mo","Tu","We","Th","Fr","Sa"].map((day) => <div key={day} className="text-[11px] font-[950]" style={{ color: c.textMuted }}>{day}</div>)}{days.map((day, index) => day ? <button key={index} onClick={() => setSelected(new Date(view.getFullYear(), view.getMonth(), day, 12))} style={{ border: `1px solid ${sameDay(selected, view, day) ? c.accent : "transparent"}`, background: sameDay(selected, view, day) ? c.accent : c.cardBg2, color: sameDay(selected, view, day) ? "#fff" : c.text }} className="h-[40px] rounded-[9px] cursor-pointer font-[inherit] font-black">{day}</button> : <span key={index} />)}</div><button onClick={() => onSelect(toDateValue(selected))} className="w-full mt-[18px]" style={primary(c)}>Use This Date</button></div></div>;
+  const pickerSelect = { padding: "10px 12px", borderRadius: 11, border: `1px solid ${c.inputBorder || c.border}`, background: c.inputBg || c.cardBg2, color: c.text, fontFamily: "inherit", fontWeight: 800, cursor: "pointer" };
+  return <div style={{ ...modalBackdrop, zIndex: 4000 }}><div className="w-[min(94vw,430px)]" style={card(c)}><div style={sectionHeader(c)}><h3 style={{ margin: 0 }}>Select Birth Date</h3><button onClick={onClose} style={iconBtn(c)}><TwIcon name="close" size={18} /></button></div><div className="flex justify-between items-center mt-[18px] mb-[12px] gap-[8px]"><button onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))} style={secondary(c)}>‹</button><span className="flex gap-[8px] flex-wrap justify-center"><select aria-label="Birth month" value={view.getMonth()} onChange={(e) => setView(new Date(view.getFullYear(), Number(e.target.value), 1))} style={pickerSelect}>{BIRTH_MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}</select><select aria-label="Birth year" value={view.getFullYear()} onChange={(e) => setView(new Date(Number(e.target.value), view.getMonth(), 1))} style={pickerSelect}>{BIRTH_YEARS.map((year) => <option key={year} value={year}>{year}</option>)}</select></span><button onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))} style={secondary(c)}>›</button></div><div className="grid grid-cols-[repeat(7,1fr)] text-center gap-[5px]">{["Su","Mo","Tu","We","Th","Fr","Sa"].map((day) => <div key={day} className="text-[11px] font-[950]" style={{ color: c.textMuted }}>{day}</div>)}{days.map((day, index) => day ? <button key={index} onClick={() => setSelected(new Date(view.getFullYear(), view.getMonth(), day, 12))} style={{ border: `1px solid ${sameDay(selected, view, day) ? c.accent : "transparent"}`, background: sameDay(selected, view, day) ? c.accent : c.cardBg2, color: sameDay(selected, view, day) ? "#fff" : c.text }} className="h-[40px] rounded-[9px] cursor-pointer font-[inherit] font-black">{day}</button> : <span key={index} />)}</div><button onClick={() => onSelect(toDateValue(selected))} className="w-full mt-[18px]" style={primary(c)}>Set Birthday</button></div></div>;
 }
 
 function Field({ c, label, children }) { return <label className="grid gap-[6px] text-[12px] font-black" style={{ color: c.textMuted }}>{label}{children}</label>; }

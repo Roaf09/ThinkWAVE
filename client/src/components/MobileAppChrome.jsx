@@ -113,15 +113,15 @@ export function MobileTabBar({ c, items, secondaryItems = [], activeId, onSelect
                 data-tutorial={`mobile-nav-${item.id}`}
                 aria-label={item.label}
                 title={item.label}
-                className={`tw-mobile-tabbar-btn${activeId === item.id ? " is-active" : ""}${iconsOnly ? " is-icon-only" : ""} flex-1 min-w-0 flex flex-col items-center justify-center gap-[3px] bg-transparent border-0 rounded-full m-[6px_3px] cursor-pointer text-[10.5px] font-extrabold`}
-                style={{ color: activeId === item.id ? "#fff" : c.navColor }}
+                className={`tw-mobile-tabbar-btn${activeId === item.id ? " is-active" : ""}${iconsOnly ? " is-icon-only" : ""} flex-1 min-w-0 flex flex-col items-center justify-center gap-[5px] bg-transparent border-0 rounded-full m-[6px_6px] px-2 cursor-pointer text-[10.5px] font-extrabold`}
+                style={{ color: activeId === item.id ? "#2b6cff" : c.navColor }}
                 onClick={(e) => {
                   if (dragRef.current?.moved) { e.preventDefault(); return; }
                   onSelect(item.id);
                 }}
               >
-                <TwIcon name={item.icon} size={iconsOnly ? 23 : 19} />
-                {!iconsOnly && <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>}
+                <TwIcon name={item.icon} size={iconsOnly ? 21 : 19} />
+                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>
               </button>
             ))}
           </div>

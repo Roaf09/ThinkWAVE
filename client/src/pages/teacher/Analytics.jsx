@@ -1,8 +1,9 @@
 /* Revision 10.4: restores the two-column advanced analytics layout, smooth student/question
  * transitions, and synchronized percentage/student-count toggles. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
+import { makeSocket } from "../../lib/socket";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { templateLabel, templateTone } from "../../lib/templatePalette";
 import { isInstitutionPlan } from "../../lib/planLimits";
@@ -35,7 +36,24 @@ export default function Analytics({ guestMode = false }) {
   const [analyticsTutorialStage, setAnalyticsTutorialStage] = useState(null);
   const [tutorialStudentOpened, setTutorialStudentOpened] = useState(false);
   const [tutorialStudentNextReady, setTutorialStudentNextReady] = useState(false);
+  const [liveRefreshTick, setLiveRefreshTick] = useState(0);
   const isMobile = useIsMobileViewport();
+
+  // Assigned analytics stay live: each new submission broadcasts to the
+  // assignment room, so refetch the report instead of freezing at open time.
+  useEffect(() => {
+    if (!assigned || !quizId) return undefined;
+    const socket = makeSocket();
+    socket.emit("assignment:join-leaderboard", { quizId: Number(quizId) });
+    socket.on("assignment:leaderboard-update", (payload) => {
+      if (Number(payload?.quizId) !== Number(quizId)) return;
+      setLiveRefreshTick((value) => value + 1);
+    });
+    return () => {
+      socket.emit("assignment:leave-leaderboard", { quizId: Number(quizId) });
+      socket.disconnect();
+    };
+  }, [assigned, quizId]);
 
   function handleMobileResultsToggle() {
     setMobileResultsView((view) => (view === "students" ? "questions" : "students"));
@@ -54,10 +72,13 @@ export default function Analytics({ guestMode = false }) {
     return () => window.clearTimeout(timer);
   }, [analyticsTutorialStage, isMobile]);
   const [, setTutorialDemoAnalytics] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // Live submission updates refetch silently; only the first load shows
+    // the loading state so the report doesn't flash on every arrival.
+    if (!hasLoadedOnceRef.current) setLoading(true);
     setError("");
     (async () => {
       try {
@@ -100,11 +121,12 @@ export default function Analytics({ guestMode = false }) {
       } catch (err) {
         if (alive) setError(err?.response?.data?.message || "Unable to load analytics.");
       } finally {
+        hasLoadedOnceRef.current = true;
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [assigned, classId, quizId, sessionId, guestMode]);
+  }, [assigned, classId, quizId, sessionId, guestMode, liveRefreshTick]);
 
   useEffect(() => {
     if (analyticsTutorialStage !== "students" || expandedStudentId === null) return;
@@ -191,8 +213,8 @@ export default function Analytics({ guestMode = false }) {
           </div>
           {exportAllowed && <div className="tw-analytics-export-row flex gap-[8px] flex-wrap">
             {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn tw-analytics-back-press" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
-            <TeacherPressButton type="button" tone="blue" className="tw-analytics-export-btn tw-analytics-back-press tw-analytics-export-icon-only" icon="pdf" aria-label="Export PDF" title="Export PDF" disabled={!!exporting} onClick={() => downloadExport("pdf")} />
-            <TeacherPressButton type="button" tone="blue" className="tw-analytics-export-btn tw-analytics-back-press tw-analytics-export-icon-only" icon="xlsx" aria-label="Export Excel" title="Export Excel" disabled={!!exporting} onClick={() => downloadExport("xlsx")} />
+            <button type="button" className="tw-analytics-export-plain tw-export-pdf" aria-label="Export PDF" title="Export PDF" disabled={!!exporting} onClick={() => downloadExport("pdf")}><TwIcon name="pdf" size={24} /><span>{exporting === "pdf" ? "Exporting…" : "PDF"}</span></button>
+            <button type="button" className="tw-analytics-export-plain tw-export-xlsx" aria-label="Export Excel" title="Export Excel" disabled={!!exporting} onClick={() => downloadExport("xlsx")}><TwIcon name="xlsx" size={24} /><span>{exporting === "xlsx" ? "Exporting…" : "XLSX"}</span></button>
           </div>}
         </div>
       </section>
@@ -209,7 +231,7 @@ export default function Analytics({ guestMode = false }) {
             <div className={`tw-analytics-panel-wrap${mobileResultsView === "students" ? " is-mobile-visible" : ""}`}>
               <Scoreboard C={C} scores={scores} tone={tone} analytics={analytics || {}} tabMonitoring={tabMonitoring} expandedStudentId={expandedStudentId} setExpandedStudentId={setExpandedStudentId} />
             </div>
-            <AdvancedAnalyticsPanel C={C} analytics={analytics || {}} assigned={assigned} tone={tone} mobileView={mobileResultsView} onToggleMobileView={handleMobileResultsToggle} />
+            <AdvancedAnalyticsPanel C={C} analytics={analytics || {}} assigned={assigned} tone={tone} mobileView={mobileResultsView} onToggleMobileView={handleMobileResultsToggle} isDesktop={!isMobile} />
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: guestMode ? "repeat(auto-fit, minmax(300px, 1fr))" : "1fr", gap: 18, alignItems: "start" }}>
@@ -310,7 +332,7 @@ function BasicAnalyticsPanel({ C, analytics, assigned, tone }) {
   </div>;
 }
 
-function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onToggleMobileView }) {
+function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onToggleMobileView, isDesktop = false }) {
   const summary = analytics.summary || {};
   const questions = analytics.questions || [];
   const tt = normalizeTemplateType(analytics?.session?.template_type);
@@ -323,9 +345,13 @@ function AdvancedAnalyticsPanel({ C, analytics, assigned, tone, mobileView, onTo
     <div className={`tw-analytics-metrics-grid${expandedMetric ? ` has-expanded-${expandedMetric}` : ""}`} data-tutorial="analytics-summary">
       <MetricCard C={C} tone={tone} label="Average" value={summary.avg_score ?? 0} /><MetricCard C={C} tone={tone} label={assigned ? "Submissions" : "Participants"} value={summary.participant_count ?? 0} /><ExpandableScoreCard C={C} tone={tone} metricKey="highest" label="Highest" value={summary.max_score ?? 0} names={highestNames} expanded={expandedMetric === "highest"} shrunk={expandedMetric === "lowest"} onToggle={() => toggleMetric("highest")} /><ExpandableScoreCard C={C} tone={tone} metricKey="lowest" label="Lowest" value={summary.min_score ?? 0} names={lowestNames} expanded={expandedMetric === "lowest"} shrunk={expandedMetric === "highest"} onToggle={() => toggleMetric("lowest")} />
     </div>
-    <TeacherPressButton type="button" data-tutorial="analytics-mobile-toggle" tone="blue" className="tw-analytics-mobile-toggle-btn tw-analytics-back-press" onClick={onToggleMobileView}><span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span><TwIcon name="swap" size={15} /></TeacherPressButton>
-    <div className={`tw-analytics-panel-wrap${mobileView === "questions" ? " is-mobile-visible" : ""}`}>
-      <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} />
+    {isDesktop ? (
+      <div className="tw-analytics-results-label" aria-hidden="true">{batchMode ? "Per-batch results" : "Per-question results"}</div>
+    ) : (
+      <TeacherPressButton type="button" data-tutorial="analytics-mobile-toggle" tone="blue" className="tw-analytics-mobile-toggle-btn tw-analytics-back-press" onClick={onToggleMobileView}><span>{mobileView === "students" ? "Per-student results" : batchMode ? "Per-batch results" : "Per-question results"}</span><TwIcon name="swap" size={15} /></TeacherPressButton>
+    )}
+    <div className={`tw-analytics-panel-wrap${mobileView === "questions" ? " is-mobile-visible" : ""}${isDesktop ? " is-desktop-visible" : ""}`}>
+      <QuestionAnalytics C={C} tone={tone} templateType={tt} questions={questions} alwaysExpanded={isDesktop} />
     </div>
   </div>;
 }
@@ -334,7 +360,7 @@ function LegacyQuestionRows({ C, tone, questions }) {
   return <div className="grid gap-[10px]">{questions.map((question, index) => <div key={question.question_id || index} className="grid gap-[10px] items-center p-[11px_12px] rounded-[14px] grid-cols-[minmax(46px,auto)_minmax(150px,1fr)_repeat(2,minmax(92px,auto))]" style={{ background: C.cardBg, border: `1px solid ${C.border}` }}><span className="font-[950]" style={{ color: tone.accent }}>Q{index + 1}</span><span className="font-[750] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: C.text }}>{question.prompt || "Untitled question"}</span><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} /></div>)}{!questions.length && <div style={emptyCard(C)}>No question-level results are available yet.</div>}</div>;
 }
 
-function QuestionAnalytics({ C, tone, templateType, questions }) {
+function QuestionAnalytics({ C, tone, templateType, questions, alwaysExpanded = false }) {
   const tt = normalizeTemplateType(templateType);
   const [expandedIndex, setExpandedIndex] = useState(null);
   const [batchIndex, setBatchIndex] = useState(0);
@@ -343,6 +369,42 @@ function QuestionAnalytics({ C, tone, templateType, questions }) {
   const batchMode = tt === "MATCHING" || tt === "THINK_SPELL";
   const toggleCounts = (event) => { event?.stopPropagation?.(); setShowCounts((value) => !value); };
   if (!questions.length) return <div className="tw-analytics-results-card" data-tutorial="analytics-question-results" style={subCard(C)}><div style={sectionTitle(C)}>{batchMode ? "Per-batch Results" : "Per-question Results"}</div><div style={emptyCard(C)}>No question-level results are available yet.</div></div>;
+
+  if (alwaysExpanded) {
+    if (batchMode) {
+      const index = Math.min(batchIndex, questions.length - 1);
+      const question = questions[index];
+      return <div className="tw-analytics-results-card tw-analytics-batch-results" data-tutorial="analytics-question-results" style={subCard(C)}>
+        <div className="flex justify-end items-center" style={{ marginBottom: 10 }}>
+          <span className="flex gap-[7px]"><ArrowButton C={C} direction="left" disabled={index <= 0} onClick={() => { setBatchExpanded(false); setBatchIndex((v) => Math.max(0, v - 1)); }} /><ArrowButton C={C} direction="right" disabled={index >= questions.length - 1} onClick={() => { setBatchExpanded(false); setBatchIndex((v) => Math.min(questions.length - 1, v + 1)); }} /></span>
+        </div>
+        <div className={`tw-analytics-question-card tw-analytics-batch-card${batchExpanded ? " is-expanded" : ""}`} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+          <div role="button" tabIndex={0} className="tw-analytics-question-toggle" aria-expanded={batchExpanded} onClick={() => setBatchExpanded((value) => !value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setBatchExpanded((value) => !value); } }}>
+            <span className="font-[950]" style={{ color: tone.accent }}>B{index + 1}</span>
+            <span className="tw-analytics-question-prompt">{question.prompt || "Untitled batch"}</span>
+            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+            <TwIcon name={batchExpanded ? "chevronUp" : "chevronDown"} size={18} />
+          </div>
+          <div className={`tw-analytics-question-collapse${batchExpanded ? " is-open" : ""}`} aria-hidden={!batchExpanded}><div><BatchDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+        </div>
+      </div>;
+    }
+    return <div className="tw-analytics-results-card tw-analytics-desktop-expanded" data-tutorial="analytics-question-results" style={subCard(C)}>
+      <div className={`tw-analytics-question-list${expandedIndex !== null ? " has-expanded" : ""}`}>{questions.map((question, index) => {
+        const expanded = expandedIndex === index;
+        const hidden = expandedIndex !== null && !expanded;
+        return <div key={question.question_id || index} data-tutorial={index === 0 ? "analytics-question-card" : undefined} aria-hidden={hidden ? "true" : undefined} className={`tw-analytics-question-card${expanded ? " is-expanded" : ""}${hidden ? " is-hidden" : ""}`} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+          <div role="button" className="tw-analytics-question-toggle" aria-expanded={expanded} tabIndex={hidden ? -1 : 0} onClick={() => !hidden && setExpandedIndex(expanded ? null : index)} onKeyDown={(event) => { if (!hidden && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setExpandedIndex(expanded ? null : index); } }}>
+            <span className="font-[950]" style={{ color: tone.accent }}>Q{index + 1}</span>
+            <span className="tw-analytics-question-prompt">{question.prompt || "Untitled question"}</span>
+            <span className="tw-analytics-summary-badges"><ResultBadge C={C} kind="correct" pct={question.pct_correct} count={question.correct_answers} toggle showCount={showCounts} onToggle={toggleCounts} /><ResultBadge C={C} kind="wrong" pct={question.pct_incorrect} count={question.incorrect_answers} toggle showCount={showCounts} onToggle={toggleCounts} /></span>
+            <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={18} />
+          </div>
+          <div className={`tw-analytics-question-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div><ExpandedQuestionDetail C={C} tone={tone} tt={tt} question={question} index={index} showCounts={showCounts} onToggleCounts={toggleCounts} /></div></div>
+        </div>;
+      })}</div>
+    </div>;
+  }
 
   if (batchMode) {
     const index = Math.min(batchIndex, questions.length - 1);

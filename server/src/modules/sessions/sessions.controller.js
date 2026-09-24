@@ -105,7 +105,7 @@ export async function createSession(req, res) {
   const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
   const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
   const [[quiz]] = await pool.query(
-    `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode,
+    `SELECT id, class_id, status, randomize_questions, shuffle_answers, delivery_mode, template_type,
             ${quizzesHaveBackground ? "background_key" : "NULL AS background_key"}
      FROM quizzes
      WHERE id=:qid AND teacher_id=:tid AND deleted_at IS NULL`,
@@ -118,6 +118,9 @@ export async function createSession(req, res) {
   // would silently fail with a confusing error instead of just re-hosting it.
   if (quiz.status !== "PUBLISHED" && quiz.status !== "BANKED") return res.status(400).json({ message: "Only published live-session quizzes can be hosted." });
   if (quiz.delivery_mode === "ASYNCHRONOUS") return res.status(400).json({ message: "Asynchronous quizzes appear in the student dashboard instead of live sessions." });
+  if (joinMode === "GROUP" && ["THINK_SPELL", "THINK_AND_SPELL"].includes(String(quiz.template_type || "").toUpperCase())) {
+    return res.status(400).json({ message: "Group mode isn't available for Crossword quizzes." });
+  }
 
   const [[active]] = await pool.query(
     `SELECT id, join_code, join_mode FROM sessions WHERE quiz_id=:qid AND teacher_id=:tid AND status IN ('LOBBY','LIVE','PAUSED') ORDER BY id DESC LIMIT 1`,
@@ -365,11 +368,11 @@ export async function startSession(req, res) {
     const [[counts]] = await pool.query(
       `SELECT
          (SELECT COUNT(*) FROM session_groups WHERE session_id=:sid) AS group_count,
-         (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid) AS participant_count,
+         (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid AND kicked_at IS NULL) AS participant_count,
          (SELECT COUNT(*)
             FROM session_participants p
             LEFT JOIN session_group_members gm ON gm.participant_id = p.id
-           WHERE p.session_id=:sid AND gm.id IS NULL) AS unassigned_count`,
+           WHERE p.session_id=:sid AND p.kicked_at IS NULL AND gm.id IS NULL) AS unassigned_count`,
       { sid: sessionId }
     );
     if (!counts.group_count) return res.status(400).json({ message: "Create at least one group before starting." });

@@ -70,6 +70,10 @@ export function WaitingRoomView({
                 </div>
                 Waiting for teacher to add groups<LoadingDots color={mutedC} />
               </div>
+            ) : state?.status !== "LOBBY" ? (
+              <div style={{ padding: 18, borderRadius: 18, background: dark ? "rgba(255,255,255,0.05)" : "#f4f7ff", border: `1px solid ${cardBor}`, color: textC, fontWeight: 700, textAlign: "center" }}>
+                Groups are locked after the teacher starts the quiz.
+              </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
                 {groups.map((group) => (
@@ -89,11 +93,11 @@ export function WaitingRoomView({
             <div style={{ padding: 16, borderRadius: 18, background: dark ? "rgba(255,255,255,0.05)" : "#f8faff", border: `1px solid ${cardBor}` }}>
               <div style={{ color: mutedC, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Your Group</div>
               <input value={groupNameDraft} onChange={(e) => onGroupNameDraft(e.target.value)} disabled={Number(myGroup?.name_editor_participant_id || 0) !== Number(participantId)} style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 14, border: `1px solid ${cardBor}`, background: dark ? "rgba(255,255,255,0.04)" : "#eef2ff", color: textC, fontWeight: 800, opacity: Number(myGroup?.name_editor_participant_id || 0) !== Number(participantId) ? 0.72 : 1 }} />
-              <div style={{ color: mutedC, fontSize: 12, marginTop: 8 }}>{Number(myGroup?.name_editor_participant_id || 0) === Number(participantId) ? 'Only the first student in the group can edit the group name.' : 'Only the first student who joined this group can rename it.'}</div>
+              <div style={{ color: mutedC, fontSize: 12, marginTop: 8 }}>{Number(myGroup?.name_editor_participant_id || 0) === Number(participantId) ? '✏️ You can name or rename this group.' : `✏️ ${myGroup.members?.find((m) => Number(m.id) === Number(myGroup?.name_editor_participant_id))?.first_name || "The first student who joined"} can name or rename this group.`}</div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10 }}>
               {myGroup.members?.map((member) => (
-                <WaitRosterCard key={member.id} item={member} dark={dark} subtitle={member.connected ? "Online" : "Offline"} />
+                <WaitRosterCard key={member.id} item={member} dark={dark} subtitle={member.connected ? "Online" : "Offline"} badge={Number(member.id) === Number(myGroup?.name_editor_participant_id) ? "✏️ Names group" : undefined} />
               ))}
             </div>
           </div>

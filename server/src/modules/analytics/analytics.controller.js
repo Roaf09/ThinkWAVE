@@ -351,21 +351,17 @@ export async function exportSessionPdf(req, res) {
     title: "Per-question Percentage",
     columns: [
       { label: "#", width: 26, align: "right" },
-      { label: "Prompt", width: 205 },
+      { label: "Prompt", width: 225 },
       { label: "Answers", width: 52, align: "right" },
-      { label: "Correct", width: 52, align: "right" },
-      { label: "% Correct", width: 60, align: "right" },
-      { label: "Wrong", width: 50, align: "right" },
-      { label: "% Wrong", width: 60, align: "right" },
+      { label: "Correct", width: 106, align: "right" },
+      { label: "Incorrect", width: 106, align: "right" },
     ],
     rows: data.questions.map((q, idx) => [
       Number(q.question_order ?? idx) + 1,
       q.prompt,
       q.total_answers ?? 0,
-      q.correct_answers ?? 0,
-      `${q.pct_correct ?? 0}%`,
-      q.incorrect_answers ?? 0,
-      `${q.pct_incorrect ?? 0}%`,
+      `${q.correct_answers ?? 0} (${q.pct_correct ?? 0}%)`,
+      `${q.incorrect_answers ?? 0} (${q.pct_incorrect ?? 0}%)`,
     ]),
   });
 

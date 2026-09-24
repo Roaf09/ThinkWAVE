@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { api } from "../../../lib/api";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { markTemplateTutorialSeen, readTutorialState, writeTutorialState } from "../../../lib/tutorialState";
@@ -259,35 +259,47 @@ export function useBuilderPersistence({
     setModal("confirmPublish");
   }
 
+  // One publish per click: the confirm dialog stays open during the request,
+  // so without this guard a double-click fires two publish calls.
+  const publishPromiseRef = useRef(null);
   async function confirmPublish() {
-    try {
-      await api.post(`/quizzes/${id}/publish`);
-      setQuiz((prev) => ({ ...prev, status: "PUBLISHED" }));
-      setPublishFlow(false);
-      setModal(null);
-      if (!guestMode && tutorialUserId && builderTutorialStage) {
-        markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
-        const mobileTutorial = typeof window !== "undefined" && window.innerWidth <= 760;
-        if (mobileTutorial) {
-          // Mobile tutorial: stay in the builder, let the overflow sheet
-          // auto-close on PUBLISHED, then point at Home. Tapping Home goes
-          // to the dashboard where the nav_sessions prompt takes over.
+    if (publishPromiseRef.current) return publishPromiseRef.current;
+    const task = (async () => {
+      try {
+        await api.post(`/quizzes/${id}/publish`);
+        setQuiz((prev) => ({ ...prev, status: "PUBLISHED" }));
+        setPublishFlow(false);
+        setModal(null);
+        if (!guestMode && tutorialUserId && builderTutorialStage) {
+          markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
+          const mobileTutorial = typeof window !== "undefined" && window.innerWidth <= 760;
+          if (mobileTutorial) {
+            // Mobile tutorial: stay in the builder, let the overflow sheet
+            // auto-close on PUBLISHED, then point at Home. Tapping Home goes
+            // to the dashboard where the nav_sessions prompt takes over.
+            const state = readTutorialState(tutorialUserId);
+            if (state.mainStage === "builder_pending") {
+              writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
+            }
+            setBuilderTutorialStage("home_highlight");
+            return;
+          }
+          setBuilderTutorialStage(null);
           const state = readTutorialState(tutorialUserId);
           if (state.mainStage === "builder_pending") {
             writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
+            window.setTimeout(() => navigate("/teacher"), 1500);
           }
-          setBuilderTutorialStage("home_highlight");
-          return;
         }
-        setBuilderTutorialStage(null);
-        const state = readTutorialState(tutorialUserId);
-        if (state.mainStage === "builder_pending") {
-          writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
-          window.setTimeout(() => navigate("/teacher"), 1500);
-        }
+      } catch (e) {
+        setMsg(e?.response?.data?.message || "Publish failed.");
       }
-    } catch (e) {
-      setMsg(e?.response?.data?.message || "Publish failed.");
+    })();
+    publishPromiseRef.current = task;
+    try {
+      return await task;
+    } finally {
+      if (publishPromiseRef.current === task) publishPromiseRef.current = null;
     }
   }
 
@@ -301,6 +313,9 @@ export function useBuilderPersistence({
     }
   }
 
+  // One bank-save per click: the confirm dialog closes immediately, so a
+  // double-click would otherwise post the same question twice.
+  const bankSavePromiseRef = useRef(null);
   async function doSaveToBank(q) {
     const issues = validateQuestion(q, quiz?.template_type);
     if (issues.length) {
@@ -308,34 +323,43 @@ export function useBuilderPersistence({
       setModal("invalid");
       return;
     }
-    try {
-      await api.post("/question-bank", {
-        templateType: quiz.template_type,
-        category: quiz.category,
-        prompt: q.prompt,
-        config: q.config,
-        correct: q.correct,
-      });
-      setMsg("");
-      setBankSavedOrders((current) => {
-        const next = new Set(current);
-        next.add(Number(q?.order ?? qIndex));
-        return next;
-      });
-      if (["bank", "bank_menu"].includes(builderTutorialStage)) {
-        setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
-      }
-    } catch (error) {
-      const message = error?.response?.data?.message || "";
-      if (/already.*saved|duplicate/i.test(message)) {
+    if (bankSavePromiseRef.current) return bankSavePromiseRef.current;
+    const task = (async () => {
+      try {
+        await api.post("/question-bank", {
+          templateType: quiz.template_type,
+          category: quiz.category,
+          prompt: q.prompt,
+          config: q.config,
+          correct: q.correct,
+        });
         setMsg("");
-        setBankSavedOrders((current) => new Set([...current, Number(q?.order ?? qIndex)]));
+        setBankSavedOrders((current) => {
+          const next = new Set(current);
+          next.add(Number(q?.order ?? qIndex));
+          return next;
+        });
         if (["bank", "bank_menu"].includes(builderTutorialStage)) {
           setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
         }
-        return;
+      } catch (error) {
+        const message = error?.response?.data?.message || "";
+        if (/already.*saved|duplicate/i.test(message)) {
+          setMsg("");
+          setBankSavedOrders((current) => new Set([...current, Number(q?.order ?? qIndex)]));
+          if (["bank", "bank_menu"].includes(builderTutorialStage)) {
+            setBuilderTutorialStage(["MATCHING", "THINK_SPELL"].includes(normalizeTemplateType(quiz?.template_type)) ? "save_delay" : "add");
+          }
+          return;
+        }
+        setMsg(message || "Failed to save to bank.");
       }
-      setMsg(message || "Failed to save to bank.");
+    })();
+    bankSavePromiseRef.current = task;
+    try {
+      return await task;
+    } finally {
+      if (bankSavePromiseRef.current === task) bankSavePromiseRef.current = null;
     }
   }
 

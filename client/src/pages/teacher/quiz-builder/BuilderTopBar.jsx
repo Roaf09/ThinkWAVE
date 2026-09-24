@@ -1,5 +1,32 @@
+import { useState } from "react";
 import { TwIcon } from "../../../components/TwUI";
 import { TeacherPressButton } from "../TeacherUI";
+
+function RandomizeHelp({ text }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return null;
+  return (
+    <span
+      className={`tw-builder-randomize-help${open ? " is-open" : ""}`}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span
+        role="button"
+        tabIndex={0}
+        className="tw-builder-randomize-q"
+        aria-label="What does randomize do?"
+        title={text}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); } }}
+      >
+        ?
+      </span>
+      {open && <span className="tw-builder-randomize-tip" role="note">{text}</span>}
+    </span>
+  );
+}
 
 export function BuilderTopBar({
   isMobile,
@@ -98,8 +125,13 @@ export function BuilderTopBar({
               <div className="tw-builder-settings-popup" role="dialog" aria-label="Quiz settings">
                 {builderSettingsRows.map((row) => (
                   <button key={row.key} type="button" className="tw-builder-settings-row" onClick={row.onToggle}>
-                    <span className="tw-builder-settings-row-label">{row.label}</span>
-                    <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(row.active)}><span style={ui.switchThumb(row.active)} /></span>
+                    <span className="tw-builder-settings-row-label">
+                      <span>{row.label}</span>
+                    </span>
+                    <span className="tw-builder-settings-right">
+                      {row.key === "randomize" && <RandomizeHelp text={row.help} />}
+                      <span className="tw-builder-settings-toggle-track" style={ui.switchTrack(row.active)}><span style={ui.switchThumb(row.active)} /></span>
+                    </span>
                   </button>
                 ))}
               </div>

@@ -42,13 +42,14 @@ export function SoundTogglePill({ muted, onClick, style, className = "" }) {
   );
 }
 
-export function WaitRosterCard({ item, dark, subtitle }) {
+export function WaitRosterCard({ item, dark, subtitle, badge }) {
   const tone = rosterTone(item.id || `${item.first_name}-${item.last_name}`, dark);
   return (
     <div className="sp-wait-roster-card" style={{ background: tone.bg, borderColor: tone.border }}>
       <div className="sp-roster-profile">{item.profile_image ? <img src={item.profile_image} alt="" /> : <TwIcon name="user" size={18} />}</div>
       <div><div style={{ color: tone.text, fontWeight: 900 }}>{item.first_name} {item.last_name}</div>
-      <div style={{ color: dark ? "#bfd0ff" : "#52648f", fontSize: 12 }}>{subtitle}</div></div>
+      <div style={{ color: dark ? "#bfd0ff" : "#52648f", fontSize: 12 }}>{subtitle}</div>
+      {badge && <div style={{ color: dark ? "#fcd34d" : "#b45309", fontSize: 11, fontWeight: 800 }}>{badge}</div>}</div>
     </div>
   );
 }

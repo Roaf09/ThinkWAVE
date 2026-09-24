@@ -168,7 +168,16 @@ function nowWithin(start, end) {
 }
 
 async function getProfile(userId) {
-  const [[profile]] = await pool.query(`SELECT * FROM student_profiles WHERE user_id=:uid`, { uid: userId });
+  // DATE_FORMAT keeps birth_date a plain YYYY-MM-DD calendar string. Returning
+  // the raw DATE column lets the MySQL driver hand back a midnight Date whose
+  // UTC serialization the client then slices a day early in +08:00 zones.
+  const [[profile]] = await pool.query(
+    `SELECT user_id, last_name, first_name, middle_initial, student_id,
+            DATE_FORMAT(birth_date, '%Y-%m-%d') AS birth_date,
+            profile_image, created_at, updated_at
+     FROM student_profiles WHERE user_id=:uid`,
+    { uid: userId }
+  );
   return profile || null;
 }
 

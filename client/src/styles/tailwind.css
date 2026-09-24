@@ -69,6 +69,6 @@
   --color-auth-panel-dark: rgba(10, 28, 58, 0.86);
 
   /* Auth page gradients (too complex for color tokens). */
-  --background-image-auth-page: radial-gradient(circle at 10% 8%, rgba(210, 170, 90, 0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255, 224, 170, 0.3), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%);
+  --background-image-auth-page: #ffffff;
   --background-image-auth-page-dark: radial-gradient(circle at 12% 8%, rgba(54, 92, 180, 0.22), transparent 30%), radial-gradient(circle at 86% 14%, rgba(44, 126, 205, 0.12), transparent 28%), linear-gradient(180deg, #030b1c 0%, #07142b 48%, #0a1832 100%);
 }

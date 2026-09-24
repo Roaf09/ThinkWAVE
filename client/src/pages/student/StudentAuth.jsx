@@ -61,7 +61,7 @@ export default function StudentAuth({ onLoginSuccess }) {
       setAuthMotion(next === "register" ? "from-right" : "from-left");
       setMsg("");
       setNotFound(false);
-    }, 210);
+    }, 200);
   }
   const [form, setForm] = useState({ firstName: "", lastName: "", email: (() => { try { return localStorage.getItem("tw_remember_email") || ""; } catch { return ""; } })(), password: "", confirmPassword: "" });
   const [showPw, setShowPw] = useState(false);
@@ -176,19 +176,20 @@ export default function StudentAuth({ onLoginSuccess }) {
                   <div className="flex items-center justify-between"><label className="text-[13px] font-semibold" style={s.label(c)}>Password</label><button type="button" className="tw-pw-help-btn" aria-label="Password requirements" onClick={() => setShowPwHelp(true)}><TwIcon name="help" size={16} /></button></div>
                   <div className="relative"><input type={showPw ? "text" : "password"} className="px-4 py-3 rounded-xl text-sm w-full box-border" style={{ ...s.input(c), paddingRight: isStrong ? 76 : 48 }} value={form.password} onChange={(e) => patch({ password: e.target.value })} placeholder="••••••••" required />{isStrong && <span className="tw-pw-strong-check" aria-label="Password meets all requirements"><TwIcon name="check" size={16} /></span>}<button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button></div>
                 </div>
-                <div className="flex flex-col gap-1.5 flex-1"><label className="text-[13px] font-semibold" style={s.label(c)}>Confirm password</label><div className="relative"><input type={showConfPw ? "text" : "password"} className="px-4 py-3 rounded-xl text-sm w-full box-border" style={{ ...s.input(c), paddingRight: 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required /><button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button></div>{form.confirmPassword && <span className="text-xs mt-1" style={{ color: matches ? "#22c55e" : "#f87171" }}>{matches ? "✓ Passwords match" : "✗ Passwords do not match"}</span>}</div>
+                <div className="flex flex-col gap-1.5 flex-1"><label className="text-[13px] font-semibold" style={s.label(c)}>Confirm password</label><div className="relative"><input type={showConfPw ? "text" : "password"} className="px-4 py-3 rounded-xl text-sm w-full box-border" style={{ ...s.input(c), paddingRight: matches ? 76 : 48, borderColor: form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder }} value={form.confirmPassword} onChange={(e) => patch({ confirmPassword: e.target.value })} placeholder="••••••••" required />{matches && <span className="tw-pw-strong-check" aria-label="Passwords match"><TwIcon name="check" size={16} /></span>}<button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button></div></div>
                 {msg && <FeedbackBox tone={errorTone} notFound={notFound} mode={mode} clear={() => { setMsg(""); setNotFound(false); }} />}
                 <button type="submit" className="tw-auth-primary p-[14px] rounded-[14px] border-[3px] border-brand bg-brand text-white text-base font-extrabold cursor-pointer shadow-[0_10px_24px_rgba(43,108,255,0.25)]">Create Student Account</button>
                 <p className="text-center text-[13px] m-[20px_0_0]" style={s.footText(c)}>Already have an account? <button type="button" onClick={() => switchMode("login")} className="border-0 bg-transparent! text-brand! dark:text-brand-dark! font-bold underline cursor-pointer p-0">Log in here</button></p>
               </form>
-              <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid" style={s.reqPanel(c)}>
+              {showPwHelp && <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid" style={s.reqPanel(c)}>
                 <div className="text-[13px] font-bold" style={s.reqTitle(c)}>Password requirements</div>
                 <div className="flex flex-col gap-2.5">
                   {Object.entries(REQ_LABELS).map(([key, label]) => <div key={key} className="flex items-center gap-2.5"><span className="w-2.5 h-2.5 rounded-full shrink-0 transition-[background,box-shadow] duration-200 ease-[ease]" style={{ ...s.reqDot, background: checks[key] ? okDot : c.border, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} /><span className="text-[13px]" style={{ color: checks[key] ? okText : c.textMuted }}>{label}</span></div>)}
                 </div>
                 <div className="h-[5px] rounded-full overflow-hidden mt-1.5" style={s.strengthBar(c)}><div className="h-full rounded-full transition-[width,background] duration-300 ease-[ease]" style={{ ...s.strengthFill, width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} /></div>
                 <div className="text-xs text-center mt-1 font-bold" style={{ ...s.strengthText(c), color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>{isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}</div>
-              </div>
+                <button type="button" onClick={() => setShowPwHelp(false)} className="border-0 bg-transparent! text-brand! font-bold underline cursor-pointer p-0 text-[13px] mt-1">Close</button>
+              </div>}
               </div>
               {showPwHelp && <div className="tw-pw-help-backdrop" onClick={() => setShowPwHelp(false)}>
                 <div className="tw-pw-help-modal" style={{ background: c.cardBg3, border: `1px solid ${c.border}`, color: c.text }} onClick={(e) => e.stopPropagation()}>

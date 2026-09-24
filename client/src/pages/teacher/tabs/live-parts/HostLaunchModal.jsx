@@ -26,6 +26,13 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
   const [zoomedPreview, setZoomedPreview] = useState(null);
   const isMobile = useIsMobileViewport();
   const template = normalizeLiveTemplate(quiz.template_type);
+  const isCrossword = template === "THINK_SPELL";
+  const groupLocked = !institutionPlan && !guestMode;
+  const groupTitle = isCrossword
+    ? "Group mode isn't available for Crossword quizzes."
+    : groupLocked
+      ? "Group mode is available on the Institution plan."
+      : "Group — team play";
   const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
 
@@ -51,9 +58,9 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
         <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
-      <div className="tw-host-mode-row tw-host-mode-row-fresh">
-        <TeacherPressButton type="button" tone="blue" className={joinMode === "SOLO" ? "is-selected is-muted-selected" : ""} disabled={joinMode === "SOLO"} title="Host a solo session" onClick={() => setJoinMode("SOLO")}>Solo</TeacherPressButton>
-        <TeacherPressButton type="button" tone="blue" className={joinMode === "GROUP" ? "is-selected is-muted-selected" : ""} disabled={joinMode === "GROUP" || (!institutionPlan && !guestMode)} title={institutionPlan || guestMode ? "Host a group session" : "Group mode is available on the Institution plan."} onClick={() => (institutionPlan || guestMode) && setJoinMode("GROUP")}>Group</TeacherPressButton>
+      <div className="tw-host-mode-row tw-host-mode-simple">
+        <TeacherPressButton type="button" tone="blue" className={`tw-host-mode-simple-btn${joinMode === "SOLO" ? " is-selected" : ""}`} disabled={joinMode === "SOLO"} title="Solo — individual play" aria-label="Solo — individual play" onClick={() => setJoinMode("SOLO")}><TwIcon name="user" size={22} /></TeacherPressButton>
+        <TeacherPressButton type="button" tone="blue" className={`tw-host-mode-simple-btn${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={joinMode === "GROUP" || groupLocked || isCrossword} title={groupTitle} aria-label={groupTitle} onClick={() => (!groupLocked && !isCrossword) && setJoinMode("GROUP")}><span className="tw-host-mode-trio" aria-hidden="true"><TwIcon name="user" size={18} /><TwIcon name="user" size={18} /><TwIcon name="user" size={18} /></span></TeacherPressButton>
       </div>
       {launchError && <div role="alert" className="tw-host-launch-error" style={{ background: c.redBg, color: c.redFg, border: `1px solid ${c.redBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 800 }}>{launchError}</div>}
       <div className="tw-host-launch-controls" style={guestMode ? { gridTemplateColumns: "1fr auto" } : undefined}>

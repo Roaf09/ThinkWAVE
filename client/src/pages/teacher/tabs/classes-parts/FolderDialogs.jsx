@@ -20,13 +20,13 @@ export function RemoveStudentModal({ c, student, onClose, onConfirm }) {
 
 export function FolderCard({ folder, c, menuFor, setMenuFor, onOpen, onRename, onDelete, onDuplicate }) {
   const open = Number(menuFor) === Number(folder.id);
-  return <div className="tw-folder-card relative overflow-visible" data-folder-id={folder.id} style={{ ...card(c, { padding: 0, boxShadow: "none", border: `4px solid ${c.border}`, borderRadius: 12 }) }}>
+  return <div className="tw-folder-card relative overflow-visible" data-folder-id={folder.id} style={{ ...card(c, { padding: 0, boxShadow: "none", border: `4px solid ${c.border}`, borderRadius: 12 }), ...(open ? { zIndex: 60 } : null) }}>
     <button onClick={onOpen} className="flex w-full items-center gap-[12px] border-0 bg-transparent px-[16px] py-[14px] text-left" style={{ color: c.text }}>
       <span className="inline-flex" style={{ color: c.accent }}><TwIcon name="folder" size={24} /></span>
       <span title={folder.name} className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-[34px] font-[900]">{folder.name}</span>
     </button>
     <button onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : folder.id); }} className="absolute right-[8px] top-[8px] h-[34px] w-[34px] cursor-pointer rounded-[10px] border-0 bg-transparent font-[900]" style={iconBtn(c)}>⋮</button>
-    {open && <div className="tw-folder-action-menu absolute right-[8px] top-[44px] w-[180px]" style={{ zIndex: 10, ...card(c, { padding: 8, background: solidModalBg(c) }) }}>
+    {open && <div className="tw-folder-action-menu absolute right-[8px] top-[44px] w-[180px]" style={{ zIndex: 500, ...card(c, { padding: 8, background: solidModalBg(c) }) }}>
       <button onClick={onRename} style={menuBtn(c)}>Rename</button>
       <button onClick={onDuplicate} style={menuBtn(c)}>Duplicate</button>
       <button onClick={onDelete} style={{ ...menuBtn(c), color: c.redFg }}>Delete</button>

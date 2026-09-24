@@ -32,14 +32,34 @@ export default function HostLive({ guestMode = false }) {
   const { dark, toggleTheme } = useTheme();
   const hostIsMobile = useHostIsMobile();
   const [mobileSheet, setMobileSheet] = useState(null);
+  const [sheetClosing, setSheetClosing] = useState(false);
   const [codeContinueReady, setCodeContinueReady] = useState(false);
   const sheetRef = useRef(null);
   const sheetDragRef = useRef(null);
+  const halfScreenH = () => Math.round((typeof window !== "undefined" ? window.innerHeight : 800) * 0.5);
+  function closeMobileSheet() {
+    if (!mobileSheet || sheetClosing) return;
+    setSheetClosing(true);
+    window.setTimeout(() => { setMobileSheet(null); setSheetClosing(false); }, 260);
+  }
+  function openMobileSheet(kind) {
+    setSheetClosing(false);
+    setMobileSheet(kind);
+  }
+  useEffect(() => {
+    if (!mobileSheet || !hostIsMobile) return;
+    const el = sheetRef.current;
+    if (el) {
+      const half = halfScreenH();
+      el.style.height = `${half}px`;
+      el.style.maxHeight = "50vh";
+    }
+  }, [mobileSheet, hostIsMobile]);
   function onSheetTouchStart(event) {
     const touch = event.touches?.[0];
     const el = sheetRef.current;
     if (!touch || !el) return;
-    sheetDragRef.current = { y: touch.clientY, h: el.offsetHeight };
+    sheetDragRef.current = { y: touch.clientY, h: el.offsetHeight || halfScreenH() };
   }
   function onSheetTouchMove(event) {
     const drag = sheetDragRef.current;
@@ -47,20 +67,22 @@ export default function HostLive({ guestMode = false }) {
     if (!drag || !el) return;
     const touch = event.touches?.[0];
     if (!touch) return;
-    const maxH = window.innerHeight - 70;
-    const next = Math.min(maxH, Math.max(drag.h, drag.h + (drag.y - touch.clientY)));
+    if (event.cancelable) event.preventDefault();
+    const maxH = halfScreenH();
+    const minH = Math.round(maxH * 0.4);
+    const next = Math.min(maxH, Math.max(minH, drag.h + (drag.y - touch.clientY)));
     el.style.height = `${next}px`;
-    el.style.maxHeight = "none";
+    el.style.maxHeight = "50vh";
   }
   function onSheetTouchEnd() {
     const drag = sheetDragRef.current;
     const el = sheetRef.current;
     sheetDragRef.current = null;
     if (!drag || !el) return;
-    const full = window.innerHeight - 70;
-    const snap = el.offsetHeight >= (drag.h + full) / 2 ? full : drag.h;
-    el.style.height = `${snap}px`;
-    el.style.maxHeight = "none";
+    const full = halfScreenH();
+    if (el.offsetHeight < full * 0.55) { closeMobileSheet(); return; }
+    el.style.height = `${full}px`;
+    el.style.maxHeight = "50vh";
   }
   const [state, setState] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -87,7 +109,7 @@ export default function HostLive({ guestMode = false }) {
   // arrives so the dialog has something to sit above.
   useEffect(() => {
     if (!hostIsMobile) return undefined;
-    if (hostTutorialStage === "participants" && !mobileSheet) setMobileSheet("participants");
+    if (hostTutorialStage === "participants" && !mobileSheet) openMobileSheet("participants");
     return undefined;
   }, [hostTutorialStage, hostIsMobile]);
   // Mobile tutorial: the code step's continue affordance appears 2s after the
@@ -613,7 +635,7 @@ export default function HostLive({ guestMode = false }) {
   }
 
   async function handlePrimaryControl() {
-    if (hostIsMobile) setMobileSheet(null);
+    if (hostIsMobile) { setMobileSheet(null); setSheetClosing(false); }
     if (tutorialDemo && hostTutorialStage === "start" && !isLive && !isPaused) {
       setHostTutorialStage("countdown");
       // Revision 10.14: move the teacher to the question area immediately after
@@ -709,23 +731,44 @@ export default function HostLive({ guestMode = false }) {
         </div>
       </div> : <section className="tw-host-ended-shell" style={card(C)}><div className="tw-host-ended-card"><h2>Session ended</h2><TeacherPressButton data-tutorial="host-panel-analytics" tone="blue" icon="chart" className="tw-host-open-analytics" style={{ "--host-accent": accent }} onClick={openAnalyticsFromTutorial}>Open Analytics</TeacherPressButton></div></section>}
       {hostIsMobile && mobileSheet && (
-        <div className="tw-host-mobile-sheet-backdrop" onClick={() => setMobileSheet(null)}>
-          <div ref={sheetRef} data-tutorial="host-mobile-sheet" className={`tw-host-mobile-sheet${mobileSheet === "code" ? " is-code" : ""}`} role="dialog" aria-label={mobileSheet === "participants" ? "Participants" : "Join code"} onClick={(e) => e.stopPropagation()} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
-            <div className="tw-builder-sheet-handle" style={{ touchAction: "none" }} onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd} />
+        <div className={`tw-host-mobile-sheet-backdrop${sheetClosing ? " is-closing" : ""}`} onClick={closeMobileSheet}>
+          <div ref={sheetRef} data-tutorial="host-mobile-sheet" className={`tw-host-mobile-sheet${mobileSheet === "code" ? " is-code" : ""}${sheetClosing ? " is-closing" : ""}`} role="dialog" aria-label={mobileSheet === "participants" ? "Participants" : mobileSheet === "groups" ? "Groups" : "Join code"} onClick={(e) => e.stopPropagation()} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+            <div className="tw-host-sheet-dragzone" style={{ touchAction: "none" }} onTouchStart={onSheetTouchStart} onTouchMove={onSheetTouchMove} onTouchEnd={onSheetTouchEnd} onMouseDown={(e) => { const el = sheetRef.current; if (!el) return; sheetDragRef.current = { y: e.clientY, h: el.offsetHeight, mouse: true }; }} onMouseMove={(e) => { const drag = sheetDragRef.current; const el = sheetRef.current; if (!drag?.mouse || !el) return; const maxH = halfScreenH(); const minH = Math.round(maxH * 0.4); const next = Math.min(maxH, Math.max(minH, drag.h + (drag.y - e.clientY))); el.style.height = `${next}px`; }} onMouseUp={() => { if (sheetDragRef.current?.mouse) onSheetTouchEnd(); }}>
+              <div className="tw-builder-sheet-handle tw-host-sheet-handle-big" />
+            </div>
             <div className="tw-host-mobile-sheet-tabs">
-              <button type="button" className={mobileSheet === "participants" ? "is-active" : ""} onClick={() => setMobileSheet("participants")}>Participants</button>
-              <button type="button" data-tutorial="host-sheet-code-tab" className={mobileSheet === "code" ? "is-active" : ""} onClick={() => setMobileSheet("code")}>Code</button>
+              <button type="button" className={mobileSheet === "participants" ? "is-active" : ""} onClick={() => openMobileSheet("participants")}>Participants</button>
+              <button type="button" data-tutorial="host-sheet-code-tab" className={mobileSheet === "code" ? "is-active" : ""} onClick={() => openMobileSheet("code")}>Code</button>
+              {joinMode === "GROUP" && <button type="button" className={mobileSheet === "groups" ? "is-active" : ""} onClick={() => openMobileSheet("groups")}>Groups</button>}
             </div>
             {mobileSheet === "participants" ? (
               <div className="tw-host-mobile-sheet-body">
-                <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
                 <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No participants have joined yet.</div>}</div>
+              </div>
+            ) : mobileSheet === "groups" ? (
+              <div className="tw-host-mobile-sheet-body">
+                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> Groups</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{groups.length} group{groups.length === 1 ? "" : "s"}</span></div>
+                {state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
+                <div className="tw-host-attendance-scroll">{groups.map((group) => (
+                  <div key={group.id} style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${C.border}`, marginBottom: 8 }}>
+                    <div style={{ fontWeight: 900, color: C.text }}>{group.display_name} <span style={{ color: C.muted, fontWeight: 700 }}>({group.members?.length || 0})</span></div>
+                    {(group.members || []).map((m) => (
+                      <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text, padding: "3px 0" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: m.connected ? "#22c55e" : "#94a3b8", flex: "none" }} />
+                        <span>{m.first_name} {m.last_name}</span>
+                        {Number(group.name_editor_participant_id) === Number(m.id) && <span style={{ color: C.muted, fontSize: 11, fontWeight: 800 }}>✏️ Names group</span>}
+                      </div>
+                    ))}
+                    {!(group.members?.length) && <div style={{ fontSize: 12, color: C.muted }}>No students joined yet.</div>}
+                  </div>
+                ))}{!groups.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No groups yet. Tap Add Group to create one.</div>}</div>
               </div>
             ) : (
               <div className="tw-host-mobile-sheet-body">
-                <div className="tw-host-section-title"><h3><TwIcon name="qr" size={21}/> {isGuestHost ? "Join Code" : "Guest Join"}</h3><b className="tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</b></div>
-                <div className="tw-host-qr"><QRCodeCanvas value={joinUrl} size={200} bgColor="#ffffff" fgColor="#0f172a" includeMargin/></div>
-                <div className="tw-host-mobile-code-text text-center text-[22px] font-black tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</div>
+                <div className="tw-host-section-title"><h3><TwIcon name="qr" size={28}/> {isGuestHost ? "Join Code" : "Guest Join"}</h3><b className="tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</b></div>
+                <div className="tw-host-qr"><QRCodeCanvas value={joinUrl} size={220} bgColor="#ffffff" fgColor="#0f172a" includeMargin/></div>
+                <div className="tw-host-mobile-code-text text-center font-black tracking-[.18em]" style={{ color: C.accent }}>{state.join_code}</div>
                 {joinMode === "GROUP" && state.status === "LOBBY" && <div className="tw-host-group-tools"><button onClick={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} style={btnStyle(C, "secondary")}><TwIcon name="plus" size={15}/> Add Group</button><div>{groups.map((group) => <button key={group.id} onClick={() => setDeleteGroupTarget(group)} style={btnStyle(C, "ghost")}>{group.display_name} ({group.members?.length || 0})</button>)}</div></div>}
               </div>
             )}
@@ -736,7 +779,7 @@ export default function HostLive({ guestMode = false }) {
 
     <ThemeIconButton dark={dark} onClick={toggleTheme} className="tw-host-floating-theme" size={22} />
     {hostIsMobile && !mobileSheet && (
-      <button type="button" className="tw-host-participants-fab" aria-label="Open participants" onClick={() => setMobileSheet("participants")} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
+      <button type="button" className="tw-host-participants-fab" aria-label="Open participants" onClick={() => openMobileSheet("participants")} style={{ background: C.cardBg, borderColor: C.border, color: C.text }}>
         <TwIcon name="users" size={22} />
       </button>
     )}

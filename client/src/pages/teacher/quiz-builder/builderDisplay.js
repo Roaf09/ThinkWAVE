@@ -51,7 +51,7 @@ export function getBuilderDisplay({
   const isCrossword = normalizeTemplateType(quiz?.template_type) === "THINK_SPELL";
 
   const builderSettingsRows = [];
-  if (!guestMode) builderSettingsRows.push({ key: "randomize", label: isBatchTemplate ? "Randomize assigned batches" : "Randomize assigned question order", active: !!settings?.randomizeQuestions, onToggle: () => saveSettings({ randomizeQuestions: !settings.randomizeQuestions }) });
+  if (!guestMode) builderSettingsRows.push({ key: "randomize", label: "Randomize question order", help: "randomizes question order for assignments", active: !!settings?.randomizeQuestions, onToggle: () => saveSettings({ randomizeQuestions: !settings.randomizeQuestions }) });
   if (quiz?.template_type === "MATCHING") builderSettingsRows.push({ key: "shuffleA", label: "Shuffle Column A", active: !!settings?.shuffleAnswers, onToggle: () => saveSettings({ shuffleAnswers: !settings.shuffleAnswers }) });
   if (quiz?.template_type === "MCQ") builderSettingsRows.push({ key: "shuffleMcq", label: "Shuffle answer choices", active: !!settings?.shuffleAnswers, onToggle: () => saveSettings({ shuffleAnswers: !settings.shuffleAnswers }) });
   builderSettingsRows.push({ key: "qimage", label: "Question image", active: !!globalShowPromptImage, onToggle: () => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage }) });

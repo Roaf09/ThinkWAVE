@@ -18,6 +18,7 @@ import { GameCrossword } from "../../components/game/GameCrossword";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { makeSocket } from "../../lib/socket";
 import { QuestionAudioButton } from "../../components/AudioControls";
+import { TeacherPressButton } from "../teacher/TeacherUI";
 import thinkBotLogo from "../../assets/thinkbot-logo.png";
 import { templateAccent } from "../../lib/templatePalette";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
@@ -77,6 +78,7 @@ export default function StudentAsyncPlay() {
   const [locked, setLocked] = useState({});
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
+  const [showLeaderboard,setShowLeaderboard]=useState(false);
   const [leaderboardRows,setLeaderboardRows]=useState([]);
   const [newlyArrivedIds,setNewlyArrivedIds]=useState(()=>new Set());
   const knownLeaderboardIdsRef=useRef(new Set());
@@ -90,6 +92,7 @@ export default function StudentAsyncPlay() {
   const [awayBlur,setAwayBlur]=useState(false);
   const [submittingUi,setSubmittingUi]=useState(false);
   const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
+  const assignmentSocketRef=useRef(null); const submitAssignmentRef=useRef(null);
   const transientTimersRef=useRef(new Set());
   const mountedRef=useRef(true);
   const restoredRef=useRef(false);
@@ -156,7 +159,8 @@ export default function StudentAsyncPlay() {
       scheduleTransient(() => {
         setBgBlurred(false);
         setEntryStage("playing");
-        scheduleTransient(() => { setRemainingSec(null); setActiveIdx(0); setIdx(0); }, 500);
+        // The timer effect below arms itself from remainingSec==null, so no
+        // index juggling is needed here.
       }, 380);
     }, 2000);
   }
@@ -187,27 +191,34 @@ export default function StudentAsyncPlay() {
   const answeredCount=Object.keys(locked).filter((key) => locked[key]).length;
   const questionProgress=questions.length ? Math.round((answeredCount/questions.length)*100) : 0;
 
+  // Single timer effect: arms the per-question deadline and ticks remainingSec
+  // down once per second. Arming is keyed on remainingSec==null (not only on
+  // question/index flips), so a missed arming - e.g. on the first question
+  // right after the beware warning fades - heals itself on the next run
+  // instead of leaving the timer frozen at full time.
   useEffect(()=>{
     if(!activeQ||done||introOpen)return;
-    setMsg("");
     if(activeLocked){deadlineRef.current=null;setRemainingSec(0);return;}
-    // On a resumed question, keep the deadline that was restored from
-    // localStorage (so time elapsed while the tab was gone still counts).
-    // Otherwise this is a genuinely new question - give it a fresh deadline.
-    if(restoredRef.current){restoredRef.current=false;}
-    else deadlineRef.current=Date.now()+activeTimeLimit*1000;
-    const deadline=deadlineRef.current;
-    setRemainingSec(deadline?Math.max(0,Math.round((deadline-Date.now())/1000)):activeTimeLimit);
-  },[activeIdx,activeQ?.id,done,introOpen]);
-  useEffect(()=>{
-    if(!activeQ||done||introOpen||activeLocked||remainingSec==null||remainingSec<=0)return;
+    if(remainingSec==null){
+      setMsg("");
+      // On a resumed question, keep the deadline restored from localStorage
+      // (so time elapsed while the tab was gone still counts). Anything else
+      // - fresh or re-armed - gets a fresh deadline. goNext nulls a stale
+      // deadline before advancing, so it can never leak across questions.
+      if(restoredRef.current){restoredRef.current=false;}
+      if(!deadlineRef.current)deadlineRef.current=Date.now()+activeTimeLimit*1000;
+      const deadline=deadlineRef.current;
+      setRemainingSec(deadline?Math.max(0,Math.round((deadline-Date.now())/1000)):activeTimeLimit);
+      return;
+    }
+    if(remainingSec<=0)return;
     const timer=setTimeout(()=>{
       const deadline=deadlineRef.current;
       if(deadline)setRemainingSec(Math.max(0,Math.round((deadline-Date.now())/1000)));
       else setRemainingSec((v)=>Math.max(0,Number(v||0)-1));
     },1000);
     return()=>clearTimeout(timer);
-  },[activeIdx,done,introOpen,activeLocked,remainingSec,activeQ]);
+  },[activeIdx,activeQ?.id,done,introOpen,activeLocked,remainingSec,activeTimeLimit]);
   useEffect(()=>{
     if(!activeQ||done||introOpen||activeLocked||remainingSec!==0)return;
     responseMsRef.current[activeIdx]=activeTimeLimit*1000;
@@ -253,10 +264,34 @@ export default function StudentAsyncPlay() {
       const initialRows=Array.isArray(data.leaderboard)?data.leaderboard:[];
       knownLeaderboardIdsRef.current=new Set(initialRows.map(row=>row.student_user_id));
       setLeaderboardRows(initialRows);
-      setResult(data);soundManager.play("correct").catch(()=>{});return data;
+      setResult(data);setShowLeaderboard(false);soundManager.play("correct").catch(()=>{});return data;
     }catch(err){setMsg(err?.response?.data?.message||"Submit failed.");soundManager.play("wrong").catch(()=>{});return null;}
     finally{if(mountedRef.current)setSubmittingUi(false);submittingRef.current=false;}
   }
+
+  // Keep the latest submit fn reachable from socket callbacks without
+  // re-subscribing on every keystroke.
+  submitAssignmentRef.current = submitAssignment;
+
+  // Long-lived socket while playing: records tab-outs server-side and listens
+  // for the 2nd-strike warning / 3rd-strike kick. Separate from the
+  // post-submit leaderboard socket below.
+  useEffect(()=>{
+    const socket = makeSocket();
+    assignmentSocketRef.current = socket;
+    socket.on("assignment:warning", (payload)=>{
+      if (Number(payload?.quizId) !== Number(quizId)) return;
+      setAntiCheat({ type: "warning", message: "We noticed that you tabbed out during the assignment. Beware as one more tab out could get you kicked." });
+    });
+    socket.on("assignment:kicked", async (payload)=>{
+      if (Number(payload?.quizId) !== Number(quizId)) return;
+      try { await submitAssignmentRef.current?.({ forced: true }); } catch {}
+      if (!mountedRef.current) return;
+      setAwayBlur(false);
+      setAntiCheat({ type: "ended", message: "You have been removed from this assignment after tabbing out 3 times. Your current answers were auto-submitted." });
+    });
+    return ()=>{ try { socket.disconnect(); } catch {} if (assignmentSocketRef.current === socket) assignmentSocketRef.current = null; };
+  },[quizId]);
 
   // Once this student's own result is in, join a lightweight realtime room so
   // that when classmates finish later, their name/rank pops onto this same
@@ -281,8 +316,12 @@ export default function StudentAsyncPlay() {
 
   useEffect(()=>{
     if(!quiz||done||introOpen)return;
-    function leave(){if(awayRef.current||done)return;awayRef.current=true;setAwayBlur(true);tabCountRef.current+=1;}
-    async function returnToPage(){if(!awayRef.current)return;awayRef.current=false;setAwayBlur(false);const count=tabCountRef.current;if(count>=2)setAntiCheat({type:"warning",message:"We noticed that you tabbed out during the assigned session. Automatic removal is temporarily disabled for testing."});}
+    function leave(){
+      if(awayRef.current||done||submittingRef.current)return;
+      awayRef.current=true;setAwayBlur(true);tabCountRef.current+=1;
+      try { assignmentSocketRef.current?.emit("assignment:tabOut", { quizId: Number(quizId) }); } catch {}
+    }
+    async function returnToPage(){if(!awayRef.current)return;awayRef.current=false;setAwayBlur(false);const count=tabCountRef.current;if(count>=2)setAntiCheat({type:"warning",message:"We noticed that you tabbed out during the assignment. Beware as one more tab out could get you kicked."});}
     const onVisibility=()=>document.hidden?leave():returnToPage();
     const onBlur=()=>{if(!document.hasFocus())leave()};
     document.addEventListener("visibilitychange",onVisibility);window.addEventListener("blur",onBlur);window.addEventListener("focus",returnToPage);window.addEventListener("pagehide",leave);
@@ -327,7 +366,7 @@ export default function StudentAsyncPlay() {
   function goNext(){
     if(idx<activeIdx){viewQuestion(idx+1);return;}
     if(!activeLocked){setMsg("Submit this answer before moving to the next question.");return;}
-    if(activeIdx<questions.length-1){const next=activeIdx+1;setActiveIdx(next);setIdx(next);setRemainingSec(null);setMsg("");}
+    if(activeIdx<questions.length-1){const next=activeIdx+1;deadlineRef.current=null;setActiveIdx(next);setIdx(next);setRemainingSec(null);setMsg("");}
   }
   const canGoPrevious=idx>0;
   const canGoNext=idx<questions.length-1&&(idx<activeIdx||(idx===activeIdx&&activeLocked));
@@ -348,12 +387,36 @@ export default function StudentAsyncPlay() {
 
   if(submittingUi&&!done){
     return <AsyncShell dark={dark} pageBg={pageBg} backgroundStyle={assignmentBgStyle} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}>
-      <div className="sp-wait-card sp-page-enter sp-submitting-card" style={{maxWidth:520,background:cardBg,borderColor:cardBor,textAlign:"center"}}>
-        <div className="sp-wait-icon-wrap sp-thinkbot-loading" style={{margin:"0 auto 16px",background:dark?"rgba(8,22,50,.88)":"rgba(255,255,255,.92)",borderColor:cardBor}}>
+      <div className="sp-anticheat-backdrop" style={{overflowY:"auto"}}>
+      <div className="sp-wait-card sp-page-enter sp-assignment-lobby-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}>
+        <div className="sp-wait-icon-wrap sp-thinkbot-loading" style={{background:dark?"rgba(8,22,50,.88)":"rgba(255,255,255,.92)",borderColor:cardBor}}>
           <span className="sp-thinkbot-loading-ring" aria-hidden="true"/>
           <img src={thinkBotLogo} alt="ThinkBot" className="sp-thinkbot-loading-logo"/>
         </div>
         <h3 className="sp-wait-title" style={{color:textC}}>Submitting answers<LoadingDots color={mutedC}/></h3>
+      </div>
+      </div>
+    </AsyncShell>;
+  }
+
+  if(done&&!showLeaderboard){
+    const score=Number(result?.score||0);
+    const maxScore=Number(result?.maxScore||0);
+    const compPoints=Math.round(Number(result?.competitivePoints||0));
+    const myRank=Number(result?.rank||0);
+    return <AsyncShell dark={dark} pageBg={pageBg} backgroundStyle={assignmentBgStyle} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} title="ThinkWAVE Assignment" isMuted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}>
+      <div className="sp-anticheat-backdrop" style={{overflowY:"auto"}}>
+      <div className="sp-wait-card sp-page-enter sp-assignment-lobby-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}>
+        <div className="sp-wait-icon-wrap sp-thinkbot-loading" style={{background:dark?"rgba(8,22,50,.88)":"rgba(255,255,255,.92)",borderColor:cardBor}}>
+          <span className="sp-thinkbot-loading-ring" aria-hidden="true"/>
+          <img src={thinkBotLogo} alt="ThinkBot" className="sp-thinkbot-loading-logo"/>
+        </div>
+        <h3 className="sp-wait-title" style={{color:textC}}>Submitted!</h3>
+        <p className="sp-wait-subtitle" style={{color:mutedC}}>Your answers have been recorded.</p>
+        <div style={{fontSize:30,fontWeight:1000,color:textC}}>{score} / {maxScore} <span style={{fontSize:15,fontWeight:800,color:mutedC}}>pts</span></div>
+        <div className="text-[13px] font-[750]" style={{color:mutedC}}>{compPoints.toLocaleString()} competitive pts{myRank>0&&<> · Rank #{myRank}</>}</div>
+        <TeacherPressButton tone="blue" onClick={()=>setShowLeaderboard(true)}>View Leaderboard</TeacherPressButton>
+      </div>
       </div>
     </AsyncShell>;
   }
@@ -422,7 +485,7 @@ export default function StudentAsyncPlay() {
         {lobbyPhase==="loading"
           ? <h3 className="sp-wait-title" style={{color:textC}}>Please wait<LoadingDots color={mutedC}/></h3>
           : <h1 className="sp-assignment-lobby-title tw-tutorial-fade-line" style={{color:textC}}>{quiz.title||"Assignment"}</h1>}
-        {lobbyPhase==="ready"&&<button type="button" className="tw-student-dashboard-press sp-assignment-start tw-tutorial-fade-line" onClick={handleStartAssignment}><span>Start</span></button>}
+        {lobbyPhase==="ready"&&<TeacherPressButton tone="blue" className="sp-assignment-start tw-tutorial-fade-line" onClick={handleStartAssignment}>Start</TeacherPressButton>}
       </div>
     </div>}
     {(entryStage==="beware"||entryStage==="beware-exit")&&<div className="sp-anticheat-backdrop">

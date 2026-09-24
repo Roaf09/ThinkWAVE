@@ -49,11 +49,12 @@ export function ThinkBotEmptyState({ title, actionLabel, onAction, actionProps =
 
 export function TeacherActionModal({ c, icon = "alert", title, message, tone = "blue", confirmLabel = "Confirm", cancelLabel = "Cancel", onConfirm, onClose, hideCancel = false, textCancel = false, children }) {
   if (typeof document === "undefined") return null;
+  const isLogoutExit = String(icon || "").toLowerCase() === "logout" || /log\s?out|exit/i.test(String(title || ""));
   return createPortal(
     <>
       <div className="tw-admin-logout-backdrop" onClick={onClose} />
       <div className="tw-admin-logout-layer" onClick={onClose}>
-        <section className="tw-admin-logout-modal tw-teacher-action-modal" onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
+        <section className={`tw-admin-logout-modal tw-teacher-action-modal${isLogoutExit ? " is-compact-confirm" : ""}`} onClick={(event) => event.stopPropagation()} style={{ background: c.cardBg, borderColor: c.border, color: c.text }}>
           <header><TwIcon name={icon} size={58} /><strong>{title}</strong></header>
           {message && <p style={{ color: c.textMuted }}>{message}</p>}
           {children}

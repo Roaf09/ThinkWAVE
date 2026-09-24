@@ -238,8 +238,8 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
                       >Open Analytics</TeacherPressButton>
                       {advancedPlan && <span className="tw-history-export-actions">
                         <span className="tw-history-export-text">
-                          <TeacherPressButton tone="neutral" icon="pdf" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
-                          <TeacherPressButton tone="neutral" icon="xlsx" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="pdf" className="tw-history-pdf-btn" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="xlsx" className="tw-history-xlsx-btn" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
                         </span>
                         <span className="tw-history-export-icons">
                           <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title="Export PDF" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}><TwIcon name="pdf" size={20} /></button>

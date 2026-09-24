@@ -54,6 +54,87 @@ function snapshotQuestionConfig(session, questionId) {
   return entry?.config_json || null;
 }
 
+// If the member who could rename the group leaves (group switch, kick), the
+// earliest remaining active member inherits the right so the group never
+// becomes permanently unrenamable.
+async function reassignGroupEditor(groupId) {
+  const [[group]] = await pool.query(`SELECT name_editor_participant_id FROM session_groups WHERE id=:gid`, { gid: groupId });
+  if (!group) return;
+  if (group.name_editor_participant_id) {
+    const [[active]] = await pool.query(
+      `SELECT gm.participant_id FROM session_group_members gm
+       JOIN session_participants p ON p.id = gm.participant_id
+       WHERE gm.group_id=:gid AND gm.participant_id=:pid AND p.kicked_at IS NULL`,
+      { gid: groupId, pid: group.name_editor_participant_id }
+    );
+    if (active) return;
+  }
+  const [[next]] = await pool.query(
+    `SELECT gm.participant_id FROM session_group_members gm
+     JOIN session_participants p ON p.id = gm.participant_id
+     WHERE gm.group_id=:gid AND p.kicked_at IS NULL
+     ORDER BY gm.id ASC LIMIT 1`,
+    { gid: groupId }
+  );
+  await pool.query(`UPDATE session_groups SET name_editor_participant_id=:pid WHERE id=:gid`, { pid: next?.participant_id || null, gid: groupId });
+}
+
+// Serializes group proposal creation per group. Two teammates submitting at
+// the same instant used to both pass the SELECT-then-INSERT pending check and
+// create two PENDING rows, double-counting the group's answer and tripping the
+// host's answered X/Y auto-advance early. Locking the group row inside a
+// transaction makes the submitted/pending check + insert atomic.
+async function createGroupProposal({ sessionId, groupId, questionId, participantId, answer, checkSubmitted }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(`SELECT id FROM session_groups WHERE id=:gid FOR UPDATE`, { gid: groupId });
+    if (checkSubmitted) {
+      const [[existingResponse]] = await conn.query(
+        `SELECT r.id
+         FROM responses r
+         JOIN session_group_members gm ON gm.participant_id = r.participant_id
+         WHERE r.session_id=:sid AND r.question_id=:qid AND gm.group_id=:gid LIMIT 1`,
+        { sid: sessionId, qid: questionId, gid: groupId }
+      );
+      if (existingResponse) {
+        await conn.rollback();
+        return { submitted: true };
+      }
+    }
+    const [[pending]] = await conn.query(
+      `SELECT id FROM group_answer_proposals WHERE session_id=:sid AND group_id=:gid AND question_id=:qid AND status='PENDING' ORDER BY id DESC LIMIT 1`,
+      { sid: sessionId, gid: groupId, qid: questionId }
+    );
+    if (pending) {
+      await conn.rollback();
+      return { pending: true, proposalId: pending.id };
+    }
+    const [result] = await conn.query(
+      `INSERT INTO group_answer_proposals(session_id, group_id, question_id, proposer_participant_id, answer_json, status)
+       VALUES(:sid,:gid,:qid,:pid,:ans,'PENDING')`,
+      { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(answer ?? null) }
+    );
+    await conn.query(
+      `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
+       VALUES(:proposalId,:participantId,'AGREE')
+       ON DUPLICATE KEY UPDATE vote='AGREE'`,
+      { proposalId: result.insertId, participantId }
+    );
+    await conn.commit();
+    return { proposalId: result.insertId };
+  } catch (err) {
+    try { await conn.rollback(); } catch {}
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// Participants with a pending disconnect grace timer. They are still flagged
+// connected=1 in the DB for STUDENT_DISCONNECT_GRACE_MS, but their vote may
+// never arrive — group quorum ignores them immediately instead of stalling.
+const disconnectingParticipants = new Set();
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
 const pausedQuestionState = new Map();
@@ -75,8 +156,8 @@ async function ensureOvertakeTable(){
   )`);
   overtakeTableReady=true;
 }
-// Temporarily disabled for gameplay testing. Tab-out events and warnings remain recorded.
-const AUTO_KICK_AFTER_TAB_OUTS = false;
+// Tab-out anti-cheat is enabled: 1st recorded, 2nd warns, 3rd kicks.
+const AUTO_KICK_AFTER_TAB_OUTS = true;
 // A dropped WiFi/tab-throttle blip disconnects and reconnects within seconds.
 // Marking `connected=0` (and broadcasting it) the instant the socket drops
 // made the teacher's online/offline display flicker for students who never
@@ -88,7 +169,6 @@ const STUDENT_DISCONNECT_GRACE_MS = 8_000;
 
 export function registerSessionSockets(io) {
   const teacherDisconnectTimers = new Map();
-  const pendingKickTimers = new Map();
   const studentDisconnectTimers = new Map();
   // A student can hold more than one live socket at once (a second device, a
   // second tab) - reconnectKey maps every one of them to the same
@@ -219,11 +299,15 @@ export function registerSessionSockets(io) {
       if (!session) return;
 
       if (status === "LIVE" && session.join_mode === "GROUP") {
+        const [[quizTpl]] = await pool.query(`SELECT template_type FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
+        if (["THINK_SPELL", "THINK_AND_SPELL"].includes(String(quizTpl?.template_type || "").toUpperCase())) {
+          return socket.emit("teacher:error", { message: "Group mode isn't available for Crossword quizzes." });
+        }
         const [[counts]] = await pool.query(
           `SELECT
              (SELECT COUNT(*) FROM session_groups WHERE session_id=:sid) AS group_count,
-             (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid) AS participant_count,
-             (SELECT COUNT(*) FROM session_participants p LEFT JOIN session_group_members gm ON gm.participant_id=p.id WHERE p.session_id=:sid AND gm.id IS NULL) AS unassigned_count`,
+             (SELECT COUNT(*) FROM session_participants WHERE session_id=:sid AND kicked_at IS NULL) AS participant_count,
+             (SELECT COUNT(*) FROM session_participants p LEFT JOIN session_group_members gm ON gm.participant_id=p.id WHERE p.session_id=:sid AND p.kicked_at IS NULL AND gm.id IS NULL) AS unassigned_count`,
           { sid: sessionId }
         );
         if (!counts.group_count) return socket.emit("teacher:error", { message: "Create at least one group before starting." });
@@ -313,6 +397,7 @@ export function registerSessionSockets(io) {
       // this participant never gets broadcast as having gone offline at all.
       const pendingDisconnect = studentDisconnectTimers.get(p.id);
       if (pendingDisconnect) { clearTimeout(pendingDisconnect); studentDisconnectTimers.delete(p.id); }
+      disconnectingParticipants.delete(p.id);
       participantConnectionCounts.set(p.id, (participantConnectionCounts.get(p.id) || 0) + 1);
 
       socket.data.role = "STUDENT";
@@ -374,11 +459,24 @@ export function registerSessionSockets(io) {
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(`SELECT status FROM sessions WHERE id=:sid`, { sid: sessionId });
-      if (!session || !['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) return socket.emit("student:error", { message: "This session is no longer accepting group joins." });
+      if (!session || session.status !== "LOBBY") return socket.emit("student:error", { message: "Groups are locked after the teacher starts the quiz." });
       const [[group]] = await pool.query(`SELECT * FROM session_groups WHERE id=:gid AND session_id=:sid`, { gid: groupId, sid: sessionId });
       if (!group) return socket.emit("student:error", { message: "Group not found." });
 
+      const [[current]] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: participantId });
       await pool.query(`DELETE FROM session_group_members WHERE participant_id=:pid`, { pid: participantId });
+      // Drop the student's vote on the old group's pending proposal so quorum
+      // can't silently change or stall on a stale vote.
+      if (current?.group_id && Number(current.group_id) !== Number(groupId)) {
+        await pool.query(
+          `DELETE gav FROM group_answer_votes gav
+           JOIN group_answer_proposals gap ON gap.id = gav.proposal_id
+           WHERE gav.participant_id=:pid AND gap.session_id=:sid AND gap.group_id=:gid AND gap.status='PENDING'`,
+          { pid: participantId, sid: sessionId, gid: current.group_id }
+        );
+        socket.leave(roomGroup(sessionId, current.group_id));
+        await reassignGroupEditor(current.group_id);
+      }
       await pool.query(
         `INSERT INTO session_group_members(session_id, group_id, participant_id) VALUES(:sid,:gid,:pid)`,
         { sid: sessionId, gid: groupId, pid: participantId }
@@ -404,7 +502,9 @@ export function registerSessionSockets(io) {
       const trimmed = String(name || "").trim().slice(0, 120);
       if (!trimmed) return;
       const [[membership]] = await pool.query(
-        `SELECT * FROM session_group_members WHERE participant_id=:pid AND group_id=:gid AND session_id=:sid`,
+        `SELECT gm.* FROM session_group_members gm
+         JOIN session_participants p ON p.id = gm.participant_id
+         WHERE gm.participant_id=:pid AND gm.group_id=:gid AND gm.session_id=:sid AND p.kicked_at IS NULL`,
         { pid: participantId, gid: groupId, sid: sessionId }
       );
       if (!membership) return;
@@ -468,8 +568,6 @@ export function registerSessionSockets(io) {
         } else if (count >= 3 && AUTO_KICK_AFTER_TAB_OUTS) {
           await kickParticipant(io, sessionId, participantId, "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher.");
           return;
-        } else if (count >= 3) {
-          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:3, message:"Tab-out removal is temporarily disabled for testing, but this activity is still recorded." });
         }
         await broadcastRoster(io, sessionId);
       } catch (error) {
@@ -479,19 +577,11 @@ export function registerSessionSockets(io) {
 
     onTeacher("teacher:allowStudent", async ({ sessionId, participantId }) => {
       if (!["TEACHER", "GUEST_HOST"].includes(socket.data.role) || Number(socket.data.sessionId) !== Number(sessionId)) return;
-      const key = `${sessionId}:${participantId}`;
-      const timer = pendingKickTimers.get(key);
-      if (timer) clearTimeout(timer);
-      pendingKickTimers.delete(key);
       io.to(roomParticipant(participantId)).emit("antiCheat:allowed", { ok:true });
     });
 
     onTeacher("teacher:kickStudent", async ({ sessionId, participantId }) => {
       if (!["TEACHER", "GUEST_HOST"].includes(socket.data.role) || Number(socket.data.sessionId) !== Number(sessionId)) return;
-      const key = `${sessionId}:${participantId}`;
-      const timer = pendingKickTimers.get(key);
-      if (timer) clearTimeout(timer);
-      pendingKickTimers.delete(key);
       await kickParticipant(io, sessionId, participantId, "You have been removed from this live session due to suspicious activity. If you think this is an accident, please speak with your teacher.");
     });
 
@@ -534,77 +624,42 @@ export function registerSessionSockets(io) {
             return socket.emit("answer:ack", { isCorrect: false, points: 0, locked: true, message: "Time's up", templateType: tt });
           }
 
-          const [[pending]] = await pool.query(
-            `SELECT * FROM group_answer_proposals WHERE session_id=:sid AND group_id=:gid AND question_id=:qid AND status='PENDING' ORDER BY id DESC LIMIT 1`,
-            { sid: sessionId, gid: groupId, qid: questionId }
-          );
-          if (pending) {
+          const created = await createGroupProposal({ sessionId, groupId, questionId, participantId, answer, checkSubmitted: false });
+          if (created.pending) {
             return socket.emit("student:error", { message: "Your group already has a pending word. Vote on it first." });
           }
 
-          const [result] = await pool.query(
-            `INSERT INTO group_answer_proposals(session_id, group_id, question_id, proposer_participant_id, answer_json, status)
-             VALUES(:sid,:gid,:qid,:pid,:ans,'PENDING')`,
-            { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(answer ?? null) }
-          );
-
-          await pool.query(
-            `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
-             VALUES(:proposalId,:participantId,'AGREE')`,
-            { proposalId: result.insertId, participantId }
-          );
-
-          await emitGroupProposal(io, sessionId, groupId, result.insertId);
-          await resolveGroupProposalIfReady(io, result.insertId, sessionId);
+          await emitGroupProposal(io, sessionId, groupId, created.proposalId);
+          await resolveGroupProposalIfReady(io, created.proposalId, sessionId);
           return;
         }
 
-        const [[existingResponse]] = await pool.query(
-          `SELECT r.id
-           FROM responses r
-           JOIN session_group_members gm ON gm.participant_id = r.participant_id
-           WHERE r.session_id=:sid AND r.question_id=:qid AND gm.group_id=:gid LIMIT 1`,
-          { sid: sessionId, qid: questionId, gid: groupId }
-        );
-        if (existingResponse) {
+        const created = await createGroupProposal({
+          sessionId, groupId, questionId, participantId,
+          answer: timeExpired && answer && typeof answer === "object" && !Array.isArray(answer)
+            ? { ...answer, __tw_time_expired: true }
+            : answer,
+          checkSubmitted: true,
+        });
+        if (created.submitted) {
           return socket.emit("answer:ack", { isCorrect: null, points: 0, locked: true, message: "Your group already submitted an answer." });
         }
-
-        const [[pending]] = await pool.query(
-          `SELECT * FROM group_answer_proposals WHERE session_id=:sid AND group_id=:gid AND question_id=:qid AND status='PENDING' ORDER BY id DESC LIMIT 1`,
-          { sid: sessionId, gid: groupId, qid: questionId }
-        );
-        if (pending) {
+        if (created.pending) {
           if (timeExpired) {
             await pool.query(
               `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
                VALUES(:proposalId,:participantId,'AGREE')
                ON DUPLICATE KEY UPDATE vote='AGREE'`,
-              { proposalId: pending.id, participantId }
+              { proposalId: created.proposalId, participantId }
             );
-            await resolveGroupProposalIfReady(io, pending.id, sessionId);
+            await resolveGroupProposalIfReady(io, created.proposalId, sessionId);
             return;
           }
           return socket.emit("student:error", { message: "Your group already has a pending answer. Vote on it first." });
         }
 
-        const proposalAnswer = timeExpired && answer && typeof answer === "object" && !Array.isArray(answer)
-          ? { ...answer, __tw_time_expired: true }
-          : answer;
-        const [result] = await pool.query(
-          `INSERT INTO group_answer_proposals(session_id, group_id, question_id, proposer_participant_id, answer_json, status)
-           VALUES(:sid,:gid,:qid,:pid,:ans,'PENDING')`,
-          { sid: sessionId, gid: groupId, qid: questionId, pid: participantId, ans: JSON.stringify(proposalAnswer ?? null) }
-        );
-
-        await pool.query(
-          `INSERT INTO group_answer_votes(proposal_id, participant_id, vote)
-           VALUES(:proposalId,:participantId,'AGREE')`,
-          { proposalId: result.insertId, participantId }
-        );
-
-        await emitGroupProposal(io, sessionId, groupId, result.insertId);
-        await resolveGroupProposalIfReady(io, result.insertId, sessionId);
+        await emitGroupProposal(io, sessionId, groupId, created.proposalId);
+        await resolveGroupProposalIfReady(io, created.proposalId, sessionId);
         return;
       }
 
@@ -622,6 +677,7 @@ export function registerSessionSockets(io) {
         if (existingTimer) clearTimeout(existingTimer);
         const timer = setTimeout(async () => {
           studentDisconnectTimers.delete(participantId);
+          disconnectingParticipants.delete(participantId);
           try {
             await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
             const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
@@ -633,6 +689,16 @@ export function registerSessionSockets(io) {
           }
         }, STUDENT_DISCONNECT_GRACE_MS);
         studentDisconnectTimers.set(participantId, timer);
+        disconnectingParticipants.add(participantId);
+        // Recompute quorum right away without waiting for the grace window:
+        // resolveGroupProposalIfReady now ignores disconnecting members, so a
+        // proposal that already has every remaining vote resolves instantly.
+        try {
+          const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
+          for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
+        } catch (error) {
+          console.error("group quorum recompute on disconnect failed:", error?.message || error);
+        }
         return;
       }
 
@@ -687,12 +753,19 @@ function roomTeacher(sessionId) { return `session:${sessionId}:teacher`; }
 function roomParticipant(participantId) { return `participant:${participantId}`; }
 function roomGroup(sessionId, groupId) { return `session:${sessionId}:group:${groupId}`; }
 
-// Privacy + payload split for student/guest rooms. Uploaded profile photos
-// (base64 blobs up to 4MB each) and kick reasons stay in the teacher room: a
-// guest holding only a join code must not receive other users' photos, and
-// stripping them also shrinks the roster/groups/leaderboard rebroadcast that
-// fires on every join for the whole class. Recursive so nested group members
-// and leaderboard rows are covered too. Exported for unit tests.
+// Privacy + payload split for student/guest rooms. Kick reasons stay in the
+// teacher room. Profile photos are shared with the session room (waiting
+// lobby, groups) so participants see each other's saved pictures, but they
+// are still stripped from leaderboard/score rebroadcasts to keep those
+// payloads small on every answer. Recursive so nested group members and
+// leaderboard rows are covered too. Exported for unit tests.
+export function stripKickReason(row) {
+  if (row && typeof row === "object" && "kick_reason" in row) {
+    const { kick_reason, ...rest } = row;
+    return rest;
+  }
+  return row;
+}
 export function stripPhotosForStudents(value) {
   if (Array.isArray(value)) return value.map(stripPhotosForStudents);
   if (value && typeof value === "object") {
@@ -986,7 +1059,7 @@ async function emitGroupProposal(io, sessionId, groupId, proposalId) {
     proposerName: `${proposal.first_name || ""} ${proposal.last_name || ""}`.trim(),
     answer: safeJson(proposal.answer_json),
     votes,
-    totalMembers: members.filter((m) => Number(m.connected) === 1).length,
+    totalMembers: members.filter((m) => Number(m.connected) === 1 && !disconnectingParticipants.has(Number(m.id))).length,
     members,
     status: proposal.status,
   });
@@ -1000,18 +1073,22 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     `SELECT p.id
      FROM session_group_members gm
      JOIN session_participants p ON p.id = gm.participant_id
-     WHERE gm.group_id=:gid AND p.connected=1
+     WHERE gm.group_id=:gid AND p.connected=1 AND p.kicked_at IS NULL
      ORDER BY p.id ASC`,
     { gid: proposal.group_id }
   );
+  // Members inside the disconnect grace window are still flagged connected=1
+  // but their vote may never arrive — don't let them stall the group.
+  const quorum = members.filter((m) => !disconnectingParticipants.has(Number(m.id)));
   const [votes] = await pool.query(`SELECT participant_id, vote FROM group_answer_votes WHERE proposal_id=:id`, { id: proposalId });
+  const countedVotes = votes.filter((v) => quorum.some((m) => Number(m.id) === Number(v.participant_id)));
 
   await emitGroupProposal(io, sessionId, proposal.group_id, proposalId);
 
-  if (votes.length < members.length) return;
+  if (countedVotes.length < quorum.length) return;
 
-  const agree = votes.filter((v) => v.vote === "AGREE").length;
-  const disagree = votes.filter((v) => v.vote === "DISAGREE").length;
+  const agree = countedVotes.filter((v) => v.vote === "AGREE").length;
+  const disagree = countedVotes.filter((v) => v.vote === "DISAGREE").length;
   const approved = agree > disagree;
 
   await pool.query(
@@ -1235,6 +1312,28 @@ async function kickParticipant(io, sessionId, participantId, reason) {
      WHERE id=:pid AND session_id=:sid`,
     { reason, pid:participantId, sid:sessionId }
   );
+  // A kicked voter's pending vote must not stall their former group, and a
+  // kicked name-editor passes the rename right to the next active member.
+  const [memberRows] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: participantId });
+  if (memberRows.length) {
+    await pool.query(
+      `DELETE gav FROM group_answer_votes gav
+       JOIN group_answer_proposals gap ON gap.id = gav.proposal_id
+       WHERE gav.participant_id=:pid AND gap.session_id=:sid AND gap.status='PENDING'`,
+      { pid: participantId, sid: sessionId }
+    );
+    for (const row of memberRows) {
+      io.in(roomParticipant(participantId)).socketsLeave(roomGroup(sessionId, row.group_id));
+      await reassignGroupEditor(row.group_id);
+    }
+    const [pending] = await pool.query(
+      `SELECT gap.id FROM group_answer_proposals gap
+       JOIN session_group_members gm ON gm.group_id=gap.group_id
+       WHERE gm.participant_id=:pid AND gap.session_id=:sid AND gap.status='PENDING'`,
+      { pid: participantId, sid: sessionId }
+    );
+    for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
+  }
   io.to(roomParticipant(participantId)).emit("antiCheat:kicked", { message:reason });
   io.in(roomParticipant(participantId)).socketsLeave(roomSession(sessionId));
   await broadcastRoster(io, sessionId);
@@ -1259,7 +1358,10 @@ export async function broadcastRoster(io, sessionId) {
     { sid: sessionId }
   );
   io.to(roomTeacher(sessionId)).emit("roster:update", participants);
-  io.to(roomSession(sessionId)).emit("roster:update", stripPhotosForStudents(participants));
+  // Waiting-lobby roster cards render each participant's saved profile photo
+  // (falling back to the default icon when none was saved), so the session
+  // room gets photos too. Only kick reasons stay teacher-only.
+  io.to(roomSession(sessionId)).emit("roster:update", participants.map(stripKickReason));
 }
 
 export async function broadcastGroups(io, sessionId) {
@@ -1295,7 +1397,8 @@ export async function broadcastGroups(io, sessionId) {
   );
   const groups = rows.map((g) => ({ ...g, members: (safeJson(g.members_json) || []).filter(Boolean) }));
   io.to(roomTeacher(sessionId)).emit("groups:update", groups);
-  io.to(roomSession(sessionId)).emit("groups:update", stripPhotosForStudents(groups));
+  // Group lobby cards show member photos just like the solo roster does.
+  io.to(roomSession(sessionId)).emit("groups:update", groups);
 }
 
 export async function broadcastScores(io, sessionId) {

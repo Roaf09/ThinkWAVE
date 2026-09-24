@@ -178,7 +178,7 @@ body.dark-mode .tw-builder-locked-banner{color:var(--tw-warn-light)}
 html, body, #root { min-height: 100%; }
 body::after { display: none !important; }
 body.dark-mode { background: #07142b !important; }
-body.light-mode { background: #fbf1dd !important; }
+body.light-mode { background: #ffffff !important; }
 .tw-responsive-dashboard,
 .tw-responsive-dashboard-main,
 .dashboard-tab-panel { background: var(--tw-dashboard-page, transparent); }

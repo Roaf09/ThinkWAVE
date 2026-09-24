@@ -1278,12 +1278,12 @@ img,video,canvas,svg{max-width:100%}
 .tw-plan-contact-action::after{inset:-7px!important;transform:scale(.96)!important;border-radius:20px}
 .tw-plan-contact-action:hover::after{transform:scale(1)!important}
 .tw-auth-route{position:relative;z-index:1}
-.tw-auth-form-shell{animation:twAuthFormEnter .26s cubic-bezier(.22,.8,.22,1) both}
-.tw-auth-form-shell.from-right{--tw-auth-x:42px}.tw-auth-form-shell.from-left{--tw-auth-x:-42px}
-.tw-auth-form-shell.exit-left{animation:twAuthExitLeft .22s ease both}.tw-auth-form-shell.exit-right{animation:twAuthExitRight .22s ease both}
+.tw-auth-form-shell{animation:twAuthFormEnter .25s ease both}
+.tw-auth-form-shell.from-right{--tw-auth-x:28px}.tw-auth-form-shell.from-left{--tw-auth-x:-28px}
+.tw-auth-form-shell.exit-left{animation:twAuthExitLeft .2s ease both}.tw-auth-form-shell.exit-right{animation:twAuthExitRight .2s ease both}
 @keyframes twAuthFormEnter{from{opacity:0;transform:translateX(var(--tw-auth-x,0))}to{opacity:1;transform:translateX(0)}}
-@keyframes twAuthExitLeft{to{opacity:0;transform:translateX(-42px)}}
-@keyframes twAuthExitRight{to{opacity:0;transform:translateX(42px)}}
+@keyframes twAuthExitLeft{to{opacity:0;transform:translateX(-28px)}}
+@keyframes twAuthExitRight{to{opacity:0;transform:translateX(28px)}}
 .tw-auth-primary{position:relative;isolation:isolate;border:3px solid #2b6cff!important;background:#2b6cff!important;color:#fff!important;box-shadow:0 10px 24px rgba(43,108,255,.25)!important;transition:transform .2s ease,box-shadow .2s ease,filter .2s ease!important}
 .tw-auth-primary:hover{transform:translateY(-3px);filter:brightness(1.05);box-shadow:0 0 0 8px rgba(43,108,255,.12),0 18px 38px rgba(43,108,255,.28)!important}
 .tw-start-modal{width:min(92vw,680px)!important;height:min(76vh,520px)!important;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-start}
@@ -1878,7 +1878,7 @@ body.dark-mode .tw-builder-locked-banner{color:#fcd34d}
 html, body, #root { min-height: 100%; }
 body::after { display: none !important; }
 body.dark-mode { background: #07142b !important; }
-body.light-mode { background: #fbf1dd !important; }
+body.light-mode { background: #ffffff !important; }
 .tw-responsive-dashboard,
 .tw-responsive-dashboard-main,
 .dashboard-tab-panel { background: var(--tw-dashboard-page, transparent); }
@@ -3558,7 +3558,7 @@ body.dark-mode .tw-analytics-result-badge *{color:#fff!important}
 .tw-template-preview-modal,
 .tw-start-modal,
 .tw-plan-success-modal{
-  background:#fffaf0!important;
+  background:#ffffff!important;
   backdrop-filter:none!important;
   -webkit-backdrop-filter:none!important;
 }

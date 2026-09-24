@@ -17,7 +17,9 @@ const profileSchema = z.object({
   firstName: z.string().min(1).max(100),
   middleInitial: z.string().max(10).optional().nullable(),
   studentId: z.string().min(1).max(80),
-  birthDate: z.string().optional().nullable(),
+  // Calendar date only (YYYY-MM-DD): stored straight into the DATE column so no
+  // timezone conversion can shift it a day in either direction.
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birth date must be YYYY-MM-DD.").optional().nullable(),
   // "" means "no picture" for clients that still send the raw form state (the
   // bundle deployed before DEF-20 did); treat it as null instead of failing
   // the data-URI check and rejecting the whole profile save.

@@ -30,6 +30,14 @@ export function FinalLeaderboardView({
   const podiumOrder = [scores[1], scores[0], scores[2]].filter(Boolean);
   const rankOf = (row) => scores.findIndex((candidate) => candidate === row) + 1;
   const displayName = (row) => isGroupMode ? (row.group_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()) : `${row.first_name || ""} ${row.last_name || ""}`.trim();
+  const shortDisplayName = (row) => {
+    if (isGroupMode) return displayName(row);
+    const first = String(row.first_name || "").trim();
+    const last = String(row.last_name || "").trim();
+    if (!first && !last) return "Player";
+    if (!last) return first;
+    return `${first} ${last.charAt(0)}.`;
+  };
   const isMe = (row) => isGroupMode ? (Number(row.group_id || 0) === Number(myGroupId || 0) || (myGroup?.display_name && row.group_name === myGroup.display_name)) : Number(row.participant_id) === Number(participantId);
   return (
     <div className={`sp-final-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, "--sp-template-accent": gameplayAccent, "--host-accent": gameplayAccent, fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
@@ -40,18 +48,18 @@ export function FinalLeaderboardView({
             {myScore && <p style={{ color: mutedC }}>You scored <b style={{ color: gameplayAccent }}>{Math.round(Number(myScore.competitive_points || 0)).toLocaleString()} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
           </div>
           <h3 className="sp-final-heading" style={{ color: textC }}><TwIcon name="trophy" size={21}/> Leaderboard</h3>
-          <div className="tw-host-podium sp-final-host-podium">
+          <div className="tw-host-podium sp-final-host-podium sp-final-avatar-podium">
             {podiumOrder.map((row) => {
               const rank = rankOf(row);
               return <div key={row.participant_id || row.group_id || rank} className={`tw-host-podium-place place-${rank}${isMe(row) ? " is-me" : ""}`}>
                 <div className="tw-host-trophy"><TwIcon name="trophy" size={54} strokeWidth={2.2}/><span>{rank}</span></div>
-                <div className="tw-host-podium-platform">
+                <div className="tw-host-podium-platform sp-final-avatar-only">
                   <div className="tw-host-podium-person">
                     <div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={isGroupMode ? "users" : "user"} size={18}/>}</div>
-                    <b>{displayName(row)}</b>
                   </div>
-                  <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</div>
                 </div>
+                <div className="sp-final-podium-name" title={displayName(row)}>{shortDisplayName(row)}</div>
+                <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</div>
               </div>;
             })}
           </div>

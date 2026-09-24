@@ -190,7 +190,26 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 .tw-enter-logoimg { height: 34px; width: auto; display: block; }
 .tw-enter-msg { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: #b91c1c; }
 .tw-enter-success { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: #166534; }
-.tw-enter-topswitch { margin-top: 14px; }
+.tw-enter-topswitch { margin: 8px 0 16px !important; text-align: center !important; }
+.tw-enter-pwlabelrow { display: flex; align-items: center; justify-content: space-between; }
+.tw-enter-pwlabelrow > span:first-child { opacity: 0.75; }
+/* Enter password help (?) sits opposite the Password label; visible on mobile
+   via the shared .tw-pw-help-btn rule. Force it in the Enter card too. */
+.tw-enter-form .tw-pw-help-btn { display: none; }
+@media (max-width: 760px) {
+  .tw-enter-form .tw-pw-help-btn { display: inline-flex !important; }
+}
+/* Enter confirm wrap reserves room for the match check + eye. */
+.tw-enter-pwwrap.has-check input { padding-right: 76px !important; }
+/* In-card forgot-password OTP boxes + requirement dots. */
+.tw-enter-otpdigits { display: flex; gap: 8px; justify-content: center; margin: 4px 0 6px; }
+.tw-enter-otpdigits input {
+  width: 44px; height: 54px; box-sizing: border-box; border-radius: 12px;
+  font-size: 22px; font-weight: 950; text-align: center; outline: none; caret-color: transparent;
+}
+.tw-enter-reqdots { display: grid; gap: 7px; margin: 2px 0 4px; }
+.tw-enter-reqdots > div { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; }
+.tw-enter-reqdots > div > span:first-child { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 
 /* Login error box, same language as the standalone login screen. */
 .tw-enter-errbox {
@@ -223,11 +242,51 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
   border: 0; background: transparent; color: #2b6cff;
   font-size: 12px; font-weight: 800; cursor: pointer; padding: 6px;
 }
-/* Icon show/hide buttons: no hover effects, steady icon swap only. */
+/* Icon show/hide buttons: subtle hover/click feedback, kept vertically centered.
+   base.css lifts every button on hover/active (translateY), which would knock
+   this absolutely-centered icon downwards. Keep it pinned at -50% and add
+   scale + tint instead. */
 .tw-enter-iconbtn {
   color: #2b6cff; display: inline-grid; place-items: center;
+  border-radius: 8px !important;
+  transition: transform .15s ease, color .15s ease, background .15s ease !important;
 }
-.tw-enter-iconbtn:hover, .tw-enter-iconbtn:active { transform: translateY(-50%); filter: none; }
+.tw-enter-pwwrap button.tw-enter-iconbtn:hover,
+.tw-enter-pwwrap button.tw-enter-iconbtn:focus-visible {
+  transform: translateY(-50%) scale(1.18) !important; color: #1d4ed8 !important;
+  background: rgba(43,108,255,.12) !important;
+}
+.tw-enter-pwwrap button.tw-enter-iconbtn:active {
+  transform: translateY(-50%) scale(.94) !important; color: #1e40af !important;
+  background: rgba(43,108,255,.18) !important;
+}
+/* Standalone auth eye buttons (Tailwind -translate-y-1/2) get the same
+   centered hover/click feedback so swapping the icon never nudges them. */
+.tw-auth-form-shell button.absolute {
+  border-radius: 8px !important;
+  transition: transform .15s ease, color .15s ease, background .15s ease !important;
+}
+.tw-auth-form-shell button.absolute:hover,
+.tw-auth-form-shell button.absolute:focus-visible {
+  transform: translateY(-50%) scale(1.18) !important; color: #1d4ed8 !important;
+  background: rgba(43,108,255,.12) !important;
+}
+.tw-auth-form-shell button.absolute:active {
+  transform: translateY(-50%) scale(.94) !important;
+}
+/* Forgot-password eye buttons share the same hover/click feedback. */
+.tw-forgot-modern-card button.absolute {
+  border-radius: 8px !important; color: #2b6cff !important;
+  transition: transform .15s ease, color .15s ease, background .15s ease !important;
+}
+.tw-forgot-modern-card button.absolute:hover,
+.tw-forgot-modern-card button.absolute:focus-visible {
+  transform: translateY(-50%) scale(1.18) !important; color: #1d4ed8 !important;
+  background: rgba(43,108,255,.12) !important;
+}
+.tw-forgot-modern-card button.absolute:active {
+  transform: translateY(-50%) scale(.94) !important;
+}
 .tw-enter-formrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tw-enter-remember { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; }
 .tw-enter-remember input { width: 15px; height: 15px; accent-color: #2b6cff; }
@@ -275,13 +334,39 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 /* Code mode is intentionally dark inside a forced-white page, so re-enable
    the shared starfield (the global light-theme rule would hide it). */
 .tw-enter-page.is-code .tw-star-field { display: block !important; }
-.tw-enter-page.is-code .tw-enter-header { background: transparent; border-bottom: 1px solid rgba(132, 167, 255, 0.16); }
+/* Code stars drift like the landing starfield (same depth animation). */
+.tw-enter-page.is-code .tw-star-field i {
+  background: #fff !important;
+  box-shadow: 0 0 4px rgba(255,255,255,.92), 0 0 10px rgba(112,166,255,.3) !important;
+  opacity: .2 !important;
+  will-change: transform, opacity !important;
+  animation: twStarDepth var(--duration) ease-in-out var(--delay) infinite alternate !important;
+}
+.tw-enter-page.is-code .tw-enter-header {
+  background: rgba(3, 11, 28, 0.6) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  border-bottom: 1px solid rgba(132, 167, 255, 0.16);
+}
 .tw-enter-page.is-code .tw-enter-header-btn { background: transparent; color: #eef4ff; border-color: rgba(132, 167, 255, 0.3); }
 .tw-enter-page.is-code .tw-enter-header-btn.is-primary { background: #2b6cff; border-color: #2b6cff; color: #fff; }
+/* Join-code field reads white with black text. */
 .tw-enter-page.is-code .tw-enter-codeform input {
-  background: rgba(8, 18, 35, 0.88) !important;
-  border-color: rgba(132, 167, 255, 0.28) !important;
-  color: #eef4ff !important;
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  color: #0f172a !important;
+}
+.tw-enter-page.is-code .tw-enter-codeform input::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+/* Mobile code form sits slightly lower while staying centered. */
+@media (max-width: 760px) {
+  .tw-enter-page.is-code .tw-enter-main {
+    place-items: center !important;
+    align-content: center !important;
+    padding-top: 11vh !important;
+  }
 }
 .tw-enter-page.is-code .tw-enter-msg { color: #fca5a5; }
 .tw-enter-footer { padding: 26px 20px calc(26px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(132, 167, 255, 0.16); }
@@ -396,6 +481,33 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
     position: static; transform: none; margin: 2px auto 0; display: flex;
     width: fit-content; max-width: 100%;
   }
+  /* Mobile landing stays always-dark: semi-transparent header, no whitewash,
+     stars only (JS keeps ForcedTheme dark + transparent wash on mobile). */
+  .tw-landing-page .tw-public-header.is-minimal {
+    background: rgba(3, 11, 28, 0.6) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+    backdrop-filter: blur(18px) !important;
+    border-bottom: 1px solid rgba(132, 167, 255, 0.16) !important;
+  }
+  .tw-landing-page .tw-public-header.is-minimal .tw-public-logo span:first-child {
+    color: #eef4ff !important;
+  }
+  /* Join Code must stay white on mobile landing regardless of the body
+     theme race on refresh (body is light for one paint while ForcedTheme is
+     already dark -> black-on-dark looked invisible). */
+  .tw-landing-page .tw-public-header.is-minimal .tw-header-joincode {
+    color: #f1f5ff !important;
+    border-color: rgba(255, 255, 255, 0.85) !important;
+    background: transparent !important;
+  }
+  .tw-starry-page > .tw-landing-whitewash {
+    display: none !important;
+  }
+  /* Stars must show on mobile landing even during the first-paint body-theme
+     race (body starts light, ForcedTheme flips to dark in an effect). */
+  .tw-landing-page .tw-star-field {
+    display: block !important;
+  }
 }
 
 /* Analytics results toggle: flat bordered button on all widths (no 3D). */
@@ -412,6 +524,16 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
   font-weight: 900 !important;
 }
 .tw-analytics-mobile-toggle-btn.tw-analytics-back-press:active > span { transform: none !important; filter: none !important; }
+
+/* OTP verify shares the Enter header + login buttons and never scrolls. */
+.tw-enter-otp-page { height: 100dvh !important; max-height: 100dvh !important; overflow: hidden !important; }
+.tw-enter-otp-page .tw-otp-main { overflow: hidden !important; min-height: 0 !important; }
+.tw-enter-otp-page .tw-otp-card { max-height: 100% !important; overflow: hidden !important; }
+@media (max-width: 760px) {
+  .tw-enter-otp-page .tw-otp-card { padding: 24px 20px !important; border-radius: 20px !important; }
+  .tw-enter-otp-page .tw-otp-digits { gap: 7px !important; }
+  .tw-enter-otp-page .tw-otp-digits input { width: 44px !important; height: 54px !important; font-size: 22px !important; }
+}
 
 /* Analytics icon buttons go flat on phones, like the class-tab icon buttons. */
 @media (max-width: 760px) {
@@ -430,3 +552,146 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
     min-width: 0 !important; width: auto !important; height: auto !important;
   }
 }
+
+/* ---- UI tweaks: landing header logo, stacked hero, solid templates, white lower ---- */
+.tw-public-header .tw-public-logoimg,
+.tw-landing-footer .tw-public-logoimg,
+.tw-enter-header .tw-enter-logoimg {
+  height: 30px !important;
+  width: auto !important;
+  display: block;
+  margin-right: 7px;
+}
+.tw-landing-footer .tw-public-logoimg { height: 24px !important; }
+.tw-enter-header .tw-enter-logoimg { height: 30px !important; }
+@media (max-width: 760px) {
+  .tw-public-header .tw-public-logoimg,
+  .tw-landing-footer .tw-public-logoimg { display: none !important; }
+}
+.tw-public-header.is-minimal .tw-header-signup { border-radius: 8px !important; background: #2b6cff !important; color: #fff !important; border-color: #2b6cff !important; }
+/* No gradient wash / no dark->white morph: hard cut only, stars stay. */
+.tw-starry-page > .tw-landing-whitewash { display: none !important; }
+.tw-landing-page header.tw-public-header,
+.tw-landing-page footer,
+.tw-landing-page section,
+.tw-landing-page article { transition: none !important; }
+/* Stacked centered hero: copy on top, big carousel below. */
+@media (min-width: 761px) {
+  .tw-landing-hero-stacked { grid-template-columns: 1fr !important; justify-items: center !important; text-align: center !important; }
+  .tw-landing-hero-centered { display: grid !important; justify-items: center !important; text-align: center !important; max-width: 960px !important; margin: 0 auto !important; }
+  .tw-hero-eyebrow-small { font-size: 11px !important; letter-spacing: 0.18em !important; }
+  .tw-hero-title-big { font-size: clamp(48px, 6vw, 84px) !important; line-height: 1.02 !important; letter-spacing: -0.05em !important; text-align: center !important; text-wrap: balance !important; max-width: 900px !important; }
+  .tw-landing-cta-centered { justify-content: center !important; }
+  .tw-landing-cta-centered .tw-cta-primary,
+  .tw-landing-cta-centered .tw-cta-secondary { border-radius: 8px !important; }
+  .tw-landing-carousel-big { width: min(100%, 980px) !important; max-width: 980px !important; justify-self: center !important; aspect-ratio: 16/8 !important; margin-top: 34px !important; }
+}
+/* Desktop template cards replicate mobile solid cards; click-only (no hover preview). */
+.tw-template-grid-solid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.tw-template-grid-solid-card { border: 0 !important; border-radius: 8px !important; padding: 22px 18px !important; color: #fff !important; box-shadow: 0 14px 30px rgba(15,23,42,0.18) !important; cursor: pointer !important; transform: none !important; }
+.tw-template-grid-solid-card > span { display: inline-grid !important; place-items: center !important; width: 46px !important; height: 46px !important; border-radius: 12px !important; background: rgba(255,255,255,0.22) !important; margin-bottom: 12px !important; color: #fff !important; }
+.tw-template-grid-solid-card h3 { margin: 0 0 6px !important; font-size: 18px !important; font-weight: 900 !important; color: #fff !important; }
+.tw-template-grid-solid-card p { margin: 0 !important; font-size: 13.5px !important; line-height: 1.6 !important; color: #fff !important; opacity: 1 !important; }
+.tw-template-grid-solid-card:hover { transform: translateY(-4px) !important; box-shadow: 0 18px 36px rgba(15,23,42,0.22) !important; }
+/* Auth: show (?) on all widths; desktop docks requirements beside the form,
+   mobile uses the centered modal. Enter help is portaled to document.body so it
+   escapes the card's animation stacking context. */
+.tw-pw-help-btn { display: inline-flex !important; }
+.tw-enter-form .tw-pw-help-btn { display: inline-flex !important; }
+.tw-pw-help-close:hover { opacity: 0.7; }
+@media (min-width: 761px) {
+  .tw-auth-register-shell .tw-pw-help-backdrop { display: none !important; }
+  .tw-enter-pw-help.tw-pw-help-backdrop {
+    background: transparent !important;
+    pointer-events: none !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    padding: 0 !important;
+  }
+  .tw-enter-pw-help .tw-pw-help-modal {
+    position: fixed !important;
+    left: min(calc(50% + 246px), calc(100vw - 356px)) !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    pointer-events: auto !important;
+    margin: 0 !important;
+    animation: twPwHelpFadeIn 0.15s ease !important;
+  }
+}
+@media (max-width: 760px) {
+  .tw-enter-pw-help.tw-pw-help-backdrop { z-index: 3000 !important; }
+}
+@media (max-width: 760px) {
+  .tw-forgot-password-grid { grid-template-columns: 1fr !important; }
+}
+/* Landing hover smoothing: short transform-only motions, no filter/blur animation. */
+.tw-landing-page .tw-hover-card,
+.tw-landing-page .tw-template-grid-solid-card,
+.tw-landing-page .tw-template-slide,
+.tw-landing-page .tw-header-login,
+.tw-landing-page .tw-header-signup,
+.tw-landing-page .tw-landing-highlight-action,
+.tw-landing-page .tw-plan-contact-action,
+.tw-landing-page .tw-hero-link-card,
+.tw-landing-page .tw-carousel-arrow,
+.tw-landing-page .tw-back-top {
+  transition-duration: .16s !important;
+  transition-timing-function: ease-out !important;
+}
+.tw-landing-page .tw-landing-highlight-action:hover,
+.tw-landing-page .tw-header-signup:hover,
+.tw-landing-page .tw-plan-contact-action:hover { filter: none !important; }
+.tw-landing-page .tw-star-field i { animation-timing-function: ease-in-out !important; }
+@media (prefers-reduced-motion: reduce) {
+  .tw-landing-page * { animation: none !important; transition: none !important; }
+}
+
+/* Mobile pill tab bar: labels always, roomy gaps, blue icon+text active (no pill fill), soft shadow. */
+.tw-mobile-tabbar {
+  box-shadow: 0 10px 30px rgba(15,23,42,.16), 0 3px 10px rgba(15,23,42,.10) !important;
+}
+.tw-mobile-tabbar-btn { min-width: 56px !important; }
+.tw-mobile-tabbar-btn.is-active {
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  color: #2b6cff !important;
+}
+
+/* Compact logout/exit confirms: mobile only, desktop keeps original size.
+   The confirm button keeps the desktop press style on mobile too. */
+@media (max-width: 760px) {
+  .tw-admin-logout-modal.is-compact-confirm { width: min(92vw, 340px) !important; min-height: 0 !important; padding: 20px !important; }
+  .tw-admin-logout-modal.is-compact-confirm header { font-size: 17px !important; gap: 8px !important; }
+  .tw-admin-logout-modal.is-compact-confirm header svg { width: 36px !important; height: 36px !important; flex: 0 0 36px !important; }
+  .tw-admin-logout-modal.is-compact-confirm p { font-size: 12.5px !important; margin: 6px 0 16px !important; }
+}
+
+/* OTP verify: shared auth header buttons + login-style actions, all 8px. */
+.tw-enter-otp-page .tw-public-header .tw-header-joincode,
+.tw-enter-otp-page .tw-public-header .tw-header-login,
+.tw-enter-otp-page .tw-public-header .tw-header-signup,
+.tw-enter-otp-page .tw-enter-header-btn { border-radius: 8px !important; }
+.tw-enter-otp-page .tw-auth-primary { border-radius: 8px !important; }
+
+/* Desktop Enter Code: bigger title lower, 3x white input, split footer. */
+@media (min-width: 761px) {
+  .tw-enter-page.is-code .tw-enter-main { place-items: center !important; align-content: center !important; padding-top: 24px !important; }
+  .tw-enter-page.is-code .tw-enter-codetitle { font-size: clamp(56px, 7vw, 72px) !important; margin: 0 0 40px !important; transform: none !important; }
+  .tw-enter-page.is-code .tw-enter-main > div { width: min(100%, 640px) !important; }
+  .tw-enter-page.is-code .tw-enter-codeform { max-width: 560px !important; margin-top: 0 !important; display: flex !important; align-items: stretch !important; gap: 0 !important; }
+  .tw-enter-page.is-code .tw-enter-codeform input { flex: 1 1 auto !important; min-width: 0 !important; padding: 19px 26px 19px 20px !important; font-size: 20px !important; border-radius: 8px !important; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%) !important; }
+  .tw-enter-page.is-code .tw-enter-codeform button { flex: 0 0 auto !important; width: auto !important; align-self: auto !important; margin-left: -8px !important; padding: 19px 28px 19px 30px !important; font-size: 16px !important; border-radius: 8px !important; white-space: nowrap !important; box-shadow: none !important; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%) !important; }
+  .tw-enter-footer { display: flex !important; justify-content: space-between !important; align-items: flex-end !important; gap: 24px !important; max-width: 1240px !important; margin: 0 auto !important; width: 100% !important; box-sizing: border-box !important; }
+  .tw-enter-footgrid { margin: 0 !important; max-width: none !important; grid-template-columns: repeat(3, minmax(130px, 190px)) !important; text-align: left !important; }
+  .tw-enter-footcopy { margin: 0 !important; text-align: right !important; white-space: nowrap !important; align-self: flex-end !important; }
+}
+
+/* Clear separation + white lower page, no gradients. */
+.tw-landing-lower-white { background: #fff !important; color: #0f172a !important; border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 0 0 !important; }
+.tw-templates-analytics-divider { border: 0 !important; border-top: 1px solid #e2e8f0 !important; margin: 10px auto 0 !important; width: min(1220px, calc(100% - 40px)) !important; }
+.tw-landing-lower-white .tw-rounded-section,
+.tw-landing-lower-white .tw-flat-section { background: #fff !important; color: #0f172a !important; }
+.tw-landing-lower-white .tw-analytics-visual { background: #fff !important; }
+.tw-landing-lower-white .tw-plan-card { background: #fff !important; }
+.tw-landing-lower-white .tw-footer-links button { color: #0f172a !important; }

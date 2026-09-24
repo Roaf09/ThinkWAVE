@@ -58,7 +58,7 @@ export default function Register() {
   const enterClass = (loc.state?.authFrom || sessionStorage.getItem("tw_auth_from")) === "right" ? "from-right" : "from-left";
   function moveToLogin() {
     setExitClass("exit-right");
-    window.setTimeout(() => nav("/login", { state: { authFrom: "left" } }), 210);
+    window.setTimeout(() => nav("/login", { state: { authFrom: "left" } }), 200);
   }
 
   useEffect(() => {
@@ -161,19 +161,15 @@ export default function Register() {
               <div className="relative">
                 <input
                   type={showConfPw ? "text" : "password"}
-                  className={`${INPUT} pr-12 ${!form.confirmPassword ? "" : matches ? "border-[#22c55e]! dark:border-[#22c55e]!" : "border-[#ef4444]! dark:border-[#ef4444]!"}`}
+                  className={`${INPUT} ${matches ? "pr-[76px]" : "pr-12"} ${!form.confirmPassword ? "" : matches ? "border-[#22c55e]! dark:border-[#22c55e]!" : "border-[#ef4444]! dark:border-[#ef4444]!"}`}
                   value={form.confirmPassword}
                   onChange={(e) => set({ confirmPassword: e.target.value })}
                   placeholder="••••••••"
                   required
                 />
+                {matches && <span className="tw-pw-strong-check" aria-label="Passwords match"><TwIcon name="check" size={16} /></span>}
                 <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
-              {form.confirmPassword && (
-                <span className={`text-xs mt-1 ${matches ? "text-[#22c55e]" : "text-[#f87171]"}`}>
-                  {matches ? "✓ Passwords match" : "✗ Passwords do not match"}
-                </span>
-              )}
             </div>
 
             {error && (
@@ -203,7 +199,7 @@ export default function Register() {
             </p>}
           </form>
 
-          <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid bg-auth-panel dark:bg-auth-panel-dark border-auth-border dark:border-auth-border-dark">
+          {showPwHelp && <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid bg-auth-panel dark:bg-auth-panel-dark border-auth-border dark:border-auth-border-dark">
             <div className="text-[13px] font-bold text-auth-text dark:text-auth-text-dark">Password requirements</div>
             <div className="flex flex-col gap-2.5">
               {Object.entries(REQ_LABELS).map(([key, label]) => (
@@ -219,7 +215,8 @@ export default function Register() {
             <div className={`text-xs text-center mt-1 ${isStrong ? "text-[#22c55e]" : strengthCount >= 3 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
               {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
             </div>
-          </div>
+            <button type="button" onClick={() => setShowPwHelp(false)} className="text-brand! dark:text-brand-dark! font-bold underline border-0 bg-transparent! cursor-pointer p-0 text-[13px] mt-1">Close</button>
+          </div>}
           </div>
 
           {showPwHelp && <div className="tw-pw-help-backdrop" onClick={() => setShowPwHelp(false)}>

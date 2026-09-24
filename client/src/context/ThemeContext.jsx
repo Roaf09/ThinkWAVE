@@ -34,7 +34,7 @@ export function ThemeProvider({ children }) {
     document.body.style.transition = "background 95ms ease, color 95ms ease";
     // Keep the browser canvas flat. Individual pages own their visual backgrounds,
     // so a short page can never reveal the old purple system gradient underneath.
-    document.body.style.background = dark ? "#07142b" : "#fbf1dd";
+    document.body.style.background = dark ? "#07142b" : "#ffffff";
     document.body.style.color = dark ? "#e7e9ee" : "#0f172a";
   }, [dark]);
 
@@ -67,7 +67,7 @@ export function ForcedTheme({ dark, children }) {
       document.body.classList.toggle("light-mode", !saved);
       document.body.classList.toggle("dark-mode", saved);
       document.body.dataset.theme = saved ? "dark" : "light";
-      document.body.style.background = saved ? "#07142b" : "#fbf1dd";
+      document.body.style.background = saved ? "#07142b" : "#ffffff";
       document.body.style.color = saved ? "#e7e9ee" : "#0f172a";
     };
   }, [forcedDark]);
@@ -114,19 +114,19 @@ export const DARK = {
 };
 
 export const LIGHT = {
-  pageBg:       "radial-gradient(circle at 10% 8%, rgba(210,170,90,0.14), transparent 30%), radial-gradient(circle at 86% 12%, rgba(255,224,170,0.30), transparent 28%), linear-gradient(180deg, #fffaf0 0%, #fbf1dd 52%, #f7ead2 100%)",
-  cardBg:       "rgba(255,252,244,0.88)",
-  cardBg2:      "rgba(250,242,224,0.90)",
-  cardBg3:      "rgba(255,250,239,0.95)",
-  border:       "rgba(154, 116, 54, 0.22)",
+  pageBg:       "#ffffff",
+  cardBg:       "#ffffff",
+  cardBg2:      "#f6f8fc",
+  cardBg3:      "#ffffff",
+  border:       "#e2e8f0",
   sidebarBg:    "linear-gradient(180deg, #1e2d55 0%, #22386e 100%)",
   sidebarBorder:"rgba(199,210,240,0.20)",
   navColor:     "#d7e2ff",
   text:         "#0f172a",
   textMuted:    "#475985",
   textSub:      "#64749e",
-  inputBg:      "rgba(255,252,245,0.98)",
-  inputBorder:  "rgba(154,116,54,0.30)",
+  inputBg:      "#ffffff",
+  inputBorder:  "#cbd5e1",
   accent:       "#2b6cff",
   accent2:      "#0284c7",
   violet:       "#7c3aed",
