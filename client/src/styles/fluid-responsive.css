@@ -168,8 +168,67 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 .tw-enter-guest-btn {
   width: 64px; height: 64px; border-radius: 8px; border: 1.5px solid;
   background: #fff; display: grid; place-items: center; cursor: pointer;
+  color: inherit; text-decoration: none;
+}
+/* Social icon row beside Guest: same 64px buttons + labels, wraps on mobile. */
+.tw-enter-oauth { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.tw-enter-oauth-item { display: grid; justify-items: center; gap: 6px; }
+.tw-enter-oauth-item small { font-size: 12.5px; font-weight: 700; }
+.tw-enter-oauth-note { margin: 10px 0 0; font-size: 12px; text-align: center; }
+/* Signup role guard: centered red, breathes on every tap (replayed by React key). */
+.tw-enter-form .tw-enter-guard-pulse,
+.tw-enter-card .tw-enter-guard-pulse {
+  text-align: center;
+  color: #dc2626;
+  font-weight: 800;
+  animation: twGuardBreathe 1.1s ease-in-out 2;
+}
+@keyframes twGuardBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+/* Social-login "account not found" modal with ThinkBot. */
+.tw-oauth-missing-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center; padding: 20px;
+  background: rgba(3, 10, 28, 0.55);
+}
+.tw-oauth-missing-card {
+  background: #fff; border-radius: 20px; padding: 30px 34px;
+  max-width: 380px; width: 100%; text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+.tw-oauth-missing-card img { display: block; margin: 0 auto 6px; }
+.tw-oauth-missing-card h2 { margin: 8px 0 6px; font-size: 22px; font-weight: 900; color: #0f172a; }
+.tw-oauth-missing-card p { margin: 0; font-size: 14px; color: #475569; }
+.tw-oauth-missing-actions { display: grid; gap: 10px; margin-top: 20px; }
+/* Email-completion form inside the modal: same card, stacked fields. */
+.tw-oauth-email-form { display: grid; gap: 10px; margin-top: 18px; text-align: left; }
+.tw-oauth-email-form .tw-enter-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: #0f172a; }
+.tw-oauth-email-form .tw-enter-field input {
+  padding: 12px 14px; border-radius: 8px; font-size: 14px;
+  border: 1.5px solid #cbd5e1; background: #fff; color: #0f172a;
+  width: 100%; box-sizing: border-box;
+}
+.tw-oauth-email-error { margin: 4px 0 0; font-size: 13px; font-weight: 700; color: #b91c1c; text-align: center; }
+/* Compact full-width social buttons inside the login/signup cards. */
+.tw-enter-oauth-list { display: grid; gap: 10px; margin-top: 16px; }
+.tw-enter-oauth-wide {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px 14px; border-radius: 8px; border: 1.5px solid;
+  background: #fff; font-size: 14px; font-weight: 800; cursor: pointer;
+  color: inherit; text-decoration: none;
 }
 .tw-enter-guest small { font-size: 12.5px; font-weight: 700; }
+/* Guest dashboard pages (home/create/history) share the sessions tab's wide
+   gutters instead of the narrow centered container, so all tabs line up. */
+.tw-guest-tab-page {
+  width: 100%;
+  max-width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  padding: 32px clamp(18px, 4vw, 64px) 56px !important;
+}
 .tw-enter-codeform { display: grid; gap: 10px; margin-top: 18px; max-width: 300px; margin-inline: auto; width: 100%; }
 .tw-enter-main > div { width: min(100%, 460px); }
 .tw-enter-codeform input {
@@ -351,19 +410,34 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
   backdrop-filter: blur(18px) !important;
   border-bottom: 1px solid rgba(132, 167, 255, 0.16);
 }
-.tw-enter-page.is-code .tw-enter-header-btn { background: transparent; color: #eef4ff; border-color: rgba(132, 167, 255, 0.3); }
+.tw-enter-page.is-code .tw-enter-header-btn:not(.is-primary) { background: transparent; color: #eef4ff; border-color: rgba(255, 255, 255, 0.85); border-width: 2px; }
+/* Login/signup header (always a white bar): black Join Code outline to match its text. */
+.tw-enter-page:not(.is-code) .tw-enter-header-btn:not(.is-primary) { border-color: #0f172a; border-width: 2px; }
 .tw-enter-page.is-code .tw-enter-header-btn.is-primary { background: #2b6cff; border-color: #2b6cff; color: #fff; }
-/* Join-code field reads white with black text. */
-.tw-enter-page.is-code .tw-enter-codeform input {
+/* Join-code field reads white with black text. Shared with the guest home
+   join card so both use byte-identical styling. */
+.tw-enter-page.is-code .tw-enter-codeform input,
+.tw-enter-codeform.tw-guest-codeform input {
   background: #ffffff !important;
   border-color: rgba(15, 23, 42, 0.14) !important;
   color: #0f172a !important;
   text-align: center !important;
 }
-.tw-enter-page.is-code .tw-enter-codeform input::placeholder {
+.tw-enter-page.is-code .tw-enter-codeform input::placeholder,
+.tw-enter-codeform.tw-guest-codeform input::placeholder {
   color: #64748b !important;
   opacity: 1 !important;
   text-align: center !important;
+}
+/* Guest home join field only (NOT the enter page): thicker idle outline,
+   blue focus ring instead of the default dark. */
+.tw-enter-codeform.tw-guest-codeform input {
+  border-width: 3px;
+}
+.tw-enter-codeform.tw-guest-codeform input:focus {
+  border-color: #2b6cff !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(43, 108, 255, 0.18);
 }
 /* Mobile code form sits slightly lower while staying centered. */
 @media (max-width: 760px) {
@@ -471,16 +545,17 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
   .tw-template-carousel::-webkit-scrollbar { display: none; }
   .tw-template-slide {
     flex: 0 0 76%; scroll-snap-align: center;
-    border: 0; border-radius: 8px; padding: 22px 18px; color: #fff;
+    border: 0; border-radius: 8px; padding: 22px 18px; color: #fff !important;
     box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
   }
   .tw-template-slide > span {
     display: inline-grid; place-items: center;
     width: 46px; height: 46px; border-radius: 12px;
-    background: rgba(255, 255, 255, 0.22); margin-bottom: 12px;
+    background: rgba(255, 255, 255, 0.22) !important; margin-bottom: 12px !important;
+    color: #fff !important;
   }
-  .tw-template-slide h3 { margin: 0 0 6px; font-size: 18px; font-weight: 900; }
-  .tw-template-slide p { margin: 0; font-size: 13.5px; line-height: 1.6; color: #fff; opacity: 1; }
+  .tw-template-slide h3 { margin: 0 0 6px; font-size: 18px; font-weight: 900; color: #fff !important; }
+  .tw-template-slide p { margin: 0; font-size: 13.5px; line-height: 1.6; color: #fff !important; opacity: 1 !important; }
   /* Template dots reuse the hero carousel dot language, statically placed. */
   .tw-template-dots.tw-carousel-dots {
     position: static; transform: none; margin: 2px auto 0; display: flex;
@@ -684,9 +759,9 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
   .tw-enter-page.is-code .tw-enter-main { place-items: center !important; align-content: center !important; padding-top: 24px !important; }
   .tw-enter-page.is-code .tw-enter-codetitle { font-size: clamp(56px, 7vw, 72px) !important; margin: 0 0 40px !important; transform: none !important; }
   .tw-enter-page.is-code .tw-enter-main > div { width: min(100%, 640px) !important; }
-  .tw-enter-page.is-code .tw-enter-codeform { max-width: 560px !important; margin-top: 0 !important; display: flex !important; align-items: stretch !important; gap: 0 !important; }
-  .tw-enter-page.is-code .tw-enter-codeform input { flex: 1 1 auto !important; min-width: 0 !important; padding: 19px 26px 19px 20px !important; font-size: 20px !important; border-radius: 8px !important; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%) !important; }
-  .tw-enter-page.is-code .tw-enter-codeform button { flex: 0 0 auto !important; width: auto !important; align-self: auto !important; margin-left: -8px !important; padding: 19px 28px 19px 30px !important; font-size: 16px !important; border-radius: 8px !important; white-space: nowrap !important; box-shadow: none !important; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%) !important; }
+  .tw-enter-page.is-code .tw-enter-codeform, .tw-enter-codeform.tw-guest-codeform { max-width: 560px !important; margin-top: 0 !important; display: flex !important; align-items: stretch !important; gap: 0 !important; }
+  .tw-enter-page.is-code .tw-enter-codeform input, .tw-enter-codeform.tw-guest-codeform input { flex: 1 1 auto !important; min-width: 0 !important; padding: 19px 26px 19px 20px !important; font-size: 20px !important; border-radius: 8px !important; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%) !important; }
+  .tw-enter-page.is-code .tw-enter-codeform button, .tw-enter-codeform.tw-guest-codeform button { flex: 0 0 auto !important; width: auto !important; align-self: auto !important; margin-left: -8px !important; padding: 19px 28px 19px 30px !important; font-size: 16px !important; border-radius: 8px !important; white-space: nowrap !important; box-shadow: none !important; clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%) !important; }
   .tw-enter-footer { display: flex !important; justify-content: space-between !important; align-items: flex-end !important; gap: 24px !important; max-width: 1240px !important; margin: 0 auto !important; width: 100% !important; box-sizing: border-box !important; }
   .tw-enter-footgrid { margin: 0 !important; max-width: none !important; grid-template-columns: repeat(3, minmax(130px, 190px)) !important; text-align: left !important; }
   .tw-enter-footcopy { margin: 0 !important; text-align: right !important; white-space: nowrap !important; align-self: flex-end !important; }
@@ -700,3 +775,483 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
 .tw-landing-lower-white .tw-analytics-visual { background: #fff !important; }
 .tw-landing-lower-white .tw-plan-card { background: #fff !important; }
 .tw-landing-lower-white .tw-footer-links button { color: #0f172a !important; }
+
+/* Updated desktop gameplay previews (~1919x915, ~2.095:1) — perfect fit, no crop.
+   Imported last so these win over earlier 16/9 + cover rules. */
+/* Landing Our Templates: image-only preview, no title/card — straight picture
+   with template-accent outline, X on the image top-right. */
+.tw-template-preview-backdrop-imageonly {
+  padding: 20px !important;
+}
+.tw-template-preview-imageonly {
+  position: relative !important;
+  width: fit-content !important;
+  max-width: min(94vw, 1080px) !important;
+  max-height: 86vh !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: 4px solid !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  line-height: 0 !important;
+  background: #000 !important;
+  box-shadow: 0 34px 110px rgba(0,0,0,.45), 0 0 42px color-mix(in srgb, var(--tw-template-accent) 45%, transparent) !important;
+}
+.tw-template-preview-imageonly img {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 82vh !important;
+  aspect-ratio: auto !important;
+  object-fit: contain !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  margin: 0 !important;
+}
+/* Phone view: tall picture hugs tight, corners match the outline. */
+.tw-template-preview-imageonly.is-mobile {
+  width: fit-content !important;
+  max-width: 94vw !important;
+  max-height: 86vh !important;
+}
+.tw-template-preview-imageonly.is-mobile img {
+  width: auto !important;
+  height: auto !important;
+  max-width: min(86vw, 380px) !important;
+  max-height: 78vh !important;
+  border-radius: 12px !important;
+}
+.tw-template-preview-imageonly-close {
+  position: absolute !important;
+  top: 10px !important;
+  right: 10px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+  background: rgba(15,23,42,.72) !important;
+  color: #fff !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  z-index: 2 !important;
+  backdrop-filter: blur(6px) !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35) !important;
+  transition: transform .15s ease, background .15s ease !important;
+}
+.tw-template-preview-imageonly-close:hover {
+  background: rgba(15,23,42,.9) !important;
+  transform: scale(1.08) !important;
+}
+.tw-host-preview-desktop {
+  aspect-ratio: 1919 / 915 !important;
+}
+.tw-host-preview-desktop img,
+.tw-host-preview-mobile img,
+.tw-template-preview-dual img {
+  object-fit: contain !important;
+}
+.tw-host-preview-zoom-card.is-desktop {
+  aspect-ratio: auto !important;
+  width: fit-content !important;
+  height: auto !important;
+  max-width: min(90vw, 720px) !important;
+  max-height: 88vh !important;
+  padding: 2px !important;
+  margin: 0 auto !important;
+}
+.tw-host-preview-zoom-card.is-mobile {
+  aspect-ratio: auto !important;
+  width: fit-content !important;
+  height: auto !important;
+  max-width: min(86vw, 360px) !important;
+  max-height: 84vh !important;
+  padding: 2px !important;
+  margin: 0 auto !important;
+}
+.tw-host-preview-zoom-card img {
+  object-fit: contain !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: calc(88vh - 8px) !important;
+  border-radius: 18px !important;
+  margin: 0 !important;
+  display: block !important;
+}
+.tw-host-preview-zoom-card.is-mobile img {
+  max-width: min(82vw, 340px) !important;
+  max-height: calc(80vh - 8px) !important;
+}
+
+/* Landing: light smooth lift for Why + Templates cards.
+   Scoped to landing only so other pages are untouched.
+   Transform-only = no layout shift, GPU-cheap, long-term safe. */
+.tw-landing-page .tw-benefit-grid .tw-hover-card,
+.tw-landing-page .tw-template-grid-solid-card,
+.tw-landing-page .tw-template-carousel .tw-template-slide {
+  transition: transform .28s ease, box-shadow .28s ease !important;
+  will-change: transform;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tw-landing-page .tw-benefit-grid .tw-hover-card:hover,
+  .tw-landing-page .tw-template-grid-solid-card:hover,
+  .tw-landing-page .tw-template-carousel .tw-template-slide:hover {
+    transform: translateY(-5px) !important;
+  }
+  .tw-landing-page .tw-benefit-grid .tw-hover-card:hover {
+    box-shadow: 0 14px 28px rgba(43, 108, 255, 0.16) !important;
+  }
+  .tw-landing-page .tw-template-grid-solid-card:hover,
+  .tw-landing-page .tw-template-carousel .tw-template-slide:hover {
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.22) !important;
+  }
+}
+.tw-landing-page .tw-benefit-grid .tw-hover-card:focus-visible,
+.tw-landing-page .tw-template-grid-solid-card:focus-visible,
+.tw-landing-page .tw-template-carousel .tw-template-slide:focus-visible {
+  transform: translateY(-5px) !important;
+  outline: 2px solid rgba(43, 108, 255, 0.6) !important;
+  outline-offset: 2px !important;
+}
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .tw-landing-page .tw-benefit-grid .tw-hover-card,
+  .tw-landing-page .tw-template-grid-solid-card,
+  .tw-landing-page .tw-template-carousel .tw-template-slide {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Landing Why icons: darker bubble behind the icon, icon color untouched.
+   Scoped to Why cards only — IconBubbles elsewhere keep their look. */
+.tw-landing-page .tw-benefit-grid .tw-hover-card .tw-icon-bubble {
+  background: rgba(7, 16, 36, 0.6) !important;
+  border-color: rgba(147, 183, 255, 0.3) !important;
+}
+
+/* Landing plans: white cards, colored tops, soft wavy dividers.
+   Basic = brand blue, Institution = purple, Pro = green (via --tw-plan-accent
+   set per card in Landing.jsx). Scoped to .tw-plans-themed so Plan.jsx and
+   other pages are untouched. */
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card.featured,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card.pro-featured {
+  background: #fff !important;
+  background-image: none !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  border-width: 1px !important;
+  color: #0f172a !important;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+  padding: 0 !important;
+  min-height: 500px !important;
+  overflow: hidden !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card.featured::after,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card.pro-featured::after {
+  display: none !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-top {
+  background: var(--tw-plan-accent) !important;
+  padding: 22px 22px 20px !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-top h3,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-price strong {
+  color: #fff !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-top p,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-price small {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-wave {
+  color: var(--tw-plan-accent);
+  background: #fff;
+  line-height: 0;
+  overflow: hidden;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-wave svg {
+  display: block;
+  width: 100%;
+  height: 16px;
+  margin-top: -1px;
+}
+/* Static wave: same even humps, no motion. */
+
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-body {
+  padding: 14px 22px 4px;
+  background: #fff;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-body b,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-body li {
+  color: #0f172a !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card .tw-plan-body li svg {
+  color: var(--tw-plan-accent) !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button.tw-plan-basic-action,
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button.tw-plan-contact-action {
+  margin: auto 22px 22px !important;
+  background: var(--tw-plan-accent) !important;
+  border: 2px solid var(--tw-plan-accent) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button {
+  transition: transform .28s ease, box-shadow .28s ease, filter .28s ease !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button:hover {
+  transform: translateY(-3px) !important;
+  filter: brightness(0.94) !important;
+  box-shadow: 0 12px 26px rgba(2, 8, 23, 0.25) !important;
+}
+/* Get Started (Basic) gets the same soft glow ring Contact Us has,
+   tinted with its own card color. */
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button.tw-plan-basic-action {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: visible !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button.tw-plan-basic-action::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: -7px !important;
+  border-radius: 20px !important;
+  background: var(--tw-plan-accent) !important;
+  opacity: 0 !important;
+  transform: scale(.96) !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  transition: opacity .28s ease, transform .28s ease !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button.tw-plan-basic-action:hover::after {
+  opacity: 0.22 !important;
+  transform: scale(1) !important;
+}
+.tw-landing-lower-white .tw-plan-grid-three.tw-plans-themed .tw-plan-card > button:focus-visible {
+  outline: 3px solid var(--tw-plan-accent) !important;
+  outline-offset: 2px !important;
+}
+
+/* Matching builder: a lone distractor keeps the two-up card size and sits
+   centered (middle two tracks of a 4-track grid = exactly half width).
+   Phones stack to one column anyway, so this only applies on desktop. */
+@media (min-width: 761px) {
+  .tw-matching-dummy-grid.is-single {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+  .tw-matching-dummy-grid.is-single > .tw-matching-dummy-card {
+    grid-column: 2 / span 2;
+  }
+}
+
+/* Builder image drop box, slightly smaller but same square shape:
+   guess-word clue tiles only. Other image fields (question, matching,
+   modified MCQ) are untouched. */
+.tw-guess-word-image {
+  width: 88%;
+  justify-self: center;
+}
+
+/* Explanation box entrance (all templates that show one): soft slide-down.
+   Transform + opacity only, so it stays cheap. */
+.tw-correct-answer-explanation {
+  animation: twExplainSlideDown 0.32s ease both;
+}
+@keyframes twExplainSlideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-correct-answer-explanation {
+    animation: none;
+  }
+}
+
+/* Mouse-drag origin (touch keeps its fully-visible source, since touch has
+   no floating card): a dashed shell tracing the choice outline with every
+   inner piece hidden — badge, text, handle, counter. Higher specificity +
+   last import wins over the fully-visible override. */
+.tw-mcq-normal-list.is-mouse-dragging .tw-mcq-normal-choice.is-drag-source {
+  opacity: 1 !important;
+  border-style: dashed !important;
+  border-color: rgba(100, 130, 190, 0.65) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.tw-mcq-normal-list.is-mouse-dragging .tw-mcq-normal-choice.is-drag-source > * {
+  visibility: hidden !important;
+}
+
+/* Modified MCQ only (normal choices untouched): same card shape, just
+   scaled down. Each pair hugs like the original — left cards sit against
+   the middle gap, right cards too — instead of floating centered. */
+.tw-mcq-modified-grid .tw-mcq-image-choice {
+  width: 80%;
+  justify-self: center;
+}
+@media (min-width: 761px) {
+  .tw-mcq-modified-grid .tw-mcq-image-choice:nth-child(odd) {
+    justify-self: end;
+  }
+  .tw-mcq-modified-grid .tw-mcq-image-choice:nth-child(even) {
+    justify-self: start;
+  }
+}
+
+/* Host + assignment share one X above the content (same on computer
+   and phone): a right-aligned row, not an overlapping corner button. */
+.tw-host-launch-toprow {
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+.tw-host-launch-modal > .tw-host-launch-toprow {
+  margin: -2px -2px 6px !important;
+}
+.tw-assignment-setup-modal > .tw-host-launch-toprow {
+  padding: 14px 18px 0 !important;
+}
+.tw-host-launch-toprow > button {
+  width: 40px !important;
+  height: 40px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  border-radius: 10px !important;
+}
+
+/* Phone schedule picker: start below the fixed app header so the date
+   box never slides behind it. Scrolls inside if the phone is short. */
+@media (max-width: 760px) {
+  .tw-schedule-overlay {
+    place-items: start center !important;
+    align-items: start !important;
+    overflow-y: auto !important;
+    padding: calc(56px + 14px + env(safe-area-inset-top, 0px)) 12px 20px !important;
+  }
+  .tw-schedule-dialog {
+    margin: 0 auto !important;
+    width: min(94vw, 340px) !important;
+    max-height: none !important;
+  }
+}
+
+/* Saved question cards: every card the same fixed size. Extra content
+   scrolls inside the card instead of stretching it. Two fit in a row on
+   wide screens, one per row on phones. Scoped to question cards only. */
+.tw-bank-question-list {
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)) !important;
+  justify-items: stretch !important;
+}
+.tw-bank-question-card {
+  width: 100% !important;
+  max-width: none !important;
+  height: 460px !important;
+  max-height: 460px !important;
+  overflow: hidden !important;
+}
+.tw-bank-question-inner {
+  height: 100% !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  align-content: start !important;
+  gap: 14px !important;
+  padding: 16px 20px 14px !important;
+}
+@media (max-width: 760px) {
+  .tw-bank-question-inner {
+    padding: 64px 14px 14px !important;
+  }
+}
+.tw-bank-question-prompt-3d {
+  margin-top: 8px !important;
+  margin-bottom: 4px !important;
+}
+.tw-bank-mcq-grid,
+.tw-bank-true-false,
+.tw-bank-answer-summary,
+.tw-bank-expanded-preview {
+  margin-top: 4px !important;
+}
+/* Identification answers need a little air before the saved date. */
+.tw-bank-answer-summary {
+  margin-bottom: 6px !important;
+}
+/* New identification 3D class has no old flat styles fighting it. */
+.tw-bank-answer-summary.is-single .tw-bank-ident-answer-3d {
+  grid-column: 1 / -1 !important;
+  width: min(100%, 310px) !important;
+  justify-self: center !important;
+}
+
+/* Bank layout fixes: earlier files force side-by-side grids with
+   !important (inline styles alone can't beat !important). This file is
+   imported last, so these win and stack answers below the content. */
+.tw-bank-expanded-preview.is-default-open {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin-top: 12px !important;
+  display: block !important;
+  width: 100% !important;
+}
+.tw-bank-guess-expanded {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  justify-items: center !important;
+  align-items: start !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+.tw-bank-guess-images {
+  width: min(100%, 250px) !important;
+  margin: 0 auto !important;
+}
+.tw-bank-guess-images > div {
+  border-width: 4px !important;
+}
+.tw-bank-guess-answer {
+  width: min(100%, 250px) !important;
+  max-width: 250px !important;
+  margin: 0 auto !important;
+  justify-self: center !important;
+}
+.tw-bank-crossword-expanded {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  justify-items: center !important;
+  align-items: start !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+.tw-bank-crossword-expanded .tw-bank-crossword-preview {
+  width: min(100%, 220px) !important;
+  margin: 0 auto !important;
+  justify-self: center !important;
+}
+.tw-bank-crossword-word-list {
+  grid-template-columns: 1fr !important;
+  width: min(100%, 260px) !important;
+  max-width: 260px !important;
+  transform: none !important;
+  justify-self: center !important;
+}
+/* Crossword answer words stay one line so tiles keep one size. */
+.tw-bank-crossword-word > span {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}

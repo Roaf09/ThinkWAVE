@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { TwIcon } from "../../../components/TwUI";
 import { compressImageFile } from "./quizBuilderUtils";
 
 export function MediaInput({ label, value, placeholder, onChange, ui, c }) {
@@ -49,19 +51,41 @@ export function MediaInput({ label, value, placeholder, onChange, ui, c }) {
   );
 }
 
-export function ImageUploadTile({ value, label = "Upload image", onChange, c, accent = "#2b6cff", compact = false }) {
+export function ImageUploadTile({ value, label = "Upload image", onChange, c, accent = "#2b6cff", compact = false, hideRemove = false, solid = null }) {
+  const [dragOver, setDragOver] = useState(false);
   async function handleFile(file) {
     if (!file || !/^image\//.test(file.type || "")) return;
     const optimized = await compressImageFile(file);
     if (optimized) onChange(optimized);
   }
+  // Solid 3D frame (e.g. all-green guess tiles a la modified MCQ choices).
+  const solidStyle = !value && solid ? {
+    borderStyle: "solid",
+    borderWidth: 4,
+    borderColor: solid.border,
+    borderRadius: 20,
+    background: solid.face,
+    boxShadow: `0 8px 0 ${solid.base}, 0 16px 28px rgba(15,23,42,.16)`,
+    color: solid.ink,
+  } : null;
   return (
-    <div className={`tw-builder-image-tile${compact ? " is-compact" : ""}`} style={{ borderColor: `${accent}99`, background: value ? c.cardBg : `${accent}0e` }}>
-      <label title={value ? "Click to replace image" : label}>
-        {value ? <img src={value} alt="" /> : <span><b>＋</b><small>{label}</small></span>}
+    <div
+      className={`tw-builder-image-tile${compact ? " is-compact" : ""}`}
+      style={{
+        borderColor: dragOver ? accent : `${accent}99`,
+        background: value ? c.cardBg : dragOver ? `${accent}22` : `${accent}0e`,
+        ...(solidStyle || {}),
+        ...((!value && !solid) ? { borderStyle: "dashed", borderWidth: 2, borderRadius: 8 } : null),
+      }}
+      onDragOver={(e) => { e.preventDefault(); if (!value) setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer?.files?.[0]); }}
+    >
+      <label title={value ? "Click to replace image" : `${label} (or drop an image here)`} style={(!value && solid) ? { color: solid.ink } : undefined}>
+        {value ? <img src={value} alt="" /> : <span style={solid ? { color: solid.ink } : undefined}><TwIcon name="upload" size={22} /><span>{dragOver ? "Drop image" : label}</span><small style={{ fontWeight: 600, opacity: 0.75 }}>Drag &amp; drop or click to browse</small></span>}
         <input type="file" accept="image/*" hidden onChange={(event) => { handleFile(event.target.files?.[0]); event.target.value = ""; }} />
       </label>
-      {value && <button type="button" className="tw-builder-image-remove" onClick={() => onChange("")} aria-label="Remove image">×</button>}
+      {value && !hideRemove && <button type="button" className="tw-builder-image-remove" onClick={() => onChange("")} aria-label="Remove image">×</button>}
     </div>
   );
 }

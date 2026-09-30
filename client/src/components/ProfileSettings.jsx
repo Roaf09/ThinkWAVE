@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { useColors } from "../context/ThemeContext";
 import { TwIcon } from "./TwUI";
 
-const emptyProfile = { firstName:"", lastName:"", contactNumber:"", email:"", institutionName:"", profileImage:"" };
+const emptyProfile = { firstName:"", lastName:"", contactNumber:"", email:"", institutionName:"", profileImage:"", birthDate:"" };
 
 export function useDashboardProfile() {
   const [profile, setProfile] = useState(emptyProfile);
@@ -90,7 +90,7 @@ function RecentLogins({ c }) {
       {rows.slice(0, 5).map((row, i) => (
         <div key={row.id || i} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-solid" style={{ borderColor: c.border, background: c.cardBg2 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{i === 0 ? "This session (most recent)" : friendlyDevice(row.user_agent)}</span>
-          <span style={{ fontSize: 11, color: c.textMuted }}>{row.created_at ? new Date(row.created_at).toLocaleString() : ""}{row.ip ? ` · ${row.ip}` : ""}</span>
+          <span style={{ fontSize: 11, color: c.textMuted }}>{row.created_at ? new Date(row.created_at).toLocaleString() : ""}</span>
         </div>
       ))}
     </div>
@@ -99,5 +99,5 @@ function RecentLogins({ c }) {
 
 export function ProfileSavedOverlay(){return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4}/></div></div>}
 
-export function profileFromUser(user={}){return {firstName:user.first_name||"",lastName:user.last_name||"",contactNumber:user.contact_number||"",email:user.email||"",institutionName:user.institution_name||"",profileImage:user.profile_image||""}}
+export function profileFromUser(user={}){return {firstName:user.first_name||"",lastName:user.last_name||"",contactNumber:user.contact_number||"",email:user.email||"",institutionName:user.institution_name||"",profileImage:user.profile_image||"",birthDate:user.birth_date?String(user.birth_date).slice(0,10):""}}
 function fieldStyle(c){return {width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:12,border:`1px solid ${c.inputBorder}`,background:c.inputBg,color:c.text}}

@@ -13,6 +13,7 @@ import { BASIC_LIMITS, getTeacherPlan } from "../plans/plan.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { attachCompetitiveTotals, sortCompetitiveRows } from "./leaderboard.js";
 import { SESSION_BACKGROUND_KEY_PATTERN, getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -196,7 +197,7 @@ export async function listActiveSessions(req, res) {
      JOIN quizzes q ON q.id = s.quiz_id
      LEFT JOIN classes c ON c.id = s.class_id
      WHERE s.teacher_id=:tid AND s.status IN ('LOBBY','LIVE','PAUSED')
-     ORDER BY s.id DESC`,
+     ORDER BY s.id DESC LIMIT 100`,
     { tid: req.user.sub }
   );
   res.json(rows);
@@ -211,9 +212,31 @@ export async function getSession(req, res) {
   res.json(s[0]);
 }
 
+// Collapses identical concurrent host-panel loads into one DB computation.
+// HostLive polls every 3s AND sockets push state, so polls routinely collide;
+// without this a 45-tab burst runs the same 6 queries 45 times. Same data,
+// zero staleness (only in-flight sharing, no caching). Errors are shared too.
+const stateInflight = new Map();
+
 // Teacher state endpoint hydrates the host panel with session info, snapshot questions, roster, groups, and scores.
 export async function getSessionStateTeacher(req, res) {
   const sessionId = Number(req.params.id);
+  const key = `${req.user.sub}:${sessionId}`;
+  let p = stateInflight.get(key);
+  if (!p) {
+    p = buildTeacherState(sessionId, req.user.sub);
+    stateInflight.set(key, p);
+    const cleanup = () => {
+      if (stateInflight.get(key) === p) stateInflight.delete(key);
+    };
+    p.then(cleanup, cleanup);
+  }
+  const payload = await p;
+  if (!payload) return res.status(404).json({ message: "Session not found" });
+  res.json(payload);
+}
+
+async function buildTeacherState(sessionId, teacherId) {
 
   const sessionsHaveBackground = await hasDatabaseColumn("sessions", "background_key");
   const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
@@ -233,9 +256,9 @@ export async function getSessionStateTeacher(req, res) {
      JOIN quizzes q ON q.id=s.quiz_id
      JOIN users u ON u.id=s.teacher_id
      WHERE s.id=:sid AND s.teacher_id=:tid`,
-    { sid: sessionId, tid: req.user.sub }
+    { sid: sessionId, tid: teacherId }
   );
-  if (!session) return res.status(404).json({ message: "Session not found" });
+  if (!session) return null;
   session.background_key = normalizeSessionBackgroundKey(
     session.resolved_background_key || session.background_key || getRememberedSessionBackground(sessionId)
   );
@@ -259,7 +282,10 @@ export async function getSessionStateTeacher(req, res) {
   delete session.question_started_unix;
   delete session.server_now_unix;
 
-  const [participants] = await pool.query(
+  // These four reads are independent of each other (session already loaded
+  // above), so they run together: 1 round-trip wave instead of 4 in a row.
+  // On loopback DBs each trip costs tens of ms, which used to total ~400ms.
+  const participantsPromise = pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
             gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
@@ -276,7 +302,7 @@ export async function getSessionStateTeacher(req, res) {
     { sid: sessionId }
   );
 
-  let scores;
+  const scoresPromise = (async () => {
   if (session.join_mode === "GROUP") {
     const [rows] = await pool.query(
       `SELECT MIN(sp.id) AS participant_id, sg.id AS group_id, COALESCE(sg.display_name, sg.default_name) AS group_name, GROUP_CONCAT(sp.id ORDER BY sp.id) AS member_ids, MAX(COALESCE(sc.total_points,0)) AS total_points,
@@ -294,6 +320,7 @@ export async function getSessionStateTeacher(req, res) {
       { sid: sessionId }
     );
     scores = sortCompetitiveRows(await attachCompetitiveTotals(pool, sessionId, rows, { groupMode: true }));
+    return scores;
   } else {
     const [rows] = await pool.query(
       `SELECT sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
@@ -309,10 +336,11 @@ export async function getSessionStateTeacher(req, res) {
        GROUP BY sc.participant_id, sc.total_points, p.first_name, p.last_name, p.group_name, stp.profile_image, u.profile_image, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
-    scores = sortCompetitiveRows(await attachCompetitiveTotals(pool, sessionId, rows));
+    return sortCompetitiveRows(await attachCompetitiveTotals(pool, sessionId, rows));
   }
+  })();
 
-  const [groups] = await pool.query(
+  const groupsPromise = pool.query(
     `SELECT g.id, g.session_id, g.group_order, g.default_name, g.display_name, g.name_editor_participant_id,
             COALESCE(
               CONCAT(
@@ -340,20 +368,30 @@ export async function getSessionStateTeacher(req, res) {
     { sid: sessionId }
   );
 
-  const choiceCounts = {};
-  if (currentQ && ["MCQ", "TRUE_FALSE"].includes(normalizeTemplateType(session.template_type))) {
-    const [responseRows] = await pool.query(
-      `SELECT answer_json FROM responses WHERE session_id=:sid AND question_id=:qid`,
-      { sid: sessionId, qid: currentQ.id }
-    );
-    for (const row of responseRows) {
-      for (const key of responseChoiceKeys(session.template_type, safeJson(row.answer_json) || {}, currentQ.config_json || {})) {
-        choiceCounts[key] = Number(choiceCounts[key] || 0) + 1;
+  const choiceCountsPromise = (async () => {
+    const counts = {};
+    if (currentQ && ["MCQ", "TRUE_FALSE"].includes(normalizeTemplateType(session.template_type))) {
+      const [responseRows] = await pool.query(
+        `SELECT answer_json FROM responses WHERE session_id=:sid AND question_id=:qid`,
+        { sid: sessionId, qid: currentQ.id }
+      );
+      for (const row of responseRows) {
+        for (const key of responseChoiceKeys(session.template_type, safeJson(row.answer_json) || {}, currentQ.config_json || {})) {
+          counts[key] = Number(counts[key] || 0) + 1;
+        }
       }
     }
-  }
+    return counts;
+  })();
 
-  res.json({
+  const [[participants], scores, [groups], choiceCounts] = await Promise.all([
+    participantsPromise,
+    scoresPromise,
+    groupsPromise,
+    choiceCountsPromise,
+  ]);
+
+  return {
     session,
     questions,
     participants,
@@ -363,7 +401,7 @@ export async function getSessionStateTeacher(req, res) {
       members: (safeJson(g.members_json) || []).filter(Boolean),
     })),
     scores,
-  });
+  };
 }
 
 export async function startSession(req, res) {
@@ -423,6 +461,7 @@ export async function endSession(req, res) {
 
 export async function getTeacherSessionHistory(req, res) {
   const teacherId = req.user.sub;
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 20, maxLimit: 100 });
 
   const [rows] = await pool.query(
     `SELECT * FROM (
@@ -493,11 +532,11 @@ export async function getTeacherSessionHistory(req, res) {
          AND (q.available_from IS NULL OR q.available_from <= NOW())
        GROUP BY q.id, q.title, q.template_type, q.category, q.class_id, c.name, q.available_from, q.available_until
      ) history_rows
-     ORDER BY sort_at DESC`,
-    { tid: teacherId }
+     ORDER BY sort_at DESC LIMIT :limit OFFSET :offset`,
+    { tid: teacherId, limit, offset }
   );
 
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
 export async function getSessionFullAnalytics(req, res) {
@@ -524,7 +563,7 @@ export async function validateJoinCode(req, res) {
     { code }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
-  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Tutorial demo sessions are for ThinkBOTs only." });
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Cannot join a tutorial session." });
   if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
     const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
     return res.status(400).json({ message });
@@ -547,29 +586,30 @@ export async function joinSession(req, res) {
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
   // s.* already carries is_tutorial once migrate_tutorial_sessions has run;
   // undefined on older DBs reads as non-tutorial, keeping those open.
-  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Tutorial demo sessions are for ThinkBOTs only." });
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message: "Cannot join a tutorial session." });
   if (!['LOBBY', 'LIVE', 'PAUSED'].includes(session.status)) {
     const message = session.status === 'ENDED' ? 'Session has already ended.' : 'Session is not available for joining.';
     return res.status(400).json({ message });
   }
 
-  // Idempotent rejoin: every POST here used to INSERT a brand-new participant
-  // row, so a retry (double submit, back-button rejoin, timeout where the
-  // server inserted but the response was lost) burned one of the 45
-  // max_participants seats each time — ~30 real students plus phantom rows
-  // read as "Session is full". If a non-kicked row with the same normalized
-  // name is currently OFFLINE, hand back that same seat instead of minting a
-  // new one. A same-name row that is still CONNECTED belongs to an active tab
-  // (second device, or a classmate with the same name), so fall through and
-  // claim a fresh seat for it.
-  const [[rejoin]] = await pool.query(
-    `SELECT id, reconnect_key, connected FROM session_participants
-     WHERE session_id=:sid AND kicked_at IS NULL
-       AND LOWER(TRIM(first_name))=:fn AND LOWER(TRIM(last_name))=:ln
-     ORDER BY connected ASC, id DESC LIMIT 1`,
-    { sid: session.id, fn: fn.toLowerCase(), ln: ln.toLowerCase() }
-  );
-  if (rejoin && Number(rejoin.connected) !== 1) {
+  // Seat recovery is proof-of-key, not proof-of-name: handing a seat back on
+  // name match alone let anyone with the join code plus a classmate's display
+  // name steal that seat (score, reconnect key, and all). Same-browser
+  // retries/rejoins carry the reconnectKey the server issued before, so they
+  // still recover their seat; everyone else claims a fresh seat under their
+  // own name. A lost-response retry (key never received) mints one extra row
+  // instead of recovering — rare, and strictly better than impersonation.
+  const providedKey = String(req.body?.reconnectKey || "");
+  let rejoin = null;
+  if (providedKey.length >= 20) {
+    [[rejoin]] = await pool.query(
+      `SELECT id, reconnect_key, connected FROM session_participants
+        WHERE session_id=:sid AND kicked_at IS NULL AND reconnect_key=:rk LIMIT 1`,
+      { sid: session.id, rk: providedKey.slice(0, 64) }
+    );
+    if (!rejoin) rejoin = null;
+  }
+  if (rejoin) {
     return res.json({
       sessionId: session.id,
       participantId: rejoin.id,
@@ -579,6 +619,8 @@ export async function joinSession(req, res) {
       existing: true,
     });
   }
+  // No (valid) key: always a fresh seat below. Never hand back another
+  // participant's row on name match alone.
 
   // Atomic seat claim: the INSERT only lands when a seat is actually free
   // (kicked seats don't count) or the plan is unlimited. One statement, so a
@@ -665,13 +707,25 @@ export async function getTabMonitoring(req, res) {
     return res.status(403).json({ message: "Tab monitoring is available on the Institution plan." });
   }
   const sessionId = Number(req.params.id);
+  // Same fence as every other teacher session endpoint: without it any
+  // teacher could pull another teacher's roster by guessing session ids.
+  const [[owned]] = await pool.query(`SELECT id FROM sessions WHERE id=:sid AND teacher_id=:tid`, { sid: sessionId, tid: req.user.sub });
+  if (!owned) return res.status(404).json({ message: "Session not found" });
   try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS screenshot_events (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      session_id BIGINT NOT NULL,
+      participant_id BIGINT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_screenshot_session_participant (session_id, participant_id)
+    )`);
     const [rows] = await pool.query(
       `SELECT p.id AS participant_id,
               p.first_name, p.last_name, p.join_type, p.group_name,
               gm.group_id,
               sg.display_name AS assigned_group_name,
-              COUNT(te.id) AS tab_out_count
+              COUNT(te.id) AS tab_out_count,
+              (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id = p.session_id AND se.participant_id = p.id) AS screenshot_count
        FROM session_participants p
        LEFT JOIN session_group_members gm ON gm.participant_id = p.id
        LEFT JOIN session_groups sg ON sg.id = gm.group_id

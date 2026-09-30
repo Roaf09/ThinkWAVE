@@ -8,12 +8,14 @@ import { sidebarStyle as sidebar, dashboardNavButtonStyle as navButton } from ".
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import GuestCreateTab from "./GuestCreateTab";
+import GuestHomeTab from "./GuestHomeTab";
 import LiveSessionsTab from "../teacher/tabs/LiveSessionsTab";
 import SessionHistoryTab from "../teacher/tabs/SessionHistoryTab";
 import { TeacherActionModal } from "../teacher/TeacherUI";
+import { useIdleLogout } from "../../lib/useIdleLogout";
 
-const VALID_GUEST_TABS = new Set(["create", "live", "history"]);
-function normalizeGuestTab(tab) { return VALID_GUEST_TABS.has(tab) ? tab : "create"; }
+const VALID_GUEST_TABS = new Set(["home", "create", "live", "history"]);
+function normalizeGuestTab(tab) { return VALID_GUEST_TABS.has(tab) ? tab : "home"; }
 
 const GUEST_IDENTITY_KEY = "thinkwave_guest_identity_v1";
 
@@ -28,6 +30,7 @@ function getOrCreateGuestKey() {
 }
 
 const NAV = [
+  { id: "home", label: "Home", icon: "home" },
   { id: "create", label: "Create", icon: "create" },
   { id: "live", label: "Sessions", icon: "live" },
   { id: "history", label: "History", icon: "history" },
@@ -98,11 +101,13 @@ export default function GuestDashboard() {
     setAuthToken("");
     navigate("/");
   }
+  const idleLoggedOut = useIdleLogout({ onTimeout: exitGuest });
 
   function renderTab() {
     if (activeTab === "live") return <LiveSessionsTab setActiveTab={setActiveTab} guestMode />;
     if (activeTab === "history") return <SessionHistoryTab setActiveTab={setActiveTab} guestMode />;
-    return <GuestCreateTab setActiveTab={setActiveTab} />;
+    if (activeTab === "create") return <GuestCreateTab setActiveTab={setActiveTab} />;
+    return <GuestHomeTab setActiveTab={setActiveTab} />;
   }
 
   if (!ready) {
@@ -143,6 +148,7 @@ export default function GuestDashboard() {
     </main>
     <MobileTabBar c={c} items={NAV} activeId={activeTab} onSelect={setActiveTab} iconsOnly />
     {showExit && <TeacherActionModal c={c} icon="logout" title="Exit Guest Host?" tone="red" confirmLabel="Yes, Exit" hideCancel onConfirm={exitGuest} onClose={() => setShowExit(false)} />}
+    {idleLoggedOut && <><div className="tw-admin-logout-backdrop" /><div className="tw-admin-logout-layer"><section className="tw-admin-logout-modal is-compact-confirm" style={{ background: c.cardBg, borderColor: c.border, color: c.text }}><header><TwIcon name="logout" size={24} /><strong>Logged out</strong></header><p style={{ color: c.textMuted }}>You have been logged out due to inactivity. Click anywhere to continue.</p></section></div></>}
   </div>;
 }
 

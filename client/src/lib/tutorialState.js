@@ -58,6 +58,23 @@ export function pushTutorialState(userId) {
   schedulePush(userId);
 }
 
+// Flush any debounced push immediately (logout / tab close). Must be called
+// BEFORE the auth token is cleared so the PUT still carries credentials.
+export async function flushTutorialPush(userId) {
+  if (!userId || typeof window === "undefined") return;
+  if (pushTimers.has(userId)) {
+    window.clearTimeout(pushTimers.get(userId));
+    pushTimers.delete(userId);
+  }
+  try {
+    const snapshot = readTutorialState(userId);
+    await api.put("/tutorial-state", { state: snapshot, updatedAt: Number(snapshot.updatedAt || 0) || Date.now() });
+  } catch {
+    // Logout path: the local cache stays authoritative and the next
+    // write retries the push.
+  }
+}
+
 export function readTutorialState(userId) {
   if (!userId || typeof window === "undefined") return {};
   try {

@@ -27,6 +27,11 @@ export function BuilderToolbar({
   validateQuestion,
   setModal,
 }) {
+  // Save stays clickable so the confirm window can tell the teacher exactly
+  // what is still missing (a silently grey button never explains itself).
+  const alreadySaved = bankSavedOrders.has(Number(currentQ?.order ?? qIndex));
+  const bankIssues = validateQuestion(currentQ, quiz.template_type);
+  const bankHint = alreadySaved ? "Saved to bank" : bankIssues.length ? `Complete this ${isBatchTemplate ? "batch" : "question"} first: ${bankIssues[0]}.` : "Save to bank";
   if (isMobile) {
     return (
       <div className="tw-builder-mobile-qactions">
@@ -44,7 +49,7 @@ export function BuilderToolbar({
                 <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); redo(); }} disabled={!canRedo || builderTutorialStage === "bank_menu"}><TwIcon name="redo" size={17} /><span>Redo</span></button>
                 <button type="button" className="tw-builder-qmenu-row" onClick={() => { setQMenuOpen(false); undo(); }} disabled={!canUndo || builderTutorialStage === "bank_menu"}><TwIcon name="undo" size={17} /><span>Undo</span></button>
                 <button type="button" className="tw-builder-qmenu-row" disabled={builderTutorialStage === "bank_menu"} onClick={() => { setQMenuOpen(false); duplicateCurrentQuestion(); }}><TwIcon name="duplicate" size={17} /><span>Duplicate</span></button>
-                {!guestMode && <button type="button" data-tutorial="builder-save-bank" className="tw-builder-qmenu-row" disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || (builderTutorialStage !== "bank" && builderTutorialStage !== "bank_menu" && validateQuestion(currentQ, quiz.template_type).length > 0)} onClick={() => { setQMenuOpen(false); setModal("confirmBank"); }}><TwIcon name="bank" size={17} /><span>{bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved to bank" : "Save to bank"}</span></button>}
+                {!guestMode && <button type="button" data-tutorial="builder-save-bank" className="tw-builder-qmenu-row" title={bankHint} disabled={alreadySaved} onClick={() => { setQMenuOpen(false); setModal("confirmBank"); }}><TwIcon name="bank" size={17} /><span>{alreadySaved ? "Saved to bank" : "Save to bank"}</span></button>}
               </div>
             </>
           )}
@@ -60,7 +65,7 @@ export function BuilderToolbar({
       <button type="button" className="tw-builder-flat-icon-btn tw-mini-template" title="Redo" aria-label="Redo" onClick={redo} disabled={!canRedo} style={{ color: ui.templateAccent }}><TwIcon name="redo" size={18} /></button>
       <button type="button" className="tw-builder-flat-icon-btn tw-mini-template" title="Duplicate question" aria-label="Duplicate question" onClick={duplicateCurrentQuestion} style={{ color: ui.templateAccent }}><TwIcon name="duplicate" size={18} /></button>
       <button type="button" className="tw-builder-flat-icon-btn tw-mini-template" title={currentQ?.config?.locked ? "Unlock question" : "Lock question"} aria-label={currentQ?.config?.locked ? "Unlock question" : "Lock question"} onClick={toggleLock} style={{ color: ui.templateAccent }}><TwIcon name={currentQ?.config?.locked ? "lock" : "unlock"} size={18} /></button>
-      {!guestMode && <button type="button" data-tutorial="builder-save-bank" className="tw-builder-flat-icon-btn tw-mini-template" title={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) ? "Saved to bank" : "Save to bank"} aria-label="Save to bank" disabled={bankSavedOrders.has(Number(currentQ?.order ?? qIndex)) || (builderTutorialStage !== "bank" && builderTutorialStage !== "bank_menu" && validateQuestion(currentQ, quiz.template_type).length > 0)} onClick={() => setModal("confirmBank")} style={{ color: ui.templateAccent }}><TwIcon name="bank" size={18} /></button>}
+      {!guestMode && <button type="button" data-tutorial="builder-save-bank" className="tw-builder-flat-icon-btn tw-mini-template" title={bankHint} aria-label="Save to bank" disabled={alreadySaved} onClick={() => setModal("confirmBank")} style={{ color: ui.templateAccent }}><TwIcon name="bank" size={18} /></button>}
       <button type="button" className="tw-builder-flat-icon-btn tw-mini-template" title={isBatchTemplate ? "Delete batch" : "Delete question"} aria-label={isBatchTemplate ? "Delete batch" : "Delete question"} onClick={deleteCurrentQuestion} style={{ color: ui.templateAccent }}><TwIcon name="trash" size={18} /></button>
     </div>
   );

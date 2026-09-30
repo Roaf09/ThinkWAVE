@@ -31,9 +31,18 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
       document.body.style.overscrollBehavior = prevOverscroll;
     };
   }, []);
+  // Tutorial: bring the background picker into view so the auto-scrolling
+  // backgrounds are easier to see while the assign_background dialog shows.
+  useEffect(() => {
+    if (tutorialStage !== "assign_background") return;
+    const timer = window.setTimeout(() => {
+      try { document.querySelector('[data-tutorial="session-backgrounds"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch {}
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [tutorialStage]);
   return <div style={modalBackdrop} onClick={onClose}><form onSubmit={submit} onClick={(event) => event.stopPropagation()} className="tw-assignment-setup-modal" style={{ ...card(c, { width: "min(95vw, 700px)", padding: 0, overflow: "hidden", background: solidModalBg(c) }) }}>
-    {isMobile && <div className="tw-host-launch-toprow"><button type="button" aria-label="Close" onClick={onClose}><TwIcon name="close" size={20} /></button></div>}
-    <div className="px-[28px] py-[22px] flex justify-between items-center" style={{ borderBottom: `1px solid ${c.border}` }}><div><h2 className="m-0" style={{ color: c.text }}>Set up assignment</h2>{!isMobile && <p className="mb-0" style={{ color: c.textMuted }}>Set the schedule, choose the class, then pick the gameplay background.</p>}</div>{!isMobile && <button type="button" onClick={onClose} style={{ ...btn(c), width: 42, height: 42, display: "grid", placeItems: "center", padding: 0 }}><TwIcon name="close" size={20} /></button>}</div>
+    <div className="tw-host-launch-toprow"><button type="button" aria-label="Close" onClick={onClose}><TwIcon name="close" size={20} /></button></div>
+    <div className="px-[28px] py-[22px] flex justify-between items-center" style={{ borderBottom: `1px solid ${c.border}` }}><div><h2 className="m-0" style={{ color: c.text }}>Set up assignment</h2>{!isMobile && <p className="mb-0" style={{ color: c.textMuted }}>Set the schedule, choose the class, then pick the gameplay background.</p>}</div></div>
     <div className="p-[28px] grid gap-[14px]">
       <div data-tutorial="assign-schedule" role="button" tabIndex={0} onClick={() => setEditing(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setEditing(true); } }} style={{ ...card(c, { boxShadow: "none", padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: c.cardBg2 }), cursor: "pointer" }}>
         <div className="flex gap-[14px] items-center"><TwIcon name="calendar" size={28} /><div><div className="text-[13px] font-[800]" style={{ color: c.textMuted }}>Schedule</div><div className="font-[900] tw-assign-schedule-value" style={{ color: c.text }}>{form.availableFrom && form.availableUntil ? `${formatSchedule(form.availableFrom)} → ${formatSchedule(form.availableUntil)}` : "Set start and end date/time"}</div></div></div>
@@ -42,7 +51,7 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
       <div className="text-[13px]" style={{ color: c.textMuted }}>Students will only be able to answer within the selected schedule.</div>
       <button data-tutorial="assign-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
       <div className="tw-assignment-primary-actions flex justify-end items-center gap-[14px] mt-[4px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" icon="send" disabled={!complete}>Send Assignment</TeacherPressButton></div>
-      <BackgroundPicker selectedKey={form.backgroundKey} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} category={quiz.category} />
+      <BackgroundPicker selectedKey={form.backgroundKey} autoPlay={tutorialStage === "assign_background"} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} category={quiz.category} />
     </div>
     {tutorialStage === "assign_schedule" && !editing && <ThinkBotTutorial target='[data-tutorial="assign-schedule"]' placement="left" square><p>Assignments are completed by students on their own time. Start by deciding when students can access this activity.</p></ThinkBotTutorial>}
     {tutorialStage === "assign_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="assign-class"]' placement="left" square highlightMode="target"><p>Now choose which class should receive the assignment.</p></ThinkBotTutorial>}
@@ -54,12 +63,14 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
 }
 
 function ScheduleEditor({ c, form, setForm, onClose, onApply }) {
+  const MAX_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   const startDefault = parseScheduleDate(form.availableFrom, new Date());
   const endDefault = parseScheduleDate(form.availableUntil, addDaysAtNoon(startDefault, 3));
   const [draft, setDraft] = useState({ availableFrom: toLocalDateTimeValue(startDefault), availableUntil: toLocalDateTimeValue(endDefault) });
   const [activeField, setActiveField] = useState("availableFrom");
   const [viewDate, setViewDate] = useState(() => new Date(startDefault.getFullYear(), startDefault.getMonth(), 1));
   const activeDate = parseScheduleDate(draft[activeField], activeField === "availableFrom" ? startDefault : endDefault);
+  const fromDate = parseScheduleDate(draft.availableFrom, startDefault);
   const days = buildCalendarDays(viewDate);
   const timeOptions = buildTimeOptions();
 
@@ -67,7 +78,19 @@ function ScheduleEditor({ c, form, setForm, onClose, onApply }) {
 
   function setDatePart(day) { const next = new Date(activeDate); next.setFullYear(viewDate.getFullYear(), viewDate.getMonth(), day); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
   function setTimePart(value) { const [hour, minute] = value.split(":").map(Number); const next = new Date(activeDate); next.setHours(hour, minute, 0, 0); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
-  function apply() { const from = parseScheduleDate(draft.availableFrom, startDefault); let until = parseScheduleDate(draft.availableUntil, endDefault); if (until <= from) until = new Date(from.getTime() + 3600000); setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) })); onClose(); onApply?.(); }
+  function isEndDayTooFar(day) {
+    if (activeField !== "availableUntil" || !day) return false;
+    const candidate = new Date(activeDate);
+    candidate.setFullYear(viewDate.getFullYear(), viewDate.getMonth(), day);
+    return candidate.getTime() - fromDate.getTime() > MAX_WEEK_MS;
+  }
+  function apply() {
+    const from = parseScheduleDate(draft.availableFrom, startDefault);
+    let until = parseScheduleDate(draft.availableUntil, endDefault);
+    if (until <= from) until = new Date(from.getTime() + 3600000);
+    if (until.getTime() - from.getTime() > MAX_WEEK_MS) until = new Date(from.getTime() + MAX_WEEK_MS);
+    setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) })); onClose(); onApply?.();
+  }
 
   const selectedTime = minutesToTimeValue(activeDate.getHours() * 60 + activeDate.getMinutes());
   return <div className="tw-schedule-overlay" style={calendarOverlay(c)} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
@@ -75,8 +98,9 @@ function ScheduleEditor({ c, form, setForm, onClose, onApply }) {
       <div className="px-[20px] pt-[22px] pb-[12px]">
         <div className="flex justify-between items-center gap-[12px] mb-[14px]"><div className="font-[900] text-[22px]">{viewDate.toLocaleString([], { month: "long", year: "numeric" })}</div><div className="flex gap-[8px]"><button type="button" onClick={() => setViewDate((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))} style={calendarNavBtn(c)}>‹</button><button type="button" onClick={() => setViewDate((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))} style={calendarNavBtn(c)}>›</button></div></div>
         <div className="grid grid-cols-[1fr_1fr] gap-[8px] mb-[12px]"><button type="button" onClick={() => setActiveField("availableFrom")} style={segmentBtn(c, activeField === "availableFrom")}>Start<br/><small>{formatSchedule(draft.availableFrom)}</small></button><button type="button" onClick={() => setActiveField("availableUntil")} style={segmentBtn(c, activeField === "availableUntil")}>End<br/><small>{formatSchedule(draft.availableUntil)}</small></button></div>
+        <div className="text-[12px] font-[700] mb-[10px]" style={{ color: c.textMuted }}>Open for up to 1 week only.</div>
         <div className="grid grid-cols-[repeat(7,1fr)] text-center font-[800] gap-y-[10px] mb-[8px]" style={{ color: c.textMuted }}>{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => <div key={day}>{day}</div>)}</div>
-        <div className="tw-schedule-days grid grid-cols-[repeat(7,1fr)] gap-[8px] text-center">{days.map((day, index) => { const selected = day && sameCalendarDay(activeDate, viewDate, day); return <button key={`${day || "blank"}-${index}`} type="button" disabled={!day} onClick={() => setDatePart(day)} style={calendarDayBtn(c, selected, !day)}>{day || ""}</button>; })}</div>
+        <div className="tw-schedule-days grid grid-cols-[repeat(7,1fr)] gap-[8px] text-center">{days.map((day, index) => { const selected = day && sameCalendarDay(activeDate, viewDate, day); const tooFar = isEndDayTooFar(day); return <button key={`${day || "blank"}-${index}`} type="button" disabled={!day || tooFar} title={tooFar ? "Up to 1 week from start only" : undefined} onClick={() => setDatePart(day)} style={{ ...calendarDayBtn(c, selected, !day), ...(tooFar && day ? { opacity: 0.35, cursor: "not-allowed" } : {}) }}>{day || ""}</button>; })}</div>
       </div>
       <div className="px-[20px] pt-[18px] pb-[16px]" style={{ borderTop: `1px solid ${c.border}` }}><div className="font-[900] text-[17px] mb-[8px]">Time</div><select value={selectedTime} onChange={(event) => setTimePart(event.target.value)} className="h-[46px] font-[700]" style={{ ...inputStyle(c) }}>{timeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
       <div className="px-[20px] pt-0 pb-[22px] flex justify-end items-center gap-[14px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="button" tone="blue" onClick={apply}>Set</TeacherPressButton></div>

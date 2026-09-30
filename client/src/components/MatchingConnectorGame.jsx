@@ -45,8 +45,18 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
   const orderB = useMemo(() => seededOrder(colB.length, true, `${questionKey}-b-p${participantSeed || 0}`), [colB.length, questionKey, participantSeed]);
   const wrapperRef = useRef(null);
   const endpointRefs = useRef(new Map());
+  // Cached geometry: endpoint centers relative to the wrapper + the wrapper's
+  // viewport offset for cursor math. Lines are positioned relative to the
+  // wrapper, so scrolling never invalidates them — only resize/question
+  // changes re-measure. This kills the old per-render getBoundingClientRect
+  // storm (every committed line, every second, every scroll).
+  const layoutRef = useRef({ points: new Map(), wrapLeft: 0, wrapTop: 0, ready: false });
   const [active, setActive] = useState(null);
   const [cursor, setCursor] = useState(null);
+  // Set when a press (pointerdown) already activated/connected: the synthetic
+  // click that follows the same press must be ignored, otherwise every
+  // press-drag would leave a dangling active line behind.
+  const downRef = useRef(false);
   const [lineVersion, setLineVersion] = useState(0);
   const moveFrameRef = useRef(0);
   const pendingCursorRef = useRef(null);
@@ -57,22 +67,51 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
     setCursor(null);
   }, [questionKey]);
 
+  function measureAll() {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const outer = wrapper.getBoundingClientRect();
+    const pts = new Map();
+    for (const [key, el] of endpointRefs.current) {
+      if (!el || !el.isConnected) continue;
+      const rect = el.getBoundingClientRect();
+      pts.set(key, { x: rect.left - outer.left + rect.width / 2, y: rect.top - outer.top + rect.height / 2 });
+    }
+    layoutRef.current = { points: pts, wrapLeft: outer.left, wrapTop: outer.top, ready: true };
+    setLineVersion((value) => value + 1);
+  }
+
+  // Re-measure after new endpoints mount (question change covers it too).
+  useEffect(() => {
+    measureAll();
+  }, [questionKey, colA.length, colB.length]);
+
   useEffect(() => {
     const update = () => {
       if (layoutFrameRef.current) return;
       layoutFrameRef.current = requestAnimationFrame(() => {
         layoutFrameRef.current = 0;
-        setLineVersion((value) => value + 1);
+        measureAll();
       });
+    };
+    // Scroll does NOT re-render: relative geometry is unchanged by scrolling.
+    // It only refreshes the wrapper's viewport offset so the drag cursor
+    // stays accurate mid-scroll, with zero React work.
+    const refreshWrapOffset = () => {
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+      const outer = wrapper.getBoundingClientRect();
+      layoutRef.current.wrapLeft = outer.left;
+      layoutRef.current.wrapTop = outer.top;
     };
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     if (wrapperRef.current && observer) observer.observe(wrapperRef.current);
     window.addEventListener("resize", update, { passive: true });
-    window.addEventListener("scroll", update, true);
+    window.addEventListener("scroll", refreshWrapOffset, { passive: true, capture: true });
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("scroll", refreshWrapOffset, true);
       if (layoutFrameRef.current) cancelAnimationFrame(layoutFrameRef.current);
       if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
     };
@@ -81,12 +120,17 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
   const usedB = useMemo(() => new Set(Object.values(valueMap || {}).map(Number)), [valueMap]);
 
   function pointFor(side, index) {
+    const hit = layoutRef.current.points.get(`${side}-${index}`);
+    if (hit) return hit;
+    // Fallback for endpoints mounted after the last measure pass.
     const wrapper = wrapperRef.current;
     const endpoint = endpointRefs.current.get(`${side}-${index}`);
     if (!wrapper || !endpoint) return null;
     const outer = wrapper.getBoundingClientRect();
     const rect = endpoint.getBoundingClientRect();
-    return { x: rect.left - outer.left + rect.width / 2, y: rect.top - outer.top + rect.height / 2 };
+    const pt = { x: rect.left - outer.left + rect.width / 2, y: rect.top - outer.top + rect.height / 2 };
+    layoutRef.current.points.set(`${side}-${index}`, pt);
+    return pt;
   }
 
   function removePairByEndpoint(side, index) {
@@ -116,6 +160,40 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
     onChange(next);
   }
 
+  // Press anywhere on a card (not just the small dot) to start connecting,
+  // so press-drag-release works in one motion on desktop and touch.
+  function handleCardPress(event, side, index) {
+    if (disabled) return;
+    if (event.pointerType === "mouse" && event.button > 0) return;
+    if (event.target.closest(".match-connect-dot")) return;
+    downRef.current = true;
+    handleEndpoint(side, index);
+  }
+
+  function handlePressClick(event, side, index) {
+    if (downRef.current) {
+      downRef.current = false;
+      return;
+    }
+    if (!event.target.closest(".match-connect-dot")) handleEndpoint(side, index);
+  }
+
+  function handleDotPress(event, side, index) {
+    if (disabled) return;
+    if (event.pointerType === "mouse" && event.button > 0) return;
+    event.stopPropagation();
+    downRef.current = true;
+    handleEndpoint(side, index);
+  }
+
+  function handleDotClick(side, index) {
+    if (downRef.current) {
+      downRef.current = false;
+      return;
+    }
+    handleEndpoint(side, index);
+  }
+
   function handleEndpoint(side, index) {
     if (disabled) return;
     if (!active && removePairByEndpoint(side, index)) return;
@@ -138,11 +216,19 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
 
   function handlePointerMove(event) {
     if (!active || !wrapperRef.current) return;
-    const rect = wrapperRef.current.getBoundingClientRect();
     const cx = event.clientX ?? event.touches?.[0]?.clientX;
     const cy = event.clientY ?? event.touches?.[0]?.clientY;
     if (cx == null || cy == null) return;
-    pendingCursorRef.current = { x: cx - rect.left, y: cy - rect.top };
+    // Cached wrapper offset (refreshed on scroll) — no layout read per move.
+    const cached = layoutRef.current;
+    let wrapLeft = cached.wrapLeft;
+    let wrapTop = cached.wrapTop;
+    if (!cached.ready) {
+      const rect = wrapperRef.current.getBoundingClientRect();
+      wrapLeft = rect.left;
+      wrapTop = rect.top;
+    }
+    pendingCursorRef.current = { x: cx - wrapLeft, y: cy - wrapTop };
     if (moveFrameRef.current) return;
     moveFrameRef.current = requestAnimationFrame(() => {
       moveFrameRef.current = 0;
@@ -174,13 +260,19 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
     handleDropAt(cx, cy);
   }
 
-  const lines = Object.entries(valueMap || {}).map(([aIndex, bIndex]) => {
+  // Committed lines only depend on pairs + cached geometry: parent ticks
+  // (1s timer) and cursor moves skip recompute entirely via memo.
+  const lines = useMemo(() => Object.entries(valueMap || {}).map(([aIndex, bIndex]) => {
     const start = pointFor("A", Number(aIndex));
     const end = pointFor("B", Number(bIndex));
+    // Cached pointFor intentionally omits layout deps: geometry only
+    // changes via measureAll -> lineVersion.
     return start && end ? { key: `${aIndex}-${bIndex}`, start, end } : null;
-  }).filter(Boolean);
-  const activeStart = active ? pointFor(active.side, active.index) : null;
-  void lineVersion;
+  }).filter(Boolean), [valueMap, lineVersion, questionKey]);
+  const activeStart = useMemo(
+    () => (active ? pointFor(active.side, active.index) : null),
+    [active, lineVersion, questionKey],
+  );
 
   return (
     <div
@@ -188,7 +280,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
       ref={wrapperRef}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={() => { setActive(null); setCursor(null); }}
+      onPointerCancel={() => { downRef.current = false; setActive(null); setCursor(null); }}
       onTouchMove={(e) => { const t = e.touches?.[0]; if (t) handlePointerMove(t); }}
       onTouchEnd={(e) => { const t = e.changedTouches?.[0]; if (t) handlePointerUp(t); }}
       style={{ touchAction: "none" }}
@@ -203,12 +295,12 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderA.map((index) => {
             const item = colA[index] || {};
             const paired = valueMap?.[index] !== undefined;
-            return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("A", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "none" }}>
+            return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "A", index)} onClick={(event) => handlePressClick(event, "A", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
               <div className="match-connect-content">
                 {textOf(item, `Item ${index + 1}`) ? <span>{textOf(item, `Item ${index + 1}`)}</span> : null}
-                {item.image ? <img src={item.image} alt="" /> : null}
+                {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
               </div>
-              <button type="button" data-match-side="A" data-match-index={index} className="match-connect-dot is-right" ref={(node) => node ? endpointRefs.current.set(`A-${index}`, node) : endpointRefs.current.delete(`A-${index}`)} onClick={() => handleEndpoint("A", index)} disabled={disabled} aria-label={`Connect Column A item ${index + 1}`} style={{ touchAction: "none" }} />
+              <button type="button" data-match-side="A" data-match-index={index} className="match-connect-dot is-right" ref={(node) => node ? endpointRefs.current.set(`A-${index}`, node) : endpointRefs.current.delete(`A-${index}`)} onPointerDown={(event) => handleDotPress(event, "A", index)} onClick={() => handleDotClick("A", index)} disabled={disabled} aria-label={`Connect Column A item ${index + 1}`} style={{ touchAction: "none" }} />
             </div>;
           })}
         </div>
@@ -219,11 +311,11 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderB.map((index) => {
             const item = colB[index] || {};
             const paired = usedB.has(index);
-            return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onClick={(event) => { if (!event.target.closest(".match-connect-dot")) handleEndpoint("B", index); }} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "none" }}>
-              <button type="button" data-match-side="B" data-match-index={index} className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onClick={() => handleEndpoint("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} style={{ touchAction: "none" }} />
+            return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "B", index)} onClick={(event) => handlePressClick(event, "B", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
+              <button type="button" data-match-side="B" data-match-index={index} className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onPointerDown={(event) => handleDotPress(event, "B", index)} onClick={() => handleDotClick("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} style={{ touchAction: "none" }} />
               <div className="match-connect-content">
                 {textOf(item, `Answer ${index + 1}`) ? <span>{textOf(item, `Answer ${index + 1}`)}</span> : null}
-                {item.image ? <img src={item.image} alt="" /> : null}
+                {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
               </div>
             </div>;
           })}

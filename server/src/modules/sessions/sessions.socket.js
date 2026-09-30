@@ -5,6 +5,7 @@
  */
 
 import { pool } from "../../db.js";
+import { createTTLCache } from "../../utils/ttlCache.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreCrosswordWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { resolveCrosswordWordBank, isCrosswordRoundComplete } from "../quizzes/templates/crossword/crossword.js";
@@ -137,12 +138,23 @@ async function createGroupProposal({ sessionId, groupId, questionId, participant
 const disconnectingParticipants = new Set();
 // Keeps the remaining question time while a teacher explicitly pauses a live session.
 // This does not require a database schema change and is cleared when the question advances or the session ends.
-const pausedQuestionState = new Map();
+// Bounded TTL: auto-drops after 2h so orphaned pauses never grow memory forever.
+const pausedQuestionState = createTTLCache({ max: 500, ttlMs: 2 * 60 * 60 * 1000 });
 // Holds the exact paused display value for three seconds after resume, then the
 // normal deadline continues from that same value without adding visible time.
-const resumedQuestionState = new Map();
+const resumedQuestionState = createTTLCache({ max: 500, ttlMs: 10 * 60 * 1000 });
 // Tracks live rank movement so achievement progress can count real overtakes.
-const previousCompetitiveRanks = new Map();
+// Bounded TTL: previous ranks only matter during the live session + 2h grace.
+const previousCompetitiveRanks = createTTLCache({ max: 500, ttlMs: 2 * 60 * 60 * 1000 });
+// Coalesces answer-burst broadcasts: max 1 full scores emit per 500ms per session.
+const scoreBroadcastState = createTTLCache({ max: 500, ttlMs: 10 * 60 * 1000 });
+export function clearSessionMemory(sessionId) {
+  const sid = Number(sessionId);
+  pausedQuestionState.delete(sid);
+  resumedQuestionState.delete(sid);
+  previousCompetitiveRanks.delete(sid);
+  scoreBroadcastState.delete(sid);
+}
 let overtakeTableReady = false;
 async function ensureOvertakeTable(){
   if(overtakeTableReady) return;
@@ -155,6 +167,21 @@ async function ensureOvertakeTable(){
     INDEX idx_overtake_student (student_user_id), INDEX idx_overtake_session (session_id)
   )`);
   overtakeTableReady=true;
+}
+// Screenshot-attempt tally for the host panel. Silent by design: counted,
+// never warned or kicked. Table is created on first use so no schema
+// migration is needed.
+let screenshotTableReady = false;
+async function ensureScreenshotTable(){
+  if(screenshotTableReady) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS screenshot_events (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    session_id BIGINT NOT NULL,
+    participant_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_screenshot_session_participant (session_id, participant_id)
+  )`);
+  screenshotTableReady=true;
 }
 // Tab-out anti-cheat is enabled: 1st recorded, 2nd warns, 3rd kicks.
 const AUTO_KICK_AFTER_TAB_OUTS = true;
@@ -202,6 +229,23 @@ export function registerSessionSockets(io) {
         } catch (error) {
           console.error(`${eventName} failed:`, error);
           socket.emit("teacher:error", { message: "Host action could not be completed." });
+        }
+      });
+    };
+
+    // Same safety net for student events: without this, one DB blip inside
+    // student:connect / answer:submit rejects with nobody catching it, and
+    // Node's default is to crash the WHOLE process (everyone's session dies).
+    // Errors here only ever fail one student's action, never the room.
+    const onStudent = (eventName, handler) => {
+      socket.on(eventName, async (payload = {}) => {
+        try {
+          await handler(payload);
+        } catch (error) {
+          console.error(`${eventName} failed:`, error?.message || error);
+          try {
+            socket.emit("student:error", { message: "Something went wrong. Please try again." });
+          } catch {}
         }
       });
     };
@@ -379,7 +423,7 @@ export function registerSessionSockets(io) {
     });
 
     // Student connection flow supports both first join and reconnect.
-    socket.on("student:connect", async ({ sessionId, reconnectKey }) => {
+    onStudent("student:connect", async ({ sessionId, reconnectKey }) => {
       if (!allowAction("student:connect", 20, 60_000)) return socket.emit("student:error", { message: "Too many connection attempts." });
       const [[p]] = await pool.query(
         `SELECT * FROM session_participants WHERE session_id=:sid AND reconnect_key=:rk`,
@@ -396,7 +440,7 @@ export function registerSessionSockets(io) {
       if (await hasDatabaseColumn("sessions", "is_tutorial")) {
         const [[tutorialRow]] = await pool.query(`SELECT is_tutorial FROM sessions WHERE id=:sid`, { sid: sessionId });
         if (Number(tutorialRow?.is_tutorial || 0) === 1) {
-          return socket.emit("student:error", { message: "Tutorial demo sessions are for ThinkBOTs only." });
+          return socket.emit("student:error", { message: "Cannot join a tutorial session." });
         }
       }
 
@@ -462,7 +506,7 @@ export function registerSessionSockets(io) {
       await broadcastGroups(io, sessionId);
     });
 
-    socket.on("student:joinGroup", async ({ sessionId, groupId }) => {
+    onStudent("student:joinGroup", async ({ sessionId, groupId }) => {
       if (!allowAction("student:joinGroup")) return;
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
@@ -503,7 +547,7 @@ export function registerSessionSockets(io) {
       await broadcastRoster(io, sessionId);
     });
 
-    socket.on("student:renameGroup", async ({ sessionId, groupId, name }) => {
+    onStudent("student:renameGroup", async ({ sessionId, groupId, name }) => {
       if (!allowAction("student:renameGroup")) return;
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
@@ -530,7 +574,7 @@ export function registerSessionSockets(io) {
       await broadcastRoster(io, sessionId);
     });
 
-    socket.on("student:voteGroupAnswer", async ({ sessionId, proposalId, vote }) => {
+    onStudent("student:voteGroupAnswer", async ({ sessionId, proposalId, vote }) => {
       if (!allowAction("student:voteGroupAnswer")) return;
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
@@ -583,6 +627,28 @@ export function registerSessionSockets(io) {
       }
     });
 
+    socket.on("student:screenshot", async ({ sessionId }) => {
+      if (!allowAction("student:screenshot")) return;
+      const participantId = socket.data.participantId;
+      try {
+        if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || Number(socket.data.participantId) !== Number(participantId)) return;
+        const [[participant]] = await pool.query(
+          `SELECT p.id, p.kicked_at, s.status
+           FROM session_participants p JOIN sessions s ON s.id=p.session_id
+           WHERE p.id=:pid AND p.session_id=:sid`,
+          { pid: participantId, sid: sessionId }
+        );
+        // Silent tally only: no warnings, no kicks, no student-facing message.
+        if (!participant || participant.kicked_at || participant.status === "ENDED") return;
+        await ensureScreenshotTable();
+        await pool.query(`INSERT INTO screenshot_events(session_id, participant_id) VALUES(:sid,:pid)`, { sid:sessionId, pid:participantId });
+        const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM screenshot_events WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId, pid:participantId });
+        io.to(roomTeacher(sessionId)).emit("screenshot:updated", { participantId:Number(participantId), count:Number(row?.total || 0) });
+      } catch (error) {
+        socket.emit("student:error", { message:"Unable to record the activity." });
+      }
+    });
+
     onTeacher("teacher:allowStudent", async ({ sessionId, participantId }) => {
       if (!["TEACHER", "GUEST_HOST"].includes(socket.data.role) || Number(socket.data.sessionId) !== Number(sessionId)) return;
       io.to(roomParticipant(participantId)).emit("antiCheat:allowed", { ok:true });
@@ -594,7 +660,7 @@ export function registerSessionSockets(io) {
     });
 
     // All answer submission funnels through one event so template scoring stays centralized on the server.
-    socket.on("answer:submit", async ({ sessionId, questionId, answer, timeExpired = false }) => {
+    onStudent("answer:submit", async ({ sessionId, questionId, answer, timeExpired = false }) => {
       if (!allowAction("answer:submit")) return;
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
@@ -674,52 +740,63 @@ export function registerSessionSockets(io) {
       await handleSoloAnswer(io, socket, { session, sessionId, participantId, questionId, answer, timeExpired });
     });
     socket.on("disconnect", async () => {
-      const { role, sessionId, participantId } = socket.data || {};
-      if (!sessionId) return;
+      try {
+        const { role, sessionId, participantId } = socket.data || {};
+        if (!sessionId) return;
 
-      if (role === "STUDENT" && participantId) {
-        const remaining = Math.max(0, (participantConnectionCounts.get(participantId) || 1) - 1);
-        if (remaining > 0) { participantConnectionCounts.set(participantId, remaining); return; }
-        participantConnectionCounts.delete(participantId);
-        const existingTimer = studentDisconnectTimers.get(participantId);
-        if (existingTimer) clearTimeout(existingTimer);
-        const timer = setTimeout(async () => {
-          studentDisconnectTimers.delete(participantId);
-          disconnectingParticipants.delete(participantId);
+        if (role === "STUDENT" && participantId) {
+          const remaining = Math.max(0, (participantConnectionCounts.get(participantId) || 1) - 1);
+          if (remaining > 0) { participantConnectionCounts.set(participantId, remaining); return; }
+          participantConnectionCounts.delete(participantId);
+          const existingTimer = studentDisconnectTimers.get(participantId);
+          if (existingTimer) clearTimeout(existingTimer);
+          const timer = setTimeout(async () => {
+            studentDisconnectTimers.delete(participantId);
+            disconnectingParticipants.delete(participantId);
+            try {
+              await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
+              const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
+              for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
+              await broadcastRoster(io, sessionId);
+              await broadcastGroups(io, sessionId);
+            } catch (error) {
+              console.error("student disconnect grace handling failed:", error);
+            }
+          }, STUDENT_DISCONNECT_GRACE_MS);
+          studentDisconnectTimers.set(participantId, timer);
+          disconnectingParticipants.add(participantId);
+          // Recompute quorum right away without waiting for the grace window:
+          // resolveGroupProposalIfReady now ignores disconnecting members, so a
+          // proposal that already has every remaining vote resolves instantly.
           try {
-            await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
             const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
             for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
-            await broadcastRoster(io, sessionId);
-            await broadcastGroups(io, sessionId);
           } catch (error) {
-            console.error("student disconnect grace handling failed:", error);
+            console.error("group quorum recompute on disconnect failed:", error?.message || error);
           }
-        }, STUDENT_DISCONNECT_GRACE_MS);
-        studentDisconnectTimers.set(participantId, timer);
-        disconnectingParticipants.add(participantId);
-        // Recompute quorum right away without waiting for the grace window:
-        // resolveGroupProposalIfReady now ignores disconnecting members, so a
-        // proposal that already has every remaining vote resolves instantly.
-        try {
-          const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
-          for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
-        } catch (error) {
-          console.error("group quorum recompute on disconnect failed:", error?.message || error);
+          return;
         }
-        return;
-      }
 
-      if (["TEACHER", "GUEST_HOST"].includes(role)) {
-        await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
-        await broadcastState(io, sessionId);
-        const timeout = setTimeout(async () => {
-          await pool.query(`UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('PAUSED','LIVE')`, { sid: sessionId });
-          await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
+        if (["TEACHER", "GUEST_HOST"].includes(role)) {
+          await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
           await broadcastState(io, sessionId);
-          teacherDisconnectTimers.delete(sessionId);
-        }, 5 * 60 * 1000);
-        teacherDisconnectTimers.set(sessionId, timeout);
+          const existing = teacherDisconnectTimers.get(sessionId);
+          if (existing) clearTimeout(existing);
+          const timeout = setTimeout(async () => {
+            try {
+              await pool.query(`UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('PAUSED','LIVE')`, { sid: sessionId });
+              await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
+              await broadcastState(io, sessionId);
+              teacherDisconnectTimers.delete(sessionId);
+              clearSessionMemory(sessionId);
+            } catch (error) {
+              console.error("teacher disconnect grace handling failed:", error?.message || error);
+            }
+          }, 5 * 60 * 1000);
+          teacherDisconnectTimers.set(sessionId, timeout);
+        }
+      } catch (error) {
+        console.error("disconnect handling failed:", error?.message || error);
       }
     });
   });
@@ -741,7 +818,8 @@ export async function closeOrphanedSessions() {
   const [rows] = await pool.query(
     `SELECT id FROM sessions
      WHERE status IN ('LOBBY','LIVE','PAUSED')
-       AND (last_heartbeat_at IS NULL OR last_heartbeat_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))`
+       AND (last_heartbeat_at IS NULL OR last_heartbeat_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
+     LIMIT 100`
   );
   for (const { id: sessionId } of rows) {
     await pool.query(
@@ -752,6 +830,7 @@ export async function closeOrphanedSessions() {
       `UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`,
       { sid: sessionId }
     );
+    clearSessionMemory(sessionId);
   }
   if (rows.length) console.log(`Closed ${rows.length} orphaned live session(s) left over from a previous server run.`);
 }
@@ -1204,24 +1283,21 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
       return;
     }
 
+    // 1 trip: same payload for every member (crossword group progress overwrites).
+    const responseJson = JSON.stringify(nextPayload);
+    await batchUpsertGroupResponses({
+      sessionId,
+      questionId: proposal.question_id,
+      rows: members.map((m) => ({
+        participantId: m.id,
+        answerJson: responseJson,
+        isCorrect: nextWords.length > 0 ? 1 : 0,
+        points: nextPoints,
+      })),
+      overwrite: true,
+    });
+    await batchRecalcGroupScores(sessionId, members.map((m) => m.id));
     for (const member of members) {
-      const [[existing]] = await pool.query(
-        `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
-        { sid: sessionId, pid: member.id, qid: proposal.question_id }
-      );
-      if (existing) {
-        await pool.query(
-          `UPDATE responses SET answer_json=:ans, is_correct=:ic, points_awarded=:pts, answered_at=NOW() WHERE id=:id`,
-          { id: existing.id, ans: JSON.stringify(nextPayload), ic: nextWords.length > 0 ? 1 : 0, pts: nextPoints }
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
-           VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
-          { sid: sessionId, pid: member.id, qid: proposal.question_id, ans: JSON.stringify(nextPayload), ic: isCorrect ? 1 : 0, pts: nextPoints }
-        );
-      }
-      await recalcParticipantScore(sessionId, member.id);
       io.to(roomParticipant(member.id)).emit("answer:ack", memberAck);
     }
 
@@ -1261,19 +1337,22 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   const competitivePoints = calculateCompetitivePoints({ templateType: session.template_type, scored, basePoints, elapsedMs, timeLimitMs, timeExpired: expiredSubmission });
   const storedAnswer = withCompetitiveMeta(scoreableAnswer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
 
+  // 1 trip: INSERT IGNORE semantics — never overwrite an existing solo answer.
+  // Recalc is idempotent (SUM), so recalculating all members is safe.
+  const storedJson = JSON.stringify(storedAnswer);
+  await batchUpsertGroupResponses({
+    sessionId,
+    questionId: proposal.question_id,
+    rows: members.map((m) => ({
+      participantId: m.id,
+      answerJson: storedJson,
+      isCorrect: isCorrect ? 1 : 0,
+      points,
+    })),
+    overwrite: false,
+  });
+  await batchRecalcGroupScores(sessionId, members.map((m) => m.id));
   for (const member of members) {
-    const [[existing]] = await pool.query(
-      `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
-      { sid: sessionId, pid: member.id, qid: proposal.question_id }
-    );
-    if (!existing) {
-      await pool.query(
-        `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
-         VALUES(:sid,:pid,:qid,:ans,:ic,:pts)`,
-        { sid: sessionId, pid: member.id, qid: proposal.question_id, ans: JSON.stringify(storedAnswer), ic: isCorrect ? 1 : 0, pts: points }
-      );
-      await recalcParticipantScore(sessionId, member.id);
-    }
     io.to(roomParticipant(member.id)).emit("answer:ack", {
       isCorrect,
       points,
@@ -1314,6 +1393,42 @@ async function recalcParticipantScore(sessionId, participantId) {
   );
 }
 
+// Long-run: 1 trip for whole group instead of 3 queries x N members.
+// Responses: single multi-row INSERT ... ON DUPLICATE/IGNORE.
+// Scores: single INSERT ... SELECT ... GROUP BY + ON DUPLICATE.
+async function batchUpsertGroupResponses({ sessionId, questionId, rows, overwrite = true }) {
+  if (!rows.length) return;
+  const placeholders = rows.map(() => "(?, ?, ?, ?, ?, ?)").join(",");
+  const params = [];
+  for (const r of rows) {
+    params.push(sessionId, r.participantId, questionId, r.answerJson, r.isCorrect ? 1 : 0, r.points);
+  }
+  const verb = overwrite
+    ? `ON DUPLICATE KEY UPDATE answer_json=VALUES(answer_json), is_correct=VALUES(is_correct), points_awarded=VALUES(points_awarded), answered_at=NOW()`
+    : `ON DUPLICATE KEY UPDATE id=id`;
+  await pool.query(
+    `INSERT INTO responses(session_id, participant_id, question_id, answer_json, is_correct, points_awarded)
+     VALUES ${placeholders} ${verb}`,
+    params
+  );
+}
+
+async function batchRecalcGroupScores(sessionId, memberIds) {
+  const ids = [...new Set(memberIds.map(Number).filter(Boolean))];
+  if (!ids.length) return;
+  const inList = ids.map(() => "?").join(",");
+  await pool.query(
+    `INSERT INTO scores(session_id, participant_id, total_points)
+     SELECT ? AS session_id, p.id AS participant_id, COALESCE(SUM(r.points_awarded),0) AS total_points
+     FROM session_participants p
+     LEFT JOIN responses r ON r.session_id=p.session_id AND r.participant_id=p.id
+     WHERE p.session_id=? AND p.id IN (${inList})
+     GROUP BY p.id
+     ON DUPLICATE KEY UPDATE total_points=VALUES(total_points)`,
+    [sessionId, sessionId, ...ids]
+  );
+}
+
 async function kickParticipant(io, sessionId, participantId, reason) {
   await pool.query(
     `UPDATE session_participants SET kicked_at=NOW(), kick_reason=:reason, connected=0, left_at=NOW()
@@ -1349,17 +1464,20 @@ async function kickParticipant(io, sessionId, participantId, reason) {
 }
 
 export async function broadcastRoster(io, sessionId) {
+  // The screenshot tally table is created on first use; make sure it exists
+  // before counting from it so fresh databases never error here.
+  await ensureScreenshotTable();
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
             gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
-            COUNT(te.id) AS tab_out_count
+            (SELECT COUNT(*) FROM tab_events te WHERE te.session_id=p.session_id AND te.participant_id=p.id) AS tab_out_count,
+            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id=p.session_id AND se.participant_id=p.id) AS screenshot_count
      FROM session_participants p
      LEFT JOIN users u ON u.id = p.student_user_id
      LEFT JOIN student_profiles stp ON stp.user_id = p.student_user_id
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
-     LEFT JOIN tab_events te ON te.session_id=p.session_id AND te.participant_id=p.id
      WHERE p.session_id=:sid
      GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, stp.profile_image, u.profile_image
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
@@ -1409,7 +1527,23 @@ export async function broadcastGroups(io, sessionId) {
   io.to(roomSession(sessionId)).emit("groups:update", groups);
 }
 
-export async function broadcastScores(io, sessionId) {
+export async function broadcastScores(io, sessionId, { force = false } = {}) {
+  const sid = Number(sessionId);
+  // Coalesce answer bursts: max 1 full emit per 500ms, trailing call wins.
+  if (!force) {
+    const now = Date.now();
+    const entry = scoreBroadcastState.get(sid);
+    if (entry && now - entry.last < 500) {
+      if (entry.timer) clearTimeout(entry.timer);
+      entry.timer = setTimeout(() => {
+        scoreBroadcastState.set(sid, { last: Date.now(), timer: null });
+        broadcastScores(io, sid, { force: true }).catch((e) => console.error("broadcastScores trailing failed:", e?.message || e));
+      }, 500 - (now - entry.last));
+      scoreBroadcastState.set(sid, entry);
+      return;
+    }
+    scoreBroadcastState.set(sid, { last: now, timer: null });
+  }
   const [[session]] = await pool.query(`SELECT s.join_mode, q.template_type FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
   let scores;
   if (session?.join_mode === "GROUP") {
@@ -1452,9 +1586,10 @@ export async function broadcastScores(io, sessionId) {
   // scores:update above; per-student rooms get the stripped copy.
   const top5 = stripPhotosForStudents(scores.slice(0, 5));
   if (session?.join_mode === "GROUP") {
-    for (const row of scores) {
+    for (let gi = 0; gi < scores.length; gi += 1) {
+      const row = scores[gi];
       const memberIds = String(row.member_ids || "").split(",").map(Number).filter(Boolean);
-      const rank = scores.indexOf(row) + 1;
+      const rank = gi + 1;
       for (const participantId of memberIds) {
         io.to(roomParticipant(participantId)).emit("leaderboard:update", { top5, myRank: rank, myScore: stripPhotosForStudents(row) });
       }
@@ -1509,6 +1644,23 @@ async function broadcastState(io, sessionId) {
   state.background_key = normalizeSessionBackgroundKey(state.background_key || getRememberedSessionBackground(sessionId));
 
   const qs = safeJson(state.questions_snapshot_json) || [];
+  // Students must never receive correct answers for templates they answer
+  // blind (MCQ / True-False / Identification / Matching are all scored
+  // server-side; the live clients never read correct_json for them). Without
+  // this, anyone in the room could open devtools and read every answer live.
+  // The template lives on the session (snapshot rows carry no per-question
+  // type). Crossword keeps its answers: the grid is generated from them
+  // client-side and the word list is shown to players by design. Guess Word
+  // keeps its target: the letter bank is built from it client-side.
+  const STUDENT_HIDDEN_CORRECT = new Set(["MCQ", "TRUE_FALSE", "TYPE_ANSWER", "MATCHING"]);
+  const hideCorrect = STUDENT_HIDDEN_CORRECT.has(normalizeTemplateType(state.template_type));
+  const studentQs = hideCorrect && Array.isArray(qs)
+    ? qs.map((q) => {
+        if (!q || typeof q !== "object" || !("correct_json" in q)) return q;
+        const { correct_json, ...rest } = q;
+        return rest;
+      })
+    : qs;
   const currentQ = qs[Number(state.current_question_index || 0)] || null;
   const qLimit = Number(currentQ?.config_json?.timeLimitSec || state.time_limit_sec || 0);
   state.paused_remaining_sec = state.status === "PAUSED" ? (pausedQuestionState.get(Number(sessionId))?.remaining ?? null) : null;
@@ -1533,7 +1685,7 @@ async function broadcastState(io, sessionId) {
   state.question_deadline_at = state.question_deadline_at_ms != null ? new Date(state.question_deadline_at_ms).toISOString() : null;
   delete state.question_started_unix;
   delete state.server_now_unix;
-  io.to(roomSession(sessionId)).emit("session:state", { state, questions: qs });
+  io.to(roomSession(sessionId)).emit("session:state", { state, questions: studentQs });
   io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });
   await broadcastScores(io, sessionId);
 }

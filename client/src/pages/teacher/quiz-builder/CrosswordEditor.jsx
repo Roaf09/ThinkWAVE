@@ -51,7 +51,10 @@ export function CrosswordEditor({ cor, cfg, onChange, ui, c, maxWords = null, is
     }
     const signature = `${buildCrosswordSignature({ questionId: 0, gridSize, words: normalized })}-${gridSeed}`;
     return buildCrosswordGrid({ gridSize, words: normalized, seed: buildCrosswordSeed(signature) });
-  }, [cfg.gridFilled, canFill, gridSize, gridSeed, savedGridKey, normalized.join("|")]);
+  // Note: word text itself is deliberately NOT a dependency. The stored
+  // grid (or blank) covers typing; the solver only runs for Fill, Shuffle,
+  // and size changes, so fast typing never triggers a 240-attempt solve.
+  }, [cfg.gridFilled, canFill, gridSize, gridSeed, savedGridKey]);
   const visiblePreview = isArranging
     ? { grid: arrangingGrid, gridSize: arrangingGridSize }
     : preview;
@@ -139,6 +142,10 @@ export function CrosswordEditor({ cor, cfg, onChange, ui, c, maxWords = null, is
         window.setTimeout(() => {
           onChange({ config: { ...cfg, answers, gridSize: filled.gridSize, grid: filled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
           setIsArranging(false);
+          // Re-announce completion: the tutorial may have bounced back to the
+          // Fill step mid-animation (or the grid was already filled), so make
+          // sure it can still advance to the Shuffle step.
+          window.dispatchEvent(new CustomEvent("thinkwave:tutorial-event", { detail: { type: "crossword-arranging" } }));
         }, 220);
       }
     }, stepMs);
@@ -151,10 +158,47 @@ export function CrosswordEditor({ cor, cfg, onChange, ui, c, maxWords = null, is
     onChange({ config: { ...cfg, answers, gridSize: shuffled.gridSize, grid: shuffled.grid, gridFilled: true, gridSeed: seedValue, minWordLength: 3, pointsPerWord: 1, lengthBonusPerLetter: 0 } });
   }
 
+  // Word fields wear the choice-tile look in the plain crossword color code.
+  const wordAccent = ui.templateAccent || "#0ea5e9";
+  function renderWordField(word, index) {
+    const norm = trimText(word).toUpperCase().replace(/[^A-Z]/g, "");
+    const isDup = norm && duplicateWordSet.has(norm);
+    const face = `color-mix(in srgb, ${wordAccent} 30%, #ffffff)`;
+    const badgeBg = `color-mix(in srgb, ${wordAccent} 22%, #ffffff)`;
+    const base = `color-mix(in srgb, ${wordAccent} 55%, #0f172a)`;
+    const ink = `color-mix(in srgb, ${wordAccent} 72%, #0f172a)`;
+    return (
+      <div key={index} style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, border: `4px solid ${isDup ? "#ef4444" : wordAccent}`, borderRadius: 16, background: isDup ? "rgba(239,68,68,.12)" : face, boxShadow: `0 5px 0 ${isDup ? "#991b1b" : base}, 0 12px 24px rgba(15,23,42,.14)` }}>
+        <span style={{ width: 38, height: 38, flex: "none", borderRadius: "50%", border: `3px solid ${isDup ? "#ef4444" : wordAccent}`, background: isDup ? "#fecaca" : badgeBg, color: isDup ? "#991b1b" : ink, fontWeight: 1000, fontSize: 16, display: "grid", placeItems: "center" }}>{index + 1}</span>
+        <input
+          maxLength={255}
+          value={word}
+          placeholder={`Word ${index + 1}`}
+          onChange={(event) => updateWord(index, event.target.value)}
+          className="tw-crossword-word-tile-input"
+          style={{ flex: "1 1 auto", minWidth: 0, background: "transparent", border: "none", outline: "none", color: isDup ? "#991b1b" : ink, fontWeight: 900, fontSize: 15, fontFamily: "inherit", padding: 0 }}
+          title={isDup ? "Duplicate word — all correct words must be unique" : undefined}
+        />
+      </div>
+    );
+  }
+
   const gridPreview = (
-    <div className="grid place-items-center p-[14px] rounded-[18px]" style={{ minHeight: isMobile ? 0 : 330, border: `1.5px solid ${ui.templateBorder || c.border}`, background: c.cardBg }}>
+    <div className="grid place-items-center p-[14px] rounded-[18px]" style={{ minHeight: isMobile ? 0 : 330, border: `4px solid ${ui.templateAccent}`, background: c.cardBg, boxShadow: `0 8px 0 color-mix(in srgb, ${ui.templateAccent} 58%, #0f172a), 0 18px 36px ${ui.templateAccent}40` }}>
       <div key={`${gridSize}-${gridSeed}-${cfg.gridFilled}-${isArranging}`} className="grid w-[min(100%,430px)]" style={{ gridTemplateColumns: `repeat(${visiblePreview.gridSize}, minmax(0,1fr))`, gap: visiblePreview.gridSize > 9 ? 3 : 5, animation: "twGridFill 320ms ease" }}>
-        {visiblePreview.grid.map((letter, index) => <div className="tw-crossword-grid-cell aspect-square grid place-items-center font-black" key={index} style={{ borderRadius: visiblePreview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: letter ? c.cardBg2 : "transparent", color: c.accent, fontSize: visiblePreview.gridSize > 9 ? 11 : 15, transition: "transform .24s ease, background .24s ease, opacity .24s ease", animation: letter ? "twTilePop 240ms ease both" : "none" }}>{letter}</div>)}
+        {visiblePreview.grid.map((letter, index) => <div className="tw-crossword-grid-cell aspect-square grid place-items-center font-black" key={index} style={letter ? {
+          borderRadius: visiblePreview.gridSize > 9 ? 6 : 9,
+          border: `2px solid ${ui.templateAccent}`,
+          background: "#ffffff",
+          boxShadow: `inset 0 3px 0 rgba(15,23,42,.10), inset 0 6px 12px color-mix(in srgb, ${ui.templateAccent} 18%, transparent)`,
+          color: c.accent, fontSize: visiblePreview.gridSize > 9 ? 11 : 15,
+          transition: "transform .24s ease, background .24s ease, opacity .24s ease",
+          animation: "twTilePop 240ms ease both",
+        } : {
+          borderRadius: visiblePreview.gridSize > 9 ? 6 : 9, border: `1px solid ${c.border}`, background: "transparent",
+          color: c.accent, fontSize: visiblePreview.gridSize > 9 ? 11 : 15,
+          transition: "transform .24s ease, background .24s ease, opacity .24s ease", animation: "none",
+        }}>{letter}</div>)}
       </div>
     </div>
   );
@@ -173,21 +217,8 @@ export function CrosswordEditor({ cor, cfg, onChange, ui, c, maxWords = null, is
             </div>
           </div>
           <div data-tutorial="builder-crossword-words" className="tw-crossword-word-grid">
-            {wordFields.map((word, index) => {
-              const norm = trimText(word).toUpperCase().replace(/[^A-Z]/g, "");
-              const isDup = norm && duplicateWordSet.has(norm);
-              return (
-                <input
-                  key={index}
-                  maxLength={255}
-                  value={word}
-                  placeholder={`Word ${index + 1}`}
-                  onChange={(event) => updateWord(index, event.target.value)}
-                  style={isDup ? { ...ui.input, borderColor: "#ef4444", background: "rgba(239,68,68,.08)" } : ui.input}
-                  title={isDup ? "Duplicate word — all correct words must be unique" : undefined}
-                />
-              );
-            })}
+            <style>{`.tw-crossword-word-tile-input::placeholder{color:rgba(0,0,0,.38)}`}</style>
+            {wordFields.map((word, index) => renderWordField(word, index))}
           </div>
           {hasDuplicateWords && <div className="text-[12px] font-extrabold mt-[6px]" style={{ color: "#dc2626" }}>Duplicate words are not allowed — all correct words must be unique.</div>}
         </div>
@@ -224,28 +255,10 @@ export function CrosswordEditor({ cor, cfg, onChange, ui, c, maxWords = null, is
             </div>
           </div>
           <div data-tutorial="builder-crossword-words" className="tw-crossword-word-grid">
-            {wordFields.map((word, index) => {
-              const norm = trimText(word).toUpperCase().replace(/[^A-Z]/g, "");
-              const isDup = norm && duplicateWordSet.has(norm);
-              return (
-                <input
-                  key={index}
-                  maxLength={255}
-                  value={word}
-                  placeholder={`Word ${index + 1}`}
-                  onChange={(event) => updateWord(index, event.target.value)}
-                  style={isDup ? { ...ui.input, borderColor: "#ef4444", background: "rgba(239,68,68,.08)" } : ui.input}
-                  title={isDup ? "Duplicate word — all correct words must be unique" : undefined}
-                />
-              );
-            })}
+            {wordFields.map((word, index) => renderWordField(word, index))}
           </div>
           {hasDuplicateWords && <div className="text-[12px] font-extrabold mt-[6px]" style={{ color: "#dc2626" }}>Duplicate words are not allowed — all correct words must be unique.</div>}
         </div>
-        <button type="button" style={ui.toggleCard(cfg.showWordList !== false)} onClick={() => onChange({ config: { ...cfg, answers, showWordList: cfg.showWordList === false } })}>
-          <div><div style={ui.toggleTitle}>Show valid words during gameplay</div><div style={ui.toggleHint}>{cfg.showWordList === false ? "Higher-order mode: learners discover which words to find." : "Lower-order mode: learners can see the word goals."}</div></div>
-          <span style={ui.switchTrack(cfg.showWordList !== false)}><span style={ui.switchThumb(cfg.showWordList !== false)} /></span>
-        </button>
         <div>
           <label style={ui.smallLabel}>Grid size</label>
           <select value={gridSize} onChange={(e) => setGridSize(e.target.value)} className="block w-full mt-[7px]" style={ui.select} disabled={!normalized.length}>

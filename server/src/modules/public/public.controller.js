@@ -1,6 +1,16 @@
 import { pool } from "../../db.js";
 
-export async function getPublicStats(_req,res){try{const [[row]]=await pool.query(`SELECT (SELECT COUNT(*) FROM sessions WHERE status='ENDED')+(SELECT COUNT(*) FROM async_quiz_submissions) AS sessions_completed,(SELECT COUNT(DISTINCT institution_name) FROM users WHERE role='ADMIN' AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' AND deleted_at IS NULL) AS institutions_count,(SELECT COUNT(*) FROM classes WHERE deleted_at IS NULL) AS classes_created`);return res.json({sessionsCompleted:Number(row?.sessions_completed||0),institutionsEmpowered:Number(row?.institutions_count||0),classesCreated:Number(row?.classes_created||0)});}catch(error){console.warn("Public statistics unavailable:",error?.code||error?.message||error);return res.json({sessionsCompleted:0,institutionsEmpowered:0,classesCreated:0});}}
+// Landing stats change slowly (sessions/classes accumulate over hours), but
+// the landing page is the highest-traffic surface AND polls every 10s per
+// visitor. Cache 60s so a school-wide announcement doesn't stampede the DB.
+let statsCache = null;
+let statsCacheAt = 0;
+const STATS_TTL_MS = 60 * 1000;
+
+export async function getPublicStats(_req,res){try{
+if (!statsCache || Date.now() - statsCacheAt > STATS_TTL_MS) {
+const [[row]]=await pool.query(`SELECT (SELECT COUNT(*) FROM sessions WHERE status='ENDED')+(SELECT COUNT(*) FROM async_quiz_submissions) AS sessions_completed,(SELECT COUNT(DISTINCT institution_name) FROM users WHERE role='ADMIN' AND institution_name IS NOT NULL AND TRIM(institution_name)<>'' AND deleted_at IS NULL) AS institutions_count,(SELECT COUNT(*) FROM classes WHERE deleted_at IS NULL) AS classes_created`);statsCache={sessionsCompleted:Number(row?.sessions_completed||0),institutionsEmpowered:Number(row?.institutions_count||0),classesCreated:Number(row?.classes_created||0)};statsCacheAt=Date.now();}
+return res.json(statsCache);}catch(error){console.warn("Public statistics unavailable:",error?.code||error?.message||error);return res.json({sessionsCompleted:0,institutionsEmpowered:0,classesCreated:0});}}
 
 export async function createPlanApplication(req,res){
   const {planType,institutionName,firstName,lastName,workEmail,country,role,phone,paymentMethod,gcashReference}=req.body||{};

@@ -10,7 +10,6 @@ export function getBuilderDisplay({
   settings,
   isSaving,
   isSaved,
-  isMobile,
   builderTitleLimit,
   dark,
   guestMode,
@@ -57,7 +56,7 @@ export function getBuilderDisplay({
   builderSettingsRows.push({ key: "qimage", label: "Question image", active: !!globalShowPromptImage, onToggle: () => applyConfigToAllQuestions({ showPromptImage: !globalShowPromptImage }) });
   builderSettingsRows.push({ key: "voice", label: "Voice record", active: !!globalVoiceRecord, onToggle: () => { const enabled = !globalVoiceRecord; applyConfigToAllQuestions({ voiceRecord: enabled, textToSpeech: enabled ? false : globalTextToSpeech }); } });
   builderSettingsRows.push({ key: "tts", label: "Text to speech", active: !!globalTextToSpeech, onToggle: () => { const enabled = !globalTextToSpeech; applyConfigToAllQuestions({ textToSpeech: enabled, voiceRecord: enabled ? false : globalVoiceRecord }); } });
-  if (isMobile && isCrossword) builderSettingsRows.push({ key: "wordlist", label: "Show valid words during gameplay", active: crosswordShowWordList, onToggle: () => { const q = questions[qIndex] || questions[0]; if (!q) return; updateQ({ config: { ...(q.config || {}), showWordList: !crosswordShowWordList } }); } });
+  if (isCrossword) builderSettingsRows.push({ key: "wordlist", label: "Show valid words during gameplay", active: crosswordShowWordList, onToggle: () => { const q = questions[qIndex] || questions[0]; if (!q) return; updateQ({ config: { ...(q.config || {}), showWordList: !crosswordShowWordList } }); } });
 
   function openSettings() {
     if (questionStripOpen) closeQuestionStrip();

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { TwIcon } from "../../../components/TwUI";
 import { getRole } from "../../../lib/auth";
 
@@ -39,15 +40,20 @@ export function FinalLeaderboardView({
     return `${first} ${last.charAt(0)}.`;
   };
   const isMe = (row) => isGroupMode ? (Number(row.group_id || 0) === Number(myGroupId || 0) || (myGroup?.display_name && row.group_name === myGroup.display_name)) : Number(row.participant_id) === Number(participantId);
+  // Normal points by default; tap any score or the chip to see competitive.
+  const [scoreMode, setScoreMode] = useState("normal");
+  const toggleScoreMode = () => setScoreMode((mode) => (mode === "competitive" ? "normal" : "competitive"));
+  const pts = (row) => Math.round(Number(scoreMode === "competitive" ? row.competitive_points : row.total_points) || 0).toLocaleString();
   return (
     <div className={`sp-final-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, "--sp-template-accent": gameplayAccent, "--host-accent": gameplayAccent, fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s, opacity 0.26s", opacity: exiting ? 0 : 1 }}>
       {experienceControls}{antiCheatOverlay}
       <div className={`sp-final-wrap sp-page-enter columns-${leaderboardColumns}`}>
         <section className="sp-final-leaderboard-card" style={{ background: cardBg, borderColor: gameplayAccent }}>
           <div className="sp-final-summary sp-final-summary-compact">
-            {myScore && <p style={{ color: mutedC }}>You scored <b style={{ color: gameplayAccent }}>{Math.round(Number(myScore.competitive_points || 0)).toLocaleString()} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
+            {myScore && <p style={{ color: mutedC }}>You scored <b style={{ color: gameplayAccent }}>{pts(myScore)} pts</b>{myRank > 0 && <> · Rank #{myRank}</>}</p>}
           </div>
           <h3 className="sp-final-heading" style={{ color: textC }}><TwIcon name="trophy" size={21}/> Leaderboard</h3>
+          <div style={{ display: "flex", justifyContent: "center", margin: "0 0 10px" }}><button type="button" onClick={toggleScoreMode} title="Switch between normal and competitive points" style={{ border: `1px solid ${gameplayAccent}`, background: "transparent", color: gameplayAccent, borderRadius: 999, padding: "5px 14px", fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{scoreMode === "competitive" ? "Competitive points" : "Normal points"}</button></div>
           <div className="tw-host-podium sp-final-host-podium">
             {podiumOrder.map((row) => {
               const rank = rankOf(row);
@@ -58,7 +64,7 @@ export function FinalLeaderboardView({
                     <div className="tw-host-podium-avatar" aria-hidden="true">{row?.profile_image ? <img src={row.profile_image} alt=""/> : <TwIcon name={isGroupMode ? "users" : "user"} size={18}/>}</div>
                     <b title={displayName(row)}>{shortDisplayName(row)}</b>
                   </div>
-                  <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</div>
+                  <button type="button" onClick={toggleScoreMode} title="Click to switch point type" className="tw-host-podium-points tw-host-score-click" style={{ background: "transparent", border: "none", cursor: "pointer", font: "inherit" }}>{pts(row)} pts</button>
                 </div>
               </div>;
             })}
@@ -69,7 +75,7 @@ export function FinalLeaderboardView({
               return <div key={row.participant_id || row.group_id || rank} className={`tw-student-leader-row${isMe(row) ? " is-me" : ""}`}>
                 <span className="tw-student-leader-rank">#{rank}</span>
                 <span className="tw-student-leader-name" style={{ color: textC }}>{displayName(row)}</span>
-                <span className="tw-student-leader-points">{Math.round(Number(row.competitive_points || 0)).toLocaleString()} pts</span>
+                <button type="button" onClick={toggleScoreMode} title="Click to switch point type" className="tw-student-leader-points" style={{ background: "transparent", border: "none", cursor: "pointer", font: "inherit", color: "inherit", padding: 0 }}>{pts(row)} pts</button>
               </div>;
             })}</div>)}
           </div>

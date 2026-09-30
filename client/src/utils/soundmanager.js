@@ -16,32 +16,43 @@ class SoundManager {
     this.currentBgm = "";
     this.muted = false;
 
-    this.sounds = {
-      lobby: new Audio(lobbyMusic),
-      playing: new Audio(playingMusic),
-      correct: new Audio(correctSound),
-      wrong: new Audio(wrongSound),
+    // Long-run free: keep only URLs here. Audio elements are created lazily
+    // on first user gesture (unlock/play/startBGM), so landing/builder pages
+    // never download 3.3MB of MP3 or pay decode cost. preload="none" until used.
+    this.tracks = {
+      lobby: lobbyMusic,
+      playing: playingMusic,
+      correct: correctSound,
+      wrong: wrongSound,
     };
-
-    this.sounds.lobby.loop = true;
-    this.sounds.playing.loop = true;
-
-    this.sounds.lobby.volume = 0.35;
-    this.sounds.playing.volume = 0.32;
-    this.sounds.correct.volume = 0.95;
-    this.sounds.wrong.volume = 0.95;
-
-    Object.values(this.sounds).forEach((audio) => {
-      audio.preload = "auto";
-    });
+    this.sounds = {};
 
     try {
       this.muted = localStorage.getItem(MUTE_KEY) === "1";
     } catch {
       this.muted = false;
     }
+  }
 
-    this.applyMuteState();
+  ensure(track) {
+    let audio = this.sounds[track];
+    if (!audio) {
+      audio = new Audio(this.tracks[track]);
+      audio.preload = "none";
+      if (track === "lobby" || track === "playing") {
+        audio.loop = true;
+        audio.volume = track === "lobby" ? 0.35 : 0.32;
+      } else {
+        audio.volume = 0.95;
+      }
+      audio.muted = this.muted;
+      this.sounds[track] = audio;
+    }
+    return audio;
+  }
+
+  ensureAll() {
+    return Object.keys(this.tracks).map((track) => this.ensure(track));
   }
 
   applyMuteState() {
@@ -76,7 +87,7 @@ class SoundManager {
     try {
       // Start every media element during the same user-activation window. Awaiting
       // each one sequentially can exhaust the browser gesture before BGM is reached.
-      const entries = Object.values(this.sounds).map((audio) => {
+      const entries = this.ensureAll().map((audio) => {
         const prevMuted = audio.muted;
         audio.muted = true;
         audio.currentTime = 0;
@@ -99,9 +110,9 @@ class SoundManager {
   }
 
   async play(sound) {
-    const audio = this.sounds[sound];
-    if (!audio) return 0;
+    if (!this.tracks[sound]) return 0;
     if (this.muted) return 0;
+    const audio = this.ensure(sound);
 
     try {
       await this.unlock();
@@ -150,23 +161,23 @@ class SoundManager {
   }
 
   pauseBackgroundTracks() {
-    [this.sounds.lobby, this.sounds.playing].forEach((audio) => {
+    for (const track of ["lobby", "playing"]) {
+      const audio = this.sounds[track];
+      if (!audio) continue;
       audio.pause();
       audio.currentTime = 0;
-    });
+    }
   }
 
   async startBGM(mode = "playing") {
     const nextKey = mode === "lobby" ? "lobby" : "playing";
-    const bg = this.sounds[nextKey];
-    if (!bg) return;
-
     if (this.currentBgm !== nextKey) {
       this.pauseBackgroundTracks();
       this.currentBgm = nextKey;
     }
 
     if (this.muted) return;
+    const bg = this.ensure(nextKey);
 
     try {
       await this.unlock();

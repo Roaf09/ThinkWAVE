@@ -5,23 +5,37 @@ import {
   loadCrosswordGridState,
   validatePathSpellsWord,
   normalizeCrosswordWord,
+  hashSeed,
+  createSeededRandom,
 } from "./crossword.js";
 
-// ThinkBOT personas: strong / average / weak students. Fresh randomness every
-// run — each bot samples a plausible answer per question, then earns whatever
-// the REAL scorer awards (no hardcoded bot0-full / bot1-half / bot2-zero).
+// ThinkBOT personas: strong / average / weak students. Answers are
+// DETERMINISTIC per (session, question, bot) so the host leaderboard and
+// analytics always agree and never change between visits — each bot still
+// samples a plausible answer at its skill level, then earns whatever the
+// REAL scorer awards (no hardcoded bot0-full / bot1-half / bot2-zero).
 export const BOT_SKILLS = [
   { hitRate: 0.9 },
   { hitRate: 0.6 },
   { hitRate: 0.3 },
 ];
 
+// Stable seed shared by the host demo and analytics demo so both sides
+// sample identical bot answers for the same session + question + bot.
+export function demoBotSeed(sessionId, questionKey, botIndex, purpose = "answer") {
+  return hashSeed(`tw-demo|${sessionId ?? ""}|${questionKey ?? ""}|${botIndex ?? ""}|${purpose}`);
+}
+
+export function createBotRng(...parts) {
+  return createSeededRandom(hashSeed(parts.join("|")));
+}
+
 const norm = (value) => String(value ?? "").trim().toLowerCase();
 
-function shuffle(list) {
+function shuffle(list, rng = Math.random) {
   const next = [...list];
   for (let i = next.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [next[i], next[j]] = [next[j], next[i]];
   }
   return next;
@@ -85,28 +99,31 @@ function findWordPath(grid, gridSize, word) {
   return null;
 }
 
-function wrongTextSample(rightText) {
+function wrongTextSample(rightText, rng = Math.random) {
   const clean = String(rightText || "").trim();
   if (!clean) return "Sample response";
   const chars = [...clean];
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const next = shuffle(chars).join("");
+    const next = shuffle(chars, rng).join("");
     if (norm(next) && norm(next) !== norm(clean)) return next;
   }
   return `${clean}?`;
 }
 
-function randomLetters(length) {
+function randomLetters(length, rng = Math.random) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const size = Math.max(1, Number(length) || 3);
-  return Array.from({ length: size }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  return Array.from({ length: size }, () => alphabet[Math.floor(rng() * alphabet.length)]).join("");
 }
 
 // Sample a student-like answer for one bot. Returns the answer payload plus
 // the selected option indexes (MCQ/TRUE_FALSE) for live choice-count dots.
-export function sampleBotAnswer({ templateType, config = {}, correct = {}, skill = 0.6 }) {
+// Pass a seeded rng (see demoBotSeed/createBotRng) for stable demos;
+// defaults to Math.random for one-off live flavour.
+export function sampleBotAnswer({ templateType, config = {}, correct = {}, skill = 0.6, rng = Math.random }) {
   const tt = normalizeTemplateType(templateType);
-  const hit = (rate = skill) => Math.random() < rate;
+  const rand = typeof rng === "function" ? rng : Math.random;
+  const hit = (rate = skill) => rand() < rate;
 
   if (tt === "MCQ") {
     const options = resolveOptions(config);
@@ -114,9 +131,9 @@ export function sampleBotAnswer({ templateType, config = {}, correct = {}, skill
     const multi = isTwoAnswerMcq(config, goodIds);
     const slots = multi ? 2 : 1;
     const picks = goodIds.filter(() => hit());
-    const wrongPool = shuffle(options.map((option) => option.id).filter((id) => !goodIds.includes(id)));
+    const wrongPool = shuffle(options.map((option) => option.id).filter((id) => !goodIds.includes(id)), rand);
     while (picks.length < slots && wrongPool.length) picks.push(wrongPool.pop());
-    const chosen = shuffle(picks).slice(0, Math.max(1, slots));
+    const chosen = shuffle(picks, rand).slice(0, Math.max(1, slots));
     const selectedIndexes = chosen
       .map((id) => options.findIndex((option) => option.id === id))
       .filter((index) => index >= 0);
@@ -135,8 +152,8 @@ export function sampleBotAnswer({ templateType, config = {}, correct = {}, skill
     const rightText = correct?.text || (Array.isArray(correct?.answers) ? correct.answers[0] : "") || config?.target || config?.answer || "";
     if (hit()) return { answer: { text: rightText }, selectedIndexes: [] };
     const wrong = tt === "GUESS_WORD_4PICS" && rightText
-      ? randomLetters(String(rightText).trim().length)
-      : wrongTextSample(rightText);
+      ? randomLetters(String(rightText).trim().length, rand)
+      : wrongTextSample(rightText, rand);
     return { answer: { text: wrong }, selectedIndexes: [] };
   }
 
@@ -147,7 +164,7 @@ export function sampleBotAnswer({ templateType, config = {}, correct = {}, skill
       const aIndex = Number(pair?.aIndex);
       const bIndex = Number(pair?.bIndex);
       if (hit() || colBLength <= 1) return { aIndex, bIndex };
-      let wrong = Math.floor(Math.random() * colBLength);
+      let wrong = Math.floor(rand() * colBLength);
       if (wrong === bIndex) wrong = (wrong + 1) % colBLength;
       return { aIndex, bIndex: wrong };
     });

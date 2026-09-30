@@ -148,6 +148,7 @@ const prevQuizStatusRef = useRef(null);
     saveSettings,
     saveTitle,
     _doSave,
+    autosaveQuestions,
     requestSave,
     save,
     publish,
@@ -205,6 +206,7 @@ const prevQuizStatusRef = useRef(null);
     settings,
     isSaved,
     modal,
+    quizCreatedAt: quiz?.created_at,
     editVersionRef,
     setQuestions,
     setQIndex,
@@ -212,7 +214,7 @@ const prevQuizStatusRef = useRef(null);
     setSettings,
     setIsSaved,
     setModal,
-    doServerSave: () => _doSave(),
+    doServerSave: () => autosaveQuestions(),
   });
 
   const {
@@ -305,7 +307,7 @@ const prevQuizStatusRef = useRef(null);
   }
 
   if (!quiz || !settings) {
-    return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
+    return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}><TwLogoLoader minHeight="60vh" /></div>;
   }
 
   const {
@@ -420,6 +422,8 @@ const prevQuizStatusRef = useRef(null);
           builderActionBorder={builderActionBorder}
           builderActionFace={builderActionFace}
           builderTemplateAccent={builderTemplateAccent}
+          currentQ={currentQ}
+          updateQ={updateQ}
         />
 
         <BuilderWorkspace

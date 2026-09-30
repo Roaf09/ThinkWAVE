@@ -11,6 +11,7 @@ import { api, setAuthToken } from "../lib/api";
 import { setRole, setToken } from "../lib/auth";
 import { consumeLastRoute } from "../lib/lastRoute";
 import { TwIcon } from "../components/TwUI";
+import OAuthButtons from "../components/OAuthButtons";
 
 // Auth pilot: colors via @theme tokens + `dark:` variant (see styles/tailwind.css).
 // Legacy `tw-auth-*` hooks stay for animations only. `useColors` is gone here —
@@ -192,6 +193,12 @@ export default function Login({ onLoginSuccess }) {
               {loading ? "Logging in…" : isAdminLogin ? "Login as Admin" : "Login as Teacher"}
             </button>
           </form>
+
+          {!isAdminLogin && (
+            <div className="mt-5">
+              <OAuthButtons mode="login" />
+            </div>
+          )}
 
           <p className="text-center text-[13px] m-[20px_0_0] text-auth-muted dark:text-auth-muted-dark">
             {isAdminLogin ? (

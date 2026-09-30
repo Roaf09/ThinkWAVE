@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
+import { downloadExportJob } from "../../lib/exportJobs";
 import { makeSocket } from "../../lib/socket";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { templateLabel, templateTone } from "../../lib/templatePalette";
@@ -14,7 +15,7 @@ import { TeacherPressButton } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { useIsMobileViewport } from "./tabs/teacherTabShared";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
-import { BOT_SKILLS, sampleBotAnswer, scoreBotAnswer } from "../../lib/tutorialBots";
+import { BOT_SKILLS, sampleBotAnswer, scoreBotAnswer, demoBotSeed, createBotRng } from "../../lib/tutorialBots";
 import { readTutorialState, writeTutorialState } from "../../lib/tutorialState";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { manilaDateTime } from "../../lib/dateFormat";
@@ -112,7 +113,7 @@ export default function Analytics({ guestMode = false }) {
                 sourceQuestions = stateResponse?.data?.questions || sourceQuestions;
               } catch { /* keep the analytics payload if session state is unavailable */ }
             }
-            analyticsData = buildTutorialDemoAnalytics(analyticsData, sourceQuestions);
+            analyticsData = buildTutorialDemoAnalytics(analyticsData, sourceQuestions, sessionId);
             tabs = buildTutorialDemoTabs(analyticsResponse.data?.tabMonitoring);
           } else {
             tabs = Array.isArray(analyticsData?.tabMonitoring) ? analyticsData.tabMonitoring : [];
@@ -177,21 +178,21 @@ export default function Analytics({ guestMode = false }) {
   const showAdvanced = true;
   const scores = useMemo(() => buildScores(analytics, showAdvanced), [analytics, showAdvanced]);
   const exportAllowed = advancedPlan && !guestMode;
-  const exportBase = assigned ? `/classes/${classId}/async-results/${quizId}/export` : `/analytics/sessions/${sessionId}/export`;
 
   async function downloadExport(format) {
     setExporting(format);
     try {
-      const response = await api.get(`${exportBase}/${format}`, { responseType: "blob" });
-      const type = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-      const url = URL.createObjectURL(new Blob([response.data], { type }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${guestMode ? "guest-session" : assigned ? "assigned-session" : "session"}-${sessionId || quizId}.${format}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadExportJob({
+        kind: assigned ? "ASYNC" : "SESSION",
+        format,
+        sessionId,
+        classId,
+        quizId,
+        fileName: `${guestMode ? "guest-session" : assigned ? "assigned-session" : "session"}-${sessionId || quizId}.${format}`,
+        onStatus: (phase) => setExporting(`${format}:${phase}`),
+      });
     } catch (downloadError) {
-      setError(downloadError?.response?.data?.message || "Unable to export analytics.");
+      setError(downloadError?.response?.data?.message || downloadError?.message || "Unable to export analytics.");
     } finally { setExporting(""); }
   }
 
@@ -218,8 +219,8 @@ export default function Analytics({ guestMode = false }) {
           </div>
           {exportAllowed && <div className="tw-analytics-export-row flex gap-[8px] flex-wrap">
             {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn tw-analytics-back-press" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
-            <button type="button" className="tw-analytics-export-plain tw-export-pdf" aria-label="Export PDF" title="Export PDF" disabled={!!exporting} onClick={() => downloadExport("pdf")}><TwIcon name="pdf" size={24} /><span>{exporting === "pdf" ? "Exporting…" : "PDF"}</span></button>
-            <button type="button" className="tw-analytics-export-plain tw-export-xlsx" aria-label="Export Excel" title="Export Excel" disabled={!!exporting} onClick={() => downloadExport("xlsx")}><TwIcon name="xlsx" size={24} /><span>{exporting === "xlsx" ? "Exporting…" : "XLSX"}</span></button>
+            <button type="button" className="tw-analytics-export-plain tw-export-pdf" aria-label="Export PDF" title={exporting.startsWith("pdf") ? "Preparing export…" : "Export PDF"} disabled={!!exporting} onClick={() => downloadExport("pdf")}><TwIcon name="pdf" size={24} /><span>{exporting.startsWith("pdf") ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "PDF"}</span></button>
+            <button type="button" className="tw-analytics-export-plain tw-export-xlsx" aria-label="Export Excel" title={exporting.startsWith("xlsx") ? "Preparing export…" : "Export Excel"} disabled={!!exporting} onClick={() => downloadExport("xlsx")}><TwIcon name="xlsx" size={24} /><span>{exporting.startsWith("xlsx") ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "XLSX"}</span></button>
           </div>}
         </div>
       </section>
@@ -231,7 +232,7 @@ export default function Analytics({ guestMode = false }) {
           <h3 className="m-0 font-[950] flex items-center gap-[9px]" style={{ color: C.text }}><TwIcon name="trophy" size={21} /> Performance Overview</h3>
           <ParticipantBadges analytics={analytics} assigned={assigned} guestMode={guestMode} C={C} tone={tone} />
         </div>
-        {loading ? <TwLogoLoader minHeight="24vh" /> : showAdvanced ? (
+        {loading ? <TwLogoLoader minHeight="50vh" /> : showAdvanced ? (
           <div className="tw-analytics-advanced-layout">
             <div className={`tw-analytics-panel-wrap${mobileResultsView === "students" ? " is-mobile-visible" : ""}`}>
               <Scoreboard C={C} scores={scores} tone={tone} analytics={analytics || {}} tabMonitoring={tabMonitoring} expandedStudentId={expandedStudentId} setExpandedStudentId={setExpandedStudentId} />
@@ -293,6 +294,20 @@ function ParticipantBadges({ analytics, assigned, guestMode, C, tone }) {
   </div>;
 }
 
+function TabShotBadge({ C, tabOutCount, shotCount }) {
+  const [showShots, setShowShots] = useState(false);
+  const shownCount = showShots ? shotCount : tabOutCount;
+  const shownLabel = showShots ? `screenshot${shotCount === 1 ? "" : "s"}` : `tab out${tabOutCount === 1 ? "" : "s"}`;
+  const shownStyle = showShots
+    ? { color: "#38bdf8", borderColor: "#38bdf8", background: "transparent" }
+    : { color: tabOutCount > 0 ? C.redFg : C.muted, borderColor: tabOutCount > 0 ? C.redBorder : C.border, background: tabOutCount > 0 ? C.redBg : C.cardBg };
+  function toggle(event) {
+    event.stopPropagation();
+    setShowShots((v) => !v);
+  }
+  return <span role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); } }} title={showShots ? "Click to show tab-out count" : "Click to show screenshot count"} className="tw-analytics-tab-out-badge" style={{ ...pill(C), ...shownStyle, cursor: "pointer" }}>{shownCount} {shownLabel}</span>;
+}
+
 function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedStudentId, setExpandedStudentId, basic = false }) {
   if (!scores.length) return <div style={emptyCard(C)}>No scores have been submitted yet.</div>;
   const isGroup = analytics?.session?.join_mode === "GROUP" && Array.isArray(analytics?.groups);
@@ -300,7 +315,6 @@ function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedSt
   const visibleScores = !basic && expandedStudentId !== null
     ? scores.map((score, index) => ({ score, index })).filter(({ score }) => sameKey(score.key, expandedStudentId))
     : scores.map((score, index) => ({ score, index }));
-  const statusColor = (label) => label === "Online" ? "#22c55e" : label === "Kicked" ? "#ef4444" : label === "Offline" ? "#f59e0b" : "#94a3b8";
   return <div className={`tw-analytics-scoreboard${!basic && expandedStudentId !== null ? " has-expanded-student" : ""}`} data-tutorial="analytics-students" style={{ display: "grid", gap: 10 }}>
     {visibleScores.map(({ score, index }) => {
       const expanded = !basic && sameKey(expandedStudentId, score.key);
@@ -310,16 +324,17 @@ function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedSt
       const tabOutCount = isGroup
         ? (tabMonitoring || []).filter((row) => memberIds.includes(Number(row.participant_id))).reduce((sum, row) => sum + Number(row.tab_out_count || 0), 0)
         : Number(((tabMonitoring || []).find((row) => Number(row.participant_id) === Number(score.participant_id))?.tab_out_count) ?? student?.tab_out_count ?? 0);
-      const presenceLabel = isGroup ? group?.presence_status : presenceStatus(student).label;
-      const presenceColor = isGroup ? statusColor(presenceLabel) : presenceStatus(student).color;
+      const shotCount = isGroup
+        ? (tabMonitoring || []).filter((row) => memberIds.includes(Number(row.participant_id))).reduce((sum, row) => sum + Number(row.screenshot_count || 0), 0)
+        : Number(((tabMonitoring || []).find((row) => Number(row.participant_id) === Number(score.participant_id))?.screenshot_count) ?? 0);
       const detailStudent = isGroup ? { responses: group?.responses || [] } : student;
       return <article key={score.key} className={`tw-analytics-student-card${expanded ? " is-expanded" : ""}`} style={{ borderColor: index === 0 ? tone.border : C.border, background: index === 0 ? tone.softBg : C.cardBg2, color: C.text }}>
         <button type="button" className="tw-analytics-student-button" disabled={basic} onClick={() => !basic && setExpandedStudentId(expanded ? null : score.key)} aria-expanded={expanded}>
-          <span className="tw-analytics-student-identity"><RankIcon rank={index + 1} /><span className="tw-analytics-student-name">{score.label}</span>{isGroup ? <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>{score.member_count} member{Number(score.member_count) === 1 ? "" : "s"}</span> : student?.participant_type === "GUEST" && <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>Guest</span>}{(() => { return presenceLabel !== "Online" ? <span title={presenceLabel} style={{ ...pill(C), padding: "3px 7px", fontSize: 10, color: presenceColor, borderColor: presenceColor }}>{presenceLabel}</span> : null; })()}</span>
-          <span className="tw-analytics-tab-out-badge" style={{ ...pill(C), color: tabOutCount > 0 ? C.redFg : C.muted, borderColor: tabOutCount > 0 ? C.redBorder : C.border, background: tabOutCount > 0 ? C.redBg : C.cardBg }}>{tabOutCount} tab out</span>
+          <span className="tw-analytics-student-identity"><RankIcon rank={index + 1} /><span className="tw-analytics-student-name">{score.label}</span>{isGroup ? <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>{score.member_count} member{Number(score.member_count) === 1 ? "" : "s"}</span> : student?.participant_type === "GUEST" && <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>Guest</span>}</span>
+          <TabShotBadge C={C} tabOutCount={tabOutCount} shotCount={shotCount} />
           <span className="tw-analytics-student-points" style={{ color: tone.accent, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>{score.total_points} pts</span> {!basic && <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={16} />}</span>
         </button>
-        {!basic && detailStudent && <div className={`tw-student-analytics-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div>{isGroup && group?.members?.length ? <div className="flex flex-wrap gap-[8px]" style={{ marginBottom: 10 }}>{group.members.map((m) => <span key={m.participant_id} style={{ ...pill(C), padding: "8px 11px" }} title={m.presence_status}><span className="w-[8px] h-[8px] rounded-[99px]" style={{ background: statusColor(m.presence_status), boxShadow: `0 0 0 4px ${statusColor(m.presence_status)}1f` }} />{`${m.first_name || ""} ${m.last_name || ""}`.trim() || "Member"}</span>)}</div> : null}<StudentQuestionAnalytics C={C} tone={tone} templateType={analytics?.session?.template_type} student={detailStudent} questions={analytics.questions || []} /></div></div>}
+        {!basic && detailStudent && <div className={`tw-student-analytics-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div>{isGroup && group?.members?.length ? <div className="flex flex-wrap gap-[8px]" style={{ marginBottom: 10 }}>{group.members.map((m) => <span key={m.participant_id} style={{ ...pill(C), padding: "8px 11px" }}>{`${m.first_name || ""} ${m.last_name || ""}`.trim() || "Member"}</span>)}</div> : null}<StudentQuestionAnalytics C={C} tone={tone} templateType={analytics?.session?.template_type} student={detailStudent} questions={analytics.questions || []} /></div></div>}
       </article>;
     })}
   </div>;
@@ -557,7 +572,7 @@ function selectedChoiceIndexes(answer, config) {
 function normalizeWord(value) { return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function foundWordSet(answer) { const rows = Array.isArray(answer?.words) ? answer.words : Array.isArray(answer?.foundEntries) ? answer.foundEntries : []; return new Set(rows.map((row) => normalizeWord(typeof row === "string" ? row : row?.text || row?.word)).filter(Boolean)); }
 
-function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
+function buildTutorialDemoAnalytics(base, sourceQuestions = [], demoSessionId = null) {
   const session = { ...(base?.session || {}) };
   const tt = normalizeTemplateType(session.template_type);
   const rawQuestions = sourceQuestions.length ? sourceQuestions : (base?.questions || []);
@@ -565,13 +580,19 @@ function buildTutorialDemoAnalytics(base, sourceQuestions = []) {
   const realQuestionsById = new Map(realBaseQuestions.map((q) => [Number(q?.question_id ?? q?.id), q]));
   // Each bot samples a student-like answer at its skill level, scored by the
   // REAL scorer — no hardcoded bot0-full / bot1-half / bot2-zero split.
+  // Seeded per (session, question, bot) so host + analytics agree and every
+  // revisit renders identical points.
   const basePointsDefault = Number(session.points_per_question ?? 1);
-  const botPlays = BOT_SKILLS.map((bot) => rawQuestions.map((source) => {
+  const seedSession = demoSessionId ?? session?.id ?? session?.session_id ?? "";
+  const botPlays = BOT_SKILLS.map((bot, botIndex) => rawQuestions.map((source, questionIndex) => {
     const config = parseMaybeJson(source?.config_json) || {};
     const correct = parseMaybeJson(source?.correct_json) || {};
+    const questionKey = String(source?.question_id ?? source?.id ?? questionIndex);
     const timeLimitMs = Math.max(1, Number(config?.timeLimitSec ?? session.time_limit_sec ?? 30)) * 1000;
-    const elapsedMs = timeLimitMs * (0.15 + Math.random() * 0.7);
-    const { answer, selectedIndexes } = sampleBotAnswer({ templateType: session.template_type, config, correct, skill: bot?.hitRate ?? 0.6 });
+    const elapsedRng = createBotRng(demoBotSeed(seedSession, questionKey, botIndex, "elapsed"));
+    const elapsedMs = timeLimitMs * (0.15 + elapsedRng() * 0.7);
+    const answerRng = createBotRng(demoBotSeed(seedSession, questionKey, botIndex, "answer"));
+    const { answer, selectedIndexes } = sampleBotAnswer({ templateType: session.template_type, config, correct, skill: bot?.hitRate ?? 0.6, rng: answerRng });
     const result = scoreBotAnswer({ templateType: session.template_type, config, correct, answer, basePoints: Number(config?.points ?? basePointsDefault), elapsedMs, timeLimitMs });
     const earned = result.timeExpired ? 0 : Number(result.pointsAwarded || 0);
     return { answer, selectedIndexes, result, elapsedMs, earned, competitive: Number(result.competitivePoints || 0) };
@@ -796,13 +817,6 @@ function ExpandableScoreCard({ C, tone, label, value, names, expanded, shrunk, o
     </div>
   </button>;
 }
-function presenceStatus(student = {}) {
-  if (student?.kicked_at) return { label: "Kicked", color: "#ef4444" };
-  if (Number(student?.response_count || 0) === 0) return { label: "Never answered", color: "#94a3b8" };
-  if (Number(student?.connected) === 1) return { label: "Online", color: "#22c55e" };
-  return { label: "Offline", color: "#f59e0b" };
-}
-function StudentChip({ name, C, student }) {
-  const status = presenceStatus(student);
-  return <span style={{ ...pill(C), padding: "8px 11px" }} title={status.label}><span className="w-[8px] h-[8px] rounded-[99px]" style={{ background: status.color, boxShadow: `0 0 0 4px ${status.color}1f` }} />{name || "Student"}</span>;
+function StudentChip({ name, C }) {
+  return <span style={{ ...pill(C), padding: "8px 11px" }}>{name || "Student"}</span>;
 }

@@ -83,7 +83,8 @@
 .tw-starry-page>.tw-star-field{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:var(--star-fade,1);transition:opacity .55s ease}
 .tw-starry-page>.tw-star-field i{position:absolute;display:block;border-radius:50%;background:var(--tw-on-brand);box-shadow:0 0 4px rgba(255,255,255,.92),0 0 10px rgba(112,166,255,.3);opacity:.2;will-change:transform,opacity;animation:twStarDepth var(--duration) ease-in-out var(--delay) infinite alternate}
 .tw-starry-page>*:not(.tw-star-field){position:relative;z-index:1}
-@keyframes twStarDepth{0%{opacity:.08;transform:translate3d(0,var(--parallax),0) scale(.65)}35%{opacity:.96;transform:translate3d(calc(var(--drift-x)*.35),calc(var(--parallax) + var(--drift-y)*.25),0) scale(1.08)}70%{opacity:.22;transform:translate3d(calc(var(--drift-x)*.7),calc(var(--parallax) + var(--drift-y)*.65),0) scale(.82)}100%{opacity:.72;transform:translate3d(var(--drift-x),calc(var(--parallax) + var(--drift-y)),0) scale(1)}}
+@keyframes twStarDepth{0%{opacity:.08;transform:translate3d(0,calc(var(--scroll-y,0px)*var(--depth-factor,0)),0) scale(.65)}35%{opacity:.96;transform:translate3d(calc(var(--drift-x)*.35),calc(var(--scroll-y,0px)*var(--depth-factor,0) + var(--drift-y)*.25),0) scale(1.08)}70%{opacity:.22;transform:translate3d(calc(var(--drift-x)*.7),calc(var(--scroll-y,0px)*var(--depth-factor,0) + var(--drift-y)*.65),0) scale(.82)}100%{opacity:.72;transform:translate3d(var(--drift-x),calc(var(--scroll-y,0px)*var(--depth-factor,0) + var(--drift-y)),0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.tw-star-field i,.tw-starry-page>.tw-star-field i{animation:none!important}}
 /* Portalled overlays stay centred regardless of page height, route animation, or star layers. */
 .tw-modal-backdrop,.tw-start-modal,.tw-template-preview-backdrop,.tw-plan-success-backdrop{position:fixed!important}
 .tw-modal-backdrop{z-index:5000!important}

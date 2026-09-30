@@ -32,7 +32,7 @@ export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, onHo
         <div className={`tw-session-closed-meta ${expanded ? "is-hidden" : ""} mt-[8px]`}><span className="inline-flex px-[10px] py-[5px] rounded-[999px] text-[12px] font-[900]" style={{ background: tone.softBg, color: tone.accent, border: `1px solid ${tone.border}` }}>{templateLabel(quiz.template_type)} · {quiz.category}</span></div>
         <div className="flex gap-[8px] flex-wrap mt-[10px]"><Badge c={c} label={inSession ? "Active session" : isPublished ? "Ready" : "Draft"} tone={inSession || isPublished ? "green" : "yellow"} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div>
       </div>
-      <TeacherPressButton tone="blue" className={`tw-session-toggle${expanded ? " is-selected" : ""}`} onClick={onToggle}>{expanded ? "Close" : "Open"}</TeacherPressButton>
+      <TeacherPressButton tone="blue" className={`tw-session-toggle${expanded ? " is-selected" : ""}`} style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={onToggle}>{expanded ? "Close" : "Open"}</TeacherPressButton>
     </div>
 
     <div className={`collapsible-content ${expanded ? "open" : ""}`} style={{ marginTop: expanded ? 16 : 0 }}><div className="collapsible-inner"><div className="grid gap-[14px]">

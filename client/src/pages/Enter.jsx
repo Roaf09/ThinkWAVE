@@ -15,6 +15,10 @@ import { setRole, setToken } from "../lib/auth";
 import { consumeLastRoute } from "../lib/lastRoute";
 import { useColors } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
+import OAuthButtons from "../components/OAuthButtons";
+import OAuthMissingModal from "../components/OAuthMissingModal";
+import OAuthEmailModal from "../components/OAuthEmailModal";
+import { oauthErrorText } from "../lib/oauthClient";
 
 function passwordChecks(p) {
   return {
@@ -143,6 +147,14 @@ function SignupForm({ c, onSwitchLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
+  // Bumps every time a social button is tapped without a role pick, so the
+  // guard message remounts and its breathe animation replays per tap.
+  const [guardPulse, setGuardPulse] = useState(0);
+  const ROLE_GUARD_MESSAGE = "Choose whether this is a student or teacher account.";
+  function requireRolePick() {
+    setError(ROLE_GUARD_MESSAGE);
+    setGuardPulse((v) => v + 1);
+  }
   const patch = (next) => setForm((prev) => ({ ...prev, ...next }));
   const checks = passwordChecks(form.password);
   const isStrong = Object.values(checks).every(Boolean);
@@ -229,9 +241,25 @@ function SignupForm({ c, onSwitchLogin }) {
           </button>
         ))}
       </div>
-      {error && <p role="alert" className="tw-enter-msg">{error}</p>}
+      {error && (
+        <p
+          key={guardPulse}
+          role="alert"
+          className={error === ROLE_GUARD_MESSAGE ? "tw-enter-guard-pulse" : "tw-enter-msg"}
+        >
+          {error}
+        </p>
+      )}
       {success && <p className="tw-enter-success">{success}</p>}
       <button type="submit" className="tw-enter-role is-submit is-blue" disabled={busy}>{busy ? "Creating…" : "Create Account"}</button>
+      <div className="tw-enter-divider"><span>or continue with</span></div>
+      <OAuthButtons
+        variant="enter"
+        layout="icons"
+        role={role || ""}
+        onRequireRole={requireRolePick}
+        itemStyle={{ borderColor: c.inputBorder, color: c.text }}
+      />
       {showPwHelp && createPortal(
         <div className="tw-pw-help-backdrop tw-enter-pw-help" onClick={() => setShowPwHelp(false)}>
           <div className="tw-pw-help-modal" style={{ background: "#fff", border: `1px solid ${c.inputBorder}`, color: c.text }} onClick={(e) => e.stopPropagation()}>
@@ -410,7 +438,7 @@ function EnterForgotForm({ c, onDone }) {
 const CODE_STARS = Array.from({ length: 92 }, (_, i) => {
   const rand = (n) => { const x = Math.sin((i + 1) * n) * 43758.5453; return x - Math.floor(x); };
   return {
-    id: i, x: rand(12.9898) * 100, y: rand(78.233) * 100, size: 0.7 + rand(31.41) * 2.25,
+    id: i, x: rand(12.9898) * 100, y: rand(78.233) * 100, size: 1.0 + rand(31.41) * 3.4,
     delay: -rand(19.19) * 12, duration: 4.5 + rand(47.77) * 9,
     driftX: (rand(8.13) - 0.5) * 70, driftY: 18 + rand(22.71) * 85,
     depth: 0.18 + rand(61.3) * 0.95,
@@ -432,9 +460,8 @@ export default function Enter() {
   const [sp] = useSearchParams();
   // After OTP verification we land back here so the user picks
   // student / teacher / admin themselves (see VerifyOtp.jsx).
-  const justVerified = loc.state?.justVerified || sp.get("verified") || "";
+  // No success banner by design — the user just continues to log in.
   const verifiedEmail = loc.state?.email || "";
-  const verifiedRoleLabel = justVerified === "student" ? "Student" : justVerified === "teacher" ? "Teacher" : justVerified === "admin" ? "Admin" : "";
   const startMode = sp.get("mode") === "signup" ? "signup" : sp.get("mode") === "code" ? "code" : "login";
   const [mode, setMode] = useState(startMode);
   const [loginRole, setLoginRole] = useState(null);
@@ -503,6 +530,34 @@ export default function Enter() {
     setPhase("exit");
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => { setLoginRole(null); setPhase("enter"); }, 200);
+  }
+
+  // Social login outcomes land here (?oauth=...) so every message appears
+  // over the enter page, never on a bare callback URL. Kept in local state
+  // (read once on mount): closing it must NOT write the URL through the
+  // router, because App.jsx remounts this page on every search-string change
+  // — which replays the whole background slide animation. A silent
+  // history.replaceState strips the param with zero re-render, so the modal
+  // just vanishes. Nothing else is affected: the router never hears about
+  // it and no state resets.
+  const [oauthError, setOauthError] = useState(() => {
+    const code = sp.get("oauth") || "";
+    return ["cancelled", "invalid_state", "exchange_failed", "profile_failed", "misconfigured", "link_failed", "need_signup", "missing", "email"].includes(code)
+      ? code === "missing"
+        ? "need_signup"
+        : code
+      : "";
+  });
+  // Pending token for the email-completion modal (provider shared no address).
+  const [oauthEmailPending] = useState(() => sp.get("pending") || "");
+  function closeOauthMissing() {
+    setOauthError("");
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("oauth");
+      url.searchParams.delete("pending");
+      window.history.replaceState(null, "", `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams.toString()}` : ""}`);
+    } catch {}
   }
 
   async function continueJoin(event) {
@@ -596,12 +651,6 @@ export default function Enter() {
             )
           ) : (
             <>
-              {justVerified && verifiedRoleLabel && (
-                <div role="status" className="tw-enter-errbox" style={{ borderColor: "#22c55e", background: "#f0fdf4" }}>
-                  <div className="tw-enter-errbox-head"><span style={{ color: "#15803d" }}>Verified!</span></div>
-                  <p style={{ color: "#15803d" }}>Your {verifiedRoleLabel.toLowerCase()} account is verified. Choose how to log in below.</p>
-                </div>
-              )}
               <h1>Choose how you want to enter ThinkWAVE</h1>
               <p className="tw-enter-sub" style={{ color: c.textMuted }}>
                 New to ThinkWAVE? <button type="button" className="tw-enter-link" onClick={() => switchMode("signup")}>Create an account</button>
@@ -618,12 +667,19 @@ export default function Enter() {
                 </button>
               </div>
               <div className="tw-enter-divider"><span>or continue with</span></div>
-              <div className="tw-enter-guest">
-                <button type="button" className="tw-enter-guest-btn" style={{ borderColor: c.inputBorder, color: c.text }} onClick={() => nav("/guest")} aria-label="Continue as guest">
-                  <TwIcon name="user" size={24} />
-                </button>
-                <small style={{ color: c.textMuted }}>Guest</small>
-              </div>
+              <OAuthButtons
+                variant="enter"
+                mode="login"
+                itemStyle={{ borderColor: c.inputBorder, color: c.text }}
+                trailing={
+                  <span className="tw-enter-oauth-item" key="guest">
+                    <button type="button" className="tw-enter-guest-btn" style={{ borderColor: c.inputBorder, color: c.text }} onClick={() => nav("/guest")} aria-label="Continue as guest">
+                      <TwIcon name="user" size={24} />
+                    </button>
+                    <small style={{ color: c.textMuted }}>Guest</small>
+                  </span>
+                }
+              />
             </>
           )}
           </div>
@@ -638,6 +694,22 @@ export default function Enter() {
           </div>
           <div className="tw-enter-footcopy">© 2026 ThinkWAVE · All Rights Reserved.</div>
         </footer>
+      )}
+      {oauthError && oauthError !== "email" && (
+        <OAuthMissingModal
+          title={oauthError === "need_signup" ? "Account not found" : "Sign-in didn't finish"}
+          message={oauthError === "need_signup" ? "Please sign up first." : oauthErrorText(oauthError)}
+          showSignup={oauthError === "need_signup"}
+          onSignup={() => { applyMode("signup"); closeOauthMissing(); }}
+          onLogin={closeOauthMissing}
+        />
+      )}
+      {oauthError === "email" && oauthEmailPending && (
+        <OAuthEmailModal
+          pending={oauthEmailPending}
+          onClose={closeOauthMissing}
+          onSwitchSignup={() => { applyMode("signup"); closeOauthMissing(); }}
+        />
       )}
     </div>
   );

@@ -46,7 +46,7 @@ export function GameMcq({ options, mcqMode, answerMode, value, onChange, disable
           >
             <span className="choice-badge">{labels[i] || ""}</span>
             <span className="choice-content">
-              {o.image ? <img src={o.image} alt="" className="choice-img" /> : null}
+              {o.image ? <img src={o.image} alt="" className="choice-img" loading="lazy" decoding="async" /> : null}
               {(trimText(o.text) || !o.image) ? <span className="choice-text" style={{ fontSize: textLen > 90 ? 13 : textLen > 55 ? 14 : undefined }}>{trimText(o.text) || `Option ${labels[i] || i + 1}`}</span> : null}
             </span>
           </button>

@@ -55,11 +55,27 @@ export async function putTutorialState(req, res) {
   }
   const updatedAt = Number(req.body?.updatedAt) > 0 ? Number(req.body.updatedAt) : Date.now();
   await ensureTutorialStateTable();
+  // A completed/skip-all tour is sticky: a stale snapshot arriving late from
+  // another tab must never resurrect an unfinished tour over it. An explicit
+  // wipe (reset writes {} with no mainStarted flag) still goes through.
+  let nextJson = json;
+  try {
+    const [[existing]] = await pool.query(
+      `SELECT state_json FROM user_tutorial_state WHERE user_id=:uid`,
+      { uid: req.user.sub }
+    );
+    const prev = parseState(existing?.state_json);
+    if (prev.mainComplete && state.mainStarted && !state.mainComplete) {
+      nextJson = JSON.stringify({ ...state, mainStarted: true, mainComplete: true, mainStage: "complete" });
+    }
+  } catch {
+    // Dedupe lookup failed: fall through and store the incoming snapshot.
+  }
   await pool.query(
     `INSERT INTO user_tutorial_state(user_id, state_json, updated_at)
      VALUES(:uid, :json, :dt)
      ON DUPLICATE KEY UPDATE state_json=VALUES(state_json), updated_at=VALUES(updated_at)`,
-    { uid: req.user.sub, json, dt: new Date(updatedAt) }
+    { uid: req.user.sub, json: nextJson, dt: new Date(updatedAt) }
   );
   res.json({ ok: true });
 }

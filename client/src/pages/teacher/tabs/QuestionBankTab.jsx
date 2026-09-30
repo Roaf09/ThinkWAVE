@@ -144,13 +144,13 @@ export default function QuestionBankTab({ setBankLabel, tutorial }) {
 
   const currentHasItems = view === "quiz" ? quizBankItems.length > 0 : questions.length > 0;
 
-  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="60vh" /></div></div>;
 
   return (
     <>
       <div className="container grid gap-[18px]">
         <section>
-          <h2 className="mb-[4px]" style={{ color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
+          <h2 style={{ marginBottom: 4, color: c.text }}>{view === 'quiz' ? 'Quiz Bank' : 'Question Bank'}</h2>
         </section>
 
         <section className="tw-bank-switch-shell" style={card(c, { padding: 12 })}>
@@ -195,7 +195,7 @@ export default function QuestionBankTab({ setBankLabel, tutorial }) {
             ))}
           </div>
         ) : (
-          <div className="grid gap-[12px] justify-items-center">
+          <div className="grid gap-[12px] justify-items-center tw-bank-question-list">
             {questions.length === 0 ? <div className="w-full"><ThinkBotEmptyState c={c} title="No saved questions yet." /></div> : filteredQuestions.length === 0 ? <div className="w-full" style={card(c)}>No saved questions match your current filters.</div> : null}
             {filteredQuestions.map((q) => <QuestionCard key={q.id} question={q} onRemove={() => setModal({ type: 'deleteQuestion', question: q })} c={c} />)}
           </div>

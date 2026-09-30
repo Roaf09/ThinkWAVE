@@ -98,14 +98,14 @@ body.dark-mode .tw-thinkbot-tutorial{
   padding-right:12px!important;
 }
 
-/* Guess Word: smaller square 2×2 image set. */
+/* Guess Word: full-width 2×2 image set, same presence as modified MCQ. */
 .tw-guess-word-grid{
-  grid-template-columns:repeat(2,minmax(0,145px))!important;
-  width:min(100%,306px)!important;
-  gap:10px!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  width:100%!important;
+  gap:14px!important;
 }
 .tw-guess-word-image{
-  width:145px!important;
+  width:auto!important;
   max-width:100%;
   aspect-ratio:1/1!important;
 }
@@ -121,8 +121,8 @@ body.dark-mode .tw-thinkbot-tutorial{
 }
 .tw-guess-word-explanation .tw-correct-answer-explanation{margin-top:0!important}
 @media(max-width:620px){
-  .tw-guess-word-grid{width:min(100%,280px)!important;grid-template-columns:repeat(2,minmax(0,135px))!important}
-  .tw-guess-word-image{width:135px!important}
+  .tw-guess-word-grid{width:100%!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .tw-guess-word-image{width:auto!important}
   .tw-guess-word-answer-row{grid-template-columns:1fr!important}
   .tw-guess-word-explanation{grid-column:1}
 }

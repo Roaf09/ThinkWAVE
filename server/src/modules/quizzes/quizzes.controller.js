@@ -5,6 +5,7 @@
  */
 
 import { pool } from "../../db.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 import { normalizeTemplateType } from "./templates.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { normalizeQuizBackgroundKey, rememberQuizBackground } from "./quizBackground.runtime.js";
@@ -37,6 +38,7 @@ function reencodeJsonColumn(value) {
 }
 
 export async function listQuizzes(req, res) {
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
   const [rows] = await pool.query(
     `SELECT q.*,
        (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS question_count,
@@ -54,10 +56,10 @@ export async function listQuizzes(req, res) {
           FROM quiz_questions qq WHERE qq.quiz_id=q.id AND qq.deleted_at IS NULL) AS total_score
      FROM quizzes q
      WHERE q.teacher_id=:tid AND q.deleted_at IS NULL
-     ORDER BY q.id DESC`,
-    { tid: req.user.sub }
+     ORDER BY q.id DESC LIMIT :limit OFFSET :offset`,
+    { tid: req.user.sub, limit, offset }
   );
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
 export async function createQuiz(req, res) {
@@ -114,10 +116,9 @@ export async function upsertQuestions(req, res) {
   );
   if (!q.length) return res.status(404).json({ message: "Quiz not found" });
 
-  // Question points only ever take 1, 2, or 3. Coerce here (in addition to
-  // route validation) so crafted/legacy payloads with floats, zeros, or
-  // oversized values can never persist — MCQ fractions stay clean
-  // (0.5 / 1 / 1.5 per correct pick on 2-answer questions).
+  // Question points only ever take 1, 2, or 3 (integers). Coerce here (in
+  // addition to route validation) so crafted/legacy payloads can never
+  // persist outside that range.
   const coerceQuestionPoints = (value) => {
     const n = Math.round(Number(value));
     if (n === 2 || n === 3) return n;
@@ -355,6 +356,11 @@ export async function assignQuiz(req, res) {
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found." });
   if (!availableFrom || !availableUntil) return res.status(400).json({ message: "Start and end time are required." });
+  const fromTime = new Date(String(availableFrom).replace(" ", "T")).getTime();
+  const untilTime = new Date(String(availableUntil).replace(" ", "T")).getTime();
+  if (Number.isNaN(fromTime) || Number.isNaN(untilTime)) return res.status(400).json({ message: "Start and end time are not valid." });
+  if (untilTime <= fromTime) return res.status(400).json({ message: "End time must be after start time." });
+  if (untilTime - fromTime > 7 * 24 * 60 * 60 * 1000) return res.status(400).json({ message: "Assignments can be open for up to 1 week only." });
   const [[ownedClass]] = await pool.query(
     `SELECT id FROM classes WHERE id=:cid AND teacher_id=:tid AND deleted_at IS NULL LIMIT 1`,
     { cid: classId, tid: teacherId }
@@ -431,8 +437,21 @@ export async function softDeleteQuiz(req, res) {
 }
 
 export async function restoreQuiz(req, res) {
-  const where = req.user.role === "ADMIN" ? "id=:id" : "id=:id AND teacher_id=:tid";
-  await pool.query(`UPDATE quizzes SET deleted_at=NULL WHERE ${where}`, { id: req.params.id, tid: req.user.sub });
+  if (req.user.role === "ADMIN") {
+    // Institution fence: an admin may only restore quizzes owned by teachers
+    // of their own institution — never another school's content.
+    const [[admin]] = await pool.query(`SELECT institution_name FROM users WHERE id=:id AND role='ADMIN'`, { id: req.user.sub });
+    const inst = String(admin?.institution_name || "");
+    if (!inst) return res.status(403).json({ message: "No institution." });
+    await pool.query(
+      `UPDATE quizzes q JOIN users t ON t.id=q.teacher_id
+       SET q.deleted_at=NULL
+       WHERE q.id=:id AND t.institution_name=:inst AND t.deleted_at IS NULL`,
+      { id: req.params.id, inst }
+    );
+  } else {
+    await pool.query(`UPDATE quizzes SET deleted_at=NULL WHERE id=:id AND teacher_id=:tid`, { id: req.params.id, tid: req.user.sub });
+  }
   res.json({ ok: true });
 }
 

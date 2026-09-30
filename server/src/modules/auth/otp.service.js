@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../../db.js";
 import { sendMail, thinkwaveEmailTemplate } from "../../utils/mailer.js";
+import { enqueueMail } from "../../queue.js";
 import { env } from "../../env.js";
 
 const OTP_EXPIRY_MINUTES = 10;
@@ -46,9 +47,28 @@ function buildOtpEmail({ code, email, purpose = "ACCOUNT_VERIFICATION" }) {
   return { subject, text, html };
 }
 
+function hashOtpFast(code) {
+  // Long-run free: SHA-256 (~microseconds) instead of bcrypt (~80ms) per OTP.
+  // Peppered with JWT_SECRET so DB leak alone doesn't reveal codes.
+  // Stored as `sha256$<hex>`; old `$2b$` bcrypt rows still verify via fallback.
+  const pepper = env.JWT_SECRET || "thinkwave-dev-pepper";
+  return `sha256$${crypto.createHash("sha256").update(`${code}:${pepper}`).digest("hex")}`;
+}
+
+function timingSafeEqualHex(a, b) {
+  try {
+    const ba = Buffer.from(String(a), "hex");
+    const bb = Buffer.from(String(b), "hex");
+    if (ba.length !== bb.length) return false;
+    return crypto.timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+}
+
 export async function sendOtpForUser(userId, email, { purpose = "ACCOUNT_VERIFICATION" } = {}) {
   const code = randomOtp();
-  const codeHash = await bcrypt.hash(code, 10);
+  const codeHash = hashOtpFast(code);
 
   await pool.query(
     `INSERT INTO otp_codes(user_id, code_hash, expires_at)
@@ -57,14 +77,16 @@ export async function sendOtpForUser(userId, email, { purpose = "ACCOUNT_VERIFIC
   );
 
   const mail = buildOtpEmail({ code, email, purpose });
-  const delivery = await sendMail({ to: email, ...mail });
+  // Non-blocking: respond fast, send in background with retries.
+  // Single-service free queue (p-queue). Same sendMail logic, just deferred.
+  enqueueMail(() => sendMail({ to: email, ...mail }));
   if (env.NODE_ENV !== "production") {
     console.info(`[ThinkWAVE OTP:${purpose}] ${email}: ${code}`);
   }
   // Deliberately no `code` in the return value: every caller only needs
   // `delivery`, and returning the plaintext code invites a future
   // `res.json(otpResult)` that would hand codes to the network.
-  return { delivery: delivery || { sent: false, reason: "UNKNOWN" } };
+  return { delivery: { sent: true, queued: true } };
 }
 
 export async function verifyOtpCode(userId, code) {
@@ -88,7 +110,15 @@ export async function verifyOtpCode(userId, code) {
   if (!rows.length) return false;
 
   for (const otp of rows) {
-    if (await bcrypt.compare(submitted, otp.code_hash)) {
+    const stored = String(otp.code_hash || "");
+    let ok = false;
+    if (stored.startsWith("sha256$")) {
+      ok = timingSafeEqualHex(hashOtpFast(submitted).slice(7), stored.slice(7));
+    } else {
+      // Backward compat: old bcrypt rows from before fast-hash rollout.
+      if (await bcrypt.compare(submitted, stored)) ok = true;
+    }
+    if (ok) {
       // Verifying one code completes the verification challenge. Retire every
       // other outstanding code for this user so none can be reused afterward.
       await pool.query(

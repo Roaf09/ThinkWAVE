@@ -1,6 +1,20 @@
 import { useState } from "react";
 import { TwIcon } from "../../../components/TwUI";
 import { TeacherPressButton } from "../TeacherUI";
+import { clampQuestionPoints } from "./quizBuilderUtils";
+import { buildTimeOptions, formatTimeLimit } from "./QuestionEditor";
+
+const headerSelect = {
+  background: "#fff",
+  color: "#0f172a",
+  border: "1px solid #fff",
+  borderRadius: 8,
+  padding: "10px 12px",
+  fontSize: 14,
+  fontWeight: 900,
+  fontFamily: "inherit",
+  cursor: "pointer",
+};
 
 function RandomizeHelp({ text }) {
   const [open, setOpen] = useState(false);
@@ -65,7 +79,11 @@ export function BuilderTopBar({
   isSaving,
   publishLatched,
   publishDisabled,
+  currentQ,
+  updateQ,
 }) {
+  const timeValue = currentQ?.timeLimitSec ?? 30;
+  const pointsValue = clampQuestionPoints(currentQ?.points);
   return (
     <div style={isMobile ? { ...ui.topBar, flexWrap: "nowrap", gap: 8, padding: "10px 14px" } : ui.topBar} className={isMobile ? "tw-builder-mobile-topbar is-single-row" : undefined}>
       {isMobile ? (
@@ -117,6 +135,32 @@ export function BuilderTopBar({
       </div>
 
       <div className="flex gap-1 items-center flex-wrap justify-end">
+        <div data-tutorial="builder-meta-grid" className="flex gap-2 items-center flex-wrap" style={{ marginRight: 4 }}>
+          <label className="flex gap-1 items-center" title="Time limit for this question">
+            <span style={{ display: "inline-flex", color: "#fff" }}><TwIcon name="clock" size={26} /></span>
+            <select
+              value={timeValue}
+              disabled={!currentQ}
+              onChange={(e) => updateQ?.({ timeLimitSec: Number(e.target.value) })}
+              aria-label="Time limit"
+              style={headerSelect}
+            >
+              {buildTimeOptions(currentQ?.timeLimitSec).map((seconds) => <option key={seconds} value={seconds} style={{ color: "#0f172a" }}>{formatTimeLimit(seconds)}</option>)}
+            </select>
+          </label>
+          <label className="flex gap-1 items-center" title="Points for this question">
+            <span style={{ display: "inline-flex", color: "#fff" }}><TwIcon name="spark" size={26} /></span>
+            <select
+              value={pointsValue}
+              disabled={!currentQ}
+              onChange={(e) => updateQ?.({ points: Number(e.target.value) })}
+              aria-label="Question points"
+              style={headerSelect}
+            >
+              {[1, 2, 3].map((value) => <option key={value} value={value} style={{ color: "#0f172a" }}>{value} pt{value === 1 ? "" : "s"}</option>)}
+            </select>
+          </label>
+        </div>
         <div className="tw-builder-settings-anchor">
           <button className={`tw-builder-settings-flat tw-builder-bare-icon no-hover-bg${settingsOpen ? " is-active" : ""}`} title="Quiz settings" aria-label="Quiz settings" onClick={() => { const opening = !settingsOpen; if (opening && questionStripOpen) closeQuestionStrip(); setOverflowOpen(false); setOverflowTitleEditing(false); setQMenuOpen(false); setSettingsOpen(opening); }}><TwIcon name="gear" size={28} /></button>
           {settingsOpen && (
@@ -141,8 +185,8 @@ export function BuilderTopBar({
         <button type="button" className="tw-builder-flat-btn is-bare is-icon-only tone-red no-hover-bg" data-tutorial="builder-delete-quiz" title="Delete quiz" aria-label="Delete quiz" onClick={() => setModal("confirmDelete")}><TwIcon name="trash" size={26} /></button>
         {!guestMode && <button type="button" className="tw-builder-flat-btn is-bare is-icon-only no-hover-bg" data-tutorial="builder-add-bank" title="Add from Bank" aria-label="Add from Bank" onClick={() => setBankOpen(true)}><TwIcon name="bank" size={26} /></button>}
         <button type="button" className="tw-builder-flat-btn is-bare is-icon-only no-hover-bg" data-tutorial="builder-add-question" title={builderTutorialStage && builderTutorialStage !== "add" ? "Finish the current tutorial step first" : (isBatchTemplate ? "Add Batch" : "Add Question")} aria-label={isBatchTemplate ? "Add Batch" : "Add Question"} onClick={addQuestion} disabled={!!builderTutorialStage && builderTutorialStage !== "add"}><TwIcon name="plus" size={26} /></button>
-        <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action tw-builder-template-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
-        <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action tw-builder-template-action${publishLatched ? " is-latched" : ""}`} style={{ "--builder-action-icon": "#fff" }} onClick={publish} disabled={publishDisabled}>{publishLatched ? "Published" : "Publish"}</TeacherPressButton>
+        <TeacherPressButton tone="blue" icon="check" data-tutorial="builder-save" className={`tw-builder-toolbar-action tw-builder-template-action is-white-action${isSaved ? " is-latched" : ""}`} style={{ "--builder-action-icon": "var(--tw-builder-action-face,#173f9b)" }} onClick={requestSave} disabled={isSaved || isSaving}>{isSaving ? "Saving…" : isSaved ? "Saved" : "Save"}</TeacherPressButton>
+        <TeacherPressButton tone="blue" icon="spark" data-tutorial="builder-publish" className={`tw-builder-toolbar-action tw-builder-template-action is-white-action${publishLatched ? " is-latched" : ""}`} style={{ "--builder-action-icon": "var(--tw-builder-action-face,#173f9b)" }} onClick={publish} disabled={publishDisabled}>{publishLatched ? "Published" : "Publish"}</TeacherPressButton>
       </div>
       </>
       )}

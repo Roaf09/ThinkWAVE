@@ -48,7 +48,7 @@ export default function GuestLiveTab({ setActiveTab }) {
     } catch (e) { setMsg(e?.response?.data?.message || "Failed."); }
   }
 
-  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="60vh" /></div></div>;
 
   return (
     <div className="container">

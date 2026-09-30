@@ -3,14 +3,16 @@ import { TwIcon } from "../../../../components/TwUI";
 import { getSessionBackgroundsForCategory } from "../../../../lib/sessionBackgrounds";
 
 // Extracted verbatim from LiveSessionsTab.jsx (no behavior change).
-export function BackgroundPicker({ selectedKey, onSelect, c, category }) {
+export function BackgroundPicker({ selectedKey, onSelect, c, category, autoPlay = false }) {
   const visibleCount = 4;
   const pool = useMemo(() => getSessionBackgroundsForCategory(category), [category]);
   const total = pool.length;
   const [startIndex, setStartIndex] = useState(0);
   const [slideDirection, setSlideDirection] = useState("next");
+  const [paused, setPaused] = useState(false);
   const lastWheelAt = useRef(0);
   const carouselRef = useRef(null);
+  const interactedRef = useRef(false);
   const selectedIndex = pool.findIndex((item) => item.key === selectedKey);
   const visible = Array.from({ length: Math.min(visibleCount, total) }, (_, offset) => pool[(startIndex + offset) % total]);
 
@@ -20,8 +22,9 @@ export function BackgroundPicker({ selectedKey, onSelect, c, category }) {
   // background the teacher can no longer see here.
   useEffect(() => { setStartIndex(0); }, [category]);
 
-  function move(step) {
+  function move(step, manual = true) {
     if (!total) return;
+    if (manual) interactedRef.current = true;
     setSlideDirection(step > 0 ? "next" : "prev");
     setStartIndex((value) => (value + step + total) % total);
   }
@@ -50,19 +53,40 @@ export function BackgroundPicker({ selectedKey, onSelect, c, category }) {
       lastWheelAt.current = now;
       const step = event.deltaY > 0 ? 1 : -1;
       setSlideDirection(step > 0 ? "next" : "prev");
+      interactedRef.current = true;
       setStartIndex((value) => (value + step + total) % total);
     };
     node.addEventListener("wheel", handleWheel, { passive: false });
     return () => node.removeEventListener("wheel", handleWheel);
   }, [total]);
 
+  // Tutorial auto-scroll: slowly cycle backgrounds so they are easier to see.
+  // Runs only while autoPlay is true, pauses on hover/focus, stops permanently
+  // once the teacher interacts or picks a background. Respects reduced motion.
+  useEffect(() => { interactedRef.current = false; setStartIndex(0); }, [category, autoPlay]);
+  useEffect(() => {
+    if (!autoPlay || !total || total <= visibleCount || paused) return undefined;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const timer = window.setInterval(() => {
+      if (interactedRef.current) { window.clearInterval(timer); return; }
+      setSlideDirection("next");
+      setStartIndex((value) => (value + 1 + total) % total);
+    }, 2800);
+    return () => window.clearInterval(timer);
+  }, [autoPlay, total, visibleCount, paused]);
+
+  function handleSelect(key) {
+    interactedRef.current = true;
+    onSelect(key);
+  }
+
   return <div className="tw-session-background-picker" data-tutorial="session-backgrounds">
     <div className="tw-session-background-head"><span>Choose a gameplay background</span><small style={{ color: c.textMuted }}>{selectedIndex >= 0 ? `${selectedIndex + 1} of ${total}` : "No background selected"}</small></div>
-    <div ref={carouselRef} className="tw-session-background-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div ref={carouselRef} className="tw-session-background-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
       <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={() => move(-1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
       <div className="tw-session-background-track">
         <div key={startIndex} className={`tw-session-background-track-inner is-${slideDirection}`}>
-          {visible.map((item) => <button type="button" key={item.key} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => onSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
+          {visible.map((item) => <button type="button" key={item.key} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => handleSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} loading="lazy" />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
         </div>
       </div>
       <button type="button" aria-label="Next backgrounds" className="tw-session-background-arrow" onClick={() => move(1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>

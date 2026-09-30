@@ -11,11 +11,13 @@ import crypto     from "crypto";
 import { pool }   from "../../db.js";
 import { env }    from "../../env.js";
 import { validateBody } from "../../middleware/validate.js";
-import { register, checkAdminInvitation, verifyOtp, resendOtp, changeEmail, login, loginHistory, me, updateMe, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
+import { register, checkAdminInvitation, verifyOtp, resendOtp, changeEmail, login, loginHistory, me, updateMe, changePassword, verifyPassword, deleteAccount, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } from "./auth.controller.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
 import { asyncHandler } from "../../middleware/asyncHandler.js";
+import { getOAuthProviders, startOAuth, oauthCallback, consumeLoginCode, getPendingProfile, requestEmailCode, completeEmailLink } from "./oauth.controller.js";
+import { invalidateAuthUser } from "../../utils/authCache.js";
 
 export const authRouter = Router();
 
@@ -49,7 +51,18 @@ const ProfileSchema = z.object({
   lastName: z.string().trim().min(1).max(80).optional(),
   contactNumber: z.string().max(40).nullable().optional(),
   profileImage: safeImage.optional(),
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 }).refine((value) => Object.keys(value).length > 0, { message: "No profile changes supplied." });
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(256),
+  newPassword: strongPassword,
+});
+const DeleteAccountSchema = z.object({
+  password: z.string().min(1).max(256),
+});
+const VerifyPasswordSchema = z.object({
+  password: z.string().min(1).max(256),
+});
 
 const LoginSchema  = z.object({
   email: z.string().email(),
@@ -152,6 +165,7 @@ authRouter.post("/guest-token", rateLimit({ windowMs: 60 * 60 * 1000, max: 60, k
     `UPDATE users SET is_active=1, deleted_at=NULL WHERE id=:id AND role='GUEST_HOST'`,
     { id: guest.id }
   );
+  invalidateAuthUser(guest.id);
   const token = jwt.sign(
     { sub: guest.id, role: "GUEST_HOST", ver: Number(guest.token_version || 0) },
     env.JWT_SECRET,
@@ -170,6 +184,26 @@ const accountKey = (req) =>
   `${clientIp(req)}:${String(req.body?.email || req.body?.currentEmail || req.body?.newEmail || req.params?.token || "").toLowerCase().slice(0, 120)}`;
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: accountKey });
 const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, keyGenerator: accountKey });
+// Social login endpoints carry no account identifier up front, so they use a
+// plain per-IP budget generous enough for a classroom behind one NAT.
+const oauthStartLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
+const oauthConsumeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60 });
+
+const OAuthConsumeSchema = z.object({ code: z.string().regex(/^[a-f0-9]{16,128}$/i) });
+const OAuthEmailRequestSchema = z.object({ pendingToken: z.string().regex(/^[a-f0-9]{16,128}$/i), email: z.string().email() });
+const OAuthEmailCompleteSchema = z.object({
+  pendingToken: z.string().regex(/^[a-f0-9]{16,128}$/i),
+  email: z.string().email(),
+  code: z.string().length(6).regex(/^\d{6}$/),
+});
+
+authRouter.get("/oauth/providers", asyncHandler(getOAuthProviders));
+authRouter.get("/oauth/start/:provider", oauthStartLimiter, asyncHandler(startOAuth));
+authRouter.get("/oauth/callback/:provider", oauthStartLimiter, asyncHandler(oauthCallback));
+authRouter.post("/oauth/consume", oauthConsumeLimiter, validateBody(OAuthConsumeSchema), asyncHandler(consumeLoginCode));
+authRouter.get("/oauth/pending/:token", oauthConsumeLimiter, asyncHandler(getPendingProfile));
+authRouter.post("/oauth/email/request", oauthConsumeLimiter, validateBody(OAuthEmailRequestSchema), asyncHandler(requestEmailCode));
+authRouter.post("/oauth/email/complete", oauthConsumeLimiter, validateBody(OAuthEmailCompleteSchema), asyncHandler(completeEmailLink));
 
 authRouter.get("/admin-invitation/:token", authLimiter, asyncHandler(checkAdminInvitation));
 authRouter.post("/register", authLimiter, validateBody(RegisterSchema), asyncHandler(register));
@@ -183,3 +217,6 @@ authRouter.post("/login", authLimiter, validateBody(LoginSchema), asyncHandler(l
 authRouter.get( "/me", requireAuth, asyncHandler(me));
 authRouter.get("/login-history", requireAuth, asyncHandler(loginHistory));
 authRouter.patch("/me", requireAuth, requireRole("TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"), validateBody(ProfileSchema), asyncHandler(updateMe));
+authRouter.post("/password", otpLimiter, requireAuth, requireRole("TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"), validateBody(ChangePasswordSchema), asyncHandler(changePassword));
+authRouter.post("/verify-password", otpLimiter, requireAuth, requireRole("TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"), validateBody(VerifyPasswordSchema), asyncHandler(verifyPassword));
+authRouter.delete("/me", otpLimiter, requireAuth, requireRole("TEACHER", "ADMIN", "SUPERADMIN", "STUDENT"), validateBody(DeleteAccountSchema), asyncHandler(deleteAccount));

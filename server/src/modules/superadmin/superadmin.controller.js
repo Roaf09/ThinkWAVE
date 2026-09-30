@@ -1,8 +1,20 @@
 import { pool } from "../../db.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 import crypto from "crypto";
 import { getSystemMetrics } from "../../metrics.js";
 import { env } from "../../env.js";
-import { sendMail, thinkwaveEmailTemplate } from "../../utils/mailer.js";
+import { sendMail, hasMailConfig, thinkwaveEmailTemplate } from "../../utils/mailer.js";
+import { enqueueMail } from "../../queue.js";
+import { invalidateAuthUser } from "../../utils/authCache.js";
+
+// Review actions must never wait on email: a slow SMTP/Mailgun outage would
+// hang the superadmin's request for up to a minute per click. Queue the send
+// (3 retries inside) and report honestly whether mail is even configured.
+function queueReviewMail(mail) {
+  if (!hasMailConfig()) return false;
+  enqueueMail(() => sendMail(mail));
+  return true;
+}
 
 const n=v=>Number(v||0);
 const safeJson=v=>{if(!v)return null;if(typeof v==="object")return v;try{return JSON.parse(v)}catch{return null}};
@@ -42,28 +54,36 @@ export async function listAccounts(_req,res){
   res.json(Object.values(map).sort((a,b)=>String(a.name).localeCompare(String(b.name))));
 }
 
-export async function listPending(_req,res){const [rows]=await pool.query(`SELECT id,role,email,first_name,last_name,contact_number,institution_name,created_at FROM users WHERE approval_status='PENDING' AND deleted_at IS NULL ORDER BY created_at`);res.json(rows)}
-export async function approveAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});await pool.query(`UPDATE users SET approval_status='APPROVED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_APPROVED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
-export async function rejectAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});await pool.query(`UPDATE users SET approval_status='REJECTED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_DISAPPROVED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
-export async function setActive(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});const active=req.body?.active?1:0;await pool.query(`UPDATE users SET is_active=:a WHERE id=:id AND deleted_at IS NULL`,{a:active,id:req.params.id});if(user&&!active){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_DEACTIVATED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
-export async function deleteAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id`,{id:req.params.id});await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id`,{id:req.params.id});if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name} ${user.last_name}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({deletedBy:'SUPERADMIN'})})}catch{}}res.json({ok:true})}
+export async function listPending(req,res){const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });const [rows]=await pool.query(`SELECT id,role,email,first_name,last_name,contact_number,institution_name,created_at FROM users WHERE approval_status='PENDING' AND deleted_at IS NULL ORDER BY created_at LIMIT :limit OFFSET :offset`,{limit,offset});return pagedOrArray(res,rows,{page,limit,paged})}
+  export async function approveAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});await pool.query(`UPDATE users SET approval_status='APPROVED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});invalidateAuthUser(req.params.id);if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_APPROVED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
+  export async function rejectAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});await pool.query(`UPDATE users SET approval_status='REJECTED' WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});invalidateAuthUser(req.params.id);if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_DISAPPROVED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
+  export async function setActive(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id AND deleted_at IS NULL`,{id:req.params.id});const active=req.body?.active?1:0;if(user&&user.role==='SUPERADMIN'&&(Number(req.user.sub)===Number(user.id)||!active)){const [[remaining]]=await pool.query(`SELECT COUNT(*) AS total FROM users WHERE role='SUPERADMIN' AND is_active=1 AND deleted_at IS NULL AND id<>:id`,{id:user.id});if(Number(req.user.sub)===Number(user.id))return res.status(400).json({message:"You cannot deactivate your own superadmin account."});if(Number(remaining?.total||0)===0)return res.status(400).json({message:"You cannot deactivate the last active superadmin."});}await pool.query(`UPDATE users SET is_active=:a WHERE id=:id AND deleted_at IS NULL`,{a:active,id:req.params.id});invalidateAuthUser(req.params.id);if(user&&!active){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_DEACTIVATED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({performedBy:req.user.sub})})}catch{}}res.json({ok:true})}
+  export async function deleteAccount(req,res){const [[user]]=await pool.query(`SELECT * FROM users WHERE id=:id`,{id:req.params.id});if(user&&user.role==='SUPERADMIN'){if(Number(req.user.sub)===Number(user.id))return res.status(400).json({message:"You cannot delete your own superadmin account."});const [[remaining]]=await pool.query(`SELECT COUNT(*) AS total FROM users WHERE role='SUPERADMIN' AND is_active=1 AND deleted_at IS NULL AND id<>:id`,{id:user.id});if(Number(remaining?.total||0)===0)return res.status(400).json({message:"You cannot delete the last active superadmin."});}await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id`,{id:req.params.id});invalidateAuthUser(req.params.id);if(user){try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name} ${user.last_name}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({deletedBy:'SUPERADMIN'})})}catch{}}res.json({ok:true})}
 
-export async function listUnlinkedTeachers(_req,res){
+export async function listUnlinkedTeachers(req,res){
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
   const [rows]=await pool.query(`SELECT u.id,u.email,u.first_name,u.last_name,u.is_active,u.contact_number,u.created_at,u.last_active_at,u.approval_status,u.plan_code,u.plan_expires_at,
     (SELECT COUNT(*) FROM sessions s WHERE s.teacher_id=u.id) hosted_sessions_count,
     (SELECT COUNT(*) FROM quizzes q WHERE q.teacher_id=u.id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) assigned_sessions_count,
     (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s WHERE s.teacher_id=u.id) last_session_at,
     (SELECT COUNT(*) FROM classes c WHERE c.teacher_id=u.id AND c.deleted_at IS NULL AND c.parent_id IS NOT NULL) classes_handled_count
-    FROM users u WHERE u.role='TEACHER' AND u.deleted_at IS NULL AND (u.institution_name IS NULL OR TRIM(u.institution_name)='') ORDER BY u.last_name,u.first_name`);
-  res.json(rows);
+    FROM users u WHERE u.role='TEACHER' AND u.deleted_at IS NULL AND (u.institution_name IS NULL OR TRIM(u.institution_name)='') ORDER BY u.last_name,u.first_name LIMIT :limit OFFSET :offset`,{limit,offset});
+  return pagedOrArray(res,rows,{page,limit,paged});
 }
 
 export async function getNotifications(req,res){
   const search=String(req.query.search||"").trim(); const type=String(req.query.type||"ALL").trim();
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 250 });
   const params={search:`%${search}%`,type};
-  const [rows]=await pool.query(`SELECT id,type,user_id,name,email,role,institution_name,payload_json,status,created_at FROM system_notifications WHERE (:type='ALL' OR type=:type2) AND (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT 250`,{type,type2:type,search:params.search,search2:params.search,search3:params.search,search4:params.search});
-  let legacy=[]; if(type==='ALL'||['USER_REGISTERED','INSTITUTION_SETUP'].includes(type)){try{const [old]=await pool.query(`SELECT id,IF(type='REGISTERED','USER_REGISTERED',type) type,user_id,name,email,role,institution_name,NULL payload_json,'READ' status,created_at FROM activity_log WHERE (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT 100`,{search:params.search,search2:params.search,search3:params.search,search4:params.search});legacy=old}catch{}}
-  res.json([...rows.map(x=>({...x,payload:safeJson(x.payload_json)})),...legacy.map(x=>({...x,payload:null,legacy:true}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,250));
+  const [rows]=await pool.query(`SELECT id,type,user_id,name,email,role,institution_name,payload_json,status,created_at FROM system_notifications WHERE (:type='ALL' OR type=:type2) AND (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT :limit OFFSET :offset`,{type,type2:type,search:params.search,search2:params.search,search3:params.search,search4:params.search,limit,offset});
+  let legacy=[]; if((type==='ALL'||['USER_REGISTERED','INSTITUTION_SETUP'].includes(type)) && offset===0){try{const [old]=await pool.query(`SELECT id,IF(type='REGISTERED','USER_REGISTERED',type) type,user_id,name,email,role,institution_name,NULL payload_json,'READ' status,created_at FROM activity_log WHERE (:search='%%' OR COALESCE(name,'') LIKE :search2 OR COALESCE(email,'') LIKE :search3 OR COALESCE(institution_name,'') LIKE :search4) ORDER BY created_at DESC LIMIT 50`,{search:params.search,search2:params.search,search3:params.search,search4:params.search});legacy=old}catch{}}
+  // Registration + institution setup are dual-written to both tables, so drop
+  // legacy rows that duplicate a system_notifications row (same type + user).
+  const seen=new Set(rows.map(x=>`${String(x.type||"").toUpperCase()}|${x.user_id ?? ""}|${String(x.email||"").toLowerCase()}`));
+  legacy=legacy.filter(x=>!seen.has(`${String(x.type||"").toUpperCase()}|${x.user_id ?? ""}|${String(x.email||"").toLowerCase()}`));
+  const merged=[...rows.map(x=>({...x,payload:safeJson(x.payload_json)})),...legacy.map(x=>({...x,payload:null,legacy:true}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,limit);
+  if (!paged) return res.json(merged);
+  return res.json({ rows: merged, page, limit, hasMore: rows.length === limit });
 }
 
 export async function reviewApplication(req,res){
@@ -76,7 +96,7 @@ export async function reviewApplication(req,res){
     await pool.query(`UPDATE users SET plan_code='PRO',plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:uid AND role='TEACHER' AND deleted_at IS NULL`,{uid:app.user_id});
     await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:reviewer,reviewed_at=NOW(),payment_confirmed_by=:reviewer,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{status,reviewer:req.user.sub,id});
     const html=thinkwaveEmailTemplate({eyebrow:'ThinkWAVE Pro approved',title:'Your Pro plan is active',intro:'Your submitted GCash transaction has been verified and your existing Teacher account now has ThinkWAVE Pro privileges.',bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Your Pro access is active for 30 days. Sign in using the same Teacher email used in the application.</p>',footer:'Renewal requires a new payment and application after the current access period ends.'});
-    const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Pro plan was approved',text:'Your ThinkWAVE Pro plan is active for 30 days.',html});emailSent=mail.sent;
+    emailSent=queueReviewMail({to:app.work_email,subject:'Your ThinkWAVE Pro plan was approved',text:'Your ThinkWAVE Pro plan is active for 30 days.',html});
   }else if(decision==='APPROVED'){
     const [[existingAdmin]]=await pool.query(`SELECT id FROM users WHERE role='ADMIN' AND email=:email AND deleted_at IS NULL LIMIT 1`,{email:app.work_email});
     if(existingAdmin){
@@ -84,7 +104,7 @@ export async function reviewApplication(req,res){
       await pool.query(`UPDATE users SET plan_code='INSTITUTION',plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY),institution_name=COALESCE(NULLIF(institution_name,''),:institution) WHERE id=:uid`,{institution:app.institution_name,uid:existingAdmin.id});
       await pool.query(`UPDATE institution_applications SET status='ACTIVATED',reviewed_by=:reviewer,reviewed_at=NOW(),payment_confirmed_by=:reviewer,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{reviewer:req.user.sub,id});
       const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan renewed',title:'Your Institution plan is active',intro:`The payment for <strong>${app.institution_name}</strong> has been verified.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">The existing Admin account and institution members now have Institution privileges for another 30 days.</p>',footer:'A new application and external payment are required for the next renewal.'});
-      const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was renewed',text:'Your ThinkWAVE Institution Plan is active for 30 days.',html});emailSent=mail.sent;
+      emailSent=queueReviewMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was renewed',text:'Your ThinkWAVE Institution Plan is active for 30 days.',html});
     }else{
       const rawToken=crypto.randomBytes(32).toString('hex'); const tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex'); status='PAYMENT_CONFIRMED';
       await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
@@ -92,7 +112,7 @@ export async function reviewApplication(req,res){
       await pool.query(`UPDATE institution_applications SET status=:status,reviewed_by=:uid,reviewed_at=NOW(),payment_confirmed_by=:uid,payment_confirmed_at=NOW(),plan_starts_at=NOW(),plan_expires_at=DATE_ADD(NOW(),INTERVAL 30 DAY) WHERE id=:id`,{status,uid:req.user.sub,id});
       const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
       const html=thinkwaveEmailTemplate({eyebrow:'Institution Plan approved',title:'Create your ThinkWAVE Admin account',intro:`Your application for <strong>${app.institution_name}</strong> has been approved and the submitted GCash transaction has been confirmed.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Use the secure link below to create the first Admin account. The Institution plan is active for 30 days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link.'});
-      const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was approved',text:`Your application was approved. Create your Admin account: ${registrationUrl}`,html});emailSent=mail.sent;
+      emailSent=queueReviewMail({to:app.work_email,subject:'Your ThinkWAVE Institution Plan was approved',text:`Your application was approved. Create your Admin account: ${registrationUrl}`,html});
       // Local-dev fallback (same as OTP codes): mail delivery is often
       // unconfigured or spam-filtered, so print the link to the terminal.
       if (env.NODE_ENV !== "production") {
@@ -103,7 +123,7 @@ export async function reviewApplication(req,res){
     await pool.query(`UPDATE institution_applications SET status='DISAPPROVED',reviewed_by=:uid,reviewed_at=NOW() WHERE id=:id`,{uid:req.user.sub,id});
     await pool.query(`UPDATE admin_invitations SET used_at=COALESCE(used_at,NOW()) WHERE application_id=:id AND used_at IS NULL`,{id});
     const html=thinkwaveEmailTemplate({eyebrow:`ThinkWAVE ${planType==='PRO'?'Pro':'Institution'} update`,title:'Application not approved',intro:'Thank you for submitting a ThinkWAVE plan application.',bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">The application was not approved. Because payment is handled outside ThinkWAVE, the Superadmin can mark the external refund after it has been completed.</p>'});
-    const mail=await sendMail({to:app.work_email,subject:'Update on your ThinkWAVE plan application',text:'Your ThinkWAVE plan application was not approved.',html});emailSent=mail.sent;
+    emailSent=queueReviewMail({to:app.work_email,subject:'Update on your ThinkWAVE plan application',text:'Your ThinkWAVE plan application was not approved.',html});
   }
   await pool.query(`UPDATE system_notifications SET status=:status WHERE type='PLAN_APPLICATION' AND JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.applicationId'))=:idText`,{status,idText:String(id)});
   res.json({ok:true,status,emailSent});
@@ -143,14 +163,14 @@ export async function resendApplicationInvite(req,res){
   await pool.query(`INSERT INTO admin_invitations(application_id,institution_name,email,token_hash,expires_at,created_by) VALUES(:id,:institution,:email,:hash,DATE_ADD(NOW(),INTERVAL 7 DAY),:uid)`,{id,institution:app.institution_name,email:app.work_email,hash:tokenHash,uid:req.user.sub});
   const registrationUrl=`${String(env.CLIENT_ORIGIN).replace(/\/$/,'')}/register?adminInvite=${rawToken}`;
   const html=thinkwaveEmailTemplate({eyebrow:'Institution invitation link',title:'Your Admin invitation link',intro:`A fresh Admin account creation link for <strong>${app.institution_name}</strong> was issued.`,bodyHtml:'<p style="font-size:14px;line-height:1.7;color:#4b5563">Any previous link was retired. This link expires in 7 days.</p>',actionLabel:'Create Admin account',actionUrl:registrationUrl,footer:'Do not forward this link.'});
-  const mail=await sendMail({to:app.work_email,subject:'Your ThinkWAVE Admin invitation link',text:`Create your Admin account: ${registrationUrl}`,html});
+  const emailSent=queueReviewMail({to:app.work_email,subject:'Your ThinkWAVE Admin invitation link',text:`Create your Admin account: ${registrationUrl}`,html});
   // Local-dev fallback (same as OTP codes): the invite email often never
   // arrives (no mail provider / spam), so print the link to the terminal.
   if (env.NODE_ENV !== "production") {
     console.info(`[ThinkWAVE ADMIN_INVITE] ${app.work_email}: ${registrationUrl}`);
   }
   try{await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ADMIN_INVITE_RESENT',NULL,:name,:email,'ADMIN',:inst,:payload)`,{name:`${app.first_name||''} ${app.last_name||''}`.trim(),email:app.work_email,inst:app.institution_name,payload:JSON.stringify({applicationId:id,resentBy:req.user.sub})})}catch{}
-  res.json({ok:true,emailSent:mail.sent});
+  res.json({ok:true,emailSent});
 }
 
 export async function getHealth(_req,res){

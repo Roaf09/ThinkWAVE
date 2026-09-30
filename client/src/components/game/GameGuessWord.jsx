@@ -63,7 +63,7 @@ export function GameGuessWord({ images, target, dummyLetters, value, onChange, d
       <div className="pics4-grid compact-grid">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="pics4-frame compact-frame">
-            {safeImages[i] ? <img src={safeImages[i]} alt={`Clue ${i + 1}`} role="button" tabIndex={0} onClick={() => setZoomedImage(safeImages[i])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setZoomedImage(safeImages[i]); }} /> : <span className="pics4-placeholder">?</span>}
+            {safeImages[i] ? <img src={safeImages[i]} alt={`Clue ${i + 1}`} loading="lazy" decoding="async" role="button" tabIndex={0} onClick={() => setZoomedImage(safeImages[i])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setZoomedImage(safeImages[i]); }} /> : <span className="pics4-placeholder">?</span>}
           </div>
         ))}
       </div>

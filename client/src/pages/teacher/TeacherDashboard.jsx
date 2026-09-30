@@ -16,7 +16,7 @@ import { TeacherActionModal } from "./TeacherUI";
 import ThinkBotTutorial from "../../components/ThinkBotTutorial";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import { useIsMobileViewport } from "./tabs/teacherTabShared";
-import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState, pullTutorialState } from "../../lib/tutorialState";
+import { readTutorialState, writeTutorialState, markMainStage, resetTutorialState, pullTutorialState, flushTutorialPush } from "../../lib/tutorialState";
 import { TEMPLATE_TYPES } from "../../lib/templateTypes";
 import { clearPersistentTabs, usePersistentTab } from "../../lib/persistentTab";
 
@@ -26,10 +26,11 @@ import QuestionBankTab   from "./tabs/QuestionBankTab";
 import LiveSessionsTab   from "./tabs/LiveSessionsTab";
 import ClassesTab        from "./tabs/ClassesTab";
 import SessionHistoryTab from "./tabs/SessionHistoryTab";
+import ProfileTab from "../../components/ProfileTab";
 
-const TEACHER_TABS = ["home", "classes", "create", "live", "bank", "history"];
+const TEACHER_TABS = ["home", "classes", "create", "live", "bank", "history", "profile"];
 
-const blankProfile = { firstName: "", lastName: "", contactNumber: "", email: "", institutionName: "", profileImage: "" };
+const blankProfile = { firstName: "", lastName: "", contactNumber: "", email: "", institutionName: "", profileImage: "", birthDate: "" };
 
 // Resuming a tour after an interruption must land on a stage that can actually
 // render: folder-name modals don't survive a reload, so modal-gated waits fall
@@ -58,6 +59,7 @@ function tutorialTabForStage(stage) {
 export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = usePersistentTab("tw_teacher_tab", "home", TEACHER_TABS);
   const [showLogout, setShowLogout] = useState(false);
+  const [idleLoggedOut, setIdleLoggedOut] = useState(false);
   const [bankLabel, setBankLabel] = useState("Quiz Bank");
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState(blankProfile);
@@ -102,8 +104,12 @@ export default function TeacherDashboard() {
           stage = fallback;
           next = writeTutorialState(data.id, { ...next, mainStage: fallback });
         }
+        // Only force the tour's tab on a fresh login. On plain reloads the
+        // persisted tab (usePersistentTab) wins — otherwise every reload
+        // yanks the teacher back to the tour's current step (e.g. Sessions)
+        // instead of where they actually were.
         const tab = tutorialTabForStage(stage);
-        if (tab) setActiveTab(tab);
+        if (tab && firstLoginPending) setActiveTab(tab);
         setTutorialState(next);
       } else if (!saved.mainComplete && !saved.mainStarted) {
         // Fallback: the one-shot first-login flag may have been burned without
@@ -179,6 +185,10 @@ export default function TeacherDashboard() {
   };
 
   function doLogout() {
+    // Flush the tour snapshot first: skip/complete must reach the server
+    // before credentials are cleared, or the next login resurrects the tour.
+    const uid = tutorialUserId;
+    if (uid) { try { flushTutorialPush(uid); } catch {} }
     clearToken();
     clearRole();
     setAuthToken("");
@@ -186,6 +196,53 @@ export default function TeacherDashboard() {
     clearPersistentTabs();
     navigate("/");
   }
+  const doLogoutRef = useRef(null);
+  doLogoutRef.current = doLogout;
+
+  // Tab close / hide: flush the tour snapshot so a skip or stage advance
+  // made just before leaving still reaches the server.
+  useEffect(() => {
+    if (!tutorialUserId) return undefined;
+    const flush = () => { try { flushTutorialPush(tutorialUserId); } catch {} };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [tutorialUserId]);
+
+  // 10-minute inactivity logout: any mouse/keyboard/touch/scroll activity
+  // re-arms the timer. Once shown, any click or keypress signs out.
+  useEffect(() => {
+    if (idleLoggedOut) return undefined;
+    let timer = null;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setIdleLoggedOut(true), 10 * 60 * 1000);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((name) => window.addEventListener(name, arm, { passive: true }));
+    arm();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, arm));
+    };
+  }, [idleLoggedOut]);
+
+  useEffect(() => {
+    if (!idleLoggedOut) return undefined;
+    const logout = () => { try { doLogoutRef.current?.(); } catch {} };
+    window.addEventListener("click", logout);
+    window.addEventListener("keydown", logout);
+    window.addEventListener("touchstart", logout);
+    return () => {
+      window.removeEventListener("click", logout);
+      window.removeEventListener("keydown", logout);
+      window.removeEventListener("touchstart", logout);
+    };
+  }, [idleLoggedOut]);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -246,6 +303,7 @@ export default function TeacherDashboard() {
       case "live": return <LiveSessionsTab setActiveTab={setActiveTab} tutorial={tutorial} />;
       case "classes": return <ClassesTab setActiveTab={setActiveTab} tutorial={tutorial} />;
       case "history": return <SessionHistoryTab setActiveTab={setActiveTab} tutorial={tutorial} />;
+      case "profile": return <ProfileTab c={c} roleLabel="Teacher" showInstitution institutionFallback="Basic plan" profile={profile} onStaffSaved={(data) => setProfile(profileFromUser(data))} onLogout={() => setShowLogout(true)} onDeleted={doLogout} />;
       default: return <HomeTab setActiveTab={setActiveTab} tutorial={tutorial} />;
     }
   }
@@ -259,13 +317,13 @@ export default function TeacherDashboard() {
         avatarSrc={profile.profileImage}
         dark={dark}
         toggleTheme={toggleTheme}
-        onSettings={() => setProfileOpen(true)}
+        onSettings={() => setActiveTab("profile")}
         onLogout={() => setShowLogout(true)}
       />
       <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div style={{ padding: "26px 18px 22px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${c.sidebarBorder}`, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "baseline" }}><span style={{ fontSize: 20, fontWeight: 900, color: "#e7e9ee" }}>Think</span><span style={{ fontSize: 20, fontWeight: 900, color: "#2b6cff" }}>WAVE</span></div>
-          <button onClick={() => setProfileOpen(true)} title="Profile settings" style={avatarButton(c)}>
+          <button onClick={() => setActiveTab("profile")} title="Profile settings" style={avatarButton(c)}>
             {profile.profileImage ? <img src={profile.profileImage} alt="Teacher profile" style={avatarImage} /> : <TwIcon name="user" size={20} />}
           </button>
         </div>
@@ -291,7 +349,7 @@ export default function TeacherDashboard() {
 
       <MobileTabBar c={c} items={mobilePrimaryNav} secondaryItems={mobileSecondaryNav} activeId={activeTab} onSelect={handleNavSelect} iconsOnly />
 
-      {tutorial.stage === "home_welcome" && <ThinkBotTutorial className="tw-tutorial-plain-secondary" actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel="Skip" onSecondary={skipMainTutorial}><div><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></div></ThinkBotTutorial>}
+      {tutorial.stage === "home_welcome" && <ThinkBotTutorial className="tw-tutorial-plain-secondary" actionLabel="Okay!" actionDelay={2000} onAction={() => setTutorialStage("home_build")} secondaryLabel={tutorialUserId ? "Skip" : undefined} onSecondary={skipMainTutorial}><div><p><strong>Welcome to ThinkWAVE!</strong></p><p>I’m ThinkBot. I’ll help you set up your workspace and get your first activity ready for your students.</p></div></ThinkBotTutorial>}
       {tutorial.stage === "home_build" && <ThinkBotTutorial className="tw-tutorial-home-build" clickAnywhere onClickAnywhere={() => setTutorialStage("nav_classes")}><p>We’ll build things as we go, so you won’t have to memorize everything at once.</p></ThinkBotTutorial>}
       {tutorial.stage === "nav_classes" && (isMobileViewport ? (
         <ThinkBotTutorial target='[data-tutorial="mobile-nav-classes"]' placement="above" square className="tw-tutorial-mobile-nav-prompt" highlight highlightMode="target"><p>Next, let’s go to <strong>Class</strong>.</p></ThinkBotTutorial>
@@ -313,6 +371,7 @@ export default function TeacherDashboard() {
       <input ref={profileFileRef} type="file" accept="image/*" hidden onChange={(event) => { handleProfileImage(event.target.files?.[0]); event.target.value = ""; }} />
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the teacher dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
+      {idleLoggedOut && <><div className="tw-admin-logout-backdrop" /><div className="tw-admin-logout-layer"><section className="tw-admin-logout-modal is-compact-confirm" style={{ background: c.cardBg, borderColor: c.border, color: c.text }}><header><TwIcon name="logout" size={24} /><strong>Logged out</strong></header><p style={{ color: c.textMuted }}>You have been logged out due to inactivity. Click anywhere to continue to login.</p></section></div></>}
     </div>
   );
 }
@@ -342,7 +401,7 @@ function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, 
 
 function ProfileSavedOverlay() { return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4} /></div></div>; }
 function Field({ label, c, children }) { return <label style={{ display: "grid", gap: 7, color: c.textMuted, fontSize: 12, fontWeight: 850 }}>{label}{children}</label>; }
-function profileFromUser(user = {}) { return { firstName: user.first_name || "", lastName: user.last_name || "", contactNumber: user.contact_number || "", email: user.email || "", institutionName: user.institution_name || "", profileImage: user.profile_image || "" }; }
+function profileFromUser(user = {}) { return { firstName: user.first_name || "", lastName: user.last_name || "", contactNumber: user.contact_number || "", email: user.email || "", institutionName: user.institution_name || "", profileImage: user.profile_image || "", birthDate: user.birth_date ? String(user.birth_date).slice(0, 10) : "" }; }
 
 const avatarImage = { width: "100%", height: "100%", objectFit: "cover" };
 const modalBackdrop = { position: "fixed", inset: 0, zIndex: 3000, display: "grid", placeItems: "center", padding: 20, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)" };

@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
+import { downloadExportJob } from "../../../lib/exportJobs";
 import { useColors } from "../../../context/ThemeContext";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { isInstitutionPlan } from "../../../lib/planLimits";
@@ -129,24 +130,24 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
     setExporting(`${session.id}:${format}`);
     try {
       const assigned = isAssignedSession(session);
-      const urlPath = assigned ? `/classes/${session.class_id}/async-results/${session.quiz_id}/export/${format}` : `/analytics/sessions/${session.id}/export/${format}`;
-      const resp = await api.get(urlPath, { responseType: "blob" });
-      const mime = format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-      const url = URL.createObjectURL(new Blob([resp.data], { type: mime }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${isAssignedSession(session) ? "assigned" : "session"}-${session.quiz_id || session.id}.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadExportJob({
+        kind: assigned ? "ASYNC" : "SESSION",
+        format,
+        sessionId: session.id,
+        classId: session.class_id,
+        quizId: session.quiz_id,
+        fileName: `${assigned ? "assigned" : "session"}-${session.quiz_id || session.id}.${format}`,
+        onStatus: (phase) => setExporting(`${session.id}:${format}:${phase}`),
+      });
     } catch (e) {
       console.error(e);
-      alert("Export failed. Please try again.");
+      alert(e?.response?.data?.message || e?.message || "Export failed. Please try again.");
     } finally {
       setExporting("");
     }
   }
 
-  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="60vh" /></div></div>;
 
   if (guestMode) {
     return <GuestHistoryView c={c} sessions={filtered} query={query} setQuery={setQuery} sortBy={sortBy} setSortBy={setSortBy} navigate={navigate} />;
@@ -155,7 +156,7 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
   return (
     <div className="container grid gap-[18px]">
       <section>
-        <h2 className="mb-[4px]" style={{ color: c.text }}>Session History</h2>
+        <h2 style={{ marginBottom: 4, color: c.text }}>Session History</h2>
       </section>
 
       {sessions.length > 0 && <section className="tw-bank-search-shell" style={{ ...card(c), position: "relative", overflow: "visible" }}>
@@ -237,18 +238,19 @@ export default function SessionHistoryTab({ guestMode = false, tutorial }) {
                     <div className="tw-history-actions-row">
                       <TeacherPressButton
                         tone="blue"
+                        style={{ "--tw-press-face": templateTone(session.template_type, c, false).accent, "--tw-press-base": `color-mix(in srgb, ${templateTone(session.template_type, c, false).accent} 62%, #000)`, "--tw-press-border": templateTone(session.template_type, c, false).border }}
                         onClick={() => navigate(isAssignedSession(session)
                           ? `/teacher/async-analytics/${session.class_id}/${session.quiz_id}`
                           : `/teacher/analytics/${session.id}`)}
                       >Open Analytics</TeacherPressButton>
                       {advancedPlan && <span className="tw-history-export-actions">
                         <span className="tw-history-export-text">
-                          <TeacherPressButton tone="neutral" icon="pdf" className="tw-history-pdf-btn" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}>{exporting === `${session.id}:pdf` ? "Exporting…" : "PDF"}</TeacherPressButton>
-                          <TeacherPressButton tone="neutral" icon="xlsx" className="tw-history-xlsx-btn" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}>{exporting === `${session.id}:xlsx` ? "Exporting…" : "XLSX"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="pdf" className="tw-history-pdf-btn" disabled={exporting.startsWith(`${session.id}:pdf`)} onClick={() => download(session, "pdf")}>{exporting.startsWith(`${session.id}:pdf`) ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "PDF"}</TeacherPressButton>
+                          <TeacherPressButton tone="neutral" icon="xlsx" className="tw-history-xlsx-btn" disabled={exporting.startsWith(`${session.id}:xlsx`)} onClick={() => download(session, "xlsx")}>{exporting.startsWith(`${session.id}:xlsx`) ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "XLSX"}</TeacherPressButton>
                         </span>
                         <span className="tw-history-export-icons">
-                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title="Export PDF" disabled={exporting === `${session.id}:pdf`} onClick={() => download(session, "pdf")}><TwIcon name="pdf" size={20} /></button>
-                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export Excel" title="Export Excel" disabled={exporting === `${session.id}:xlsx`} onClick={() => download(session, "xlsx")}><TwIcon name="xlsx" size={20} /></button>
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export PDF" title={exporting.startsWith(`${session.id}:pdf`) ? "Preparing export…" : "Export PDF"} disabled={exporting.startsWith(`${session.id}:pdf`)} onClick={() => download(session, "pdf")}><TwIcon name="pdf" size={20} /></button>
+                          <button type="button" className="tw-history-export-icon-btn" aria-label="Export Excel" title={exporting.startsWith(`${session.id}:xlsx`) ? "Preparing export…" : "Export Excel"} disabled={exporting.startsWith(`${session.id}:xlsx`)} onClick={() => download(session, "xlsx")}><TwIcon name="xlsx" size={20} /></button>
                         </span>
                       </span>}
                     </div>
@@ -283,8 +285,8 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
       setReuseBusy(false);
     }
   }
-  return <div className="container grid gap-[18px]">
-    <section><h2 className="mb-[4px]" style={{ color: c.text }}>History</h2></section>
+  return <div className="tw-guest-tab-page grid gap-[18px]">
+    <section><h2 style={{ marginBottom: 4, color: c.text }}>History</h2></section>
     {sessions.length > 0 && <section className="tw-bank-search-shell" style={{ ...card(c), position: "relative", overflow: "visible" }}>
       <div className="tw-search-filter-row">
         <input className="tw-history-search-field tw-search-filter-input w-full box-border px-[14px] py-[12px] rounded-[12px]" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sessions" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
@@ -305,7 +307,7 @@ function GuestHistoryView({ c, sessions, query, setQuery, sortBy, setSortBy, nav
           <span style={badge(c, { borderColor: tone.border, background: tone.softBg, color: tone.accent })}>{templateLabel(session.template_type)}</span>
         </div>
         <div className="grid grid-cols-[repeat(2,minmax(150px,1fr))] gap-[10px] mt-[14px]"><MiniInfo label="Template" value={templateLabel(session.template_type)} c={c} /><MiniInfo label="Participants" value={session.participant_count || 0} c={c} /></div>
-        <div className="mt-[14px] flex gap-[10px] flex-wrap"><TeacherPressButton tone="blue" onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton><TeacherPressButton tone="neutral" onClick={() => setReuseTarget(session)}>Reuse</TeacherPressButton></div>
+        <div className="mt-[14px] flex gap-[10px] flex-wrap"><TeacherPressButton tone="blue" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={() => navigate(`/guest/analytics/${session.id}`)}>Open Analytics</TeacherPressButton><TeacherPressButton tone="neutral" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={() => setReuseTarget(session)}>Reuse</TeacherPressButton></div>
       </div>;
     })}
     {reuseTarget && <TeacherActionModal c={c} tone="blue" icon="history" title="Send quiz back to Sessions?" message={`${reuseTarget.quiz_title} will return to Sessions.`} confirmLabel={reuseBusy ? "Sending…" : "Reuse Quiz"} textCancel onClose={() => !reuseBusy && setReuseTarget(null)} onConfirm={confirmReuse} />}

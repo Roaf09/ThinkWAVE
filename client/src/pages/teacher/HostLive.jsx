@@ -9,7 +9,7 @@ import { normalizeTemplateType } from "../../lib/templateTypes";
 import { templateAccent } from "../../lib/templatePalette";
 import ThemeIconButton from "../../components/ThemeIconButton";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
-import { BOT_SKILLS, sampleBotAnswer, scoreBotAnswer } from "../../lib/tutorialBots";
+import { BOT_SKILLS, sampleBotAnswer, scoreBotAnswer, demoBotSeed, createBotRng } from "../../lib/tutorialBots";
 import { TeacherPressButton } from "./TeacherUI";
 import { TwIcon } from "../../components/TwUI";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
@@ -134,7 +134,7 @@ export default function HostLive({ guestMode = false }) {
   const [roster, setRoster] = useState([]);
   const [groups, setGroups] = useState([]);
   const [scores, setScores] = useState([]);
-  const [scoreMode, setScoreMode] = useState("competitive");
+  const [scoreMode, setScoreMode] = useState("normal");
   const [msg, setMsg] = useState("");
   const [starting, setStarting] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -183,6 +183,10 @@ export default function HostLive({ guestMode = false }) {
   const tutorialJoinStartedRef = useRef(false);
   const tutorialAnswerRunRef = useRef("");
   const socketRef = useRef(null);
+  // Last time ANY socket message arrived. The 3s poll below is only a
+  // fallback for dead sockets — while messages flow, polling is pure waste
+  // (full state re-download + re-render storm on every tick).
+  const lastSocketAtRef = useRef(0);
   const lastTeacherActionRef = useRef(Date.now());
   const lastQuestionEndedAtRef = useRef(null);
   const timedOutQuestionRef = useRef(null);
@@ -219,9 +223,10 @@ export default function HostLive({ guestMode = false }) {
           tutorialJoinStartedRef.current = true;
           const questionIndex = Number(data.session?.current_question_index || 0);
           const currentTutorialQuestion = (data.questions || [])[questionIndex] || null;
-          const questionKey = String(currentTutorialQuestion?.id ?? questionIndex);
+          const questionKey = String(currentTutorialQuestion?.question_id ?? currentTutorialQuestion?.id ?? questionIndex);
           const savedProgress = tutorialState?.tutorialDemoQuestionProgress || null;
-          if (savedProgress && String(savedProgress.questionKey ?? "") === questionKey) {
+          const savedKey = String(savedProgress?.questionKey ?? "");
+          if (savedProgress && (savedKey === questionKey || savedKey === String(currentTutorialQuestion?.id ?? questionIndex))) {
             setTutorialAnsweredCount(Math.max(0, Math.min(3, Number(savedProgress.answeredCount || 0))));
             setTutorialChoiceCounts(savedProgress.choiceCounts && typeof savedProgress.choiceCounts === "object" ? savedProgress.choiceCounts : {});
           }
@@ -253,6 +258,9 @@ export default function HostLive({ guestMode = false }) {
   useEffect(() => {
     const socket = makeSocket();
     socketRef.current = socket;
+    const touchSocket = () => { lastSocketAtRef.current = Date.now(); };
+    // Fires for every incoming event (present + future): one stamp spot.
+    if (typeof socket.onAny === "function") socket.onAny(touchSocket);
     socket.on("connect", () => socket.emit("teacher:join", { sessionId: Number(id) }));
     socket.on("teacher:error", (payload) => setMsg(payload?.message || "Action could not be completed."));
     socket.on("session:state", (payload) => {
@@ -291,22 +299,26 @@ export default function HostLive({ guestMode = false }) {
       });
     });
     socket.on("tab:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, tab_out_count: count } : row)));
+    socket.on("screenshot:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, screenshot_count: count } : row)));
     const heartbeat = setInterval(() => socket.emit("teacher:heartbeat", { sessionId: Number(id) }), 5000);
     return () => {
       clearInterval(heartbeat);
+      if (typeof socket.offAny === "function") {
+        try { socket.offAny(touchSocket); } catch {}
+      }
       socket.removeAllListeners();
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
     };
   }, [id, guestMode]);
 
-  // Polling fallback so guest-hosted sessions (and any host whose socket
-  // misses a scores:update) still see scores/competitive points increment
-  // live. Socket remains the primary path; this just re-syncs every 3s while
-  // the session is active.
+  // Polling fallback for dead sockets only (guest hosts, missed pushes).
+  // While socket messages arrive (<10s since the last one), the poll skips —
+  // firing it anyway re-downloads + re-renders the whole panel every 3s.
   useEffect(() => {
     if (!state || !["LOBBY", "LIVE", "PAUSED"].includes(state.status)) return undefined;
     const timer = window.setInterval(async () => {
+      if (Date.now() - lastSocketAtRef.current < 10000) return;
       try {
         const { data } = await api.get(`/sessions/${id}/state`);
         if (Array.isArray(data.scores)) setScores(data.scores);
@@ -510,7 +522,7 @@ export default function HostLive({ guestMode = false }) {
     if (!tutorialDemo || !isLive || !currentQ) return undefined;
     // No group-mode bot tutorials: bots stay solo-style only.
     if (state?.join_mode === "GROUP") return undefined;
-    const questionKey = String(currentQ.id ?? state?.current_question_index ?? "");
+    const questionKey = String(currentQ?.question_id ?? currentQ?.id ?? state?.current_question_index ?? "");
     if (!questionKey || tutorialAnswerRunRef.current === questionKey) return undefined;
     tutorialAnswerRunRef.current = questionKey;
     const alreadyAnswered = Math.max(0, Math.min(3, Number(tutorialAnsweredCount || 0)));
@@ -529,8 +541,11 @@ export default function HostLive({ guestMode = false }) {
         setTutorialAnsweredCount((value) => Math.min(3, value + 1));
         // Each bot samples a student-like answer at its skill level, then the
         // REAL scorer + speed formula decide its points — nothing hardcoded.
+        // Seeded per (session, question, bot) so host + analytics agree and
+        // repeat visits stay stable; elapsed stays live-measured.
         const skill = BOT_SKILLS[botIndex]?.hitRate ?? 0.6;
-        const { answer, selectedIndexes } = sampleBotAnswer({ templateType: state?.template_type, config, correct, skill });
+        const botRng = createBotRng(demoBotSeed(id, questionKey, botIndex, "answer"));
+        const { answer, selectedIndexes } = sampleBotAnswer({ templateType: state?.template_type, config, correct, skill, rng: botRng });
         const elapsedMs = Date.now() - questionStartedAt;
         const result = scoreBotAnswer({ templateType: state?.template_type, config, correct, answer, basePoints, elapsedMs, timeLimitMs });
         const tt = normalizeTemplateType(state?.template_type);
@@ -560,14 +575,14 @@ export default function HostLive({ guestMode = false }) {
       tutorialDemoBotCompetitive: tutorialBotCompetitive,
       ...(currentQ ? {
         tutorialDemoQuestionProgress: {
-          questionKey: String(currentQ.id ?? state?.current_question_index ?? ""),
+          questionKey: String(currentQ?.question_id ?? currentQ?.id ?? state?.current_question_index ?? ""),
           questionIndex: Number(state?.current_question_index || 0),
           answeredCount: Math.max(0, Math.min(3, Number(tutorialAnsweredCount || 0))),
           choiceCounts: tutorialChoiceCounts || {},
         },
       } : {}),
     });
-  }, [tutorialDemo, tutorialUserId, tutorialBotScores, tutorialBotCompetitive, tutorialAnsweredCount, tutorialChoiceCounts, hostTutorialStage, currentQ?.id, state?.current_question_index, id]);
+  }, [tutorialDemo, tutorialUserId, tutorialBotScores, tutorialBotCompetitive, tutorialAnsweredCount, tutorialChoiceCounts, hostTutorialStage, currentQ?.question_id, currentQ?.id, state?.current_question_index, id]);
 
   useEffect(() => {
     if (!tutorialDemo || !isLive || !currentQ || tutorialAnsweredCount < 3) return undefined;
@@ -604,7 +619,7 @@ export default function HostLive({ guestMode = false }) {
     if (!tutorialDemo || hostTutorialStage !== "question") return undefined;
     const timerId = window.setTimeout(() => {
       setHostTutorialStage("question_metrics");
-    }, 2200);
+    }, 3000);
     return () => window.clearTimeout(timerId);
   }, [tutorialDemo, hostTutorialStage]);
 
@@ -783,7 +798,7 @@ export default function HostLive({ guestMode = false }) {
             </div>
           </div>
           <div data-tutorial="host-question-progress" className={`tw-host-progress tw-host-pixel-progress${timer.remainingSec <= 3 && isLive ? " is-danger" : timer.remainingSec <= 4 && isLive ? " is-warning" : ""}`} style={{ "--host-accent": accent }}><div style={{ width: `${Math.round(timer.progress * 100)}%` }}/></div>
-          <div className="tw-host-prompt" style={{ background: C.cardBg2, borderColor: C.border }}><h3 style={{ fontSize: fitHostTextSize(currentQ?.prompt, 31, 17) }}>{currentQ?.prompt || "Waiting for the first question"}</h3>{currentQ && <QuestionPreview q={currentQ} templateType={state.template_type} C={C} choiceCounts={displayChoiceCounts}/>}</div>
+          <div className="tw-host-prompt" style={{ background: C.cardBg2, borderColor: C.border }}><div style={{ width: "100%", boxSizing: "border-box", background: `color-mix(in srgb, ${accent} 12%, #ffffff)`, border: `3px solid ${accent}`, borderRadius: 8, padding: "20px 24px", minHeight: 130, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 6px 0 color-mix(in srgb, ${accent} 58%, #0f172a), 0 18px 34px ${accent}59, inset 0 2px 0 rgba(255,255,255,.8)` }}><h3 style={{ fontSize: fitHostTextSize(currentQ?.prompt, 31, 17), color: "#0f172a", textAlign: "center", margin: 0, overflowWrap: "anywhere" }}>{currentQ?.prompt || "Waiting for the first question"}</h3></div>{currentQ && <QuestionPreview q={currentQ} templateType={state.template_type} C={C} choiceCounts={displayChoiceCounts}/>}</div>
         </section>
         <div className={`tw-host-right-stack${hostIsMobile ? " is-mobile-hidden" : ""}`}>
           {joinMode === "GROUP" ? (
@@ -869,7 +884,7 @@ export default function HostLive({ guestMode = false }) {
     {!tabTutorialOpen && hostTutorialStage === "start" && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-panel-start"]' placement="below" square highlightMode="target"><p>Once everyone is ready, start the activity from here.</p></ThinkBotTutorial>}
     {!tabTutorialOpen && ["countdown", "question_delay", "ending"].includes(hostTutorialStage) && <ThinkBotTutorial accentColor={accent} />}
     {!tabTutorialOpen && hostTutorialStage === "question" && (
-      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement={hostIsMobile ? "above" : "right"} square dialogWidth={hostIsMobile ? 300 : 360} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
         <p className="tw-tutorial-fade-line">This is the question content area. It displays the current question the students are answering on their screens.</p>
       </ThinkBotTutorial>
     )}
@@ -878,7 +893,7 @@ export default function HostLive({ guestMode = false }) {
         <p className="tw-tutorial-fade-line">You can see how many have already answered, how many points the question is worth, and the timer.</p>
       </ThinkBotTutorial>
     ) : (
-      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="screen-left" square dialogWidth={360} highlight={false} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
+      <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-question-content"]' placement="right" square dialogWidth={360} highlight={false} allowTargetInteraction={false} secondaryLabel="Skip" onSecondary={skipQuestionTutorial}>
         <p className="tw-tutorial-fade-line">You can see how many have already answered, how many points the question is worth, and the timer.</p>
       </ThinkBotTutorial>
     ))}
@@ -907,7 +922,7 @@ const Podium = memo(function Podium({ leaders, scoreMode = "competitive", onTogg
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const count = Number(row.tab_out_count || 0); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8"; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<span data-tutorial="host-tab-out" className="text-[12px] font-extrabold" style={{ color: tabColor }}>{count} tab out{count === 1 ? "" : "s"}</span></div>; });
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const tabCount = Number(row.tab_out_count || 0); const shotCount = Number(row.screenshot_count || 0); const [showShots, setShowShots] = useState(false); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = tabCount >= 3 ? "#ef4444" : tabCount === 2 ? "#f97316" : "#94a3b8"; const shownCount = showShots ? shotCount : tabCount; const shownColor = showShots ? "#38bdf8" : tabColor; const shownLabel = showShots ? `screenshot${shotCount === 1 ? "" : "s"}` : `tab out${tabCount === 1 ? "" : "s"}`; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<button type="button" data-tutorial="host-tab-out" onClick={() => setShowShots((v) => !v)} title={showShots ? "Click to show tab-out count" : "Click to show screenshot count"} className="text-[12px] font-extrabold" style={{ color: shownColor, background: "transparent", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "right" }}>{shownCount} {shownLabel}</button></div>; });
 // Groupings replaces Student Attendance in GROUP mode (solo keeps AttendanceRow).
 // Students self-join groups; the teacher only adds/deletes them (LOBBY only,
 // enforced server-side). Single-expand mirrors the analytics per-question
@@ -993,9 +1008,13 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
   }
 
   if (tt === "TYPE_ANSWER") {
-    const answer = String(correct?.text || cfg?.answer || "").trim();
-    return <div className="tw-host-identification-answer" style={{ background: C.cardBg, borderColor: C.border }}>
-      <b style={{ fontSize: fitHostTextSize(answer || "No answer set", 24, 14) }}>{answer || "No answer set"}</b>
+    const main = String(correct?.text || cfg?.answer || "").trim();
+    const extra = (Array.isArray(correct?.answers) ? correct.answers : []).map((a) => String(a || "").trim()).filter((a) => a && a !== main).slice(0, 2);
+    const answers = [main, ...extra].filter(Boolean);
+    const accent = C.accent || "#a855f7";
+    const well = { background: "#ffffff", border: `3px solid ${accent}`, borderRadius: 14, boxShadow: `inset 0 4px 0 rgba(15,23,42,.10), inset 0 10px 20px color-mix(in srgb, ${accent} 16%, transparent)`, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "center", color: "#0f172a", fontWeight: 900, lineHeight: 1.45, textAlign: "center", overflowWrap: "anywhere", boxSizing: "border-box", minHeight: 58, width: "100%" };
+    return <div className="tw-host-identification-answer" style={{ background: "transparent", borderColor: "transparent", display: "grid", gap: 10, padding: 0 }}>
+      {answers.length ? answers.map((a, i) => <div key={i} style={well}><b style={{ fontSize: fitHostTextSize(a, 22, 13) }}>{a}</b></div>) : <div style={well}><b style={{ fontSize: 14 }}>No answer set</b></div>}
     </div>;
   }
 
@@ -1005,17 +1024,33 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
     const dummyB = Array.isArray(cfg.dummyB) ? cfg.dummyB : [];
     const pairedB = sourceB.slice(0, colA.length);
     const sourceTail = sourceB.slice(colA.length);
-    const normalizedDummy = dummyB.length ? dummyB : sourceTail;
-    const colB = [...pairedB, ...normalizedDummy];
-    return <div className="tw-host-matching-preview">
-      <div><h4>Column A</h4>{colA.map((row, i) => <HostMediaChoice key={i} item={row} fallback={`Item ${i + 1}`} C={C}/>)}</div>
-      <div><h4>Column B</h4>{colB.map((row, i) => <HostMediaChoice key={i} item={row} fallback={`Choice ${i + 1}`} C={C}/>)}</div>
+    const distractors = dummyB.length ? dummyB : sourceTail;
+    const accent = C.accent || "#f97316";
+    const outer3d = { border: `3px solid ${accent}`, borderRadius: 18, background: `color-mix(in srgb, ${accent} 12%, #ffffff)`, boxShadow: `0 6px 0 ${accent}, 0 14px 28px ${accent}40, inset 0 2px 0 rgba(255,255,255,.6)`, padding: 12, display: "grid", gap: 8, boxSizing: "border-box", width: "100%" };
+    const inset3d = { background: "#ffffff", border: `3px solid ${accent}`, borderRadius: 12, boxShadow: `inset 0 4px 0 rgba(15,23,42,.10), inset 0 10px 20px color-mix(in srgb, ${accent} 16%, transparent)`, color: "#0f172a", padding: "8px 10px", boxSizing: "border-box", minWidth: 0 };
+    const pairRow = { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", gap: 8, alignItems: "center" };
+    const labelRow = { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", gap: 8, alignItems: "center", fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".06em", color: accent };
+    return <div className="tw-host-matching-bank" style={outer3d}>
+      {colA.length > 0 && <div style={labelRow}><span style={{ textAlign: "center" }}>Column A</span><span /><span style={{ textAlign: "center" }}>Column B</span></div>}
+      {colA.map((row, i) => <div key={i} style={pairRow}>
+        <div style={inset3d}><HostMediaChoice item={row} fallback={`Item ${i + 1}`} C={C} /></div>
+        <span style={{ color: accent, fontWeight: 1000 }}>&lt;-&gt;</span>
+        <div style={inset3d}><HostMediaChoice item={pairedB[i]} fallback={`Match ${i + 1}`} C={C} /></div>
+      </div>)}
+      {distractors.length > 0 && <div style={{ fontSize: 11, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".06em", color: accent }}>Distractors</div>}
+      {distractors.map((row, i) => <div key={`d-${i}`} style={inset3d}><HostMediaChoice item={row} fallback={`Distractor ${i + 1}`} C={C} /></div>)}
     </div>;
   }
 
   if (tt === "GUESS_WORD_4PICS") {
     const answer = String(correct?.text || cfg?.target || "").trim();
-    return <div className="tw-host-guess-preview"><div className="tw-host-pics">{[0, 1, 2, 3].map((i) => <div key={i}>{cfg.images?.[i] ? <img src={cfg.images[i]} alt=""/> : "?"}</div>)}</div><div className="tw-host-guess-answer" style={{ background: C.cardBg, borderColor: C.border }}><b>{answer || "No answer set"}</b></div></div>;
+    const images = Array.isArray(cfg.images) ? cfg.images : [];
+    const imgCard = { border: "4px solid #35a159", borderRadius: 20, background: "#7fd09a", boxShadow: "0 8px 0 #25753f, 0 16px 28px rgba(15,23,42,.16)", padding: 8, boxSizing: "border-box", overflow: "hidden" };
+    const answerCard = { background: "#e7f4ec", border: "3px solid #35a159", borderRadius: 20, boxShadow: "0 6px 0 #25753f, 0 14px 28px rgba(37,117,63,.25), inset 0 2px 0 rgba(255,255,255,.7)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "center", color: "#14532d", fontWeight: 900, lineHeight: 1.4, textAlign: "center", overflowWrap: "anywhere", boxSizing: "border-box", minHeight: 72, width: "100%" };
+    return <div className="tw-host-guess-bank" style={{ display: "grid", gap: 12, justifyItems: "center", width: "100%" }}>
+      <div style={{ width: "min(100%, 320px)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>{[0, 1, 2, 3].map((i) => <div key={i} className="aspect-square overflow-hidden grid place-items-center" style={imgCard}>{images[i] ? <img src={images[i]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 12, display: "block" }} /> : <span style={{ color: "#14532d", fontWeight: 900, fontSize: 28 }}>?</span>}</div>)}</div>
+      <div style={{ ...answerCard, width: "min(100%, 320px)" }}><b style={{ fontSize: fitHostTextSize(answer || "No answer set", 24, 14) }}>{answer || "No answer set"}</b></div>
+    </div>;
   }
 
   if (tt === "CROSSWORD") {
@@ -1025,21 +1060,38 @@ const QuestionPreview = memo(function QuestionPreview({ q, templateType, C, choi
     const generated = buildCrosswordGrid({ gridSize: requestedGridSize, words, seed: buildCrosswordSeed(signature) });
     const gridSize = generated.gridSize;
     const grid = Array.isArray(cfg.grid) && cfg.grid.length === gridSize * gridSize ? cfg.grid : generated.grid;
-    return <div className="tw-host-crossword-grid" style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0,1fr))` }}>
-      {grid.map((letter, index) => <span key={`${signature}-${index}`}>{String(letter || "").toUpperCase()}</span>)}
+    const accent = C.accent || "#0ea5e9";
+    const face = `color-mix(in srgb, ${accent} 30%, #ffffff)`;
+    const base = `color-mix(in srgb, ${accent} 55%, #0f172a)`;
+    const ink = `color-mix(in srgb, ${accent} 72%, #0f172a)`;
+    const displayWords = words.map((word) => String(word || "").toUpperCase().replace(/[^A-Z]/g, "")).filter(Boolean);
+    return <div className="tw-host-crossword-bank" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch", width: "100%" }}>
+      <div className="grid place-items-center" style={{ flex: "3 1 320px", minWidth: 0, maxWidth: 440, width: "100%", margin: "0 auto", padding: 14, borderRadius: 18, border: `4px solid ${accent}`, background: C.cardBg, boxShadow: `0 8px 0 color-mix(in srgb, ${accent} 58%, #0f172a), 0 18px 36px ${accent}40`, boxSizing: "border-box" }}>
+      <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0,1fr))`, gap: gridSize > 9 ? 3 : 5 }}>
+        {grid.map((letter, index) => {
+          const upper = String(letter || "").toUpperCase();
+          return upper
+            ? <span key={`${signature}-${index}`} className="aspect-square grid place-items-center font-black" style={{ borderRadius: gridSize > 9 ? 6 : 9, border: `2px solid ${accent}`, background: "#ffffff", boxShadow: `inset 0 3px 0 rgba(15,23,42,.10), inset 0 6px 12px color-mix(in srgb, ${accent} 18%, transparent)`, color: C.accent, fontSize: gridSize > 9 ? 11 : 15 }}>{upper}</span>
+            : <span key={`${signature}-${index}`} className="aspect-square" style={{ borderRadius: gridSize > 9 ? 6 : 9, border: `1px solid ${C.border}`, background: "transparent" }} />;
+        })}
+      </div>
+      </div>
+      {displayWords.length > 0 && <div style={{ flex: "2 1 200px", minWidth: 0, alignSelf: "center", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "stretch" }}>
+        {displayWords.map((word, i) => <div key={`${word}-${i}`} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 10px", border: `4px solid ${accent}`, borderRadius: 14, background: face, boxShadow: `0 4px 0 ${base}, 0 10px 20px rgba(15,23,42,.14)`, boxSizing: "border-box", minWidth: 0 }}><span style={{ color: ink, fontWeight: 900, fontSize: 14, overflowWrap: "anywhere", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{word}</span></div>)}
+      </div>}
     </div>;
   }
 
   return <div style={{ color: C.muted }}>Student interaction is shown on each learner’s screen.</div>;
 });
 
-const HostMediaChoice = memo(function HostMediaChoice({ item, fallback, C }) {
+const HostMediaChoice = memo(function HostMediaChoice({ item, fallback }) {
   const value = item && typeof item === "object" ? item : { text: String(item || "") };
   const text = String(value.text || "").trim();
   const image = String(value.image || "").trim();
-  return <span className="tw-host-media-choice" style={{ background: C.cardBg, borderColor: C.border }}>
-    {(text || !image) && <b style={{ fontSize: fitHostTextSize(text || fallback, 18, 12) }}>{text || fallback}</b>}
-    {image && <img src={image} alt="" />}
+  return <span className="tw-host-media-mini" style={{ background: "transparent", border: "none", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, minWidth: 0, textAlign: "center" }}>
+    {(text || !image) && <b style={{ fontSize: fitHostTextSize(text || fallback, 18, 12), color: "#0f172a", overflowWrap: "anywhere", minWidth: 0 }}>{text || fallback}</b>}
+    {image && <img src={image} alt="" style={{ width: 42, height: 42, borderRadius: 8, objectFit: "cover", flex: "none" }} />}
   </span>;
 });
 function fitHostTextSize(text, max = 24, min = 12) { const length = String(text || "").length; if (length <= 28) return max; if (length >= 150) return min; return Math.max(min, Math.round(max - (length - 28) * ((max - min) / 122))); }

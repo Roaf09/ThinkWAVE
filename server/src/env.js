@@ -89,4 +89,15 @@ export const env = {
   JWT_EXPIRES_IN: /^[1-9]\d*[smhd]$/.test(String(process.env.JWT_EXPIRES_IN || ""))
     ? String(process.env.JWT_EXPIRES_IN)
     : "8h",
+
+  // Social login (Google / Facebook). Each provider is OFF unless its
+  // id + secret are both set — the frontend hides unconfigured buttons.
+  // OAUTH_API_BASE must be the exact public base URL of THIS server because
+  // every provider requires pre-registering the full redirect URI:
+  //   {OAUTH_API_BASE}/api/auth/oauth/callback/google (and /facebook)
+  OAUTH_API_BASE: String(process.env.OAUTH_API_BASE || `http://localhost:${Number(process.env.PORT || 4000)}`).replace(/\/$/, ""),
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || "",
+  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID || "",
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET || "",
 };

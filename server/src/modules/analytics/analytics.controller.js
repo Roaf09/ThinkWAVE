@@ -13,6 +13,8 @@ import { normalizeTemplateType } from "../quizzes/templates.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "../sessions/sessionBackground.runtime.js";
 import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
+import { enqueueExport, queueStats } from "../../queue.js";
+import { yieldToLoop } from "../exports/exportStore.js";
 
 function safeJson(v) {
   if (!v) return null;
@@ -212,16 +214,23 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     competitiveByParticipant.set(pid, Number(competitiveByParticipant.get(pid) || 0) + Number(meta.competitivePoints || 0));
   }
 
+  await pool.query(`CREATE TABLE IF NOT EXISTS screenshot_events (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    session_id BIGINT NOT NULL,
+    participant_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_screenshot_session_participant (session_id, participant_id)
+  )`);
   const [allTabMonitoring] = await pool.query(
     `SELECT p.id AS participant_id,
             p.first_name, p.last_name, p.join_type, p.group_name,
             gm.group_id,
             sg.display_name AS assigned_group_name,
-            COUNT(te.id) AS tab_out_count
+            (SELECT COUNT(*) FROM tab_events te WHERE te.participant_id = p.id AND te.session_id = :sid) AS tab_out_count,
+            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id = p.session_id AND se.participant_id = p.id) AS screenshot_count
      FROM session_participants p
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
-     LEFT JOIN tab_events te ON te.participant_id = p.id AND te.session_id = :sid
      WHERE p.session_id = :sid2
      GROUP BY p.id
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
@@ -334,12 +343,9 @@ export async function sessionQuestionStats(req, res) {
   res.json(data.questions);
 }
 
-export async function exportSessionXlsx(req, res) {
-  if (!(await requireInstitutionAnalytics(req, res))) return;
-  const sessionId = Number(req.params.sessionId);
-  const data = await buildFullAnalyticsData(sessionId, req.user.sub);
-  if (!data) return res.status(404).json({ message: "Session not found" });
-
+// Shared workbook builder: one layout for sync download + async file jobs.
+// Row adds yield every 500 rows so a big export interleaves with live sockets.
+export async function buildSessionWorkbook(data) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "ThinkWAVE";
 
@@ -378,16 +384,24 @@ export async function exportSessionXlsx(req, res) {
   // same class of timezone mismatch fmtDate above exists to avoid.
   // GROUP mode lists one row per group instead of per student.
   if (isGroupExport) {
-    data.groups.forEach((g) => attendance.addRow({
-      last_name: g.display_name,
-      first_name: `${g.member_count} member${g.member_count === 1 ? "" : "s"}: ${(g.members || []).map((m) => `${m.first_name || ""} ${m.last_name || ""}`.trim()).filter(Boolean).join(", ")}`,
-      assigned_group_name: g.display_name,
-      total_points: g.total_points,
-      presence_status: g.presence_status,
-      joined_at: fmtDate(g.joined_at),
-    }));
+    let i = 0;
+    for (const g of data.groups) {
+      attendance.addRow({
+        last_name: g.display_name,
+        first_name: `${g.member_count} member${g.member_count === 1 ? "" : "s"}: ${(g.members || []).map((m) => `${m.first_name || ""} ${m.last_name || ""}`.trim()).filter(Boolean).join(", ")}`,
+        assigned_group_name: g.display_name,
+        total_points: g.total_points,
+        presence_status: g.presence_status,
+        joined_at: fmtDate(g.joined_at),
+      });
+      if (++i % 500 === 0) await yieldToLoop();
+    }
   } else {
-    data.students.forEach((r) => attendance.addRow({ ...r, joined_at: fmtDate(r.joined_at) }));
+    let i = 0;
+    for (const r of data.students) {
+      attendance.addRow({ ...r, joined_at: fmtDate(r.joined_at) });
+      if (++i % 500 === 0) await yieldToLoop();
+    }
   }
   attendance.getRow(1).font = { bold: true };
 
@@ -401,7 +415,12 @@ export async function exportSessionXlsx(req, res) {
     { header: "Incorrect Answers", key: "incorrect_answers", width: 18 },
     { header: "% Answered Incorrect", key: "pct_incorrect", width: 22 },
   ];
-  data.questions.forEach((q, idx) => qSheet.addRow({ ...q, question_order: Number(q.question_order ?? idx) + 1 }));
+  let qi = 0;
+  for (const q of data.questions) {
+    qSheet.addRow({ ...q, question_order: Number(q.question_order ?? qi) + 1 });
+    qi += 1;
+    if (qi % 500 === 0) await yieldToLoop();
+  }
   qSheet.getRow(1).font = { bold: true };
 
   const tabSheet = workbook.addWorksheet("Tab Monitoring");
@@ -410,38 +429,56 @@ export async function exportSessionXlsx(req, res) {
     { header: "First Name", key: "first_name", width: 24 },
     { header: "Group", key: "assigned_group_name", width: 24 },
     { header: "Tab Out Count", key: "tab_out_count", width: 16 },
+    { header: "Screenshot Count", key: "screenshot_count", width: 18 },
   ];
-  // GROUP mode sums tab-outs per group instead of listing students.
+  // GROUP mode sums tab-outs and screenshots per group instead of listing students.
   if (isGroupExport) {
     const tabByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.tab_out_count || 0)]));
-    data.groups.forEach((g) => tabSheet.addRow({
-      last_name: g.display_name,
-      first_name: `${g.member_count} member${g.member_count === 1 ? "" : "s"}`,
-      assigned_group_name: g.display_name,
-      tab_out_count: (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0),
-    }));
+    const shotByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.screenshot_count || 0)]));
+    let i = 0;
+    for (const g of data.groups) {
+      tabSheet.addRow({
+        last_name: g.display_name,
+        first_name: `${g.member_count} member${g.member_count === 1 ? "" : "s"}`,
+        assigned_group_name: g.display_name,
+        tab_out_count: (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0),
+        screenshot_count: (g.member_ids || []).reduce((sum, pid) => sum + (shotByPid.get(Number(pid)) || 0), 0),
+      });
+      if (++i % 500 === 0) await yieldToLoop();
+    }
   } else {
-    data.tabMonitoring.forEach((r) => tabSheet.addRow(r));
+    let i = 0;
+    for (const r of data.tabMonitoring) {
+      tabSheet.addRow({ ...r, screenshot_count: Number(r.screenshot_count || 0) });
+      if (++i % 500 === 0) await yieldToLoop();
+    }
   }
   tabSheet.getRow(1).font = { bold: true };
-
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="session-${sessionId}-analytics.xlsx"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  return workbook;
 }
 
-export async function exportSessionPdf(req, res) {
+export async function exportSessionXlsx(req, res) {
   if (!(await requireInstitutionAnalytics(req, res))) return;
+  if (queueStats().exportSize > 3) {
+    return res.status(429).json({ message: "Export is busy. Please try the async export or try again shortly." });
+  }
   const sessionId = Number(req.params.sessionId);
-  const data = await buildFullAnalyticsData(sessionId, req.user.sub);
-  if (!data) return res.status(404).json({ message: "Session not found" });
+  await enqueueExport(async () => {
+    const data = await buildFullAnalyticsData(sessionId, req.user.sub);
+    if (!data) {
+      if (!res.headersSent) res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    const workbook = await buildSessionWorkbook(data);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="session-${sessionId}-analytics.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  });
+}
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="session-${sessionId}-analytics.pdf"`);
-
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
-  doc.pipe(res);
+// Shared PDF layout: draws onto any PDFDocument (response stream or file stream).
+export function renderSessionPdf(data, doc, sessionId) {
   const left = doc.page.margins.left;
 
   doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(data.session.quiz_title || `Session #${sessionId}`, left, doc.page.margins.top);
@@ -509,18 +546,39 @@ export async function exportSessionPdf(req, res) {
     y,
     title: "Tab Monitoring",
     columns: [
-      { label: "Last Name", width: 130 },
-      { label: "First Name", width: 130 },
-      { label: "Group", width: 145 },
-      { label: "Tab Outs", width: 110, align: "right" },
+      { label: "Last Name", width: 110 },
+      { label: "First Name", width: 110 },
+      { label: "Group", width: 125 },
+      { label: "Tab Outs", width: 85, align: "right" },
+      { label: "Screenshots", width: 85, align: "right" },
     ],
     rows: isGroupPdf
       ? (() => {
           const tabByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.tab_out_count || 0)]));
-          return data.groups.map((g) => [g.display_name, `${g.member_count} member${g.member_count === 1 ? "" : "s"}`, g.display_name, (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0)]);
+          const shotByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.screenshot_count || 0)]));
+          return data.groups.map((g) => [g.display_name, `${g.member_count} member${g.member_count === 1 ? "" : "s"}`, g.display_name, (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0), (g.member_ids || []).reduce((sum, pid) => sum + (shotByPid.get(Number(pid)) || 0), 0)]);
         })()
-      : data.tabMonitoring.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.tab_out_count || 0]),
+      : data.tabMonitoring.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.tab_out_count || 0, Number(r.screenshot_count || 0)]),
   });
+}
 
-  doc.end();
+export async function exportSessionPdf(req, res) {
+  if (!(await requireInstitutionAnalytics(req, res))) return;
+  if (queueStats().exportSize > 3) {
+    return res.status(429).json({ message: "Export is busy. Please try the async export or try again shortly." });
+  }
+  const sessionId = Number(req.params.sessionId);
+  await enqueueExport(async () => {
+    const data = await buildFullAnalyticsData(sessionId, req.user.sub);
+    if (!data) {
+      if (!res.headersSent) res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="session-${sessionId}-analytics.pdf"`);
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    doc.pipe(res);
+    renderSessionPdf(data, doc, sessionId);
+    doc.end();
+  });
 }

@@ -40,11 +40,16 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
     if (!guestMode && tutorialUserId && quiz?.template_type) {
       markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
     }
-    setBuilderTutorialStage(null);
+    // End on a closing beat instead of vanishing, so first-time users get a
+    // clear handoff before the walkthrough goes away.
+    setBuilderTutorialStage("template_done");
   }
 
   function skipFollowupTemplateTutorial() {
-    finishFollowupTemplateTutorial();
+    if (!guestMode && tutorialUserId && quiz?.template_type) {
+      markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+    }
+    setBuilderTutorialStage(null);
   }
 
   function startFollowupTemplateTutorial() {
@@ -95,14 +100,15 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
       } else if (tt === "TYPE_ANSWER") {
         // Identification waits for typing to stop, then shows a Done? confirmation.
       } else if (tt === "MATCHING") {
-        // Matching now waits for the teacher to press the tutorial Done button.
-        // This keeps the pair editor interactive long enough to try text, images,
-        // or a combination before moving on to distractors.
+        // Matching waits for click-anywhere once the pair is filled
+        // (see BuilderTutorials matching_new_pair). The pair editor stays
+        // interactive long enough to try text, images, or a combination
+        // before moving on to distractors.
       } else if (tt === "GUESS_WORD_4PICS") {
         const images = Array.isArray(cfg.images) ? cfg.images.slice(0, 4) : [];
         if (images.length === 4 && images.every((x) => trimText(x))) next = "guess_images_done";
       } else if (tt === "CROSSWORD") {
-        // Crossword waits for the teacher to press Done after entering at least four words.
+        // Crossword waits for click-anywhere after entering at least four words.
       }
       if (next) {
         const timer = window.setTimeout(() => setBuilderTutorialStage(next), 250);
@@ -148,6 +154,13 @@ export function useBuilderTutorial({ guestMode, quiz, questions, qIndex, isSaved
       }
       if (builderTutorialStage === "crossword_shuffle" && !cfg.gridFilled) {
         const timer = window.setTimeout(() => setBuilderTutorialStage("crossword_fill"), 400);
+        return () => window.clearTimeout(timer);
+      }
+      // Forward path: a filled grid while sitting on the Fill step (restored
+      // progress, or the bounce-back above) moves on to Shuffle instead of
+      // stranding the tutorial on "Click Fill It Up!".
+      if (builderTutorialStage === "crossword_fill" && cfg.gridFilled) {
+        const timer = window.setTimeout(() => setBuilderTutorialStage("crossword_shuffle"), 400);
         return () => window.clearTimeout(timer);
       }
     }

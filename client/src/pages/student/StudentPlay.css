@@ -632,3 +632,11 @@ body.dark-mode .sp-explanation-feedback{background:rgba(10,23,48,.96);color:#f8f
   }
   .sp-live-top5:not(.is-minimized) .sp-live-top5-panel{padding-right:18px}
 }
+
+/* Gameplay capture guards (toggled on <body> by useGameplayProtection while a
+   live session or assignment is being played). Text selection and touch
+   callouts are disabled except inside answer inputs, which students still
+   need for typing. */
+body.sp-capture-guarded,body.sp-capture-guarded *:not(input):not(textarea){user-select:none!important;-webkit-user-select:none!important}
+body.sp-capture-guarded{-webkit-touch-callout:none}
+body.sp-capture-guarded input,body.sp-capture-guarded textarea{-webkit-touch-callout:default}

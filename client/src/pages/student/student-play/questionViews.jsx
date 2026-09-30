@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { GameMcq } from "../../../components/game/GameMcq";
 import { GameMatching } from "../../../components/game/GameMatching";
 import { GameTrueFalse } from "../../../components/game/GameTrueFalse";
@@ -38,7 +39,7 @@ export function GuessWord4PicsTemplate({ disabled, cfg, spell, setSpell, onSubmi
   );
 }
 
-export function TemplateBody({
+export const TemplateBody = memo(function TemplateBody({
   disabled,
   templateType,
   q,
@@ -108,4 +109,4 @@ export function TemplateBody({
     );
   }
   return <GameTypeAnswer value={answerText} onChange={setAnswerText} disabled={disabled} />;
-}
+});

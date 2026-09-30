@@ -34,10 +34,14 @@ export default function StudentJoin() {
     setMsg("");
     setLoading(true);
     try {
+      const storedKey = String(localStorage.getItem("qz_reconnectKey") || "");
       const { data } = await api.post("/sessions/join", {
         code: code.trim().toUpperCase(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        // Same-browser seat recovery: proves an earlier seat is ours so the
+        // server hands it back instead of minting a duplicate row.
+        ...(storedKey.length >= 20 ? { reconnectKey: storedKey.slice(0, 64) } : {}),
       });
       localStorage.setItem("qz_reconnectKey", data.reconnectKey);
       localStorage.setItem("qz_participantId", String(data.participantId));
@@ -88,7 +92,7 @@ export default function StudentJoin() {
           <form onSubmit={handleJoin} className="flex flex-col gap-3">
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" required autoFocus className="px-4 py-[14px] rounded-xl text-base w-full box-border outline-none" style={{ background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
             <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name (optional)" className="px-4 py-[14px] rounded-xl text-base w-full box-border outline-none" style={{ background: inputBg, border: `1px solid ${inputBor}`, color: textC }} />
-            {msg && <p className="text-[13px] rounded-xl p-[10px_12px] m-0 border border-solid text-[#f87171] bg-[rgba(239,68,68,0.12)] border-[rgba(239,68,68,0.2)]">{msg}</p>}
+            {msg && <p className="text-[13px] rounded-xl p-[10px_12px] m-0 border border-solid text-[#f87171] bg-[rgba(239,68,68,0.12)] border-[rgba(239,68,68,0.2)]" style={{ textAlign: "center" }}>{msg}</p>}
             <button type="submit" disabled={loading} className="tw-guest-join-primary mt-1 p-[14px_16px] rounded-full border-0 bg-brand text-white text-[15px] font-extrabold cursor-pointer shadow-[0_12px_30px_rgba(43,108,255,0.28)]" style={{ opacity: loading ? 0.7 : 1 }}>{loading ? "Joining…" : "Join Session"}</button>
             <button type="button" onClick={() => nav("/?join=guest")} className="bg-transparent border-0 text-[13px] cursor-pointer font-bold" style={{ color: mutedC }}>Change code</button>
           </form>

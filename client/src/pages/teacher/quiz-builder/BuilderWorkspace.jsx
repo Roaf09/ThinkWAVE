@@ -49,6 +49,36 @@ export function BuilderWorkspace({
   goPrev,
   goNext,
 }) {
+  // Desktop: the mini actions sit on the same row as the "Question n/255"
+  // label inside QuestionEditor. Mobile keeps the toolbar row above.
+  const toolbarNode = (
+    <BuilderToolbar
+      isMobile={isMobile}
+      ui={ui}
+      currentQ={currentQ}
+      qIndex={qIndex}
+      quiz={quiz}
+      isBatchTemplate={isBatchTemplate}
+      isFirst={isFirst}
+      isLast={isLast}
+      moveQuestion={moveQuestion}
+      addQuestion={addQuestion}
+      deleteCurrentQuestion={deleteCurrentQuestion}
+      qMenuOpen={qMenuOpen}
+      setQMenuOpen={setQMenuOpen}
+      toggleLock={toggleLock}
+      redo={redo}
+      canRedo={canRedo}
+      undo={undo}
+      canUndo={canUndo}
+      duplicateCurrentQuestion={duplicateCurrentQuestion}
+      guestMode={guestMode}
+      bankSavedOrders={bankSavedOrders}
+      builderTutorialStage={builderTutorialStage}
+      validateQuestion={validateQuestion}
+      setModal={setModal}
+    />
+  );
   return (
     <div
       className={`tw-builder-content-region${questionStripOpen ? " has-question-strip" : ""}${isMobile ? " is-mobile" : ""}`}
@@ -73,36 +103,13 @@ export function BuilderWorkspace({
           {currentQ && (
             <div key={`${qIndex}-${navTick}`} style={{ animation: `${navDir === "next" ? "twSlideLeftIn" : "twSlideRightIn"} 220ms cubic-bezier(0.22, 1, 0.36, 1)` }}>
               <div style={isMobile ? undefined : ui.questionCard} className={isMobile ? `tw-builder-mobile-question ${builderTemplateDragClass}` : `tw-builder-question-form ${builderTemplateDragClass}`}>
+                {isMobile && (
                 <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
-                  <BuilderToolbar
-                    isMobile={isMobile}
-                    ui={ui}
-                    currentQ={currentQ}
-                    qIndex={qIndex}
-                    quiz={quiz}
-                    isBatchTemplate={isBatchTemplate}
-                    isFirst={isFirst}
-                    isLast={isLast}
-                    moveQuestion={moveQuestion}
-                    addQuestion={addQuestion}
-                    deleteCurrentQuestion={deleteCurrentQuestion}
-                    qMenuOpen={qMenuOpen}
-                    setQMenuOpen={setQMenuOpen}
-                    toggleLock={toggleLock}
-                    redo={redo}
-                    canRedo={canRedo}
-                    undo={undo}
-                    canUndo={canUndo}
-                    duplicateCurrentQuestion={duplicateCurrentQuestion}
-                    guestMode={guestMode}
-                    bankSavedOrders={bankSavedOrders}
-                    builderTutorialStage={builderTutorialStage}
-                    validateQuestion={validateQuestion}
-                    setModal={setModal}
-                  />
+                  {toolbarNode}
                 </div>
+                )}
 
-                <QuestionEditor ui={ui} c={c} quiz={quiz} currentQ={currentQ} updateQ={updateQ} isMobile={isMobile} />
+                <QuestionEditor ui={ui} c={c} quiz={quiz} currentQ={currentQ} updateQ={updateQ} isMobile={isMobile} toolbar={isMobile ? null : toolbarNode} />
               </div>
             </div>
           )}

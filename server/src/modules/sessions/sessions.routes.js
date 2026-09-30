@@ -43,6 +43,8 @@ const JoinSchema = z.object({
   code: z.string().min(4),
   firstName: z.string().min(1),
   lastName: z.string().optional(),
+  // Same-browser seat recovery: the key this browser was issued before, if any.
+  reconnectKey: z.string().min(20).max(64).optional(),
 });
 
 const CodeSchema = z.object({

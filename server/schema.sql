@@ -25,6 +25,7 @@ CREATE TABLE users (
   last_active_at         TIMESTAMP NULL,
   contact_number         VARCHAR(30) NULL,
   profile_image          LONGTEXT NULL,
+  birth_date             DATE NULL,
   institution_name       VARCHAR(200) NULL,
   institution_setup_done TINYINT(1) NOT NULL DEFAULT 0,
   plan_code              ENUM('BASIC','PRO','INSTITUTION') NOT NULL DEFAULT 'BASIC',
@@ -64,7 +65,8 @@ CREATE TABLE otp_codes (
   attempt_count INT NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_otp_codes_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+  INDEX idx_otp_lookup (user_id, used_at, expires_at)
 );
 
 -- -----------------------------------------------------------
@@ -93,8 +95,48 @@ CREATE TABLE rate_limit_hits (
   endpoint_key VARCHAR(190) NOT NULL,
   client_key   VARCHAR(190) NOT NULL,
   hit_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  INDEX idx_ratelimit_lookup (endpoint_key, client_key, hit_at)
+  INDEX idx_ratelimit_lookup (endpoint_key, client_key, hit_at),
+  INDEX idx_ratelimit_hit (hit_at)
 ) ENGINE=InnoDB;
+
+-- -----------------------------------------------------------
+-- 2c. oauth_accounts (Google / Facebook sign-in links)
+-- One user can link several providers; one provider account links to one user.
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS oauth_accounts (
+  id               BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id          BIGINT NOT NULL,
+  provider         ENUM('GOOGLE','FACEBOOK') NOT NULL,
+  provider_user_id VARCHAR(190) NOT NULL,
+  email            VARCHAR(190) NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_oauth_accounts_user
+    FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE KEY uq_oauth_provider_user (provider, provider_user_id),
+  INDEX idx_oauth_user (user_id)
+);
+
+-- -----------------------------------------------------------
+-- 2d. oauth_pending (one-time login codes + X email-link flow)
+-- LOGIN: short code the callback hands the browser to swap for a JWT.
+-- PROFILE: unguessable token referencing a provider profile that still needs
+--   an email address (X rarely shares one).
+-- EMAIL_LINK: 6-digit code mailed to prove ownership of that address.
+-- All rows expire fast and are pruned daily; codes are single-use.
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS oauth_pending (
+  id               BIGINT PRIMARY KEY AUTO_INCREMENT,
+  code_hash        CHAR(64) NOT NULL UNIQUE,
+  purpose          ENUM('LOGIN','PROFILE','EMAIL_LINK') NOT NULL,
+  user_id          BIGINT NULL,
+  provider         ENUM('GOOGLE','FACEBOOK') NULL,
+  provider_user_id VARCHAR(190) NULL,
+  profile_json     JSON NULL,
+  email            VARCHAR(190) NULL,
+  expires_at       TIMESTAMP NOT NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_oauth_pending_expiry (expires_at)
+);
 
 -- -----------------------------------------------------------
 -- 3. classes (folder tree)
@@ -149,7 +191,10 @@ CREATE TABLE quizzes (
   CONSTRAINT fk_quizzes_source
     FOREIGN KEY (source_quiz_id) REFERENCES quizzes(id),
   INDEX idx_quizzes_teacher_status (teacher_id, status),
-  INDEX idx_quizzes_class (class_id)
+  INDEX idx_quizzes_class (class_id),
+  INDEX idx_quizzes_source (source_quiz_id),
+  INDEX idx_quizzes_teacher_deleted (teacher_id, deleted_at, id DESC),
+  INDEX idx_quizzes_class_delivery (class_id, delivery_mode, deleted_at)
 );
 
 -- -----------------------------------------------------------
@@ -166,7 +211,8 @@ CREATE TABLE quiz_questions (
   deleted_at      TIMESTAMP NULL,
   CONSTRAINT fk_quiz_questions_quiz
     FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
-  INDEX idx_quiz_questions_quiz_order (quiz_id, question_order)
+  INDEX idx_quiz_questions_quiz_order (quiz_id, question_order),
+  INDEX idx_quiz_questions_quiz_deleted (quiz_id, deleted_at, question_order)
 );
 
 -- -----------------------------------------------------------
@@ -201,7 +247,8 @@ CREATE TABLE sessions (
   INDEX idx_sessions_teacher_status (teacher_id, status),
   INDEX idx_sessions_class (class_id),
   INDEX idx_sessions_quiz (quiz_id),
-  INDEX idx_sessions_ended_at (ended_at)
+  INDEX idx_sessions_ended_at (ended_at),
+  INDEX idx_sessions_status_heartbeat (status, last_heartbeat_at)
 );
 
 -- -----------------------------------------------------------
@@ -267,7 +314,9 @@ CREATE TABLE session_group_members (
   CONSTRAINT fk_session_group_members_participant
     FOREIGN KEY (participant_id) REFERENCES session_participants(id),
   UNIQUE KEY uq_group_member (participant_id),
-  INDEX idx_session_group_members_group (session_id, group_id)
+  INDEX idx_session_group_members_group (session_id, group_id),
+  INDEX idx_sgm_group (group_id),
+  INDEX idx_sgm_participant (participant_id)
 );
 
 -- -----------------------------------------------------------
@@ -307,7 +356,8 @@ CREATE TABLE group_answer_votes (
     FOREIGN KEY (proposal_id) REFERENCES group_answer_proposals(id),
   CONSTRAINT fk_gav_participant
     FOREIGN KEY (participant_id) REFERENCES session_participants(id),
-  UNIQUE KEY uq_group_answer_vote (proposal_id, participant_id)
+  UNIQUE KEY uq_group_answer_vote (proposal_id, participant_id),
+  INDEX idx_gav_participant (participant_id)
 );
 
 -- -----------------------------------------------------------
@@ -369,7 +419,8 @@ CREATE TABLE class_enrollments (
   CONSTRAINT fk_class_enrollments_student FOREIGN KEY (student_user_id) REFERENCES users(id),
   UNIQUE KEY uq_class_student (class_id, student_user_id),
   INDEX idx_class_enrollments_student (student_user_id, removed_at),
-  INDEX idx_class_enrollments_teacher (teacher_id, class_id)
+  INDEX idx_class_enrollments_teacher (teacher_id, class_id),
+  INDEX idx_enroll_class_removed (class_id, removed_at)
 );
 
 -- -----------------------------------------------------------
@@ -392,7 +443,8 @@ CREATE TABLE async_quiz_submissions (
   CONSTRAINT fk_async_submissions_student FOREIGN KEY (student_user_id) REFERENCES users(id),
   UNIQUE KEY uq_async_quiz_student (quiz_id, student_user_id),
   INDEX idx_async_quiz_class (class_id, quiz_id),
-  INDEX idx_async_student (student_user_id, submitted_at)
+  INDEX idx_async_student (student_user_id, submitted_at),
+  INDEX idx_async_rank (quiz_id, competitive_points, submitted_at)
 );
 
 -- -----------------------------------------------------------
@@ -410,7 +462,9 @@ CREATE TABLE question_bank (
   deleted_at    TIMESTAMP NULL,
   CONSTRAINT fk_question_bank_teacher
     FOREIGN KEY (teacher_id) REFERENCES users(id),
-  INDEX idx_question_bank_teacher (teacher_id, deleted_at)
+  INDEX idx_question_bank_teacher (teacher_id, deleted_at),
+  INDEX idx_question_bank_teacher_saved (teacher_id, deleted_at, saved_at DESC),
+  INDEX idx_question_bank_filter (teacher_id, template_type, category, deleted_at)
 );
 
 -- -----------------------------------------------------------
@@ -523,10 +577,25 @@ CREATE TABLE system_notifications (
   role             VARCHAR(30) NULL,
   institution_name VARCHAR(200) NULL,
   payload_json     JSON NULL,
+  -- Generated for indexing: WHERE JSON_EXTRACT(payload_json,'$.applicationId') is unindexable.
+  application_id   VARCHAR(64) AS (JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.applicationId'))) STORED,
   status           VARCHAR(30) NOT NULL DEFAULT 'NEW',
   created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_system_notification_type (type, created_at),
-  INDEX idx_system_notification_user (user_id)
+  INDEX idx_system_notification_user (user_id),
+  INDEX idx_system_notification_app (type, application_id)
+);
+
+-- Runtime-created table (was CREATE TABLE IF NOT EXISTS in code, never pruned).
+-- Declared here so fresh resets have it with correct index from day one.
+CREATE TABLE IF NOT EXISTS assignment_tab_events (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  quiz_id BIGINT NOT NULL,
+  student_user_id BIGINT NOT NULL,
+  event_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_assignment_tab (quiz_id, student_user_id),
+  INDEX idx_assignment_tab_created (created_at)
 );
 
 
@@ -571,4 +640,26 @@ CREATE TABLE IF NOT EXISTS student_competitive_overtakes (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_overtake_student (student_user_id),
   INDEX idx_overtake_session (session_id)
+);
+
+-- -----------------------------------------------------------
+-- 21. exports (async PDF/XLSX jobs)
+-- Single-service free: built by in-process queue, files in uploads/exports/.
+-- Row is the source of truth for PENDING -> RUNNING -> DONE/FAILED status.
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS exports (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  teacher_id BIGINT NOT NULL,
+  kind ENUM('SESSION','ASYNC') NOT NULL,
+  ref_session_id BIGINT NULL,
+  ref_class_id BIGINT NULL,
+  ref_quiz_id BIGINT NULL,
+  format ENUM('xlsx','pdf') NOT NULL,
+  status ENUM('PENDING','RUNNING','DONE','FAILED') NOT NULL DEFAULT 'PENDING',
+  file_path VARCHAR(500) NULL,
+  error VARCHAR(500) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  done_at TIMESTAMP NULL,
+  CONSTRAINT fk_exports_teacher FOREIGN KEY (teacher_id) REFERENCES users(id),
+  INDEX idx_exports_teacher_status (teacher_id, status, created_at)
 );

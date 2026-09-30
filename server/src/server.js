@@ -7,13 +7,25 @@
 import http from "http";
 import { Server as IOServer } from "socket.io";
 import { env } from "./env.js";
-import { mailProvider } from "./utils/mailer.js";
+import { mailProvider, verifyMailAtBoot } from "./utils/mailer.js";
 import { makeApp } from "./app.js";
 import { registerSessionSockets, closeOrphanedSessions } from "./modules/sessions/sessions.socket.js";
 import { registerAssignmentSockets } from "./modules/student/assignment.socket.js";
 import { setIO } from "./socketRegistry.js";
 import jwt from "jsonwebtoken";
 import { pool } from "./db.js";
+import { getCachedAuthUser } from "./utils/authCache.js";
+import { startPruneJobs } from "./jobs/prune.js";
+import { ensureUploadDir } from "./utils/imageStore.js";
+import { ensureExportDir, ensureExportsTable } from "./modules/exports/exportStore.js";
+import { ensureOAuthTables } from "./modules/auth/oauth.controller.js";
+
+ensureUploadDir();
+ensureExportDir();
+startPruneJobs();
+ensureExportsTable().catch((err) => console.error("[exports] startup ensure failed:", err?.message || err));
+ensureOAuthTables().catch((err) => console.error("[oauth] startup ensure failed:", err?.message || err));
+verifyMailAtBoot().catch(() => {});
 
 // Safety net: this column has repeatedly caused ER_BAD_FIELD_ERROR crashes
 // (assignment submission, student dashboard) on databases that predate it.
@@ -56,6 +68,23 @@ async function ensureTutorialColumn() {
 }
 await ensureTutorialColumn();
 
+// Safety net: Profile Settings tab lets teachers/admins store a birthday.
+// Same idempotent pattern as above — only alters when genuinely missing.
+async function ensureBirthDateColumn() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) AS c FROM information_schema.columns
+       WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'birth_date'`
+    );
+    if (Number(rows?.[0]?.c || 0) > 0) return;
+    await pool.query(`ALTER TABLE users ADD COLUMN birth_date DATE NULL AFTER profile_image`);
+    console.log("[startup] Added missing users.birth_date column.");
+  } catch (err) {
+    console.warn("[startup] Could not verify/add birth_date column automatically:", err?.message || err);
+  }
+}
+await ensureBirthDateColumn();
+
 // Create the Express app first so REST routes and middleware exist before sockets attach.
 const app = makeApp();
 // HTTP server is shared by REST and Socket.IO so both run on the same port.
@@ -71,10 +100,7 @@ io.use(async (socket, next) => {
   if (!token) return next();
   try {
     const payload = jwt.verify(token, env.JWT_SECRET);
-    const [[user]] = await pool.query(
-      `SELECT id, role, is_active, deleted_at, token_version FROM users WHERE id=:id LIMIT 1`,
-      { id: payload.sub }
-    );
+    const user = await getCachedAuthUser(payload.sub);
     const guestHost = payload.role === "GUEST_HOST" && user?.role === "TEACHER";
     if (!user || !user.is_active || (!guestHost && user.deleted_at)) return next();
     if (!guestHost && user.role !== payload.role) return next();
@@ -139,3 +165,16 @@ function shutdown(signal) {
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// Last resort: an error nobody caught must never silently kill a live
+// classroom. Every REST route (asyncHandler), socket event (onTeacher /
+// onStudent / inner guards), queue job, and timer already handles its own
+// failures — reaching here means a brand-new bug. Log it loudly (it shows in
+// Render logs) and keep serving; shared state is DB-backed or self-expiring
+// caches, so there is nothing half-written to protect by exiting.
+process.on("unhandledRejection", (reason) => {
+  console.error("[guarded] unhandled rejection (server kept running):", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("[guarded] uncaught exception (server kept running):", error);
+});

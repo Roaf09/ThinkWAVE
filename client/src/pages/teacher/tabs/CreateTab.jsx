@@ -56,6 +56,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   const { dark } = useTheme();
   const isMobile = useIsMobileViewport();
   const [recentQuizzes, setRecentQuizzes] = useState([]);
+  const [existingTitles, setExistingTitles] = useState([]);
   const [form, setForm] = useState({ title: "", category: "", templateType: "", classId: null });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -103,7 +104,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
 
   useEffect(() => {
     if (tutorial?.stage !== "create_intro_delay") return undefined;
-    const timer = window.setTimeout(() => tutorial?.setStage?.("create_intro"), 2000);
+    const timer = window.setTimeout(() => tutorial?.setStage?.("create_intro"), 900);
     return () => window.clearTimeout(timer);
   }, [tutorial?.stage]);
 
@@ -117,12 +118,30 @@ export default function CreateTab({ guestMode = false, tutorial }) {
     return () => window.clearTimeout(timer);
   }, [tutorial?.stage, tutorialTitleHasText]);
 
+  // Safety: the create_open_builder dialog points at the submit button that
+  // only renders once a template is picked. A persisted stage can outlive the
+  // form (fresh login, draft gone) leaving a fullscreen blocker with no
+  // target and no way out — step back to template selection instead.
+  useEffect(() => {
+    if (tutorial?.stage !== "create_open_builder") return undefined;
+    const timer = window.setTimeout(() => {
+      if (tutorial?.stage !== "create_open_builder") return;
+      if (!document.querySelector('[data-tutorial="create-open-builder"]')) {
+        tutorial?.setStage?.("create_choose_template");
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [tutorial?.stage, form.templateType]);
+
   useEffect(() => {
     let ignore = false;
     (async () => {
       try {
         const { data } = await api.get("/quizzes");
-        if (!ignore) setRecentQuizzes((data || []).slice(0, 3));
+        if (!ignore) {
+          setRecentQuizzes((data || []).slice(0, 3));
+          setExistingTitles((data || []).map((quiz) => String(quiz?.title || "").trim().toLowerCase()).filter(Boolean));
+        }
       } catch {
         if (!ignore) setRecentQuizzes([]);
       }
@@ -186,7 +205,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   }
 
   return <div className="container grid gap-[20px]">
-    <section><h2 className="mb-[4px]" style={{ color: c.text }}>Create</h2></section>
+    <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
     {draftRestored && (
       <div className="px-[14px] py-[12px] rounded-[14px] text-[13px] flex items-center justify-between gap-[12px] flex-wrap" style={{ background: `${c.accent}14`, border: `1px solid ${c.accent}`, color: c.text }}>
         <span>Restored your unfinished setup from before the interruption.</span>
@@ -199,6 +218,9 @@ export default function CreateTab({ guestMode = false, tutorial }) {
         <div>
           <label style={labelStyle(c)}>Quiz Title</label>
           <input data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required className="font-[850] tracking-[0.04em]" style={{ ...inputStyle(c) }} />
+          {form.title.trim() && existingTitles.includes(form.title.trim().toLowerCase()) && (
+            <div className="px-[12px] py-[9px] rounded-[12px] text-[12.5px] font-[700] mt-[8px]" style={{ background: c.yellowBg, border: `1px solid ${c.yellowBorder}`, color: c.yellowFg }}>Heads up: this title is already used in another one of your works.</div>
+          )}
         </div>
 
         <div data-tutorial="create-category" className="tw-create-category-tutorial-target inline-grid rounded-[16px] w-[min(100%,560px)]">
@@ -249,8 +271,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
     {!guestMode && tutorial?.stage === "create_intro_details" && <ThinkBotTutorial placement="center" dialogWidth={430} dragKey="create-intro-dialog" clickAnywhere onClickAnywhere={() => tutorial?.setStage?.("create_title")}><p>Templates control how your activity looks and how students interact with it.</p></ThinkBotTutorial>}
     {!guestMode && ["create_title", "create_title_done"].includes(tutorial?.stage) && <ThinkBotTutorial target='[data-tutorial="create-title"]' placement={isMobile ? "below" : "right"} dialogWidth={isMobile ? 280 : 300} dragKey="create-title-dialog" highlightMode="target" allowTargetInteraction={true} className="tw-tutorial-done-avatar-clear" clickAnywhere={tutorial?.stage === "create_title_done"} onClickAnywhere={() => tutorial?.setStage?.("create_choose_category")}><p>First, add a quiz title.</p></ThinkBotTutorial>}
     {!guestMode && tutorial?.stage === "create_choose_category" && <ThinkBotTutorial target='[data-tutorial="create-category"]' placement={isMobile ? "below" : "right"} dialogWidth={isMobile ? 300 : 360} highlightMode="spotlight" highlightPadding={14} className="tw-tutorial-create-focus"><p>Second, select the category of the class you are handling.</p></ThinkBotTutorial>}
-    {!guestMode && tutorial?.stage === "create_choose_template" && <ThinkBotTutorial target='[data-tutorial="create-template-section"]' placement="above" dialogWidth={440} highlightMode="spotlight" highlightPadding={14} className="tw-tutorial-create-focus"><p>Each template offers a different kind of experience. Choose whichever one fits the activity you want to make.</p></ThinkBotTutorial>}
-    {!guestMode && tutorial?.stage === "create_open_builder" && <ThinkBotTutorial target='[data-tutorial="create-open-builder"]' placement="above" className="tw-tutorial-bob-down tw-tutorial-template-selected" highlightMode="target"><p>Your template is selected. Create it and open the builder to start adding questions.</p></ThinkBotTutorial>}
+    {!guestMode && tutorial?.stage === "create_choose_template" && <ThinkBotTutorial target='[data-tutorial="create-template-section"]' placement="above" dialogWidth={440} highlightMode="spotlight" highlightPadding={14} className="tw-tutorial-create-focus"><p>Each template offers a different kind of experience. Choose whichever one fits the activity you want to make, and then click the create button.</p></ThinkBotTutorial>}
   </div>;
 }
 

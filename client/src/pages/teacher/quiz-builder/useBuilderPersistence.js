@@ -225,10 +225,85 @@ export function useBuilderPersistence({
     }
   }
 
+  // Autosave: quietly persist completed questions, keep blank ones local.
+  // - Sends only questions with a non-empty prompt so a single empty draft
+  //   never triggers a server "Validation error" popup while idle.
+  // - Never opens warning/confirm modals and never surfaces validation
+  //   messages; local state (including empties) is left untouched so the
+  //   empty question stays in the builder.
+  // - Leaves isSaved=false when empties remain so manual Save still warns.
+  async function autosaveQuestions() {
+    if (savePromiseRef.current) return savePromiseRef.current;
+    const valid = questions.filter((q) => trimText(q?.prompt));
+    if (!valid.length) return false;
+    const payload = valid.map((q) => {
+      const idx = questions.indexOf(q);
+      const extra = quiz?.template_type === "MATCHING"
+        ? { shuffleColA: !!settings.shuffleAnswers }
+        : {};
+      return {
+        ...q,
+        order: idx,
+        config: {
+          ...q.config,
+          ...extra,
+          timeLimitSec: q.timeLimitSec,
+          points: clampQuestionPoints(q.points, 3),
+        },
+      };
+    });
+    // Re-index to 0..n-1 for the server's authoritative order.
+    payload.forEach((item, i) => { item.order = i; });
+    setIsSaving(true);
+    const task = (async () => {
+      try {
+        await api.put(`/quizzes/${id}/questions`, { questions: payload });
+        // Don't mark fully saved while a blank draft remains locally.
+        const hasEmpty = questions.some((q) => !trimText(q?.prompt));
+        if (!hasEmpty) {
+          setIsSaved(true);
+          if (!guestMode && tutorialUserId && quiz?.template_type) {
+            markTemplateTutorialSeen(tutorialUserId, quiz.template_type);
+          }
+        }
+        return true;
+      } catch (e) {
+        // Silent on 400s during idle autosave: a fresh question (e.g. a new
+        // matching quiz with fewer than 2 pairs) legitimately fails server
+        // structural checks before the teacher has typed anything. Manual
+        // Save still validates client-side and reports. Surface only
+        // non-400 (network/server) failures here.
+        const status = e?.response?.status;
+        if (status && status !== 400) {
+          setMsg(e?.response?.data?.message || "Autosave failed.");
+        }
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    })();
+    savePromiseRef.current = task;
+    try {
+      return await task;
+    } finally {
+      if (savePromiseRef.current === task) savePromiseRef.current = null;
+    }
+  }
+
   function requestSave() {
     setPublishFlow(false);
     setMsg("");
     if (builderTutorialStage === "save_review") setBuilderTutorialStage("save");
+    // Warning first: only show the save confirmation when everything is valid.
+    // checkInvalid() opens the "Some questions are incomplete" modal itself.
+    const list = questions
+      .map((q, idx) => ({ question: idx + 1, issues: validateQuestion(q, quiz?.template_type) }))
+      .filter((x) => x.issues.length > 0);
+    if (list.length) {
+      setInvalidList(list);
+      setModal("invalid");
+      return;
+    }
     setModal("confirmSave");
   }
 
@@ -270,8 +345,13 @@ export function useBuilderPersistence({
         setQuiz((prev) => ({ ...prev, status: "PUBLISHED" }));
         setPublishFlow(false);
         setModal(null);
-        if (!guestMode && tutorialUserId && builderTutorialStage) {
-          markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
+        if (!guestMode && tutorialUserId) {
+          // Main-tour exit is decoupled from the builder track: publishing
+          // while mainStage is builder_pending always advances to nav_sessions,
+          // even if the builder's own tutorial already finished (null).
+          if (builderTutorialStage) {
+            markTemplateTutorialSeen(tutorialUserId, quiz?.template_type);
+          }
           const mobileTutorial = typeof window !== "undefined" && window.innerWidth <= 760;
           if (mobileTutorial) {
             // Mobile tutorial: stay in the builder, let the overflow sheet
@@ -281,10 +361,10 @@ export function useBuilderPersistence({
             if (state.mainStage === "builder_pending") {
               writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
             }
-            setBuilderTutorialStage("home_highlight");
+            if (builderTutorialStage) setBuilderTutorialStage("home_highlight");
             return;
           }
-          setBuilderTutorialStage(null);
+          if (builderTutorialStage) setBuilderTutorialStage(null);
           const state = readTutorialState(tutorialUserId);
           if (state.mainStage === "builder_pending") {
             writeTutorialState(tutorialUserId, { mainStarted: true, mainStage: "nav_sessions" });
@@ -407,6 +487,7 @@ export function useBuilderPersistence({
     prepareForSave,
     checkInvalid,
     _doSave,
+    autosaveQuestions,
     requestSave,
     save,
     publish,

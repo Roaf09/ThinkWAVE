@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
+import { templateAccent } from "../../lib/templatePalette";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 
@@ -19,6 +20,23 @@ async function getGuestApi() {
     sessionStorage.setItem("guest_token", token);
   }
   return axios.create({ baseURL: API_BASE, headers: { Authorization: `Bearer ${token}` } });
+}
+
+// Builder prompt field: fixed box height, no scroll. Lines 1-3 stay full
+// size; from the 4th line on, the font shrinks instead; shortening restores it.
+const GUEST_PROMPT_MAX_FONT = 20;
+const GUEST_PROMPT_MIN_FONT = 13;
+
+function fitGuestPromptFont(el) {
+  if (!el) return;
+  let size = GUEST_PROMPT_MAX_FONT;
+  el.style.fontSize = `${size}px`;
+  let guard = 0;
+  while (el.scrollHeight > el.clientHeight + 1 && size > GUEST_PROMPT_MIN_FONT && guard < 24) {
+    size -= 1;
+    guard += 1;
+    el.style.fontSize = `${size}px`;
+  }
 }
 
 // Duplicate detector
@@ -131,10 +149,11 @@ export default function GuestBuilder() {
     } catch { setMsg("Delete failed."); }
   }
 
-  if (!quiz||!settings) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (!quiz||!settings) return <div className="container"><div className="card"><TwLogoLoader minHeight="60vh" /></div></div>;
 
   const currentQ = questions[qIndex]||null;
   const totalQ   = questions.length;
+  const accent = templateAccent(quiz?.template_type);
 
   return (
     <>
@@ -226,12 +245,21 @@ export default function GuestBuilder() {
                 </div>
               </div>
 
+              <style>{`.qn-guest-prompt::placeholder{color:rgba(15,23,42,.5)}`}</style>
               <label style={styles.fieldLabel}>
                 Prompt <span style={{ fontSize:11, opacity:0.45, marginLeft:8 }}>{(currentQ.prompt||"").length}/255</span>
               </label>
-              <textarea rows={4} maxLength={255} value={currentQ.prompt}
-                onChange={e=>updateQ({prompt:e.target.value})}
-                style={styles.textarea} />
+              {/* Builder question area follows the template color like the header and form. */}
+              <div className="tw-builder-prompt-box" style={{ background:`color-mix(in srgb, ${accent} 12%, #ffffff)`, borderRadius:8, padding:"20px 24px", minHeight:130, marginBottom:0, border:`3px solid ${accent}`, boxShadow:`0 6px 0 color-mix(in srgb, ${accent} 58%, #0f172a), 0 18px 34px ${accent}59, inset 0 2px 0 rgba(255,255,255,.8)`, boxSizing:"border-box", display:"flex", flexDirection:"column", alignItems:"stretch", justifyContent:"center" }}>
+                <textarea rows={1} maxLength={255} value={currentQ.prompt}
+                  onChange={e=>updateQ({prompt:e.target.value})}
+                  onInput={e=>fitGuestPromptFont(e.currentTarget)}
+                  ref={el=>{ if (el) fitGuestPromptFont(el); }}
+                  placeholder="Type your question here"
+                  aria-label="Prompt"
+                  className="qn-guest-prompt"
+                  style={{ background:"transparent", border:"none", outline:"none", resize:"none", overflow:"hidden", width:"100%", height:90, boxSizing:"border-box", fontSize:20, fontWeight:800, color:"#0f172a", textAlign:"center", fontFamily:"inherit", whiteSpace:"pre-wrap", padding:0, paddingTop: currentQ.prompt ? 0 : 30, margin:0, lineHeight:1.5 }} />
+              </div>
 
               <SimpleTemplateEditor
                 templateType={quiz.template_type} category={quiz.category}

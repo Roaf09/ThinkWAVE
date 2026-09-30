@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { makeSocket } from "../../../lib/socket";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { getRole } from "../../../lib/auth";
@@ -54,6 +54,8 @@ export function useStudentSocket({
   setWaitingForFinalFx,
 }) {
   // Real-time connection. Student screens stay updated from socket events instead of repeated polling.
+  // proposalClearTimer is local: the 1400ms group-resolve notice must not fire after unmount.
+  const proposalClearTimer = useRef(null);
   useEffect(() => {
     const s = makeSocket();
     socketRef.current = s;
@@ -137,7 +139,8 @@ export function useStudentSocket({
         setSubmittedQId(null);
         setSubmitLabel(rejectedCrossword ? "Submit Word" : "Submit");
       }
-      setTimeout(() => {
+      clearTimeout(proposalClearTimer.current);
+      proposalClearTimer.current = setTimeout(() => {
         setGroupProposal(null);
         setProposalStatus("");
       }, 1400);
@@ -269,6 +272,8 @@ export function useStudentSocket({
       clearTimeout(explanationDockTimer.current);
       clearTimeout(explanationFadeTimer.current);
       clearTimeout(explanationClearTimer.current);
+      clearTimeout(antiRemovalTimer.current);
+      clearTimeout(proposalClearTimer.current);
       soundManager.stopBGM();
       s.disconnect();
     };

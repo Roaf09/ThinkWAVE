@@ -7,12 +7,15 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 import { makeJoinCode } from "../../utils/codes.js";
 import { getTeacherPlan } from "../plans/plan.js";
 import { buildDetailedQuestionAnalytics, buildStudentResponseDetails, safeJsonValue as safeAnalyticsJson } from "../analytics/analytics.helpers.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
 import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
+import { enqueueExport, queueStats } from "../../queue.js";
+import { yieldToLoop } from "../exports/exportStore.js";
 
 // Assignment tab-out store (mirrors live sessions' tab_events 3-strike rule).
 // Created lazily so databases predating this feature keep working.
@@ -90,14 +93,15 @@ function collectFolderAndDescendants(rows, rootId) {
 }
 
 export async function listClasses(req, res) {
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 100, maxLimit: 200 });
   const [rows] = await pool.query(
     `SELECT id, teacher_id, name, parent_id, created_at, updated_at
      FROM classes
      WHERE teacher_id=:tid AND deleted_at IS NULL
-     ORDER BY COALESCE(parent_id, 0) ASC, name ASC, id ASC`,
-    { tid: req.user.sub }
+     ORDER BY COALESCE(parent_id, 0) ASC, name ASC, id ASC LIMIT :limit OFFSET :offset`,
+    { tid: req.user.sub, limit, offset }
   );
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
 export async function createClass(req, res) {
@@ -171,8 +175,21 @@ export async function softDeleteClass(req, res) {
 }
 
 export async function restoreClass(req, res) {
-  const where = req.user.role === "ADMIN" ? "id=:id" : "id=:id AND teacher_id=:tid";
-  await pool.query(`UPDATE classes SET deleted_at=NULL WHERE ${where}`, { id: req.params.id, tid: req.user.sub });
+  if (req.user.role === "ADMIN") {
+    // Institution fence, same as restoreQuiz: only folders owned by teachers
+    // of the admin's own institution.
+    const [[admin]] = await pool.query(`SELECT institution_name FROM users WHERE id=:id AND role='ADMIN'`, { id: req.user.sub });
+    const inst = String(admin?.institution_name || "");
+    if (!inst) return res.status(403).json({ message: "No institution." });
+    await pool.query(
+      `UPDATE classes c JOIN users t ON t.id=c.teacher_id
+       SET c.deleted_at=NULL
+       WHERE c.id=:id AND t.institution_name=:inst AND t.deleted_at IS NULL`,
+      { id: req.params.id, inst }
+    );
+  } else {
+    await pool.query(`UPDATE classes SET deleted_at=NULL WHERE id=:id AND teacher_id=:tid`, { id: req.params.id, tid: req.user.sub });
+  }
   res.json({ ok: true });
 }
 
@@ -214,14 +231,15 @@ export async function listClassStudents(req, res) {
   const classId = Number(req.params.id);
   const [[folder]] = await pool.query(`SELECT id FROM classes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: classId, tid: req.user.sub });
   if (!folder) return res.status(404).json({ message: "Class folder not found." });
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 100, maxLimit: 200 });
   const [rows] = await pool.query(
     `SELECT id, student_user_id, student_id, first_name, last_name, middle_initial, joined_at
      FROM class_enrollments
      WHERE class_id=:cid AND teacher_id=:tid AND removed_at IS NULL
-     ORDER BY last_name ASC, first_name ASC, student_id ASC`,
-    { cid: classId, tid: req.user.sub }
+     ORDER BY last_name ASC, first_name ASC, student_id ASC LIMIT :limit OFFSET :offset`,
+    { cid: classId, tid: req.user.sub, limit, offset }
   );
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
 export async function removeClassStudent(req, res) {
@@ -239,6 +257,7 @@ export async function listClassAsyncResults(req, res) {
   const classId = Number(req.params.id);
   const [[folder]] = await pool.query(`SELECT id FROM classes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`, { id: classId, tid: req.user.sub });
   if (!folder) return res.status(404).json({ message: "Class folder not found." });
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
   const [rows] = await pool.query(
     `SELECT q.id AS quiz_id, q.title AS quiz_title, q.template_type, q.available_from, q.available_until,
             COUNT(a.id) AS submitted_count,
@@ -249,13 +268,13 @@ export async function listClassAsyncResults(req, res) {
      LEFT JOIN async_quiz_submissions a ON a.quiz_id=q.id
      WHERE q.class_id=:cid AND q.teacher_id=:tid AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL
      GROUP BY q.id
-     ORDER BY q.available_from DESC, q.id DESC`,
-    { cid: classId, tid: req.user.sub }
+     ORDER BY q.available_from DESC, q.id DESC LIMIT :limit OFFSET :offset`,
+    { cid: classId, tid: req.user.sub, limit, offset }
   );
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
-async function getAsyncExportData(classId, quizId, teacherId) {
+export async function getAsyncExportData(classId, quizId, teacherId) {
   const [[quiz]] = await pool.query(
     `SELECT q.id, q.title, q.template_type, q.available_from, q.available_until, c.name AS class_name
      FROM quizzes q JOIN classes c ON c.id=q.class_id
@@ -277,11 +296,9 @@ async function getAsyncExportData(classId, quizId, teacherId) {
   return { quiz, rows };
 }
 
-export async function exportClassAsyncXlsx(req, res) {
-  const plan = await getTeacherPlan(req.user.sub);
-  if (plan.code === "BASIC") return res.status(403).json({ message: "Analytics downloads are available on ThinkWAVE Pro and Institution plans." });
-  const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
-  if (!data) return res.status(404).json({ message: "Async quiz not found." });
+// Shared workbook builder: one layout for sync download + async file jobs.
+// Student rows stream in 500-row chunks with event-loop yields.
+export async function buildAsyncWorkbook(data) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "ThinkWAVE";
   const sheet = workbook.addWorksheet("Async Results");
@@ -307,22 +324,74 @@ export async function exportClassAsyncXlsx(req, res) {
   // Pre-format submitted_at rather than handing exceljs a raw Date - it
   // serializes date cells on its own UTC/local convention, which is the same
   // timezone mismatch fmtExportDate exists to avoid.
-  data.rows.forEach((r) => sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", Number(r.tab_out_count || 0), r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]));
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.xlsx"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  let i = 0;
+  for (const r of data.rows) {
+    sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", Number(r.tab_out_count || 0), r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]);
+    if (++i % 500 === 0) await yieldToLoop();
+  }
+  return workbook;
 }
 
-export async function exportClassAsyncPdf(req, res) {
+export async function exportClassAsyncXlsx(req, res) {
   const plan = await getTeacherPlan(req.user.sub);
   if (plan.code === "BASIC") return res.status(403).json({ message: "Analytics downloads are available on ThinkWAVE Pro and Institution plans." });
-  const data = await getAsyncExportData(Number(req.params.id), Number(req.params.quizId), req.user.sub);
-  if (!data) return res.status(404).json({ message: "Async quiz not found." });
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.pdf"`);
-  const doc = new PDFDocument({ margin: 40, size: "A4" });
-  doc.pipe(res);
+  if (queueStats().exportSize > 3) {
+    return res.status(429).json({ message: "Export is busy. Please try the async export or try again shortly." });
+  }
+  const classId = Number(req.params.id);
+  const quizId = Number(req.params.quizId);
+  await enqueueExport(async () => {
+    const data = await getAsyncExportData(classId, quizId, req.user.sub);
+    if (!data) {
+      if (!res.headersSent) res.status(404).json({ message: "Async quiz not found." });
+      return;
+    }
+    const workbook = await buildAsyncWorkbook(data);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  });
+}
+
+// Per-question analysis for the async PDF second table. Shared by sync + async jobs.
+export async function loadAsyncAnalysis({ classId, quizId, teacherId, templateType }) {
+  const [asyncQuestions] = await pool.query(
+    `SELECT id AS question_id, question_order, prompt, config_json, correct_json
+     FROM quiz_questions
+     WHERE quiz_id=:qid AND deleted_at IS NULL
+     ORDER BY question_order ASC`,
+    { qid: quizId }
+  );
+  const [asyncSubmissions] = await pool.query(
+    `SELECT student_user_id, answers_json, submitted_at
+     FROM async_quiz_submissions
+     WHERE quiz_id=:qid AND class_id=:cid AND teacher_id=:tid`,
+    { qid: quizId, cid: classId, tid: teacherId }
+  );
+  const asyncResponseRows = [];
+  for (const submission of asyncSubmissions) {
+    const checked = safeAnalyticsJson(submission.answers_json);
+    for (const answer of Array.isArray(checked) ? checked : []) {
+      asyncResponseRows.push({
+        participant_id: Number(submission.student_user_id),
+        question_id: Number(answer?.questionId),
+        answer_json: answer?.answer ?? null,
+        is_correct: answer?.isCorrect ? 1 : 0,
+        points_awarded: Number(answer?.points || 0),
+        answered_at: submission.submitted_at,
+      });
+    }
+    if (asyncResponseRows.length % 1000 === 0) await yieldToLoop();
+  }
+  const asyncTemplate = String(templateType || "").toUpperCase();
+  const asyncIsBatch = asyncTemplate === "MATCHING" || asyncTemplate === "CROSSWORD" || asyncTemplate === "THINK_SPELL" || asyncTemplate === "THINK_AND_SPELL";
+  const asyncDetails = buildDetailedQuestionAnalytics(templateType, asyncQuestions, asyncResponseRows);
+  return { asyncDetails, asyncIsBatch };
+}
+
+// Shared PDF layout for async results. Draws onto any PDFDocument.
+export function renderAsyncPdf(doc, data, analysis) {
   const left = doc.page.margins.left;
 
   doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text(data.quiz.title || "Asynchronous Quiz Results", left, doc.page.margins.top);
@@ -372,38 +441,7 @@ export async function exportClassAsyncPdf(req, res) {
     ]),
   });
 
-  const classId = Number(req.params.id);
-  const quizId = Number(req.params.quizId);
-  const [asyncQuestions] = await pool.query(
-    `SELECT id AS question_id, question_order, prompt, config_json, correct_json
-     FROM quiz_questions
-     WHERE quiz_id=:qid AND deleted_at IS NULL
-     ORDER BY question_order ASC`,
-    { qid: quizId }
-  );
-  const [asyncSubmissions] = await pool.query(
-    `SELECT student_user_id, answers_json, submitted_at
-     FROM async_quiz_submissions
-     WHERE quiz_id=:qid AND class_id=:cid AND teacher_id=:tid`,
-    { qid: quizId, cid: classId, tid: req.user.sub }
-  );
-  const asyncResponseRows = [];
-  for (const submission of asyncSubmissions) {
-    const checked = safeAnalyticsJson(submission.answers_json);
-    for (const answer of Array.isArray(checked) ? checked : []) {
-      asyncResponseRows.push({
-        participant_id: Number(submission.student_user_id),
-        question_id: Number(answer?.questionId),
-        answer_json: answer?.answer ?? null,
-        is_correct: answer?.isCorrect ? 1 : 0,
-        points_awarded: Number(answer?.points || 0),
-        answered_at: submission.submitted_at,
-      });
-    }
-  }
-  const asyncTemplate = String(data.quiz.template_type || "").toUpperCase();
-  const asyncIsBatch = asyncTemplate === "MATCHING" || asyncTemplate === "CROSSWORD" || asyncTemplate === "THINK_SPELL" || asyncTemplate === "THINK_AND_SPELL";
-  const asyncDetails = buildDetailedQuestionAnalytics(data.quiz.template_type, asyncQuestions, asyncResponseRows);
+  const { asyncDetails, asyncIsBatch } = analysis;
 
   drawTable(doc, {
     x: left,
@@ -424,8 +462,30 @@ export async function exportClassAsyncPdf(req, res) {
       `${q.pct_incorrect ?? 0}% (${q.incorrect_answers ?? 0})`,
     ]),
   });
+}
 
-  doc.end();
+export async function exportClassAsyncPdf(req, res) {
+  const plan = await getTeacherPlan(req.user.sub);
+  if (plan.code === "BASIC") return res.status(403).json({ message: "Analytics downloads are available on ThinkWAVE Pro and Institution plans." });
+  if (queueStats().exportSize > 3) {
+    return res.status(429).json({ message: "Export is busy. Please try the async export or try again shortly." });
+  }
+  const classId = Number(req.params.id);
+  const quizId = Number(req.params.quizId);
+  await enqueueExport(async () => {
+    const data = await getAsyncExportData(classId, quizId, req.user.sub);
+    if (!data) {
+      if (!res.headersSent) res.status(404).json({ message: "Async quiz not found." });
+      return;
+    }
+    const analysis = await loadAsyncAnalysis({ classId, quizId, teacherId: req.user.sub, templateType: data.quiz.template_type });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="async-${req.params.quizId}-results.pdf"`);
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    doc.pipe(res);
+    renderAsyncPdf(doc, data, analysis);
+    doc.end();
+  });
 }
 
 function asyncCorrectAnswerText(templateType, correct = {}, config = {}) {

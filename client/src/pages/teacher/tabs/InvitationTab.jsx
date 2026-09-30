@@ -65,7 +65,7 @@ export default function InvitationTab() {
   return (
     <div className="container grid gap-[18px]">
       <section>
-        <h2 className="mb-[4px]" style={{ color: c.text }}>Invitation</h2>
+        <h2 style={{ marginBottom: 4, color: c.text }}>Invitation</h2>
 
       </section>
 

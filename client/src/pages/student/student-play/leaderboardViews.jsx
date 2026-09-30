@@ -1,11 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { TwIcon } from "../../../components/TwUI";
 
 function scoreName(row, groupMode = false) {
   return groupMode ? (row?.group_name || `${row?.first_name || ""} ${row?.last_name || ""}`.trim()) : `${row?.first_name || ""} ${row?.last_name || ""}`.trim();
 }
 
-export function LiveLeaderboardPanel({ leaderboard, participantId, groupMode = false }) {
+// Steady shell: the 1-second game timer must not redraw the leaderboard.
+// It only redraws when the scores actually change.
+export const LiveLeaderboardPanel = memo(function LiveLeaderboardPanel({ leaderboard, participantId, groupMode = false }) {
   // Only affects layout below the mobile breakpoint (see StudentPlay.css) -
   // above it the panel always renders in full regardless of this state.
   // Starts minimized so it never opens on top of the question by default;
@@ -64,4 +66,4 @@ export function LiveLeaderboardPanel({ leaderboard, participantId, groupMode = f
       </> : null}
     </div>
   </aside>;
-}
+});

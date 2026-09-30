@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState}from"react";
+import {useEffect,useMemo,useRef,useState}from"react";
 import{createPortal}from"react-dom";
 import{useLocation}from"react-router-dom";
 
@@ -8,13 +8,16 @@ export default function StarField(){
  const loc=useLocation();
  const enabled=PUBLIC_STAR_PATHS.includes(loc.pathname);
  const[target,setTarget]=useState(null);
+ const fieldRef=useRef(null);
  const stars=useMemo(()=>Array.from({length:92},(_,i)=>{
   const rand=(n)=>{const x=Math.sin((i+1)*n)*43758.5453;return x-Math.floor(x)};
   return {id:i,x:rand(12.9898)*100,y:rand(78.233)*100,size:.7+rand(31.41)*2.25,delay:-rand(19.19)*12,duration:4.5+rand(47.77)*9,driftX:(rand(8.13)-.5)*70,driftY:18+rand(22.71)*85,depth:.18+rand(61.3)*.95};
  }),[]);
- const[scroll,setScroll]=useState(0);const[fade,setFade]=useState(1);
  useEffect(()=>{if(!enabled){setTarget(null);return;}const raf=requestAnimationFrame(()=>setTarget(document.querySelector(".tw-starry-page")));return()=>cancelAnimationFrame(raf)},[enabled,loc.pathname,loc.search]);
-  useEffect(()=>{if(!enabled)return;let raf=0;const update=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const y=window.scrollY||0;setScroll(y);if(loc.pathname!=="/"){setFade(1);return;}const templates=document.getElementById("templates");const start=templates?Math.max(280,templates.offsetTop-window.innerHeight*.35):700;const end=templates?templates.offsetTop+templates.offsetHeight*.9:1300;setFade(y<=start?1:Math.max(0,1-(y-start)/Math.max(220,end-start)));});};update();window.addEventListener("scroll",update,{passive:true});window.addEventListener("resize",update);return()=>{window.removeEventListener("scroll",update);window.removeEventListener("resize",update);if(raf)cancelAnimationFrame(raf);}} ,[enabled,loc.pathname]);
+ // Scroll parallax + fade write straight to the DOM node: the old version
+ // stored scrollY in React state, re-rendering all 92 stars on every scroll
+ // frame. Same visuals, zero React work while scrolling.
+ useEffect(()=>{if(!enabled)return;let raf=0;const update=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const node=fieldRef.current;if(!node)return;const y=window.scrollY||0;if(loc.pathname!=="/"){node.style.setProperty("--star-fade",1);return;}const templates=document.getElementById("templates");const start=templates?Math.max(280,templates.offsetTop-window.innerHeight*.35):700;const end=templates?templates.offsetTop+templates.offsetHeight*.9:1300;node.style.setProperty("--star-fade",y<=start?1:Math.max(0,1-(y-start)/Math.max(220,end-start)));node.style.setProperty("--scroll-y",`${y}px`);});};update();window.addEventListener("scroll",update,{passive:true});window.addEventListener("resize",update);return()=>{window.removeEventListener("scroll",update);window.removeEventListener("resize",update);if(raf)cancelAnimationFrame(raf);}} ,[enabled,loc.pathname]);
  if(!enabled||!target)return null;
- return createPortal(<div className="tw-star-field" aria-hidden="true" style={{"--star-fade":fade}}>{stars.map(s=><i key={s.id} style={{left:`${s.x}%`,top:`${s.y}%`,width:s.size,height:s.size,"--delay":`${s.delay}s`,"--duration":`${s.duration}s`,"--drift-x":`${s.driftX}px`,"--drift-y":`${s.driftY}px`,"--parallax":`${scroll*s.depth*.1}px`}}/>)}</div>,target);
+ return createPortal(<div ref={fieldRef} className="tw-star-field" aria-hidden="true">{stars.map(s=><i key={s.id} style={{left:`${s.x}%`,top:`${s.y}%`,width:s.size,height:s.size,"--delay":`${s.delay}s`,"--duration":`${s.duration}s`,"--drift-x":`${s.driftX}px`,"--drift-y":`${s.driftY}px`,"--depth-factor":(s.depth*.1).toFixed(4)}}/>)}</div>,target);
 }

@@ -55,7 +55,7 @@ export default function GuestCreateTab() {
     createWithTemplate(form.templateType);
   }
 
-  return <div className="container" style={{ display: "grid", gap: 20 }}>
+  return <div className="tw-guest-tab-page" style={{ display: "grid", gap: 20 }}>
     <section><h2 style={{ marginBottom: 4, color: c.text }}>Create</h2></section>
     <section style={card(c)}>
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>

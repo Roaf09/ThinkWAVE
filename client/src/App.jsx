@@ -4,7 +4,7 @@
  * Tip: Start with exported functions/components first, then read helper functions underneath.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 
 import Landing             from "./pages/Landing.jsx";
@@ -16,24 +16,28 @@ import SuperadminLogin     from "./pages/SuperadminLogin.jsx";
 import VerifyOtp           from "./pages/VerifyOtp.jsx";
 import Login               from "./pages/Login.jsx";
 import ForgotPassword      from "./pages/ForgotPassword.jsx";
-import TeacherDashboard    from "./pages/teacher/TeacherDashboard.jsx";
-import QuizBuilder         from "./pages/teacher/QuizBuilder.jsx";
-import HostLive            from "./pages/teacher/HostLive.jsx";
-import Analytics           from "./pages/teacher/Analytics.jsx";
-import AdminDashboard      from "./pages/admin/AdminDashboard.jsx";
-import SuperadminDashboard from "./pages/superadmin/SuperadminDashboard.jsx";
-import GuestDashboard      from "./pages/guest/GuestDashboard.jsx";
+import OAuthCallback       from "./pages/OAuthCallback.jsx";
 import StudentJoin         from "./pages/student/StudentJoin.jsx";
-import StudentPlay         from "./pages/student/StudentPlay.jsx";
 import StudentAuth         from "./pages/student/StudentAuth.jsx";
-import StudentDashboard    from "./pages/student/StudentDashboard.jsx";
-import StudentAsyncPlay    from "./pages/student/StudentAsyncPlay.jsx";
+// Heavy pages load on demand so the first paint (landing/login) stays light.
+// Each becomes its own JS chunk; Suspense shows the logo spinner meanwhile.
+const TeacherDashboard    = lazy(() => import("./pages/teacher/TeacherDashboard.jsx"));
+const QuizBuilder         = lazy(() => import("./pages/teacher/QuizBuilder.jsx"));
+const HostLive            = lazy(() => import("./pages/teacher/HostLive.jsx"));
+const Analytics           = lazy(() => import("./pages/teacher/Analytics.jsx"));
+const AdminDashboard      = lazy(() => import("./pages/admin/AdminDashboard.jsx"));
+const SuperadminDashboard = lazy(() => import("./pages/superadmin/SuperadminDashboard.jsx"));
+const GuestDashboard      = lazy(() => import("./pages/guest/GuestDashboard.jsx"));
+const StudentPlay         = lazy(() => import("./pages/student/StudentPlay.jsx"));
+const StudentDashboard    = lazy(() => import("./pages/student/StudentDashboard.jsx"));
+const StudentAsyncPlay    = lazy(() => import("./pages/student/StudentAsyncPlay.jsx"));
 
 import { getRole, getToken, getTabToken, clearToken, clearRole } from "./lib/auth";
 import { saveLastRoute, clearLastRoute } from "./lib/lastRoute";
 import { clearPersistentTabs } from "./lib/persistentTab";
 import { setAuthToken, api } from "./lib/api";
 import { TwIcon } from "./components/TwUI";
+import { TwLogoLoader } from "./components/TwLogoLoader.jsx";
 import StarField from "./components/StarField.jsx";
 import ActionDialog from "./components/ActionDialog.jsx";
 import { ForcedTheme } from "./context/ThemeContext.jsx";
@@ -194,6 +198,8 @@ export default function App() {
           onConfirm={dismissSessionConflict}
         />
       )}
+      {/* Lazy pages share one spinner boundary so a slow chunk shows feedback, not blank. */}
+      <Suspense fallback={<TwLogoLoader label="Loading page" />}>
       <Routes>
         <Route path="/"                    element={<Landing />} />
         <Route path="/enter"                element={<White><Enter /></White>} />
@@ -206,6 +212,7 @@ export default function App() {
         <Route path="/verify"              element={<White><VerifyOtp /></White>} />
         <Route path="/login"               element={<White><Login onLoginSuccess={handleLoginSuccess} /></White>} />
         <Route path="/forgot-password"     element={<White><ForgotPassword /></White>} />
+        <Route path="/oauth/callback"      element={<White><OAuthCallback onLoginSuccess={handleLoginSuccess} /></White>} />
 
         {/* Guest — no auth, session-based */}
         <Route path="/guest"                            element={<GuestDashboard />} />
@@ -235,6 +242,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </Shell>
   );
 }

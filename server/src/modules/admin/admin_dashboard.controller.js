@@ -5,6 +5,8 @@
  */
 
 import { pool } from "../../db.js";
+import { invalidateAuthUser } from "../../utils/authCache.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 import { makeJoinCode } from "../../utils/codes.js";
 
 async function getAdminInstitution(adminId) {
@@ -171,6 +173,7 @@ export async function getStats(req, res) {
 export async function listTeachers(req, res) {
   const admin = await getAdminInstitution(req.user.sub);
   const inst = admin?.institution_name || null;
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
   let rows=[];
   try {
     [rows]=await pool.query(`SELECT u.id,u.email,u.first_name,u.last_name,u.is_active,u.contact_number,u.created_at,u.last_active_at,u.approval_status,
@@ -178,12 +181,12 @@ export async function listTeachers(req, res) {
       (SELECT COUNT(*) FROM quizzes q WHERE q.teacher_id=u.id AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL) assigned_sessions_count,
       (SELECT MAX(COALESCE(s.ended_at,s.created_at)) FROM sessions s WHERE s.teacher_id=u.id) last_session_at,
       (SELECT COUNT(*) FROM classes c WHERE c.teacher_id=u.id AND c.deleted_at IS NULL AND c.parent_id IS NOT NULL) classes_handled_count
-      FROM users u WHERE u.role='TEACHER' AND u.institution_name=:inst AND u.deleted_at IS NULL ORDER BY u.last_name,u.first_name`,{inst});
+      FROM users u WHERE u.role='TEACHER' AND u.institution_name=:inst AND u.deleted_at IS NULL ORDER BY u.last_name,u.first_name LIMIT :limit OFFSET :offset`,{inst,limit,offset});
   } catch (error) {
     console.warn('Admin teacher detail fallback:', error?.message || error);
-    [rows]=await pool.query(`SELECT id,email,first_name,last_name,is_active,contact_number,created_at,last_active_at,approval_status,0 hosted_sessions_count,0 assigned_sessions_count,NULL last_session_at,0 classes_handled_count FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL ORDER BY last_name,first_name`,{inst});
+    [rows]=await pool.query(`SELECT id,email,first_name,last_name,is_active,contact_number,created_at,last_active_at,approval_status,0 hosted_sessions_count,0 assigned_sessions_count,NULL last_session_at,0 classes_handled_count FROM users WHERE role='TEACHER' AND institution_name=:inst AND deleted_at IS NULL ORDER BY last_name,first_name LIMIT :limit OFFSET :offset`,{inst,limit,offset});
   }
-  res.json(rows);
+  return pagedOrArray(res, rows, { page, limit, paged });
 }
 
 
@@ -201,12 +204,22 @@ export async function setTeacherActive(req, res) {
 
   const active = req.body?.active ? 1 : 0;
   await pool.query(`UPDATE users SET is_active = :a WHERE id = :id`, { a: active, id: req.params.id });
+  invalidateAuthUser(req.params.id);
   res.json({ ok: true });
 }
 
 export async function deleteTeacher(req, res) {
-  const [[teacher]] = await pool.query(`SELECT id,first_name,last_name,email,role,institution_name FROM users WHERE id=:id AND role='TEACHER'`, { id:req.params.id });
+  // Same institution fence as setTeacherActive: an admin can only remove
+  // teachers of their own institution — never another school's staff.
+  const [[teacher]] = await pool.query(
+    `SELECT id,first_name,last_name,email,role,institution_name FROM users
+     WHERE id=:id AND role='TEACHER'
+       AND institution_name = (SELECT institution_name FROM users WHERE id=:adminId)`,
+    { id:req.params.id, adminId:req.user.sub }
+  );
+  if (!teacher) return res.status(404).json({ message: "Teacher not found." });
   await pool.query(`UPDATE users SET deleted_at=NOW() WHERE id=:id AND role='TEACHER'`, { id:req.params.id });
+  invalidateAuthUser(req.params.id);
   if (teacher) { try { await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('ACCOUNT_DELETED',:uid,:name,:email,:role,:inst,:payload)`, { uid:teacher.id,name:`${teacher.first_name} ${teacher.last_name}`.trim(),email:teacher.email,role:teacher.role,inst:teacher.institution_name,payload:JSON.stringify({deletedBy:'ADMIN'}) }); } catch (_) {} }
   res.json({ ok: true });
 }

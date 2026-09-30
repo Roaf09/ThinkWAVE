@@ -84,8 +84,10 @@ export async function compressImageFile(file) {
       el.onerror = reject;
       el.src = url;
     });
-    const maxW = 1280;
-    const maxH = 720;
+    // Game screens show these at a few hundred px wide, so 800x450 keeps
+    // them sharp while staying light for weak phones to download and unpack.
+    const maxW = 800;
+    const maxH = 450;
     let { width, height } = img;
     const ratio = Math.min(1, maxW / width, maxH / height);
     width = Math.max(1, Math.round(width * ratio));
@@ -160,15 +162,22 @@ export function trimText(v) {
   return String(v || "").trim();
 }
 
-// Question points only ever take 1, 2, or 3. Anything else (floats like 2.5
-// from legacy rows, 0, negatives, oversized values) snaps to the nearest
-// valid choice so MCQ fractions stay clean (0.5 / 1 / 1.5 for 2-answer).
+// Question points only ever take 1, 2, or 3 (integers).
+// Anything else snaps to the nearest valid choice.
 export function clampQuestionPoints(value) {
   const n = Math.round(Number(value));
   if (n === 2 || n === 3) return n;
   if (n === 1) return 1;
   if (Number.isFinite(n) && n > 3) return 3;
   return 1;
+}
+
+export function parsePointsInput(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const n = Number(String(value).trim());
+  if (!Number.isInteger(n)) return null;
+  if (n < 1 || n > 3) return null;
+  return n;
 }
 
 export function displayTemplateName(value) {
@@ -289,8 +298,15 @@ export function validateQuestion(q, templateType) {
   }
 
   if (tt === "TYPE_ANSWER") {
-    if (!trimText(cor.text)) issues.push("correct answer is empty");
-    if (trimText(cor.text).length > 255) issues.push("answer must be 255 characters or fewer");
+    const extra = Array.isArray(cor.answers) ? cor.answers : [];
+    const all = [cor.text, ...extra].map((w) => trimText(w)).filter(Boolean);
+    if (!all.length || !trimText(cor.text)) issues.push("correct answer is empty");
+    else if (extra.some((w) => !trimText(w))) issues.push("one or more added answers are empty");
+    if (all.length > 3) issues.push("identification supports at most 3 correct answers");
+    for (const word of all) {
+      if (word.length > 255) issues.push("answer must be 255 characters or fewer");
+    }
+    if (hasDuplicateTextValues(all)) issues.push("answers must be unique — remove duplicate answers");
   }
 
   if (tt === "CROSSWORD") {
@@ -345,6 +361,7 @@ export function validateQuestion(q, templateType) {
     if (dummyB.length > 2) issues.push("matching supports a maximum of 2 dummy answers");
     if (colA.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column A items are empty");
     if (colB.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more column B items are empty");
+    if (dummyB.length && dummyB.some((item) => !(trimText(item?.text) || trimText(item?.image)))) issues.push("one or more distractors are empty");
     if ([...colA, ...colB].some((item) => trimText(item?.text).length > 255)) issues.push("matching labels must be 255 characters or fewer");
     if (pairs.length !== colA.length) issues.push("correct matches are not set");
     if (hasDuplicateRows(colA)) issues.push("column A has duplicate labels or images — each term must be unique");
@@ -368,3 +385,69 @@ export function validateQuestion(q, templateType) {
 }
 
 // QuizBuilder is the main authoring page. Each template shares the same save/publish flow but renders different fields.
+
+// Shared text-area fit: the box stays a fixed 3-line height while the text
+// does the adjusting — full size through 3 lines, then shrinking toward
+// minSize instead of growing a 4th. Leftover space becomes top padding so
+// short text sits centered both ways (and stays middle-aligned with siblings
+// like answer dots on 1, 2, or 3 lines). A manually stretched box is honored
+// as the new fixed height.
+//
+// Measuring collapses the box to 1px first: scrollHeight otherwise reports at
+// least the rows-based height (e.g. rows=2 inflates single-line text to two
+// lines), which mis-centers short text. All synchronous — a single paint.
+const fitPending = new WeakMap();
+
+export function fitCappedLines(el, { maxSize, minSize, maxLines = 3, maxHeight = Infinity }) {
+  if (!el || typeof getComputedStyle !== "function") return;
+  // Coalesce rapid-fire calls (typing) to one fit per animation frame per
+  // field. Same end result, far fewer measure/write cycles.
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    let pending = fitPending.get(el);
+    if (!pending) {
+      pending = { queued: false, opts: null };
+      fitPending.set(el, pending);
+    }
+    pending.opts = { maxSize, minSize, maxLines, maxHeight };
+    if (pending.queued) return;
+    pending.queued = true;
+    window.requestAnimationFrame(() => {
+      const latest = fitPending.get(el);
+      fitPending.delete(el);
+      if (latest) fitCappedLinesNow(el, latest.opts);
+    });
+    return;
+  }
+  fitCappedLinesNow(el, { maxSize, minSize, maxLines, maxHeight });
+}
+
+function fitCappedLinesNow(el, { maxSize, minSize, maxLines = 3, maxHeight = Infinity }) {
+  let size = maxSize;
+  el.style.fontSize = `${size}px`;
+  el.style.paddingTop = "0px";
+  const boxH = Math.max(maxHeight === Infinity ? 0 : maxHeight, el.clientHeight || 0);
+  el.style.height = "1px";
+  const measure = () => {
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || size * 1.5;
+    const safeLh = Math.max(1, lh);
+    const height = el.scrollHeight;
+    return { lh: safeLh, lines: Math.max(1, Math.round(height / safeLh)), height };
+  };
+  let guard = 0;
+  let m = measure();
+  // Shrink while over the line count OR while the lines overflow the box.
+  // The old check only counted lines, so exactly-3-lines at full size never
+  // shrank even when the box was shorter than those 3 lines (clipped 3rd
+  // line on choice tiles). Same sizes and limits as before otherwise.
+  while ((m.lines > maxLines || m.height > boxH) && size > minSize && guard < 24) {
+    size -= 1;
+    el.style.fontSize = `${size}px`;
+    guard += 1;
+    m = measure();
+  }
+  const contentH = el.scrollHeight;
+  el.style.height = `${boxH}px`;
+  el.style.paddingTop = `${Math.max(0, (boxH - contentH) / 2)}px`;
+  // Never scroll: overlong text clips instead (all inputs are maxLength-capped).
+  el.style.overflowY = "hidden";
+}

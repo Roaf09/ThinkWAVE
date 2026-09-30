@@ -9,8 +9,33 @@ import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quiz
 import { calculateCompetitivePoints } from "../sessions/leaderboard.js";
 import { getIO } from "../../socketRegistry.js";
 import { broadcastAssignmentLeaderboard } from "./assignment.socket.js";
+import { createTTLCache } from "../../utils/ttlCache.js";
+import { compressDataUrlImage, isDataUrl } from "../../utils/imageStore.js";
 
-const asyncAnswerChecks = new Map();
+// Short-lived answer preview cache: 10min TTL, max 1000 entries.
+// Long-run: old 6h Map + per-key timer grew forever + full-scan delete per submit.
+// Secondary index quizKeys lets submit clear one quiz without scanning all keys.
+const asyncAnswerChecks = createTTLCache({ max: 1000, ttlMs: 10 * 60 * 1000 });
+const asyncAnswerQuizIndex = new Map(); // quizKey `${uid}:${qid}` -> Set<checkKey>
+function trackCheckKey(checkKey, quizKey) {
+  let set = asyncAnswerQuizIndex.get(quizKey);
+  if (!set) {
+    set = new Set();
+    asyncAnswerQuizIndex.set(quizKey, set);
+  }
+  set.add(checkKey);
+  if (set.size > 200) {
+    const oldest = set.values().next().value;
+    set.delete(oldest);
+  }
+}
+function clearQuizChecks(uid, quizId) {
+  const quizKey = `${uid}:${quizId}`;
+  const set = asyncAnswerQuizIndex.get(quizKey);
+  if (!set) return;
+  for (const k of set) asyncAnswerChecks.delete(k);
+  asyncAnswerQuizIndex.delete(quizKey);
+}
 
 async function buildAssignmentLeaderboard(quizId) {
   const [rows] = await pool.query(
@@ -183,6 +208,14 @@ async function getProfile(userId) {
 
 export async function upsertProfile(req, res) {
   const { lastName, firstName, middleInitial, studentId, birthDate = null, profileImage = null } = req.body;
+  // Long-run free: shrink camera PNGs (~2MB) to small JPEG (~60KB) before DB.
+  // Same dataURL shape, so client needs no change, but roster/history payloads shrink.
+  let smallImage = profileImage || null;
+  if (isDataUrl(smallImage)) {
+    try {
+      smallImage = await compressDataUrlImage(smallImage);
+    } catch { /* keep original on failure */ }
+  }
   try {
   await pool.query(
     `INSERT INTO student_profiles(user_id,last_name,first_name,middle_initial,student_id,birth_date,profile_image)
@@ -192,10 +225,10 @@ export async function upsertProfile(req, res) {
       uid: req.user.sub,
       ln: String(lastName || "").trim(), fn: String(firstName || "").trim(),
       mi: String(middleInitial || "").trim() || null, sid: String(studentId || "").trim(),
-      birthDate: birthDate || null, profileImage: profileImage || null,
+      birthDate: birthDate || null, profileImage: smallImage || null,
       ln2: String(lastName || "").trim(), fn2: String(firstName || "").trim(),
       mi2: String(middleInitial || "").trim() || null, sid2: String(studentId || "").trim(),
-      birthDate2: birthDate || null, profileImage2: profileImage || null,
+      birthDate2: birthDate || null, profileImage2: smallImage || null,
     }
   );
   } catch (e) {
@@ -255,7 +288,7 @@ export async function getStudentDashboard(req, res) {
      JOIN classes c ON c.id=q.class_id
      LEFT JOIN async_quiz_submissions a ON a.quiz_id=q.id AND a.student_user_id=e.student_user_id
      WHERE e.student_user_id=:uid AND e.removed_at IS NULL
-     ORDER BY q.available_from DESC, q.id DESC`, { uid }
+     ORDER BY q.available_from DESC, q.id DESC LIMIT 100`, { uid }
   );
   const [openLiveSessions] = await pool.query(
     `SELECT DISTINCT s.id AS session_id, s.status, s.join_code, s.created_at, s.started_at, s.class_id, q.title AS quiz_title, q.template_type, c.name AS class_name
@@ -264,7 +297,7 @@ export async function getStudentDashboard(req, res) {
      JOIN quizzes q ON q.id=s.quiz_id
      JOIN classes c ON c.id=s.class_id
      WHERE e.student_user_id=:uid AND e.removed_at IS NULL
-     ORDER BY s.id DESC`, { uid }
+     ORDER BY s.id DESC LIMIT 50`, { uid }
   );
   const [recentLive] = await pool.query(
     `SELECT s.id AS session_id, s.class_id, q.title AS quiz_title, q.template_type, c.name AS class_name, s.ended_at, sc.total_points AS score,
@@ -281,7 +314,7 @@ export async function getStudentDashboard(req, res) {
     `SELECT answers_json, score, max_score, submitted_at
      FROM async_quiz_submissions
      WHERE student_user_id=:uid
-     ORDER BY submitted_at ASC`, { uid }
+     ORDER BY submitted_at ASC LIMIT 500`, { uid }
   );
   const [[liveAchievementStats]] = await pool.query(
     `SELECT
@@ -331,8 +364,10 @@ export async function getStudentDashboard(req, res) {
     `SELECT r.is_correct, r.answered_at,
             COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.answer_json,'$.__tw_live.responseMs')) AS UNSIGNED),999999) AS response_ms
      FROM session_participants p JOIN responses r ON r.participant_id=p.id AND r.session_id=p.session_id
-     WHERE p.student_user_id=:uid ORDER BY r.answered_at ASC,r.id ASC`, { uid }
+     WHERE p.student_user_id=:uid ORDER BY r.answered_at DESC,r.id DESC LIMIT 500`, { uid }
   );
+  // DESC + LIMIT keeps it bounded; reverse for streak calc (oldest -> newest).
+  streakRows.reverse();
   let currentStreak=0,maxCorrectStreak=0,currentFastStreak=0,maxFastStreak=0;
   for (const row of streakRows) {
     if (Number(row.is_correct) === 1) {
@@ -559,7 +594,7 @@ export async function joinStudentLiveSession(req, res) {
     { uid, sid:sessionId }
   );
   if (!session) return res.status(404).json({ message:"Live session not found for your classes." });
-  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message:"Tutorial demo sessions are for ThinkBOTs only." });
+  if (Number(session.is_tutorial || 0) === 1) return res.status(403).json({ message:"Cannot join a tutorial session." });
   if (!['LOBBY','LIVE','PAUSED'].includes(session.status)) return res.status(400).json({ message: 'Session has ended.' });
   const profile = await getProfile(uid);
   if (!profile) return res.status(400).json({ message:"Complete your Student Info first." });
@@ -718,7 +753,7 @@ export async function checkStudentQuizAnswer(req, res) {
     explanation: String(config?.explanation || ""),
   };
   asyncAnswerChecks.set(checkKey, result);
-  setTimeout(() => asyncAnswerChecks.delete(checkKey), 6 * 60 * 60 * 1000).unref?.();
+  trackCheckKey(checkKey, `${req.user.sub}:${quizId}`);
   res.json(result);
 }
 
@@ -801,9 +836,7 @@ export async function submitStudentQuiz(req, res) {
       { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore }
     );
   }
-  for (const key of asyncAnswerChecks.keys()) {
-    if (key.startsWith(`${req.user.sub}:${quizId}:`)) asyncAnswerChecks.delete(key);
-  }
+  clearQuizChecks(req.user.sub, quizId);
   let leaderboard = [];
   let myRank = null;
   if (!competitivePointsColumnMissing) {

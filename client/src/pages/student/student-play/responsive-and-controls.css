@@ -448,3 +448,16 @@
 .quiz-shell-new.theme-dark .type-input{color:#f8fafc!important}
 .quiz-shell-new.theme-dark .type-input::placeholder{color:#8fa7cf!important}
 .quiz-shell-new.theme-dark .type-charbox{background:#0b244a!important;border-bottom-color:#2f6db2!important;color:#fff!important}
+
+/* Phones: lighter visuals for speed. Same layout and colors, but the big
+   always-on frosted blurs become plain panels and the pinned photo
+   background scrolls normally. Desktop is untouched. */
+@media (max-width: 760px) {
+  .sp-gameplay-page{background-attachment:scroll!important}
+  .qn-prompt-box{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.94)!important}
+  .theme-dark .qn-prompt-box{background:rgba(6,18,42,.94)!important}
+  .type-center-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.94)!important}
+  .theme-dark .type-center-shell{background:rgba(6,18,42,.94)!important}
+  .bword-game-panel{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.94)!important}
+  .theme-dark .bword-game-panel{background:rgba(6,18,42,.94)!important}
+}

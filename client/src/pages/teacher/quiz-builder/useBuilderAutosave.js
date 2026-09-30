@@ -61,6 +61,7 @@ export function useBuilderAutosave({
   settings,
   isSaved,
   modal,
+  quizCreatedAt,
   editVersionRef,
   setQuestions,
   setQIndex,
@@ -80,6 +81,17 @@ export function useBuilderAutosave({
     checkedRef.current = true;
     const draft = readBuilderDraft(id, guestMode);
     if (!draft) return;
+    // Stale-id guard: numeric ids can be reused (fresh database, another
+    // account's old draft on a shared machine). A draft written before this
+    // quiz was even created cannot belong to it — discard silently instead
+    // of prompting on a brand-new quiz.
+    if (quizCreatedAt) {
+      const born = new Date(quizCreatedAt).getTime();
+      if (Number.isFinite(born) && Number(draft.updatedAt) < born) {
+        clearBuilderDraft(id, guestMode);
+        return;
+      }
+    }
     const current = { questions, titleDraft, settings, qIndex };
     const candidate = { questions: draft.questions, titleDraft: draft.titleDraft || "", settings: draft.settings || null, qIndex: draft.qIndex || 0 };
     if (sameContent(current, candidate)) {

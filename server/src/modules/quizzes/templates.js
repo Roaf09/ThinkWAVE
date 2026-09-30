@@ -41,6 +41,13 @@ export function normalizeTemplateType(templateType) {
 }
 
 export function scoreAnswer({ templateType, correct, answer, config = {}, basePoints = 0 }) {
+  const coerceBase = (v) => {
+    const n = Math.round(Number(v));
+    if (n === 2 || n === 3) return n;
+    if (n === 1) return 1;
+    if (Number.isFinite(n) && n > 3) return 3;
+    return 1;
+  };
   if (!correct) return { isCorrect: false, pointsAwarded: 0 };
 
   switch (normalizeTemplateType(templateType)) {
@@ -59,7 +66,7 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
         if (selected.some((sel) => isChoiceCorrect(sel, choice, config))) correctSelectedCount += 1;
       }
       const hasWrongSelected = selected.some((sel) => !scorableChoices.some((cor) => isChoiceCorrect(sel, cor, config)));
-      const cappedBase = Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1)));
+      const cappedBase = coerceBase(basePoints);
       const pointsAwarded = (cappedBase / totalCorrect) * correctSelectedCount;
       const isCorrect = correctSelectedCount === scorableChoices.length && !hasWrongSelected;
       const partial = !isCorrect && correctSelectedCount > 0;
@@ -77,7 +84,7 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
     case TEMPLATE_TYPES.TRUE_FALSE:
       {
         const isCorrect = isChoiceCorrect(answer?.choice, correct?.choice, config);
-        return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
+        return { isCorrect, pointsAwarded: isCorrect ? coerceBase(basePoints) : 0 };
       }
 
     case TEMPLATE_TYPES.TYPE_ANSWER: {
@@ -86,12 +93,12 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
         .map(norm)
         .filter(Boolean);
       const isCorrect = actual.length > 0 && expectedAny.some((expected) => actual === expected);
-      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
+      return { isCorrect, pointsAwarded: isCorrect ? coerceBase(basePoints) : 0 };
     }
 
     case TEMPLATE_TYPES.GUESS_WORD_4PICS: {
       const isCorrect = normWord(answer?.text) === normWord(correct?.text);
-      return { isCorrect, pointsAwarded: isCorrect ? Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1))) : 0 };
+      return { isCorrect, pointsAwarded: isCorrect ? coerceBase(basePoints) : 0 };
     }
 
     case TEMPLATE_TYPES.CROSSWORD:
@@ -106,7 +113,7 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
         if (expectedMap.get(Number(pair.aIndex)) === Number(pair.bIndex)) correctCount += 1;
       }
       const totalPairs = expectedMap.size;
-      const base = Math.min(3, Math.max(1, Math.round(Number(basePoints) || 1)));
+      const base = coerceBase(basePoints);
       const isCorrect = totalPairs > 0 && correctCount === totalPairs;
       const partial = correctCount > 0 && correctCount < totalPairs;
       return {

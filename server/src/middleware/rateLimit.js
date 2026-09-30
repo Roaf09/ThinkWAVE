@@ -1,51 +1,29 @@
-import { pool } from "../db.js";
+/* FILE GUIDE:
+ * server/src/middleware/rateLimit.js
+ * Purpose: In-memory sliding-window rate limiter. Zero DB queries per request.
+ *
+ * Single-service free: one Node process owns all traffic (localhost XAMPP and
+ * one Render service), so a process-local Map is exact. The old MySQL version
+ * cost INSERT + SELECT on EVERY request (~100ms on XAMPP) just to protect the DB.
+ * If this ever runs multi-instance, swap the store for Redis (same factory API).
+ */
 
-// Shared rate limiter backed by MySQL so budgets hold across restarts and
-// across multiple server instances (the previous in-memory Map reset on every
-// restart and diverged per instance).
-//
-// Table is created lazily on first use (same pattern as other runtime tables
-// in this codebase) and must also exist in schema.sql for fresh installs.
-//
-// Failure mode is fail-OPEN: if MySQL is unreachable the request is allowed
-// through and a throttled warning is logged. Rate limiting must never become
-// the thing that takes the site down during a DB blip.
-//
-// Cost: one INSERT + one SELECT per guarded request. Auth/public/join
-// endpoints are low-frequency; the high-frequency socket path keeps its own
-// per-socket in-memory throttle in sessions.socket.js (no DB round trip).
+// endpointKey -> clientKey -> array of hit timestamps (ms)
+const buckets = new Map();
+const MAX_BUCKETS = 20000;
+let lastSweepAt = 0;
 
-let tableReady = false;
-let tableFailedAt = 0;
-let lastPruneAt = 0;
-let lastWarnAt = 0;
-
-async function ensureTable() {
-  if (tableReady) return true;
-  // Back off for a minute after a failure so a down DB isn't hammered.
-  if (Date.now() - tableFailedAt < 60_000) return false;
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS rate_limit_hits (
-        id BIGINT PRIMARY KEY AUTO_INCREMENT,
-        endpoint_key VARCHAR(190) NOT NULL,
-        client_key VARCHAR(190) NOT NULL,
-        hit_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-        INDEX idx_ratelimit_lookup (endpoint_key, client_key, hit_at)
-      ) ENGINE=InnoDB`);
-    tableReady = true;
-    return true;
-  } catch {
-    tableFailedAt = Date.now();
-    return false;
-  }
-}
-
-function warnThrottled(message) {
+function sweep() {
   const now = Date.now();
-  if (now - lastWarnAt < 60_000) return;
-  lastWarnAt = now;
-  console.warn(message);
+  if (now - lastSweepAt < 60_000) return;
+  lastSweepAt = now;
+  // Drop empty buckets; cap total size (Map keeps insertion order).
+  for (const [key, arr] of buckets) {
+    if (!arr.length) buckets.delete(key);
+  }
+  while (buckets.size > MAX_BUCKETS) {
+    buckets.delete(buckets.keys().next().value);
+  }
 }
 
 function clientKey(req) {
@@ -60,48 +38,39 @@ export function rateLimit({
   skip,
   message = "Too many requests. Please try again later.",
 }) {
-  const windowSec = Math.max(1, Math.round(windowMs / 1000));
+  const window = Math.max(100, Number(windowMs) || 60000);
+  const limit = Math.max(1, Number(max) || 10);
   return async (req, res, next) => {
     try {
       if (skip && skip(req)) return next();
-      if (!(await ensureTable())) {
-        warnThrottled("[rateLimit] MySQL unavailable — failing open.");
-        return next();
-      }
 
       const endpointKey = String(key || `${req.baseUrl || ""}${req.path || ""}`).slice(0, 190);
       const cKey = String(keyGenerator(req) || "unknown").slice(0, 190);
-
-      await pool.query(
-        `INSERT INTO rate_limit_hits (endpoint_key, client_key) VALUES (:endpoint, :client)`,
-        { endpoint: endpointKey, client: cKey }
-      );
-      const [[row]] = await pool.query(
-        `SELECT COUNT(*) AS hits, MIN(hit_at) AS oldest
-         FROM rate_limit_hits
-         WHERE endpoint_key = :endpoint
-           AND client_key = :client
-           AND hit_at > DATE_SUB(NOW(3), INTERVAL :windowSec SECOND)`,
-        { endpoint: endpointKey, client: cKey, windowSec }
-      );
-
-      // Opportunistic prune, at most once a minute per process. The 2-hour
-      // horizon covers the longest configured window (1h) with margin.
+      const bucketKey = `${endpointKey}\n${cKey}`;
       const now = Date.now();
-      if (now - lastPruneAt > 60_000) {
-        lastPruneAt = now;
-        pool.query(`DELETE FROM rate_limit_hits WHERE hit_at < DATE_SUB(NOW(3), INTERVAL 2 HOUR)`).catch(() => {});
+      const cutoff = now - window;
+
+      let arr = buckets.get(bucketKey);
+      if (!arr) {
+        arr = [];
+        buckets.set(bucketKey, arr);
+      } else if (arr.length && arr[0] <= cutoff) {
+        // Timestamps only grow, so trim expired from the front.
+        let drop = 0;
+        while (drop < arr.length && arr[drop] <= cutoff) drop += 1;
+        if (drop) arr.splice(0, drop);
       }
 
-      if (Number(row?.hits || 0) > max) {
-        const oldestMs = row?.oldest ? new Date(row.oldest).getTime() : now;
-        const retrySec = Math.max(1, Math.ceil((oldestMs + windowMs - now) / 1000));
+      if (arr.length >= limit) {
+        const retrySec = Math.max(1, Math.ceil((arr[0] + window - now) / 1000));
         res.setHeader("Retry-After", retrySec);
         return res.status(429).json({ message });
       }
+      arr.push(now);
+      sweep();
       return next();
     } catch {
-      warnThrottled("[rateLimit] check failed — failing open.");
+      // A limiter must never take the site down: fail open on any bug.
       return next();
     }
   };

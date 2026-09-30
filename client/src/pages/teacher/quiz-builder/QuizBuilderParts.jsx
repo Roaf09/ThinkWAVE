@@ -6,7 +6,7 @@ import { TrueFalseEditor, TypeAnswerEditor, GuessWordEditor } from "./SimpleEdit
 
 export { BuilderModal, BankModal } from "./builderDialogs";
 export { MediaInput, ImageUploadTile } from "./builderMedia";
-export { voiceAnswerRows, VoiceRecordingPanel, CorrectAnswerExplanation } from "./builderVoice";
+export { CorrectAnswerExplanation } from "./builderVoice";
 export { CrosswordEditor } from "./CrosswordEditor";
 export { McqEditor } from "./McqEditor";
 export { MatchingEditor } from "./MatchingEditor";
@@ -21,11 +21,11 @@ export function TemplateEditor({ templateType, category, q, onChange, ui, c, isM
     return <McqEditor category={category} q={q} onChange={onChange} ui={ui} c={c} isMobile={isMobile} />;
   }
   if (tt === "TRUE_FALSE") {
-    return <TrueFalseEditor q={q} onChange={onChange} ui={ui} c={c} />;
+    return <TrueFalseEditor q={q} onChange={onChange} ui={ui} c={c} isMobile={isMobile} />;
   }
 
   if (tt === "TYPE_ANSWER") {
-    return <TypeAnswerEditor templateType={tt} q={q} onChange={onChange} ui={ui} c={c} />;
+    return <TypeAnswerEditor templateType={tt} q={q} onChange={onChange} ui={ui} c={c} isMobile={isMobile} />;
   }
 
   if (tt === "GUESS_WORD_4PICS") {

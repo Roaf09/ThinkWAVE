@@ -29,8 +29,8 @@ export function QuizBankCard({ quiz, onPreview, onDelete, onReuse, c, isMobile =
         </div>
       </div>
       <div className="tw-bank-card-actions" style={isMobile ? { justifyContent: "flex-end", width: "100%" } : undefined}>
-        {!isMobile && <button onClick={() => { setMoreOpen(false); onPreview(); }} className="tw-analytics-text-link tw-bank-preview-link" style={{ color: c.accent }}>Preview</button>}
-        <TeacherPressButton tone="blue" onClick={onReuse}>Reuse</TeacherPressButton>
+        {!isMobile && <button onClick={() => { setMoreOpen(false); onPreview(); }} className="tw-analytics-text-link tw-bank-preview-link" style={{ color: tone.accent }}>Preview</button>}
+        <TeacherPressButton tone="blue" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={onReuse}>Reuse</TeacherPressButton>
         <div data-bank-more={quiz.id} className="relative">
           <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
           {moreOpen && <div className="absolute right-0 top-[calc(100%_+_8px)] w-[200px]" style={{ zIndex: 1200, ...card(c, { padding: 8, boxShadow: "0 22px 50px rgba(15,23,42,.24)" }) }}>

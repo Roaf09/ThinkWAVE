@@ -8,6 +8,8 @@ import express from "express";
 import cors    from "cors";
 import helmet  from "helmet";
 import morgan  from "morgan";
+import path from "path";
+import { fileURLToPath } from "url";
 import { env } from "./env.js";
 
 import { authRouter }           from "./modules/auth/auth.routes.js";
@@ -22,8 +24,10 @@ import { adminDashboardRouter } from "./modules/admin/admin_dashboard.routes.js"
 import { studentRouter }        from "./modules/student/student.routes.js";
 import { tutorialStateRouter }  from "./modules/tutorial_state/tutorial_state.routes.js";
 import { publicRouter }         from "./modules/public/public.routes.js";
+import { exportsRouter }        from "./modules/exports/exports.routes.js";
 import { metricsMiddleware }     from "./metrics.js";
 import { rateLimit }             from "./middleware/rateLimit.js";
+import { pool }                  from "./db.js";
 
 export function makeApp() {
   const app = express();
@@ -59,8 +63,45 @@ export function makeApp() {
   // Never log request bodies here — they may contain passwords/OTPs.
   app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
   app.use(metricsMiddleware);
+  // Local file storage for compressed uploads (free single-service).
+  // Long-run: swap to R2/S3 by changing imageStore.js only — URLs stay /uploads/*.
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    app.use("/uploads", express.static(path.resolve(here, "../uploads"), { maxAge: "30d", immutable: true }));
+  } catch { /* static optional */ }
   // Health route is useful for quick checks during deployment or local debugging.
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  app.get("/api/health/detailed", async (_req, res) => {
+    const mem = process.memoryUsage();
+    // Year-scale watch: which tables are eating the database. Row counts are
+    // InnoDB estimates (good enough for growth trends). Never fails the check.
+    let dbSize = null;
+    try {
+      const [tables] = await pool.query(
+        `SELECT table_name, table_rows,
+                ROUND((data_length + index_length) / 1024 / 1024, 1) AS mb
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE()
+         ORDER BY (data_length + index_length) DESC
+         LIMIT 8`
+      );
+      const [[total]] = await pool.query(
+        `SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) AS mb
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE()`
+      );
+      dbSize = { totalMb: Number(total?.mb || 0), tables };
+    } catch {
+      dbSize = null;
+    }
+    res.json({
+      ok: true,
+      uptimeSec: Math.round(process.uptime()),
+      memoryMb: Math.round(mem.heapUsed / 1024 / 1024),
+      rssMb: Math.round(mem.rss / 1024 / 1024),
+      dbSize,
+    });
+  });
 
   // Safety-net limiter for every /api route (authenticated or not), so a
   // route that never got its own tight limiter still can't be hammered.
@@ -86,7 +127,7 @@ export function makeApp() {
     if (/^\d{1,15}$/.test(String(value))) return next();
     return res.status(400).json({ message: `Invalid ${name}.` });
   };
-  for (const router of [publicRouter, authRouter, classesRouter, quizzesRouter, sessionsRouter, analyticsRouter, adminRouter, questionBankRouter, superadminRouter, adminDashboardRouter, studentRouter]) {
+  for (const router of [publicRouter, authRouter, classesRouter, quizzesRouter, sessionsRouter, analyticsRouter, adminRouter, questionBankRouter, superadminRouter, adminDashboardRouter, studentRouter, exportsRouter]) {
     for (const name of NUMERIC_PARAMS) router.param(name, ensureNumericParam);
   }
 
@@ -103,6 +144,7 @@ export function makeApp() {
   app.use("/api/admin-dashboard", adminDashboardRouter);
   app.use("/api/student",         studentRouter);
   app.use("/api/tutorial-state",  tutorialStateRouter);
+  app.use("/api/exports",          exportsRouter);
 
   // Unknown API route — JSON 404 instead of the default HTML page
   // (avoids leaking stack traces / framework fingerprinting).

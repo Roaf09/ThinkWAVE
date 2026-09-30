@@ -43,7 +43,7 @@ export default function ThinkBotTutorial({
   placement = "auto",
   highlight = true,
   highlightMode = "spotlight",
-  highlightPadding = 7,
+  highlightPadding = 10,
   className = "",
   transparent = false,
   square = false,
@@ -57,6 +57,11 @@ export default function ThinkBotTutorial({
   dragKey,
   accentColor,
   reserveActionSpace = false,
+  // Safety net: when a targeted step renders but its target never appears
+  // (stale persisted stage, fresh-empty form) and the instance offers no
+  // other exit, show a visible "Skip step" escape instead of a dead blocker.
+  skipStepLabel = "Skip step",
+  onSkipStep,
 }) {
   const c = useColors();
   const { dark } = useTheme();
@@ -70,6 +75,11 @@ export default function ThinkBotTutorial({
   const [dragPosition, setDragPosition] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [bubbleSize, setBubbleSize] = useState(null);
+  // Safety-net state: dismiss hides this instance (frees the page) when the
+  // step has no reachable target and no other exit; targetMissing flips once
+  // a string target stays unresolved past a short grace period.
+  const [dismissed, setDismissed] = useState(false);
+  const [targetMissing, setTargetMissing] = useState(false);
   const targetNodeRef = useRef(null);
   const bubbleRef = useRef(null);
   const dragSessionRef = useRef(null);
@@ -134,6 +144,33 @@ export default function ThinkBotTutorial({
     setDragging(false);
     dragSessionRef.current = null;
   }, [resolvedDragKey, dialogWidth, square, matchTargetHeight]);
+
+  // Safety net part 1: a fresh target/placement means a fresh step — clear any
+  // previous dismissal or missing-target flag.
+  useEffect(() => {
+    setDismissed(false);
+    setTargetMissing(false);
+  }, [open, target, placement]);
+
+  // Safety net part 2: a string target that never resolves leaves a fullscreen
+  // blocker with no hole. Flag it past a short grace period (the resolver
+  // polls every ~220ms, so a real target appears well before this fires).
+  const hasRect = !!rect;
+  useEffect(() => {
+    if (!open || typeof target !== "string" || !target || hasRect) return undefined;
+    const timer = window.setTimeout(() => setTargetMissing(true), 400);
+    return () => window.clearTimeout(timer);
+  }, [open, target, hasRect]);
+
+  // Safety net part 3: bare delay blockers (no bubble, timer is the only exit)
+  // auto-release after 8s if their stage never advanced — frees the page
+  // instead of blocking forever on a dropped stage write.
+  const isBareBlocker = !children;
+  useEffect(() => {
+    if (!open || !isBareBlocker) return undefined;
+    const timer = window.setTimeout(() => setDismissed(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [open, isBareBlocker, target]);
 
   useEffect(() => {
     if (!open || !highlight || typeof document === "undefined") return undefined;
@@ -245,7 +282,7 @@ export default function ThinkBotTutorial({
     };
   }, [bubbleStyle, dragPosition, square]);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!open || dismissed || typeof document === "undefined") return null;
 
   const blockerClick = clickAnywhere ? (event) => {
     event.preventDefault();
@@ -334,6 +371,14 @@ export default function ThinkBotTutorial({
     holeRect.width = Math.max(0, holeRect.right - holeRect.left);
     holeRect.height = Math.max(0, holeRect.bottom - holeRect.top);
   }
+  // Safety net part 4: visible escape. A bubble whose string target never
+  // resolved and which offers no other exit (no click-anywhere, no action or
+  // secondary button) shows "Skip step" instead of blocking forever.
+  const showSkipStep = !!children && typeof target === "string" && !!target && !rect && targetMissing && !clickAnywhere && !actionLabel && !secondaryLabel;
+  const handleSkipStep = () => {
+    try { onSkipStep?.(); } catch {}
+    setDismissed(true);
+  };
   const blockers = blockInteraction ? (useHole && holeRect ? <>
     <div className="tw-tutorial-blocker" style={{ left: 0, top: 0, right: 0, height: holeRect.top }} />
     <div className="tw-tutorial-blocker" style={{ left: 0, top: holeRect.top, width: holeRect.left, height: holeRect.height }} />
@@ -351,9 +396,10 @@ export default function ThinkBotTutorial({
         <img src="/media/thinkbot.png" alt="ThinkBot" className="tw-thinkbot-tutorial-avatar" />
         <div className="tw-thinkbot-tutorial-copy">{children}</div>
         {clickAnywhere && <div className="tw-tutorial-click-anywhere">{clickAnywhereLabel}</div>}
-        {(reserveActionSpace || actionLabel || secondaryLabel) && <div className={`tw-thinkbot-tutorial-actions is-reserved${actionLabel || secondaryLabel ? " has-action" : ""}`}>
+        {(reserveActionSpace || actionLabel || secondaryLabel || showSkipStep) && <div className={`tw-thinkbot-tutorial-actions is-reserved${actionLabel || secondaryLabel ? " has-action" : ""}`}>
           {secondaryLabel && actionReady && <button type="button" className="tw-tutorial-secondary" onClick={onSecondary}>{secondaryLabel}</button>}
           {actionLabel && actionReady && <button type="button" className="tw-tutorial-press" onClick={onAction}><span>{actionLabel}</span></button>}
+          {showSkipStep && <button type="button" className="tw-tutorial-secondary" onClick={handleSkipStep}>{skipStepLabel}</button>}
         </div>}
       </section>}
     </div>,

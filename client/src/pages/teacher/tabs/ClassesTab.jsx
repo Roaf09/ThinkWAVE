@@ -14,7 +14,7 @@ import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { tabCard as card, tabBtn as btn, useIsMobileViewport } from "./teacherTabShared";
 import { buildTree, buildPath, findNode } from "./classes-parts/classTreeUtils";
 import { AssignmentResultRow, ClassReportCard, ClassAnalyticsModal, StudentAnalyticsModal } from "./classes-parts/ClassReportsAndAnalytics";
-import { RemoveStudentModal, FolderCard, FolderModal } from "./classes-parts/FolderDialogs";
+import { FolderCard, FolderModal } from "./classes-parts/FolderDialogs";
 import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
 function row(c) { return { background: c.cardBg2, border: `3px solid ${c.border}` }; }
@@ -32,10 +32,12 @@ export default function ClassesTab({ tutorial }) {
   const [sessions, setSessions] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [classCode, setClassCode] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [menuFor, setMenuFor] = useState(null);
   const [folderModal, setFolderModal] = useState(null);
+  const [folderError, setFolderError] = useState("");
   const [renameModal, setRenameModal] = useState(null);
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [folderAction, setFolderAction] = useState(null);
@@ -90,8 +92,8 @@ export default function ClassesTab({ tutorial }) {
     let delay = 0;
     let next = null;
     if (stage === "classes_intro_delay") { delay = 2000; next = "classes_intro"; }
-    else if (stage === "classes_subject_done_delay") { delay = 2000; next = "classes_subject_done"; }
-    else if (stage === "classes_to_create_delay") { delay = 2000; next = "nav_create"; }
+    else if (stage === "classes_subject_done_delay") { delay = 900; next = "classes_subject_done"; }
+    else if (stage === "classes_to_create_delay") { delay = 900; next = "nav_create"; }
     if (!next) return undefined;
     const timer = window.setTimeout(() => tutorial?.setStage?.(next), delay);
     return () => window.clearTimeout(timer);
@@ -112,7 +114,9 @@ export default function ClassesTab({ tutorial }) {
   // Resume hardening: after an interruption the persisted tutorial folders may
   // no longer be selected (selection is transient), which would leave the
   // highlight/dialog pointing at nothing. Re-select them, or fall back to the
-  // stable prompt when the folder itself is gone.
+  // stable prompt when the folder itself is gone. Exception: focus_subject
+  // intentionally waits for the teacher to click the highlighted subject
+  // folder themselves (auto-advance on selection handles the next step).
   useEffect(() => {
     if (loading || !folders.length) return;
     const stage = tutorial?.stage;
@@ -125,9 +129,6 @@ export default function ClassesTab({ tutorial }) {
     if ((stage === "classes_ready" || stage === "classes_share_explain") && tutorialSectionId && !hasSection) {
       tutorial?.setStage?.("classes_intro");
       return;
-    }
-    if (stage === "classes_focus_subject" && hasSubject && Number(selectedFolderId) !== tutorialSubjectId) {
-      setSelectedFolderId(tutorialSubjectId);
     }
     if ((stage === "classes_ready" || stage === "classes_share_explain") && hasSection && Number(selectedFolderId) !== tutorialSectionId) {
       setSelectedFolderId(tutorialSectionId);
@@ -211,6 +212,7 @@ export default function ClassesTab({ tutorial }) {
 
   function openAddFolder() {
     setFolderName("");
+    setFolderError("");
     setFolderModal({ parentId: selectedFolderId || null });
     if (tutorial?.stage === "classes_intro") tutorial.setStage?.("classes_wait_subject");
     if (tutorial?.stage === "classes_create_section") tutorial.setStage?.("classes_wait_section");
@@ -219,6 +221,7 @@ export default function ClassesTab({ tutorial }) {
   async function submitFolder(e) {
     e.preventDefault();
     if (!folderName.trim()) return;
+    setFolderError("");
     try {
       const parentId = folderModal?.parentId || null;
       const { data } = await api.post("/classes", { name: folderName.trim().slice(0, 95), parentId });
@@ -235,7 +238,12 @@ export default function ClassesTab({ tutorial }) {
         tutorial.setStage?.("classes_ready", { tutorialSectionId: newId });
       }
     } catch (err) {
-      setMsg(err?.response?.data?.message || "Could not create folder.");
+      const message = err?.response?.data?.message || "Could not create folder.";
+      setMsg(message);
+      // Surface the failure inside the modal (the page-level message sits
+      // behind the overlay) and release Cancel so the teacher is never
+      // trapped by a create that cannot succeed.
+      setFolderError(message);
     }
   }
 
@@ -279,10 +287,28 @@ export default function ClassesTab({ tutorial }) {
     try {
       const { data } = await api.get(`/classes/${selectedFolderId}/code`);
       setClassCode(data.classCode || "");
+      setCopiedCode(false);
       if (tutorial?.stage === "classes_ready") tutorial.setStage?.("classes_share_explain");
     } catch (err) {
       setMsg(err?.response?.data?.message || "Could not generate class code.");
     }
+  }
+
+  async function copyClassCode() {
+    const code = String(classCode || "");
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      ta.remove();
+    }
+    setCopiedCode(true);
+    window.setTimeout(() => setCopiedCode(false), 1600);
   }
 
   async function removeStudent(enrollmentId) {
@@ -296,7 +322,7 @@ export default function ClassesTab({ tutorial }) {
   const classCreateTarget = folders.length === 0 ? '[data-tutorial="class-create-empty"]' : '[data-tutorial="class-add-folder"]';
   const tutorialNodes = <>
     {["classes_intro_delay", "classes_subject_done_delay", "classes_to_create_delay"].includes(tutorial?.stage) && <ThinkBotTutorial />}
-    {tutorial?.stage === "classes_intro" && <ThinkBotTutorial target={classCreateTarget} placement="below" dialogWidth={410} highlightMode="target"><p>Let’s start by organizing your classes.</p><p>Create a subject folder for one of the subjects you teach.</p></ThinkBotTutorial>}
+    {tutorial?.stage === "classes_intro" && <ThinkBotTutorial target={classCreateTarget} placement={isMobile ? "below" : "right"} dialogWidth={410} highlightMode="target"><p>Let’s start by organizing your classes.</p><p>Create a subject folder for one of the subjects you teach.</p></ThinkBotTutorial>}
     {tutorial?.stage === "classes_wait_subject" && !subjectTipReady && <ThinkBotTutorial target='[data-tutorial="class-folder-modal"]' highlight={false} />}
     {tutorial?.stage === "classes_wait_subject" && subjectTipReady && <ThinkBotTutorial target='[data-tutorial="class-folder-modal"]' placement={isMobile ? "above" : "right"} dialogWidth={isMobile ? 250 : 285} matchTargetHeight={!isMobile} highlight={false} className={isMobile ? "tw-tutorial-tip-small" : "tw-tutorial-tip-panel"}><p><strong>Tip:</strong></p><p>You could use names like <strong>Mathematics</strong>, <strong>Science</strong>, <strong>English</strong>, or whatever works best for you.</p></ThinkBotTutorial>}
     {tutorial?.stage === "classes_subject_done" && <ThinkBotTutorial target={tutorialSubjectId ? `[data-folder-id="${tutorialSubjectId}"]` : undefined} placement={isMobile ? "below" : "center"} square dragKey="classes-sections-dialog" highlightMode="target" allowTargetInteraction={false} clickAnywhere onClickAnywhere={() => tutorial?.setStage?.("classes_sections_example")}><p>Nice! Subject folders give you one place to keep related classes and sections together.</p></ThinkBotTutorial>}
@@ -312,10 +338,10 @@ export default function ClassesTab({ tutorial }) {
 
   if (!loading && folders.length === 0) {
     return <div className="container grid gap-[18px]">
-      <section><h2 className="mb-[4px]" style={{ color: c.text }}>Class</h2></section>
+      <section><h2 style={{ marginBottom: 4, color: c.text }}>Class</h2></section>
       {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
       <ThinkBotEmptyState c={c} title="You have not made any classes yet." actionLabel="Create a Class" onAction={openAddFolder} actionProps={{ "data-tutorial": "class-create-empty" }} />
-      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} confirmLabel="Create" placeholder={folderModal?.parentId ? "ex. Grade 6 - Serenity, BSIT 41 A, etc." : "ex. Mathematics, Science, English, etc."} disableCancel={["classes_wait_subject", "classes_wait_section"].includes(tutorial?.stage)} />}
+      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => { setFolderModal(null); setFolderError(""); }} confirmLabel="Create" placeholder={folderModal?.parentId ? "ex. Grade 6 - Serenity, BSIT 41 A, etc." : "ex. Mathematics, Science, English, etc."} disableCancel={["classes_wait_subject", "classes_wait_section"].includes(tutorial?.stage) && !folderError} error={folderError} />}
       {tutorialNodes}
     </div>;
   }
@@ -323,7 +349,7 @@ export default function ClassesTab({ tutorial }) {
   return (
     <div className="container grid gap-[18px]">
       <section>
-        <h2 className="mb-[4px]" style={{ color: c.text }}>Class</h2>
+        <h2 style={{ marginBottom: 4, color: c.text }}>Class</h2>
       </section>
 
       {msg && <div style={{ ...card(c, { background: c.redBg, borderColor: c.redBorder, color: c.redFg, boxShadow: "none" }) }}>{msg}</div>}
@@ -344,8 +370,12 @@ export default function ClassesTab({ tutorial }) {
         </div>
 
         {classCode && selectedFolderId && (
-          <div data-tutorial="class-code-display" className="mb-[16px] p-[14px] rounded-[14px] font-[900] tracking-[2px]" style={{ border: `1px dashed ${c.accent}`, background: `${c.accent}12`, color: c.accent }}>
-            Class Code: {classCode}
+          <div data-tutorial="class-code-display" className="mb-[16px] p-[14px] rounded-[14px] font-[900] tracking-[2px]" style={{ border: `1px dashed ${c.accent}`, background: `${c.accent}12`, color: c.accent, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <span>Class Code: {classCode}</span>
+            <button type="button" onClick={copyClassCode} title={copiedCode ? "Copied!" : "Copy class code"} aria-label="Copy class code" style={{ border: "none", background: "transparent", color: c.accent, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, font: "inherit", fontSize: 13, letterSpacing: 0 }}>
+              <TwIcon name="copy" size={20} />
+              {copiedCode ? "Copied" : ""}
+            </button>
           </div>
         )}
 
@@ -353,7 +383,7 @@ export default function ClassesTab({ tutorial }) {
           <div className="font-[900]" style={{ color: c.text }}>{selectedFolderId ? current?.name || "Folder" : "Folders"}</div>
         </div>
 
-        {loading ? <TwLogoLoader minHeight="24vh" /> : (
+        {loading ? <TwLogoLoader minHeight="50vh" /> : (
           <div className="grid gap-[12px] grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {children.map((folder) => <FolderCard key={folder.id} folder={folder} c={c} menuFor={menuFor} setMenuFor={setMenuFor} onOpen={() => setSelectedFolderId(folder.id)} onRename={() => { setFolderName(folder.name); setRenameModal(folder); setMenuFor(null); }} onDelete={() => { setFolderAction({ type: "delete", folder }); setMenuFor(null); }} onDuplicate={() => { setFolderAction({ type: "duplicate", folder }); setMenuFor(null); }} />)}
           </div>
@@ -386,10 +416,10 @@ export default function ClassesTab({ tutorial }) {
         </div>
       </section>}
 
-      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => setFolderModal(null)} confirmLabel="Create" placeholder={folderModal?.parentId ? "ex. Grade 6 - Serenity, BSIT 41 A, etc." : "ex. Mathematics, Science, English, etc."} disableCancel={["classes_wait_subject", "classes_wait_section"].includes(tutorial?.stage)} />}
+      {folderModal && <FolderModal c={c} title="Create a Class" value={folderName} setValue={setFolderName} onSubmit={submitFolder} onClose={() => { setFolderModal(null); setFolderError(""); }} confirmLabel="Create" placeholder={folderModal?.parentId ? "ex. Grade 6 - Serenity, BSIT 41 A, etc." : "ex. Mathematics, Science, English, etc."} disableCancel={["classes_wait_subject", "classes_wait_section"].includes(tutorial?.stage) && !folderError} error={folderError} />}
       {renameModal && <FolderModal c={c} title="Rename Class" value={folderName} setValue={setFolderName} onSubmit={renameFolder} onClose={() => setRenameModal(null)} confirmLabel="Save" />}
       {folderAction && <TeacherActionModal c={c} textCancel icon={folderAction.type === "delete" ? "trash" : "plus"} tone={folderAction.type === "delete" ? "red" : "blue"} title={folderAction.type === "delete" ? "Delete class?" : "Duplicate class?"} message={`${folderAction.folder.name} will be ${folderAction.type === "delete" ? "permanently deleted" : "copied with its current folder structure"}.`} confirmLabel={folderAction.type === "delete" ? "Delete" : "Duplicate"} onClose={() => setFolderAction(null)} onConfirm={() => folderAction.type === "delete" ? deleteFolder(folderAction.folder) : duplicateFolder(folderAction.folder)} />}
-      {removeConfirm && <RemoveStudentModal c={c} student={removeConfirm} onClose={() => setRemoveConfirm(null)} onConfirm={() => removeStudent(removeConfirm.id)} />}
+      {removeConfirm && <TeacherActionModal c={c} icon="user" tone="red" title="Remove student?" message={`${removeConfirm.last_name}, ${removeConfirm.first_name} will be removed from this class.`} confirmLabel="Remove" textCancel onClose={() => setRemoveConfirm(null)} onConfirm={() => removeStudent(removeConfirm.id)} />}
       {classAnalytics && <ClassAnalyticsModal c={c} data={classAnalytics} loading={classAnalyticsLoading} mode={classAnalyticsMode} setMode={setClassAnalyticsMode} onClose={() => setClassAnalytics(null)} />}
       {studentAnalytics && <StudentAnalyticsModal c={c} data={studentAnalytics} loading={studentAnalyticsLoading} onClose={() => setStudentAnalytics(null)} />}
       {tutorialNodes}

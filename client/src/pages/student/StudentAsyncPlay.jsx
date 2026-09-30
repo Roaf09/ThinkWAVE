@@ -2,7 +2,7 @@
  * client/src/pages/student/StudentAsyncPlay.jsx
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { getToken } from "../../lib/auth";
@@ -45,6 +45,10 @@ function clearAssignmentProgress(quizId) {
   try { localStorage.removeItem(assignmentProgressKey(quizId)); } catch {}
 }
 
+// Shared empty answer so the ticking timer doesn't hand the game board a
+// brand-new object every second (that would redraw it for no reason).
+const EMPTY_ANSWER = {};
+
 // The JWT payload isn't sensitive here - just reading the already-trusted
 // "sub" claim client-side to know which leaderboard row is "me", since it
 // isn't otherwise available on this page.
@@ -79,6 +83,8 @@ export default function StudentAsyncPlay() {
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
   const [showLeaderboard,setShowLeaderboard]=useState(false);
+  // Normal points by default; tap any score or the chip for competitive.
+  const [boardMode,setBoardMode]=useState("normal");
   const [leaderboardRows,setLeaderboardRows]=useState([]);
   const [newlyArrivedIds,setNewlyArrivedIds]=useState(()=>new Set());
   const knownLeaderboardIdsRef=useRef(new Set());
@@ -178,8 +184,8 @@ export default function StudentAsyncPlay() {
   const tt = normalizeTemplateType(quiz?.template_type);
   const gameplayAccent = templateAccent(tt);
   // Keep each question's answer and lock state independent, even when an older API payload omits or repeats an id.
-  const currentAnswer = answers[idx] || {};
-  const activeAnswer = answers[activeIdx] || {};
+  const currentAnswer = answers[idx] || EMPTY_ANSWER;
+  const activeAnswer = answers[activeIdx] || EMPTY_ANSWER;
   const activeTimeLimit=Math.max(1,Number(activeQ?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
   const totalAssignmentSec=useMemo(()=>questions.reduce((sum,item)=>sum+Math.max(1,Number(item?.config_json?.timeLimitSec||quiz?.time_limit_sec||30)),0),[questions,quiz?.time_limit_sec]);
   const activeIsLast = activeIdx >= questions.length - 1;
@@ -227,17 +233,27 @@ export default function StudentAsyncPlay() {
     setMsg("Time's up, you can no longer answer this question.");
   },[remainingSec,activeIdx,activeLocked,done,introOpen,tt,activeQ,activeTimeLimit]);
 
-  // Persist progress after every meaningful change so a lost/closed tab can
-  // resume exactly where the student left off, including the timer.
+  // Persist progress (debounced trailing 1s) so a lost/closed tab can
+  // resume exactly where the student left off, including the timer —
+  // without stringifying the whole crossword grid on every keystroke.
+  const progressPendingRef = useRef(null);
+  const progressSaveTimer = useRef(null);
   useEffect(()=>{
     if(!quiz||introOpen||done)return;
-    saveAssignmentProgress(quizId,{
+    progressPendingRef.current={
       questionCount:questions.length,
       answers,locked,activeIdx,idx,
       activeDeadlineAt:deadlineRef.current,
-    });
+    };
+    clearTimeout(progressSaveTimer.current);
+    progressSaveTimer.current=setTimeout(()=>{
+      if(progressPendingRef.current){saveAssignmentProgress(quizId,progressPendingRef.current);progressPendingRef.current=null;}
+    },1000);
+    return()=>clearTimeout(progressSaveTimer.current);
   },[quiz,introOpen,done,answers,locked,activeIdx,idx,questions.length,quizId]);
-  useEffect(()=>{ if(done) clearAssignmentProgress(quizId); },[done,quizId]);
+  useEffect(()=>{ if(done){clearTimeout(progressSaveTimer.current);progressPendingRef.current=null;clearAssignmentProgress(quizId);} },[done,quizId]);
+  // Flush a pending debounced save if the tab unmounts mid-debounce.
+  useEffect(()=>()=>{ if(progressPendingRef.current){try{saveAssignmentProgress(quizId,progressPendingRef.current);}catch{}} },[quizId]);
 
   useEffect(()=>{
     if(!activeQ||done||introOpen||!activeIsLast||!activeLocked||!answers[activeIdx]?.timedOut)return undefined;
@@ -293,6 +309,14 @@ export default function StudentAsyncPlay() {
     return ()=>{ try { socket.disconnect(); } catch {} if (assignmentSocketRef.current === socket) assignmentSocketRef.current = null; };
   },[quizId]);
 
+  // After submit the tab-out socket has no job left; the leaderboard socket
+  // below takes over. Without this both sockets stay alive on results.
+  useEffect(()=>{
+    if(!done) return;
+    try { assignmentSocketRef.current?.disconnect(); } catch {}
+    assignmentSocketRef.current = null;
+  },[done]);
+
   // Once this student's own result is in, join a lightweight realtime room so
   // that when classmates finish later, their name/rank pops onto this same
   // leaderboard screen live instead of requiring a refresh.
@@ -329,7 +353,7 @@ export default function StudentAsyncPlay() {
   },[quiz,done,introOpen,answers,locked,idx]);
 
   function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next)void soundManager.startBGM("playing");}
-  function setAnswer(answer){if(!q||done||currentLocked||idx!==activeIdx)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));}
+  const setAnswer = useCallback(function setAnswer(answer){if(!q||done||currentLocked||idx!==activeIdx)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));},[q,done,currentLocked,idx,activeIdx]);
   async function submitCurrent(){
     if(!q||done||currentLocked||idx!==activeIdx)return;
     if(!currentAnswered){setMsg("Answer this question before submitting.");return;}
@@ -425,7 +449,11 @@ export default function StudentAsyncPlay() {
     const myUserId=currentStudentUserId();
     const myRow=leaderboardRows.find(row=>Number(row.student_user_id)===Number(myUserId))||null;
     const myRank=myRow?.rank||result?.rank||0;
-    const myPoints=myRow?myRow.competitive_points:result?.competitivePoints||0;
+    const toggleBoardMode=()=>setBoardMode((mode)=>(mode==="competitive"?"normal":"competitive"));
+    const boardPts=(row)=>Math.round(Number(boardMode==="competitive"?row.competitive_points:row.score)||0).toLocaleString();
+    const myPoints=boardMode==="competitive"
+      ? (myRow?myRow.competitive_points:result?.competitivePoints||0)
+      : (myRow?myRow.score:result?.score||0);
     const podiumOrder=[leaderboardRows[1],leaderboardRows[0],leaderboardRows[2]].filter(Boolean);
     const leaderboardColumns=Math.max(1,Math.min(4,Math.ceil(leaderboardRows.length/10)));
     const rankGroups=[leaderboardRows.slice(3,10),leaderboardRows.slice(10,20),leaderboardRows.slice(20,30),leaderboardRows.slice(30,40)].slice(0,leaderboardColumns);
@@ -440,6 +468,7 @@ export default function StudentAsyncPlay() {
               <p style={{color:mutedC}}>You scored <b style={{color:gameplayAccent}}>{Math.round(Number(myPoints||0)).toLocaleString()} pts</b>{myRank>0&&<> · Rank #{myRank}</>}</p>
             </div>
             <h3 className="sp-final-heading" style={{color:textC}}><TwIcon name="trophy" size={21}/> Leaderboard</h3>
+            <div style={{display:"flex",justifyContent:"center",margin:"0 0 10px"}}><button type="button" onClick={toggleBoardMode} title="Switch between normal and competitive points" style={{border:`1px solid ${gameplayAccent}`,background:"transparent",color:gameplayAccent,borderRadius:999,padding:"5px 14px",fontSize:12,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>{boardMode==="competitive"?"Competitive points":"Normal points"}</button></div>
             <div className="tw-host-podium sp-final-host-podium">
               {podiumOrder.map((row)=>{
                 const rank=row.rank;
@@ -451,7 +480,7 @@ export default function StudentAsyncPlay() {
                       <div className="tw-host-podium-avatar" aria-hidden="true">{row.profile_image?<img src={row.profile_image} alt=""/>:<TwIcon name="user" size={18}/>}</div>
                       <b>{displayName(row)}</b>
                     </div>
-                    <div className="tw-host-podium-points">{Math.round(Number(row.competitive_points||0)).toLocaleString()} pts</div>
+                    <div className="tw-host-podium-points"><button type="button" onClick={toggleBoardMode} title="Click to switch point type" style={{background:"transparent",border:"none",cursor:"pointer",font:"inherit",color:"inherit",padding:0}}>{boardPts(row)} pts</button></div>
                   </div>
                 </div>;
               })}
@@ -462,7 +491,7 @@ export default function StudentAsyncPlay() {
                 return <div key={row.student_user_id} className={`tw-student-leader-row${isMe(row)?" is-me":""}${arriving?" sp-leaderboard-row-enter":""}`}>
                   <span className="tw-student-leader-rank">#{row.rank}</span>
                   <span className="tw-student-leader-name" style={{color:textC}}>{displayName(row)}</span>
-                  <span className="tw-student-leader-points">{Math.round(Number(row.competitive_points||0)).toLocaleString()} pts</span>
+                  <button type="button" onClick={toggleBoardMode} title="Click to switch point type" className="tw-student-leader-points" style={{background:"transparent",border:"none",cursor:"pointer",font:"inherit",color:"inherit",padding:0}}>{boardPts(row)} pts</button>
                 </div>;
               })}</div>)}
             </div>
@@ -491,7 +520,7 @@ export default function StudentAsyncPlay() {
     {(entryStage==="beware"||entryStage==="beware-exit")&&<div className="sp-anticheat-backdrop">
       <div className={`sp-assignment-intro sp-page-enter${entryStage==="beware-exit"?" is-leaving":""}`} style={{background:cardBg,borderColor:cardBor,color:textC}}>
         <div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div>
-        <p style={{color:mutedC}}>You have a total of <b style={{color:textC}}>{formatDuration(totalAssignmentSec)}</b> to answer.</p>
+        <p style={{ color: mutedC, fontSize: 19, lineHeight: 1.5 }}>You have a total of <b style={{ color: textC, fontSize: 21 }}>{formatDuration(totalAssignmentSec)}</b> to answer.</p>
         <div className="sp-assignment-warning">BEWARE: CHEATING IS PROHIBITED</div>
       </div>
     </div>}
@@ -539,7 +568,9 @@ function AsyncShell({ dark, pageBg, backgroundStyle, textC, title, isMuted, onMu
   );
 }
 
-function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = false }) {
+// Steady shell: the 1-second timer must not redraw the game board.
+// It only redraws when the answer, lock, or question actually change.
+const TemplateBody = memo(function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = false }) {
   const cfg = q?.config_json || {};
   if (templateType === TEMPLATE_TYPES.MCQ) return <McqTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.TRUE_FALSE) return <TrueFalseTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
@@ -547,7 +578,7 @@ function TemplateBody({ templateType, q, value, onChange, disabled, timeUp = fal
   if (templateType === TEMPLATE_TYPES.GUESS_WORD_4PICS) return <GuessWord4PicsTemplate cfg={cfg} value={value} onChange={onChange} disabled={disabled} />;
   if (templateType === TEMPLATE_TYPES.CROSSWORD) return <GameCrossword config={cfg} correct={{}} store={value} onStore={onChange} disabled={disabled} questionId={q?.id} timeUp={timeUp} initExtra={{ words: [] }} summaryHint="Continue when the next question unlocks." totalPoints={null} />;
   return <TypeAnswerTemplate value={value} onChange={onChange} disabled={disabled} />;
-}
+});
 
 function McqTemplate({ cfg, value, onChange, disabled }) {
   return (

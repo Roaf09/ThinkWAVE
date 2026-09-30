@@ -10,6 +10,9 @@ import jwt    from "jsonwebtoken";
 import crypto from "crypto";
 import { pool } from "../../db.js";
 import { env  } from "../../env.js";
+import { compressDataUrlImage, isDataUrl } from "../../utils/imageStore.js";
+import { invalidateAuthUser } from "../../utils/authCache.js";
+import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { sendOtpForUser, verifyOtpCode } from "./otp.service.js";
 import { getTeacherPlan } from "../plans/plan.js";
 
@@ -87,6 +90,7 @@ export async function register(req, res) {
           { ph: passwordHash, fn: firstName.trim(), ln: lastName.trim(), institution: invitation.institution_name, id: existing.id }
         );
         await pool.query(`UPDATE admin_invitations SET used_at=NOW() WHERE id=:id`, { id: invitation.id });
+        invalidateAuthUser(existing.id);
         const [[approvedPlan]] = await pool.query(`SELECT plan_expires_at FROM institution_applications WHERE id=:id`, { id: invitation.application_id });
         await pool.query(`UPDATE users SET plan_code='INSTITUTION', plan_expires_at=:expiresAt WHERE id=:userId`, { expiresAt: approvedPlan?.plan_expires_at || null, userId: existing.id });
         await pool.query(`UPDATE institution_applications SET status='ACTIVATED' WHERE id=:id`, { id: invitation.application_id });
@@ -297,7 +301,7 @@ export async function loginHistory(req, res) {
   try {
     await pool.query(LOGIN_HISTORY_DDL);
     const [rows] = await pool.query(
-      `SELECT id, ip, user_agent, created_at FROM login_history WHERE user_id=:uid ORDER BY id DESC LIMIT 10`,
+      `SELECT id, user_agent, created_at FROM login_history WHERE user_id=:uid ORDER BY id DESC LIMIT 10`,
       { uid: req.user.sub }
     );
     res.json(rows || []);
@@ -391,11 +395,14 @@ export async function requestPasswordReset(req, res) {
 
 export async function verifyPasswordResetOtp(req, res) {
   const cleanEmail = normalizeEmail(req.body.email);
-  const [rows] = await pool.query(`SELECT id FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`, { email: cleanEmail });
+  const [rows] = await pool.query(`SELECT id, token_version FROM users WHERE email=:email AND deleted_at IS NULL LIMIT 1`, { email: cleanEmail });
   if (!rows.length) return res.status(404).json({ message: "User not found" });
   const ok = await verifyOtpCode(rows[0].id, req.body.code);
   if (!ok) return res.status(400).json({ message: "Invalid or expired OTP" });
-  const resetToken = jwt.sign({ sub: rows[0].id, purpose: "PASSWORD_RESET" }, env.JWT_SECRET, { expiresIn: "10m" });
+  // Bound to the current token_version: confirmPasswordReset bumps the
+  // version on first use, so a replayed token no longer verifies. This also
+  // signs the user out everywhere else, which is standard after a reset.
+  const resetToken = jwt.sign({ sub: rows[0].id, purpose: "PASSWORD_RESET", ver: Number(rows[0].token_version || 0) }, env.JWT_SECRET, { expiresIn: "10m" });
   res.json({ message: "OTP verified.", resetToken });
 }
 
@@ -404,16 +411,25 @@ export async function confirmPasswordReset(req, res) {
   try { payload = jwt.verify(req.body.resetToken, env.JWT_SECRET); }
   catch { return res.status(400).json({ message: "Reset authorisation is invalid or expired." }); }
   if (payload?.purpose !== "PASSWORD_RESET") return res.status(400).json({ message: "Invalid reset authorisation." });
+  const [[resetUser]] = await pool.query(`SELECT token_version FROM users WHERE id=:id AND deleted_at IS NULL`, { id: payload.sub });
+  if (!resetUser || Number(payload.ver ?? -1) !== Number(resetUser.token_version || 0)) {
+    return res.status(400).json({ message: "Reset authorisation is invalid or expired." });
+  }
   const passwordHash = await bcrypt.hash(req.body.newPassword, 12);
   await pool.query(`UPDATE users SET password_hash=:ph, token_version=token_version+1 WHERE id=:id AND deleted_at IS NULL`, { ph: passwordHash, id: payload.sub });
+  invalidateAuthUser(payload.sub);
   try { const [[user]]=await pool.query(`SELECT id,first_name,last_name,email,role,institution_name FROM users WHERE id=:id`,{id:payload.sub}); if(user) await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`,{uid:user.id,name:`${user.first_name||''} ${user.last_name||''}`.trim(),email:user.email,role:user.role,inst:user.institution_name,payload:JSON.stringify({method:'OTP_RESET'})}); } catch (_) {}
   res.json({ message: "Password changed successfully." });
 }
 
 export async function me(req, res) {
+  // Cached capability check, not a live information_schema hit: /auth/me runs
+  // on every login and many page loads.
+  const hasBirthDate = await hasDatabaseColumn("users", "birth_date");
   const [rows] = await pool.query(
     `SELECT id, role, email, first_name, last_name, is_verified, is_active,
             approval_status, institution_name, contact_number, profile_image,
+            ${hasBirthDate ? "birth_date," : ""}
             created_at
      FROM users WHERE id=:id`,
     { id: req.user.sub }
@@ -436,6 +452,12 @@ export async function me(req, res) {
 export async function updateMe(req, res) {
   const fields = [];
   const params = { id: req.user.sub };
+  // Compress profile photos before DB so roster broadcasts stay small.
+  if (typeof req.body?.profileImage === "string" && isDataUrl(req.body.profileImage)) {
+    try {
+      req.body.profileImage = await compressDataUrlImage(req.body.profileImage);
+    } catch { /* keep original */ }
+  }
   const mapping = { firstName: "first_name", lastName: "last_name", contactNumber: "contact_number", profileImage: "profile_image" };
   for (const [key, column] of Object.entries(mapping)) {
     if (!Object.prototype.hasOwnProperty.call(req.body || {}, key)) continue;
@@ -443,7 +465,74 @@ export async function updateMe(req, res) {
     fields.push(`${column}=:${param}`);
     params[param] = req.body[key] === null ? null : String(req.body[key] ?? "").trim();
   }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "birthDate")) {
+    const raw = req.body.birthDate === null ? "" : String(req.body.birthDate ?? "").trim();
+    if (raw !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.status(400).json({ message: "Birthday must be a valid date (YYYY-MM-DD)." });
+    }
+    fields.push(`birth_date=:v_birthDate`);
+    params.v_birthDate = raw === "" ? null : raw;
+  }
   if (!fields.length) return res.status(400).json({ message: "No profile changes supplied." });
-  await pool.query(`UPDATE users SET ${fields.join(", ")} WHERE id=:id AND deleted_at IS NULL`, params);
+  try {
+    await pool.query(`UPDATE users SET ${fields.join(", ")} WHERE id=:id AND deleted_at IS NULL`, params);
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      // Upgraded code against a database that predates users.birth_date:
+      // retry without the birthday field so other profile edits still save.
+      const retryFields = fields.filter((f) => !f.startsWith("birth_date="));
+      const retryParams = { ...params };
+      delete retryParams.v_birthDate;
+      if (!retryFields.length) return res.status(400).json({ message: "Birthday is not supported by this database yet. Restart the server to migrate." });
+      await pool.query(`UPDATE users SET ${retryFields.join(", ")} WHERE id=:id AND deleted_at IS NULL`, retryParams);
+      return me(req, res);
+    }
+    throw error;
+  }
   return me(req, res);
+}
+
+export async function changePassword(req, res) {
+  const currentPassword = String(req.body?.currentPassword ?? "");
+  if (!currentPassword) return res.status(400).json({ message: "Enter your current password." });
+  const [[user]] = await pool.query(
+    `SELECT id, password_hash, is_active FROM users WHERE id=:id AND deleted_at IS NULL LIMIT 1`,
+    { id: req.user.sub }
+  );
+  if (!user) return res.status(404).json({ message: "Account not found." });
+  if (!user.is_active) return res.status(403).json({ message: "Account deactivated" });
+  const ok = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!ok) return res.status(401).json({ message: "Current password is incorrect." });
+  const passwordHash = await bcrypt.hash(req.body.newPassword, 12);
+  await pool.query(`UPDATE users SET password_hash=:ph, token_version=token_version+1 WHERE id=:id AND deleted_at IS NULL`, { ph: passwordHash, id: user.id });
+  invalidateAuthUser(user.id);
+  try { const [[full]]=await pool.query(`SELECT id,first_name,last_name,email,role,institution_name FROM users WHERE id=:id`,{id:user.id}); if(full) await pool.query(`INSERT INTO system_notifications(type,user_id,name,email,role,institution_name,payload_json) VALUES('PASSWORD_CHANGED',:uid,:name,:email,:role,:inst,:payload)`,{uid:full.id,name:`${full.first_name||''} ${full.last_name||''}`.trim(),email:full.email,role:full.role,inst:full.institution_name,payload:JSON.stringify({method:'PROFILE_CHANGE'})}); } catch (_) {}
+  res.json({ message: "Password updated. Other devices have been signed out." });
+}
+
+export async function verifyPassword(req, res) {
+  const password = String(req.body?.password ?? "");
+  if (!password) return res.json({ ok: false });
+  const [[user]] = await pool.query(
+    `SELECT password_hash FROM users WHERE id=:id AND deleted_at IS NULL LIMIT 1`,
+    { id: req.user.sub }
+  );
+  if (!user) return res.status(404).json({ message: "Account not found." });
+  const ok = await bcrypt.compare(password, user.password_hash);
+  res.json({ ok });
+}
+
+export async function deleteAccount(req, res) {
+  const password = String(req.body?.password ?? "");
+  if (!password) return res.status(400).json({ message: "Enter your password to confirm." });
+  const [[user]] = await pool.query(
+    `SELECT id, password_hash, is_active FROM users WHERE id=:id AND deleted_at IS NULL LIMIT 1`,
+    { id: req.user.sub }
+  );
+  if (!user) return res.status(404).json({ message: "Account not found." });
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) return res.status(401).json({ message: "Incorrect password." });
+  await pool.query(`UPDATE users SET deleted_at=NOW(), is_active=0, token_version=token_version+1 WHERE id=:id`, { id: user.id });
+  invalidateAuthUser(user.id);
+  res.json({ message: "Account deleted." });
 }

@@ -19,7 +19,7 @@ export function competitiveSpeedMultiplier(remainingRatio) {
 
 export function calculateCompetitivePoints({ templateType, scored, basePoints, elapsedMs, timeLimitMs, timeExpired = false }) {
   if (timeExpired || Number(timeLimitMs || 0) <= 0 || Number(elapsedMs || 0) > Number(timeLimitMs || 0) + 300) return 0;
-  const maxCompetitive = Math.max(1, Math.min(3, Number(basePoints) || 1)) * 1000;
+  const maxCompetitive = Math.max(1, Math.min(3, Math.round(Number(basePoints) || 1))) * 1000;
   const remainingRatio = Math.max(0, Math.min(1, 1 - (Math.max(0, Number(elapsedMs || 0)) / Number(timeLimitMs || 1))));
   const speed = competitiveSpeedMultiplier(remainingRatio);
   const tt = normalizeTemplateType(templateType);

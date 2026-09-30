@@ -218,11 +218,11 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   async function addToQuizBank(quiz) { try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.", "error"); } }
   async function duplicateQuiz(quiz) { try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); await load(); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); } catch (error) { showFlash(error?.response?.data?.message || "Failed to duplicate quiz.", "error"); } }
 
-  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="60vh" /></div></div>;
 
   return <>
-    <div className="container tw-live-sessions-page grid gap-[18px]" style={{ overflow: "visible", background: c.pageBg, alignContent: "start", gridAutoRows: "max-content" }}>
-      <section><h2 className="mb-[4px]" style={{ color: c.text }}>{guestMode ? "Sessions" : "Live Sessions"}</h2></section>
+    <div className="container tw-live-sessions-page grid gap-[18px]" style={{ overflow: "visible", alignContent: "start", gridAutoRows: "max-content" }}>
+      <section><h2 style={{ marginBottom: 4, color: c.text }}>{guestMode ? "Sessions" : "Live Sessions"}</h2></section>
       {liveQuizzes.length > 0 && <section style={card(c, { position: "relative", overflow: "visible" })}>
         <div className="tw-search-filter-row">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search quizzes" className="tw-search-filter-input" style={inputStyle(c)} />

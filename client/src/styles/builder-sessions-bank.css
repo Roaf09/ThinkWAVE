@@ -10,6 +10,11 @@
 }
 .tw-analytics-text-link:hover::after,.tw-analytics-text-link:focus-visible::after{transform:scaleX(1)}
 .tw-analytics-text-link:focus-visible{outline:none}
+/* Card "Open Analytics" links render in ink black instead of brand blue. */
+.tw-class-report-actions .tw-analytics-text-link.is-ink{color:#0f172a!important}
+body.dark-mode .tw-class-report-actions .tw-analytics-text-link.is-ink{color:#e7e9ee!important}
+.tw-analytics-text-link.is-ink{color:#0f172a!important}
+body.dark-mode .tw-analytics-text-link.is-ink{color:#e7e9ee!important}
 
 .tw-builder-press{border-radius:10px!important;font-weight:850!important;transition:transform .14s ease,filter .16s ease,box-shadow .16s ease!important;box-shadow:0 5px 0 rgba(38,68,130,.45),0 11px 22px rgba(15,23,42,.16)!important}
 .tw-builder-press:hover:not(:disabled){filter:brightness(.93);transform:translateY(-1px)}
@@ -51,7 +56,8 @@ body.dark-mode .tw-builder-locked-banner{color:var(--tw-warn-light)}
 .tw-builder-answer-choice{transition:border-color .18s ease,box-shadow .18s ease,background .18s ease,transform .14s ease!important}
 .tw-builder-answer-choice.is-true{border-color:var(--tw-success)!important;box-shadow:0 0 0 3px rgba(34,197,94,.18)!important}
 .tw-builder-answer-choice.is-false{border-color:var(--tw-danger-accent)!important;box-shadow:0 0 0 3px rgba(239,68,68,.17)!important}
-.tw-builder-choice-record{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid rgba(100,130,190,.3);border-radius:12px;font-size:12px;font-weight:800}
+/* Voice record rows everywhere share MCQ's white pressed-in (inverted 3D) well. */
+.tw-builder-choice-record{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid rgba(100,130,190,.3);border-radius:12px;font-size:12px;font-weight:800;background:#fff;box-shadow:inset 0 3px 0 rgba(15,23,42,.10),inset 0 8px 16px rgba(15,23,42,.08);color:#0f172a}
 
 .tw-builder-image-tile{position:relative;min-height:150px;border:3px dashed;border-radius:18px;overflow:hidden;transition:transform .17s ease,filter .17s ease,box-shadow .17s ease}
 .tw-builder-image-tile:hover{transform:translateY(-2px);filter:brightness(.96);box-shadow:0 12px 25px rgba(15,23,42,.14)}
@@ -59,7 +65,7 @@ body.dark-mode .tw-builder-locked-banner{color:var(--tw-warn-light)}
 .tw-builder-image-tile img{width:100%;height:100%;min-height:150px;object-fit:cover;display:block}
 .tw-builder-image-tile span{display:grid;justify-items:center;gap:7px;text-align:center;font-weight:850;opacity:.8}.tw-builder-image-tile span b{font-size:30px}.tw-builder-image-tile span small{font-size:12px}
 .tw-builder-image-tile.is-compact,.tw-builder-image-tile.is-compact>label,.tw-builder-image-tile.is-compact img{min-height:112px}
-.tw-builder-image-remove{position:absolute;right:8px;top:8px;width:30px;height:30px;border:0;border-radius:999px;background:rgba(15,23,42,.82);color:var(--tw-on-brand);font-size:19px;font-weight:900;cursor:pointer}
+.tw-builder-image-remove{position:absolute;right:8px;top:8px;width:30px;height:30px;border:0;border-radius:999px;background:rgba(15,23,42,.82);color:var(--tw-on-brand);font-size:19px;font-weight:900;cursor:pointer;outline:2px solid #fff!important;outline-offset:2px}
 
 .tw-matching-pair-carousel{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:12px;align-items:center;margin-top:10px}
 .tw-matching-arrow{width:44px;height:44px;border-radius:999px;border:2px solid var(--tw-brand);background:var(--tw-brand);color:var(--tw-on-brand);font-size:28px;font-weight:900;cursor:pointer;box-shadow:0 5px 0 var(--tw-blue-deep);transition:transform .14s ease,filter .14s ease}
@@ -124,7 +130,13 @@ body.dark-mode .tw-builder-locked-banner{color:var(--tw-warn-light)}
 .tw-mcq-control-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;padding:7px 5px 9px;overflow:visible}
 .tw-mcq-control-row.is-secondary{padding-top:3px}
 .tw-mcq-normal-list{display:grid;gap:12px}
-.tw-mcq-normal-choice{display:flex;gap:10px;align-items:flex-start;padding:12px;border:2px solid;border-radius:15px;cursor:grab;transition:border-color .18s ease,background .18s ease,box-shadow .18s ease}
+/* Desktop MCQ builder 2x2 gameplay tiles (badge sizing must beat the base 34px !important rule). */
+.tw-mcq-game-badge{width:56px!important;height:56px!important;flex:0 0 56px!important;font-size:24px!important;border-width:4px!important}
+.tw-mcq-game-badge.is-two-answer{border-radius:12px!important}
+/* Quiz builder sticky header+pager: page-level overflow-x:hidden breaks position:sticky — clip keeps no-x-scroll without creating a scroll container. */
+html:has(body .tw-quiz-builder-page),
+body:has(.tw-quiz-builder-page),
+#root:has(.tw-quiz-builder-page){overflow-x:clip}.tw-mcq-normal-choice{display:flex;gap:10px;align-items:flex-start;padding:12px;border:2px solid;border-radius:15px;cursor:grab;transition:border-color .18s ease,background .18s ease,box-shadow .18s ease}
 .tw-mcq-normal-choice.is-correct{box-shadow:0 0 0 3px rgba(43,108,255,.13)}
 .tw-mcq-normal-content{display:grid;gap:10px;flex:1;min-width:0}
 .tw-mcq-modified-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
@@ -182,6 +194,9 @@ body.light-mode { background: #ffffff !important; }
 .tw-responsive-dashboard,
 .tw-responsive-dashboard-main,
 .dashboard-tab-panel { background: var(--tw-dashboard-page, transparent); }
+/* Soft gray page backdrop for every dashboard tab (light mode only) so white cards stand out. */
+body.light-mode .tw-responsive-dashboard-main,
+body.light-mode .tw-standard-dashboard-main { background: #eef1f6 !important; }
 .tw-live-sessions-page {
   width: 100%;
   max-width: 100% !important;
@@ -192,7 +207,6 @@ body.light-mode { background: #ffffff !important; }
 }
 .tw-responsive-dashboard-main:has(.tw-live-sessions-page) {
   overflow: visible !important;
-  background: inherit !important;
 }
 .tw-session-filter-grid {
   display: grid;

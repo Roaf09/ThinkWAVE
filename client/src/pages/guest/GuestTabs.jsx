@@ -129,7 +129,7 @@ export function GuestLiveTab({ setActiveTab }) {
     } catch (err) { setMsg(err?.response?.data?.message || "Failed."); }
   }
 
-  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="60vh" /></div></div>;
 
   return (
     <div className="container">
@@ -199,7 +199,7 @@ export function GuestHistoryTab() {
 
   const fmtDate=(d)=>d?manilaDateTime(d,{dateStyle:"medium",timeStyle:"short"}):"—";
 
-  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="24vh" /></div></div>;
+  if (loading) return <div className="container"><div className="card"><TwLogoLoader minHeight="60vh" /></div></div>;
 
   return (
     <div className="container">

@@ -154,6 +154,14 @@ body:not(.dark-mode) .tw-host-prompt{background:rgba(15,23,42,.16)!important;bor
   left:20px!important;top:20px!important;width:34px!important;height:34px!important;
   font-size:15px!important;font-weight:1000!important;box-shadow:0 4px 12px rgba(15,23,42,.18)!important;
 }
+.tw-mcq-image-choice>.tw-mcq-correct-dot.tw-mcq-image-correct-letter svg{width:15px!important;height:15px!important}
+@media (min-width:761px){
+.tw-mcq-image-choice>.tw-mcq-correct-dot.tw-mcq-image-correct-letter{
+  width:68px!important;height:68px!important;
+  font-size:30px!important;
+}
+.tw-mcq-image-choice>.tw-mcq-correct-dot.tw-mcq-image-correct-letter svg{width:30px!important;height:30px!important}
+}
 .tw-mcq-image-letter{display:none!important}
 .tw-matching-dummy-input{text-align:left!important;align-self:start!important;padding-top:12px!important}
 .tw-class-picker-name{
@@ -296,6 +304,15 @@ body.dark-mode .tw-landing-fixed-theme{color:var(--tw-on-brand)!important}
 .tw-analytics-choice-content{display:flex;align-items:center;gap:10px;min-width:0;line-height:1.35}
 .tw-analytics-choice-content img{width:76px;height:76px;object-fit:cover;border-radius:10px;flex:0 0 auto}
 .tw-analytics-choice-stat{border:0;background:transparent;font:inherit;font-weight:900;cursor:pointer;padding:7px 8px;border-radius:9px;white-space:nowrap}
+/* Long prompt/choice text auto-grows and wraps to the next line instead of
+   running on into the stat/chosen badges (per-student + per-question/batch). */
+.tw-analytics-full-prompt{white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;min-width:0!important}
+.tw-analytics-choice-grid{min-width:0}
+.tw-analytics-choice-row{min-width:0}
+.tw-analytics-choice-content{flex:1 1 auto!important;min-width:0!important}
+.tw-analytics-choice-content b{white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;min-width:0!important}
+.tw-analytics-pair-row>*,.tw-analytics-word-row>b,.tw-analytics-media,.tw-analytics-media b,.tw-analytics-result-pair{min-width:0!important;overflow-wrap:anywhere!important}
+.tw-analytics-answer-only span{white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;min-width:0!important}
 .tw-analytics-batch-detail{display:grid;gap:14px}
 .tw-analytics-pair-list,.tw-analytics-word-list{display:grid;gap:8px;margin-left:12px;padding-left:12px;border-left:3px solid rgba(127,127,127,.2)}
 .tw-analytics-pair-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.05em;opacity:.72;padding:0 10px}

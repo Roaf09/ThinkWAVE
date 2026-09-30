@@ -12,6 +12,7 @@ import { TeacherMetricCard, TeacherPressButton } from "../TeacherUI";
 import { templateCardChrome, templateLabel, templateTone } from "../../../lib/templatePalette";
 import { manilaDateTime } from "../../../lib/dateFormat";
 import { TwLogoLoader } from "../../../components/TwLogoLoader";
+import { useIsMobileViewport } from "./teacherTabShared";
 
 const shellCard = (c, extra = {}) => ({
   background: c.cardBg,
@@ -36,6 +37,7 @@ const actionBtn = (c, primary = false) => ({
 });
 
 export default function HomeTab({ setActiveTab }) {
+  const isMobile = useIsMobileViewport();
   const [sessions, setSessions] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -139,14 +141,14 @@ export default function HomeTab({ setActiveTab }) {
   }, [analyticsMap]);
 
   if (loading) {
-    return <div className="container"><div className="tw-home-performance-shell rounded-[18px] p-[18px]" style={shellCard(c)}><TwLogoLoader /></div></div>;
+    return <div className="container"><div className="tw-home-performance-shell rounded-[18px] p-[18px]" style={shellCard(c)}><TwLogoLoader minHeight="60vh" /></div></div>;
   }
 
   return (
     <>
       <div className="container grid gap-[18px]">
         <section>
-          <h2 className="mb-[4px]" style={{ color: c.text }}>Home</h2>
+          <h2 style={{ marginBottom: 4, color: c.text }}>Home</h2>
         </section>
 
         <section className="tw-home-top-grid grid gap-[16px] items-stretch grid-cols-[minmax(180px,250px)_minmax(300px,1fr)]">
@@ -198,7 +200,7 @@ export default function HomeTab({ setActiveTab }) {
               <div>
                 <div className="font-[900] text-[17px]" style={{ color: c.text }}>Recent Sessions</div>
               </div>
-              <TeacherPressButton tone="blue" onClick={() => setActiveTab?.("history")}>Open History</TeacherPressButton>
+              <TeacherPressButton tone="blue" onClick={() => setActiveTab?.("history")}>{isMobile ? "Open" : "Open History"}</TeacherPressButton>
             </div>
             {recentSessions.length === 0 ? (
               <EmptyState c={c} icon="history" title="No completed sessions yet" message="Your next finished live or assigned session will appear here with a quick report shortcut." />
@@ -263,7 +265,7 @@ function SessionCard({ session, analytics, c, navigate }) {
         <div className="text-[13px]" style={{ color: c.textMuted }}>
           {session.question_count || 0} questions · {assigned ? `${session.avg_score ?? 0} average score` : analytics?.questions?.length ? `${Math.round(Number(analytics.questions[0]?.pct_correct || 0))}% correct on the first tracked item` : "Analytics ready to open"}
         </div>
-        <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); goToAnalytics(); }}>Open Analytics</button>
+        <button type="button" className="tw-analytics-text-link is-ink" onClick={(event) => { event.stopPropagation(); goToAnalytics(); }}>Open Analytics</button>
       </div>
 
       {/* Mobile layout - compact square card, title + question count + participants only */}

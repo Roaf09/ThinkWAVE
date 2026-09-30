@@ -52,6 +52,8 @@ export function BuilderHeader({
   builderActionBorder,
   builderActionFace,
   builderTemplateAccent,
+  currentQ,
+  updateQ,
 }) {
   return (
     <>
@@ -93,6 +95,8 @@ export function BuilderHeader({
           isSaving={isSaving}
           publishLatched={publishLatched}
           publishDisabled={publishDisabled}
+          currentQ={currentQ}
+          updateQ={updateQ}
         />
 
         <BuilderPager

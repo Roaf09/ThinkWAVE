@@ -5,17 +5,19 @@
  */
 
 import { pool } from "../../db.js";
+import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
 import { getTeacherPlan, BASIC_LIMITS } from "../plans/plan.js";
 import { normalizeTemplateType } from "../quizzes/templates.js";
 
 // ireturn mga saved questions sa teacher, dipa soft delete
 export async function listBankQuestions(req, res) {
+  const { page, limit, offset, paged } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
   const [rows] = await pool.query(
     `SELECT id, template_type, category, prompt, config_json, correct_json, saved_at
      FROM question_bank
      WHERE teacher_id = :tid AND deleted_at IS NULL
-     ORDER BY saved_at DESC`,
-    { tid: req.user.sub }
+     ORDER BY saved_at DESC LIMIT :limit OFFSET :offset`,
+    { tid: req.user.sub, limit, offset }
   );
   // parse json fields para object tanggapin ni client hindi string
   let parsed = rows.map((r) => ({
@@ -35,7 +37,7 @@ export async function listBankQuestions(req, res) {
       return true;
     });
   }
-  res.json(parsed);
+  return pagedOrArray(res, parsed, { page, limit, paged });
 }
 
 

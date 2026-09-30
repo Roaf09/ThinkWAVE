@@ -9,6 +9,7 @@ import PublicHeader from "../components/PublicHeader";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { TwIcon } from "../components/TwUI";
+import OAuthButtons from "../components/OAuthButtons";
 
 // Auth pilot: colors via @theme tokens + `dark:` variant (see styles/tailwind.css).
 // Legacy `tw-auth-*` / `tw-pw-*` hooks stay for layout/animations only.
@@ -208,6 +209,11 @@ export default function Register() {
             {!isAdminReg && <p className="text-center text-[13px] m-0 text-auth-muted dark:text-auth-muted-dark">
               Already have an account? <button type="button" onClick={moveToLogin} className="text-brand! dark:text-brand-dark! font-bold underline underline-offset-2 border-0 bg-transparent! cursor-pointer p-0">Log in here</button>
             </p>}
+            {!isAdminReg && (
+              <div className="mt-1">
+                <OAuthButtons role="teacher" />
+              </div>
+            )}
           </form>
 
           {showPwHelp && <div className="tw-password-requirements-panel flex-1 flex flex-col gap-3 self-stretch justify-center rounded-[14px] p-5 border border-solid bg-auth-panel dark:bg-auth-panel-dark border-auth-border dark:border-auth-border-dark">

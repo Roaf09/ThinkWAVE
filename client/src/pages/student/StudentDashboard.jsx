@@ -8,6 +8,7 @@ import { api, setAuthToken } from "../../lib/api";
 import { clearRole, clearToken } from "../../lib/auth";
 import { clearLastRoute } from "../../lib/lastRoute";
 import { clearPersistentTabs, usePersistentTab } from "../../lib/persistentTab";
+import { useIdleLogout } from "../../lib/useIdleLogout";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
@@ -17,8 +18,9 @@ import { templateLabel, templateTone, templateCardChrome } from "../../lib/templ
 import { TeacherActionModal, TeacherPressButton, ThinkBotEmptyState } from "../teacher/TeacherUI";
 import { MobileTopHeader, MobileTabBar } from "../../components/MobileAppChrome";
 import { manilaDateTime, manilaDate } from "../../lib/dateFormat";
+import ProfileTab from "../../components/ProfileTab";
 
-const STUDENT_TABS = ["home", "classes"];
+const STUDENT_TABS = ["home", "classes", "profile"];
 
 export default function StudentDashboard() {
   const c = useColors();
@@ -82,8 +84,19 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     load();
-    const timer = setInterval(() => load({ silent: true }), 5000);
-    return () => clearInterval(timer);
+    // The dashboard is the heaviest read in the app (~15 queries + a full
+    // rank scan). Refresh every 30s instead of 5s, plus immediately when the
+    // tab regains focus — same freshness for invites/removals, 1/6 the load.
+    const timer = setInterval(() => load({ silent: true }), 30000);
+    const onFocus = () => load({ silent: true });
+    const onVisible = () => { if (!document.hidden) load({ silent: true }); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -180,6 +193,39 @@ export default function StudentDashboard() {
     }
   }
 
+  // Per-row saves for the Profile Settings tab: merge the patch into the
+  // latest profile, persist the whole form (server requires it), reload.
+  // Returns an error string or null on success.
+  async function saveStudentPatch(patch) {
+    const next = { ...profile, ...patch };
+    try {
+      await api.post("/student/profile", {
+        ...next,
+        middleInitial: String(next.middleInitial || "").trim() || null,
+        birthDate: next.birthDate || null,
+        profileImage: next.profileImage || null,
+      });
+      setProfile(next);
+      await load({ silent: true });
+      return null;
+    } catch (error) {
+      return error?.response?.data?.message || "Unable to save.";
+    }
+  }
+
+  async function uploadTabAvatar(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return "Please choose an image file.";
+    if (file.size > 2_000_000) return "Please choose an image smaller than 2 MB.";
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    return saveStudentPatch({ profileImage: dataUrl });
+  }
+
   async function joinLiveSession(session) {
     setJoiningSession(session.session_id);
     setMsg("");
@@ -214,6 +260,7 @@ export default function StudentDashboard() {
     clearPersistentTabs();
     nav("/");
   }
+  const idleLoggedOut = useIdleLogout({ onTimeout: doLogout });
 
   const navItems = [
     { id: "home", label: "Home", icon: "home" },
@@ -229,13 +276,13 @@ export default function StudentDashboard() {
         avatarSrc={profile.profileImage}
         dark={dark}
         toggleTheme={toggleTheme}
-        onSettings={() => setProfileOpen(true)}
+        onSettings={() => setActiveTab("profile")}
         onLogout={() => setShowLogout(true)}
       />
       <aside data-sidebar="true" className="tw-responsive-sidebar" style={sidebar(c)}>
         <div className="flex items-center justify-between pt-[26px] pr-[18px] pb-[22px] pl-[24px] mb-[12px]" style={{ borderBottom: `1px solid ${c.sidebarBorder}` }}>
           <div><span className="text-[20px] font-black text-[#e7e9ee]">Think</span><span className="text-[20px] font-black text-brand">WAVE</span></div>
-          <div className="flex items-center gap-[5px]">{(data.gamification?.favorites||[]).slice(0,3).map((id)=><span key={id} title={ACHIEVEMENT_DEFINITIONS.find((item)=>item.id===id)?.title||"Favorite achievement"} className="inline-flex text-[#fbbf24]"><TwIcon name="trophy" size={12}/></span>)}<button onClick={() => setProfileOpen(true)} title="Student Info" style={profileGearBtn(c)}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" className="w-full h-full object-cover" /> : <TwIcon name="user" size={20} />}</button></div>
+          <div className="flex items-center gap-[5px]">{(data.gamification?.favorites||[]).slice(0,3).map((id)=><span key={id} title={ACHIEVEMENT_DEFINITIONS.find((item)=>item.id===id)?.title||"Favorite achievement"} className="inline-flex text-[#fbbf24]"><TwIcon name="trophy" size={12}/></span>)}<button onClick={() => setActiveTab("profile")} title="Profile Settings" style={profileGearBtn(c)}>{profile.profileImage ? <img src={profile.profileImage} alt="Student profile" className="w-full h-full object-cover" /> : <TwIcon name="user" size={20} />}</button></div>
         </div>
 
         <nav className="flex flex-col gap-[4px] px-[12px] py-0 flex-1">
@@ -252,6 +299,19 @@ export default function StudentDashboard() {
         {msg && <div className="container" style={{ paddingBottom: 0 }}><div style={notice(c, "error")}>{msg}</div></div>}
         {activeTab === "home" ? (
           <HomePanel c={c} dark={dark} data={data} nav={nav} onJoinLive={joinLiveSession} joiningSession={joiningSession} onAnalytics={setAnalyticsTarget} onOpenAchievements={() => setAchievementsOpen(true)} onOpenProgressModal={() => setProgressModalOpen(true)} />
+        ) : activeTab === "profile" ? (
+          <ProfileTab
+            c={c}
+            roleLabel="Student"
+            studentMode
+            profile={profile}
+            onSaveStudentPatch={saveStudentPatch}
+            onBirthClick={() => setBirthPickerOpen(true)}
+            onAvatarUpload={uploadTabAvatar}
+            onAvatarRemove={deleteProfileImage}
+            onLogout={() => setShowLogout(true)}
+            onDeleted={doLogout}
+          />
         ) : (
           <ClassesPanel c={c} dark={dark} data={data} nav={nav} onJoinClass={() => setJoinOpen(true)} onAnalytics={setAnalyticsTarget} onJoinLive={joinLiveSession} joiningSession={joiningSession} />
         )}
@@ -268,6 +328,7 @@ export default function StudentDashboard() {
       {progressModalOpen && <MobileProgressModal c={c} dark={dark} data={data} onClose={() => setProgressModalOpen(false)} />}
       {profileSaved && <ProfileSavedOverlay />}
       {showLogout && <TeacherActionModal c={c} icon="logout" title="Logout" message="Are you sure you want to log out of the student dashboard?" tone="red" confirmLabel="Yes, Logout" hideCancel onClose={() => setShowLogout(false)} onConfirm={doLogout} />}
+      {idleLoggedOut && <><div className="tw-admin-logout-backdrop" /><div className="tw-admin-logout-layer"><section className="tw-admin-logout-modal is-compact-confirm" style={{ background: c.cardBg, borderColor: c.border, color: c.text }}><header><TwIcon name="logout" size={24} /><strong>Logged out</strong></header><p style={{ color: c.textMuted }}>You have been logged out due to inactivity. Click anywhere to continue to login.</p></section></div></>}
       {removalNotices[0] && <ClassRemovalModal c={c} notice={removalNotices[0]} onClose={() => acknowledgeRemoval(removalNotices[0])} />}
       {achievementToast&&<div className="tw-achievement-unlock-toast"><TwIcon name="trophy" size={22}/><div><small>Achievement Mastered</small><strong>{achievementToast.title}</strong></div></div>}
     </div>
@@ -783,4 +844,4 @@ function iconBtn(c) { return { width: 38, height: 38, display: "grid", placeItem
 function profileGearBtn(c) { return { width: 38, height: 38, padding: 0, overflow: "hidden", display: "grid", placeItems: "center", borderRadius: "50%", border: 0, background: "rgba(255,255,255,.08)", color: c.navColor, cursor: "pointer" }; }
 function sectionHeader(c) { return { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", color: c.text }; }
 function empty(c) { return { padding: 20, borderRadius: 14, border: `1px dashed ${c.border}`, color: c.textMuted, textAlign: "center" }; }
-function notice(c, kind) { return { padding: 12, borderRadius: 12, background: kind === "success" ? c.greenBg : c.redBg, color: kind === "success" ? c.greenFg : c.redFg, border: `1px solid ${kind === "success" ? c.greenBorder : c.redBorder}`, fontWeight: 900 }; }
+function notice(c, kind) { return { padding: 12, borderRadius: 12, background: kind === "success" ? c.greenBg : c.redBg, color: kind === "success" ? c.greenFg : c.redFg, border: `1px solid ${kind === "success" ? c.greenBorder : c.redBorder}`, fontWeight: 900, textAlign: "center" }; }

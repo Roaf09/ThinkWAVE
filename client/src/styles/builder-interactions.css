@@ -313,12 +313,14 @@ body.dark-mode .tw-host-live-v25 .tw-host-scoreboard{
 .tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-green);--choice-base:var(--tw-pick-green-deep);--choice-border:var(--tw-pick-green-edge);--choice-ink:var(--tw-pick-green-ink)}
 .tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:var(--tw-pick-blue);--choice-base:var(--tw-pick-blue-deep);--choice-border:var(--tw-pick-blue-edge);--choice-ink:var(--tw-pick-blue-ink)}
 .tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#f4d467;--choice-base:#a87813;--choice-border:#d4a522;--choice-ink:#713f12}
+.tw-host-student-choice-grid .tw-host-student-choice.choice-5{--choice-face:#c39af5;--choice-base:#7443ae;--choice-border:#9868d1;--choice-ink:#4c1d95}
 .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-green);--choice-base:var(--tw-pick-green-deep);--choice-border:var(--tw-pick-green-edge);--choice-ink:var(--tw-pick-green-ink)}
 .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-red);--choice-base:var(--tw-pick-red-deep);--choice-border:var(--tw-pick-red-edge);--choice-ink:var(--tw-danger-ink)}
 body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-red-dark);--choice-ink:var(--tw-danger-pale)}
 body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-green-dark);--choice-ink:var(--tw-mint-pale)}
 body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-3{--choice-face:#244f9d;--choice-ink:#dbeafe}
 body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-4{--choice-face:#786018;--choice-ink:#fef3c7}
+body.dark-mode .tw-host-student-choice-grid .tw-host-student-choice.choice-5{--choice-face:#5f368c;--choice-ink:#ede9fe}
 body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-1{--choice-face:var(--tw-pick-green-dark);--choice-ink:var(--tw-mint-pale)}
 body.dark-mode .tw-host-student-choice-grid.is-true-false .tw-host-student-choice.choice-2{--choice-face:var(--tw-pick-red-dark);--choice-ink:var(--tw-danger-pale)}
 .tw-host-student-choice-badge{

@@ -24,7 +24,7 @@ export function AssignmentResultRow({ r, c, onAnalytics }) {
       <div className="flex gap-[8px] flex-wrap"><ReportPill c={c} tone={tone}>{templateLabel(r.template_type)}</ReportPill><ReportPill c={c}>Assignment</ReportPill><ReportPill c={c}>{r.submitted_count || 0} submitted</ReportPill></div>
     </div>
     <div className="tw-class-report-actions flex items-center justify-end gap-[12px] flex-wrap">
-      <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); onAnalytics(); }}>Open Analytics</button>
+      <button type="button" className="tw-analytics-text-link is-ink" onClick={(event) => { event.stopPropagation(); onAnalytics(); }}>Open Analytics</button>
     </div>
   </div>;
 }
@@ -39,7 +39,7 @@ export function ClassReportCard({ session, c, onOpenLive, onOpenAssigned }) {
       <div className="flex gap-[8px] flex-wrap"><ReportPill c={c} tone={tone}>{templateLabel(session.template_type)}</ReportPill><ReportPill c={c}>{assigned ? "Assignment" : "Live session"}</ReportPill><ReportPill c={c}>{session.participant_count || 0} {assigned ? "submitted" : "participants"}</ReportPill></div>
     </div>
     <div className="tw-class-report-actions flex items-center justify-end gap-[12px] flex-wrap">
-      <button type="button" className="tw-analytics-text-link" onClick={(event) => { event.stopPropagation(); openReport(); }}>Open Analytics</button>
+      <button type="button" className="tw-analytics-text-link is-ink" onClick={(event) => { event.stopPropagation(); openReport(); }}>Open Analytics</button>
     </div>
   </div>;
 }

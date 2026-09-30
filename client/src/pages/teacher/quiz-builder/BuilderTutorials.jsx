@@ -23,11 +23,20 @@ export function BuilderTutorials({
   qMenuOpen = false,
   overflowOpen = false,
 }) {
+  // Draft recovery takes precedence: while "restore unsaved work?" is open,
+  // hold every tutorial bubble so the two never stack and block each other.
+  // Resolving the prompt clears the modal and the tour resumes where it left off.
+  if (modal === "recoverDraft") return null;
   return (
     <>
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "template_prompt" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} clickAnywhere onClickAnywhere={startFollowupTemplateTutorial} secondaryLabel="Skip" onSecondary={skipFollowupTemplateTutorial} className="tw-tutorial-template-optin">
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} actionLabel="Okay" onAction={startFollowupTemplateTutorial} secondaryLabel="Skip" onSecondary={skipFollowupTemplateTutorial} className="tw-tutorial-template-optin">
           <p>Would you like to see the tutorial for this template?</p>
+        </ThinkBotTutorial>
+      )}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "template_done" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} placement="center" dialogWidth={430} clickAnywhere onClickAnywhere={() => setBuilderTutorialStage(null)}>
+          <p>Tutorial ends here for this template.</p>
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "intro" && (
@@ -54,18 +63,18 @@ export function BuilderTutorials({
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "MCQ" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement={isMobile ? "above" : "screen-left"} square dialogWidth={isMobile ? 300 : 360} dragKey="builder-mcq-dialog" highlightMode="target">
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement="above" square dialogWidth={isMobile ? 300 : 360} dragKey="builder-mcq-dialog" highlightMode="target">
           <p>Next, add the possible answers.</p>
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "mcq_correct" && (
-        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement={isMobile ? "above" : "screen-left"} square dialogWidth={isMobile ? 300 : 360} dragKey="builder-mcq-dialog" highlight={false} hint={mcqTipVisible ? <span>You may also add or delete choices.</span> : null}>
-          <p>Next, add the possible answers.</p>
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-mcq-options"]' placement="above" square dialogWidth={isMobile ? 300 : 360} dragKey="builder-mcq-dialog" highlight={false}>
           <p className="tw-tutorial-fade-line">Now click the small circle beside the correct answer.</p>
         </ThinkBotTutorial>
       )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "TRUE_FALSE" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-tf-answers"]' placement="screen-right" square dialogWidth={360}><p>Next, select either <strong>True</strong> or <strong>False</strong> to set it as the correct answer.</p></ThinkBotTutorial>}
-      {!guestMode && !modifiedTutorialOpen && ["specific", "identification_done"].includes(builderTutorialStage) && normalizeTemplateType(quiz?.template_type) === "TYPE_ANSWER" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-identification-answer"]' placement="screen-right" square dialogWidth={350} dragKey="builder-identification-dialog" allowTargetInteraction={true} className="tw-tutorial-done-avatar-clear" clickAnywhere={builderTutorialStage === "identification_done"} onClickAnywhere={() => { document.activeElement?.blur?.(); if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}><p>Next, type in the correct answer.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && ["specific", "identification_done"].includes(builderTutorialStage) && normalizeTemplateType(quiz?.template_type) === "TYPE_ANSWER" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-identification-answer"]' placement="screen-right" square dialogWidth={350} dragKey="builder-identification-dialog" allowTargetInteraction={true} className="tw-tutorial-done-avatar-clear" clickAnywhere={builderTutorialStage === "identification_done"} onClickAnywhere={() => { document.activeElement?.blur?.(); setBuilderTutorialStage("identification_add_answer"); }}><p>Next, type in the correct answer.</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "identification_add_answer" && normalizeTemplateType(quiz?.template_type) === "TYPE_ANSWER" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-identification-add-answer"]' placement={isMobile ? "above" : "screen-right"} square dialogWidth={isMobile ? 300 : 350} dragKey="builder-identification-dialog" allowTargetInteraction={true} highlightMode="target" clickAnywhere onClickAnywhere={() => { document.activeElement?.blur?.(); if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("answer_explanation"); }}><p>You can also add optional alternate answers for the question.</p></ThinkBotTutorial>}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "specific" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (() => {
         // Gate Done on the first pair being filled so a stray click can't skip
         // pair filling entirely. The TIP bubble stays non-blocking.
@@ -78,7 +87,7 @@ export function BuilderTutorials({
         <>
           <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
             target='[data-tutorial="builder-matching-pairs"]'
-            placement="screen-right"
+            placement="below"
             square
             dialogWidth={370}
             dragKey="builder-matching-dialog"
@@ -104,20 +113,14 @@ export function BuilderTutorials({
         </>
         );
       })()}
-      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_dummy" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (() => {
-        const q = questions[qIndex] || questions[0];
-        const cfg = q?.config || {};
-        const colA = Array.isArray(cfg.colA) ? cfg.colA : [];
-        const allB = Array.isArray(cfg.colB) ? cfg.colB : [];
-        const dummies = Array.isArray(cfg.dummyB) && cfg.dummyB.length ? cfg.dummyB : allB.slice(colA.length);
-        const dummyReady = dummies.some((row) => trimText(row?.text) || trimText(row?.image));
-        return <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
+      {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_dummy" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && (
+        <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
           target='[data-tutorial="builder-matching-dummy"]' placement="screen-right" square dialogWidth={350}
-          allowTargetInteraction={true} clickAnywhere={dummyReady}
+          allowTargetInteraction={true} clickAnywhere
           onClickAnywhere={() => setBuilderTutorialStage("matching_add_pair")}>
-          <p>Add a distractor, then fill it in.</p>
-        </ThinkBotTutorial>;
-      })()}
+          <p>Add a distractor, then fill it in (optional).</p>
+        </ThinkBotTutorial>
+      )}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "matching_add_pair" && normalizeTemplateType(quiz?.template_type) === "MATCHING" && <ThinkBotTutorial
         accentColor={quiz ? templateAccent(quiz.template_type) : undefined}
         target='[data-tutorial="builder-matching-add-pair"]' placement="above" square dialogWidth={330}
@@ -135,7 +138,7 @@ export function BuilderTutorials({
           target='[data-tutorial="builder-matching-active-pair"]' placement="screen-right" square dialogWidth={350}
           allowTargetInteraction={true} clickAnywhere={pairReady}
           onClickAnywhere={() => { if (followupTemplateTutorial) finishFollowupTemplateTutorial(); else setBuilderTutorialStage("add_delay"); }}>
-          <p>Fill in the new pair, then click Done.</p>
+          <p>Fill in the new pair.</p>
         </ThinkBotTutorial>;
       })()}
       {!guestMode && !modifiedTutorialOpen && ["specific", "guess_images_done"].includes(builderTutorialStage) && normalizeTemplateType(quiz?.template_type) === "GUESS_WORD_4PICS" && <ThinkBotTutorial
@@ -168,7 +171,7 @@ export function BuilderTutorials({
           <p>You may also shuffle the arrangement of the letters.</p>
         </ThinkBotTutorial>;
       })()}
-      {!guestMode && !modifiedTutorialOpen && ["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-answer-explanation"]' placement={isMobile ? "above" : "right"} square dialogWidth={isMobile ? 300 : 350} className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear" allowTargetInteraction={true} clickAnywhere onClickAnywhere={() => setBuilderTutorialStage("add_delay")}><p>Add a short explanation of why the answer is correct (optional).</p></ThinkBotTutorial>}
+      {!guestMode && !modifiedTutorialOpen && ["answer_explanation", "answer_explanation_done"].includes(builderTutorialStage) && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-answer-explanation"]' placement={isMobile ? "above" : "right"} square dialogWidth={isMobile ? 300 : 350} className="tw-tutorial-answer-explanation tw-tutorial-done-avatar-clear" allowTargetInteraction={true} clickAnywhere onClickAnywhere={() => setBuilderTutorialStage("add_delay")} hint={normalizeTemplateType(quiz?.template_type) === "MCQ" ? <span>You may also add or delete choices.</span> : null}><p>Add a short explanation of why the answer is correct (optional).</p></ThinkBotTutorial>}
       {!guestMode && !modifiedTutorialOpen && ["add_delay", "save_delay"].includes(builderTutorialStage) && null}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "meta" && <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-meta-grid"]' placement={isMobile ? "below" : "right"} square dialogWidth={isMobile ? 300 : 370} className="tw-tutorial-meta-lower tw-tutorial-meta-points-side" clickAnywhere onClickAnywhere={() => setBuilderTutorialStage("bank")}><p>You can set the time limit and points depending on the question.</p></ThinkBotTutorial>}
       {!guestMode && !modifiedTutorialOpen && builderTutorialStage === "bank" && modal !== "confirmBank" && (isMobile ? (!qMenuOpen ? <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-qmenu-toggle"]' placement="below" dialogWidth={300} highlightMode="target"><p>You can also save this specific {isBatchTemplate ? "batch" : "question"} along with its choices in case you need it in the future.</p></ThinkBotTutorial> : null) : <ThinkBotTutorial accentColor={quiz ? templateAccent(quiz.template_type) : undefined} target='[data-tutorial="builder-save-bank"]' placement="below" dialogWidth={390} highlightMode="target"><p>You can also save this specific {isBatchTemplate ? "batch" : "question"} along with its choices in case you need it in the future.</p></ThinkBotTutorial>)}

@@ -36,6 +36,16 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
   const tone = templateTone(template, c, dark);
   const selected = folders.find((folder) => Number(folder.id) === Number(classId));
 
+  // Tutorial: bring the background picker into view so the auto-scrolling
+  // backgrounds are easier to see while the host_background dialog shows.
+  useEffect(() => {
+    if (tutorialStage !== "host_background") return;
+    const timer = window.setTimeout(() => {
+      try { document.querySelector('[data-tutorial="session-backgrounds"]')?.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch {}
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [tutorialStage]);
+
   // Mobile: hide the pill-shaped bottom tab bar while this setup modal is open + lock background scroll.
   useEffect(() => {
     document.body.classList.add("tw-mobile-modal-open");
@@ -52,22 +62,22 @@ export function HostLaunchModal({ quiz, folders, institutionPlan, guestMode = fa
 
   return <div className="tw-host-launch-backdrop" onClick={() => { if (!tutorialStage) onClose?.(); }}>
     <section className="tw-host-launch-modal" onClick={(event) => event.stopPropagation()} style={{ background: dark ? "#102443" : solidModalBg(c), borderColor: c.border, color: c.text }}>
-      {isMobile && <div className="tw-host-launch-toprow"><button type="button" aria-label="Close" onClick={() => { if (!tutorialStage) onClose?.(); }}><TwIcon name="close" size={20} /></button></div>}
+      <div className="tw-host-launch-toprow"><button type="button" aria-label="Close" onClick={() => { if (!tutorialStage) onClose?.(); }}><TwIcon name="close" size={20} /></button></div>
       <div className="tw-host-preview-dual">
         <button type="button" className="tw-host-preview-desktop tw-host-preview-clickable" onClick={() => setZoomedPreview("desktop")}><img src={TEMPLATE_IMAGES[template]?.landscape} alt={`${templateLabel(template)} desktop gameplay preview`} /></button>
         <button type="button" className="tw-host-preview-mobile tw-host-preview-clickable" onClick={() => setZoomedPreview("mobile")}><img src={TEMPLATE_IMAGES[template]?.mobile} alt={`${templateLabel(template)} mobile gameplay preview`} /></button>
       </div>
       <div className="tw-host-launch-copy"><h2>{quiz.title}</h2><p style={{ color: c.textMuted }}>Bring friendly competition to ThinkWAVE. Learners climb the leaderboard by answering accurately and quickly, so every response can change the podium.</p></div>
-      <div className="tw-host-mode-row tw-host-mode-simple">
+      {!guestMode && <div className="tw-host-mode-row tw-host-mode-simple">
         <TeacherPressButton type="button" tone="blue" className={`tw-host-mode-simple-btn${joinMode === "SOLO" ? " is-selected" : ""}`} disabled={joinMode === "SOLO"} title="Solo — individual play" aria-label="Solo — individual play" onClick={() => setJoinMode("SOLO")}><TwIcon name="user" size={22} /></TeacherPressButton>
         <TeacherPressButton type="button" tone="blue" className={`tw-host-mode-simple-btn${joinMode === "GROUP" ? " is-selected" : ""}`} disabled={joinMode === "GROUP" || groupLocked || isCrossword} title={groupTitle} aria-label={groupTitle} onClick={() => (!groupLocked && !isCrossword) && setJoinMode("GROUP")}><span className="tw-host-mode-trio" aria-hidden="true"><TwIcon name="user" size={18} /><TwIcon name="user" size={18} /><TwIcon name="user" size={18} /></span></TeacherPressButton>
-      </div>
+      </div>}
       {launchError && <div role="alert" className="tw-host-launch-error" style={{ background: c.redBg, color: c.redFg, border: `1px solid ${c.redBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 800 }}>{launchError}</div>}
       <div className="tw-host-launch-controls" style={guestMode ? { gridTemplateColumns: "1fr auto" } : undefined}>
         {!guestMode && <button data-tutorial="host-class" type="button" className="tw-host-class-field" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>}
         <TeacherPressButton data-tutorial="host-start" tone="blue" disabled={!guestMode && !classId} onClick={() => { if (tutorialStage === "host_start") onTutorialFinish?.(); onStart(quiz, joinMode, guestMode ? null : classId, backgroundKey); }}>Start</TeacherPressButton>
       </div>
-      <BackgroundPicker selectedKey={backgroundKey} onSelect={(key) => { setBackgroundKey(key); if (tutorialStage === "host_background") onTutorialStage?.("host_start"); }} c={c} category={quiz.category} />
+      <BackgroundPicker selectedKey={backgroundKey} autoPlay={tutorialStage === "host_background"} onSelect={(key) => { setBackgroundKey(key); if (tutorialStage === "host_background") onTutorialStage?.("host_start"); }} c={c} category={quiz.category} />
     </section>
     {zoomedPreview && <div className="tw-host-preview-zoom-backdrop" onClick={(event) => { event.stopPropagation(); setZoomedPreview(null); }}>
       <div className={`tw-host-preview-zoom-card is-${zoomedPreview}`} onClick={(event) => event.stopPropagation()}>

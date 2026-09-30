@@ -50,6 +50,7 @@ export function mailProvider() {
 }
 
 let smtpTransporter = null;
+let smtpVerified = false;
 function getSmtpTransporter() {
   if (smtpTransporter) return smtpTransporter;
   const secure = Number(env.SMTP_PORT) === 465;
@@ -67,6 +68,31 @@ function getSmtpTransporter() {
     socketTimeout: 20000,
   });
   return smtpTransporter;
+}
+
+// Boot-time check (log only, never blocks startup): proves the SMTP login
+// works BEFORE users complain that codes never arrive. A wrong/expired Gmail
+// app password shows up here immediately instead of as silent user reports.
+export async function verifyMailAtBoot() {
+  if (hasMailgunConfig()) {
+    console.log("[boot] mail provider: mailgun (credentials checked on first send).");
+    return;
+  }
+  if (!hasSmtpConfig()) {
+    console.log("[boot] mail provider: not configured — OTP/dev codes print to this log only.");
+    return;
+  }
+  if (smtpVerified) return;
+  try {
+    await getSmtpTransporter().verify();
+    smtpVerified = true;
+    console.log(`[boot] mail provider: smtp OK (${env.SMTP_HOST}:${env.SMTP_PORT || 587} as ${env.SMTP_USER}).`);
+  } catch (err) {
+    console.error(
+      `[boot] mail provider: SMTP LOGIN FAILED (${env.SMTP_HOST} as ${env.SMTP_USER}): ${err?.message || err}. ` +
+        `No OTP/code email will arrive until this is fixed (check the app password).`
+    );
+  }
 }
 
 async function sendViaSmtp({ to, subject, text, html }) {

@@ -269,9 +269,18 @@ body.dark-mode .tw-plan-success-modal{
 .tw-tutorial-blocker-full{inset:0}.tw-tutorial-blocker-full.is-clickable{cursor:pointer}
 .tw-tutorial-highlight{z-index:30010;border-width:4px;box-shadow:0 0 0 5px rgba(43,108,255,.24),0 0 34px 12px rgba(43,108,255,.62);animation:twTutorialPulseStrong .92s ease-in-out infinite}
 @keyframes twTutorialPulseStrong{0%,100%{box-shadow:0 0 0 3px rgba(43,108,255,.18),0 0 24px 7px rgba(43,108,255,.42);filter:brightness(1)}50%{box-shadow:0 0 0 9px rgba(43,108,255,.30),0 0 44px 16px rgba(43,108,255,.80);filter:brightness(1.12)}}
-.tw-tutorial-target-pulse{position:relative!important;z-index:30015!important;outline:4px solid var(--tw-brand)!important;outline-offset:2px!important;box-shadow:0 0 0 5px rgba(43,108,255,.24),0 0 38px 13px rgba(43,108,255,.68)!important;animation:twTutorialTargetPulse .88s ease-in-out infinite!important}
+.tw-tutorial-target-pulse{position:relative!important;z-index:30015!important;outline:4px solid var(--tw-brand)!important;outline-offset:8px!important;box-shadow:0 0 0 5px rgba(43,108,255,.16),0 0 22px 7px rgba(43,108,255,.38)!important;animation:twTutorialCreatePulse 1s ease-in-out infinite!important}
 .tw-tutorial-target-pulse.tw-tutorial-target-locked{pointer-events:none!important}
 @keyframes twTutorialTargetPulse{0%,100%{outline-width:3px;box-shadow:0 0 0 3px rgba(43,108,255,.18),0 0 25px 7px rgba(43,108,255,.45)}50%{outline-width:5px;box-shadow:0 0 0 8px rgba(43,108,255,.30),0 0 45px 16px rgba(43,108,255,.82)}}
+/* Create-a-Class buttons keep rounded corners on top of the shared gap + pulse. */
+[data-tutorial="class-create-empty"].tw-tutorial-target-pulse,
+[data-tutorial="class-add-folder"].tw-tutorial-target-pulse{
+  border-radius:14px!important;
+}
+@keyframes twTutorialCreatePulse{
+  0%,100%{outline-width:4px;box-shadow:0 0 0 5px rgba(43,108,255,.16),0 0 22px 7px rgba(43,108,255,.38)}
+  50%{outline-width:6px;box-shadow:0 0 0 11px rgba(43,108,255,.30),0 0 46px 17px rgba(43,108,255,.78)}
+}
 .tw-thinkbot-tutorial{z-index:30020;border-width:4px;border-radius:24px;padding:32px 112px 82px 30px;min-height:230px;max-height:min(76vh,620px);overflow:auto;box-shadow:0 28px 78px rgba(2,8,23,.38);display:flex;flex-direction:column}
 .tw-thinkbot-tutorial.is-square{aspect-ratio:auto;min-height:320px}
 .tw-thinkbot-tutorial.is-transparent{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
@@ -280,7 +289,8 @@ body.dark-mode .tw-plan-success-modal{
 .tw-thinkbot-tutorial-actions{position:absolute;right:20px;bottom:18px;justify-content:flex-end;align-items:flex-end;margin:0;min-height:48px}
 .tw-tutorial-press span{padding:12px 22px;font-size:15px}.tw-tutorial-secondary{padding:11px 18px;font-size:14px}
 .tw-tutorial-hint{z-index:30022;width:min(310px,calc(100vw - 24px));border-width:3px;padding:20px;font-size:15px;line-height:1.6;text-align:center}
-.tw-tutorial-click-anywhere{position:absolute;left:24px;right:24px;bottom:18px;text-align:center;font-size:11px;font-weight:850;letter-spacing:.04em;opacity:.62;pointer-events:none}
+.tw-tutorial-click-anywhere{position:absolute;left:24px;right:24px;bottom:18px;text-align:center;font-size:11px;font-weight:850;letter-spacing:.04em;opacity:.62;pointer-events:none;animation:twClickAnywhereIn .55s ease .8s both}
+@keyframes twClickAnywhereIn{from{opacity:0;transform:translateY(4px)}to{opacity:.62;transform:none}}
 .tw-thinkbot-tutorial.tw-tutorial-tip-panel{justify-content:center;padding:28px 70px 28px 22px;min-height:220px}.tw-thinkbot-tutorial.tw-tutorial-tip-panel .tw-thinkbot-tutorial-avatar{display:block;width:60px;height:60px;right:12px;top:16px}.tw-thinkbot-tutorial.tw-tutorial-tip-panel .tw-thinkbot-tutorial-copy{text-align:center;padding:0}
 @media(max-width:760px){.tw-thinkbot-tutorial{width:calc(100vw - 24px);max-width:calc(100vw - 24px)!important;padding:26px 88px 76px 22px;min-height:220px;border-radius:20px}.tw-thinkbot-tutorial.is-square{min-height:290px}.tw-thinkbot-tutorial-avatar{width:72px;height:72px;right:13px;top:18px}.tw-thinkbot-tutorial-copy{font-size:16px}.tw-thinkbot-tutorial-actions{right:14px;bottom:14px}.tw-tutorial-click-anywhere{bottom:14px}.tw-tutorial-hint{display:none}}
 
@@ -289,7 +299,7 @@ body.dark-mode .tw-plan-success-modal{
   position: relative;
   z-index: 30015 !important;
   outline: 3px solid rgba(49,130,246,.96) !important;
-  outline-offset: 3px;
+  outline-offset: 6px;
   box-shadow: 0 0 0 7px rgba(49,130,246,.20), 0 0 28px rgba(49,130,246,.78) !important;
   animation: twTutorialPulseStrong .78s ease-in-out infinite alternate !important;
 }
@@ -812,8 +822,8 @@ body.dark-mode .tw-thinkbot-tutorial.is-transparent{
   animation:twTutorialColorTarget .88s ease-in-out infinite!important;
 }
 @keyframes twTutorialColorTarget{
-  0%,100%{outline-width:3px;box-shadow:0 0 0 3px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 16%,transparent),0 0 25px 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 43%,transparent)}
-  50%{outline-width:5px;box-shadow:0 0 0 8px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 28%,transparent),0 0 45px 16px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 80%,transparent)}
+  0%,100%{outline-width:4px;box-shadow:0 0 0 5px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 16%,transparent),0 0 22px 7px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 38%,transparent)}
+  50%{outline-width:6px;box-shadow:0 0 0 11px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 30%,transparent),0 0 46px 17px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 78%,transparent)}
 }
 .tw-tutorial-mini-pulse{
   outline-color:var(--tw-template-tutorial-highlight,var(--tw-brand))!important;
@@ -823,6 +833,17 @@ body.dark-mode .tw-thinkbot-tutorial.is-transparent{
 @keyframes twTutorialColorMini{
   from{box-shadow:0 0 0 4px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 15%,transparent),0 0 18px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 48%,transparent)}
   to{box-shadow:0 0 0 8px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 26%,transparent),0 0 32px color-mix(in srgb,var(--tw-template-tutorial-highlight,var(--tw-brand)) 82%,transparent)}
+}
+
+/* MCQ correct-answer circles glow white while the tutorial points at them. */
+[data-tutorial="builder-mcq-options"] .tw-mcq-correct-dot.tw-tutorial-mini-pulse{
+  outline-color:#ffffff!important;
+  box-shadow:0 0 0 7px rgba(15,23,42,.35),0 0 30px rgba(255,255,255,.95)!important;
+  animation:twTutorialWhiteMini .78s ease-in-out infinite alternate!important;
+}
+@keyframes twTutorialWhiteMini{
+  from{box-shadow:0 0 0 4px rgba(15,23,42,.30),0 0 18px rgba(255,255,255,.65)}
+  to{box-shadow:0 0 0 8px rgba(15,23,42,.40),0 0 34px rgba(255,255,255,.95)}
 }
 
 /* The optional per-template prompt uses Skip as plain text, while Okay keeps the

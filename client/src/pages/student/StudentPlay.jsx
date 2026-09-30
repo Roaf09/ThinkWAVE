@@ -5,7 +5,7 @@
  */
 
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import "./StudentPlay.css";
 import { useTheme } from "../../context/ThemeContext";
@@ -14,6 +14,7 @@ import { gameSurfaceColors } from "../../components/TwUI";
 import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { AntiCheatModal, ExperienceControls } from "./student-play/experienceChrome";
 import { useTabOutTracking } from "./student-play/useTabOutTracking";
+import { useGameplayProtection } from "./student-play/useGameplayProtection";
 import { useStudentSocket } from "./student-play/useStudentSocket";
 import { useStudentSound } from "./student-play/useStudentSound";
 import { useStudentGameplay } from "./student-play/useStudentGameplay";
@@ -59,7 +60,12 @@ export default function StudentPlay() {
   const [feedbackFxKey, setFeedbackFxKey] = useState(0);
   const [antiCheat, setAntiCheat] = useState(null);
   const [antiCountdown, setAntiCountdown] = useState(0);
-  const [, setExperienceBlur] = useState(false);
+  const [experienceBlur, setExperienceBlur] = useState(false);
+  // Visual away-blur (tracked but never displayed before) + screenshot /
+  // screen-record deterrents for the whole session.
+  // Screenshot attempts are also tallied server-side for the host panel
+  // (silently — the student sees no warning, only the screen blank flash).
+  const guard = useGameplayProtection({ active: true, onCaptureAttempt: () => socketRef.current?.emit("student:screenshot", { sessionId: Number(sessionId) }) });
 
   const socketRef = useRef(null);
   const currentQRef = useRef(null);
@@ -129,7 +135,7 @@ export default function StudentPlay() {
     return ()=>clearTimeout(t);
   },[antiCheat,antiCountdown]);
 
-  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 200); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const currentQ = useMemo(() => state ? questions[state.current_question_index || 0] || null : null, [state, questions]);
   useEffect(() => { currentQRef.current = currentQ; }, [currentQ]);
@@ -161,7 +167,10 @@ export default function StudentPlay() {
     return { text: answerText || "" };
   }
 
-  function submit(options = {}) {
+  // Steady submit handler: without this the game board below would redraw on
+  // every one-second timer tick. The board only needs to redraw when answers
+  // or locks actually change, so the tick only moves the timer text.
+  const submit = useCallback(function submit(options = {}) {
     const timeExpired = !!options.timeExpired;
     if (!currentQ || submittedQId === currentQ.id) return;
     if (!timeExpired && isLocked) return;
@@ -169,7 +178,7 @@ export default function StudentPlay() {
     socketRef.current?.emit("answer:submit", { sessionId: Number(sessionId), participantId, questionId: currentQ.id, answer, timeExpired });
     if (timeExpired) setSubmitLabel("Time's up");
     else if (isGroupMode) setSubmitLabel("Waiting for group vote…");
-  }
+  }, [currentQ, submittedQId, isLocked, state, selectedChoice, answerText, matchingMap, spell, participantId, sessionId, isGroupMode]);
 
   useEffect(() => {
     if (!currentQ || state?.status !== "LIVE" || countdown > 0 || timer.remainingSec !== 0) return;
@@ -217,6 +226,17 @@ export default function StudentPlay() {
 
   const experienceControls=<ExperienceControls dark={dark} muted={isMuted} onMute={handleToggleMute} onTheme={toggleTheme}/>;
   const antiCheatOverlay=<AntiCheatModal antiCheat={antiCheat} countdown={antiCountdown} onConfirm={()=>{setAntiCheat(null);setAntiCountdown(0)}}/>;
+  // Blur layer for tab-switch (mirrors assignments) and capture attempts.
+  // Pointer events stay off so the anti-cheat confirm dialog above it (z 500)
+  // remains clickable; this only hides the game, it never locks input.
+  const awayBlocked = experienceBlur || guard.awayBlur;
+  const guardOverlay = (awayBlocked || guard.shotBlocked) && (
+    <div style={{ position: "fixed", inset: 0, zIndex: 400, display: "grid", placeItems: "center", padding: 20, pointerEvents: "none", background: dark ? "rgba(3,10,28,.35)" : "rgba(255,255,255,.25)", backdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)", WebkitBackdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)" }}>
+      <span style={{ padding: "10px 18px", borderRadius: 999, background: dark ? "rgba(8,22,50,.9)" : "rgba(255,255,255,.92)", color: dark ? "#e7e9ee" : "#0f172a", fontSize: 13, fontWeight: 800, boxShadow: "0 10px 26px rgba(0,0,0,.22)" }}>
+        {guard.shotBlocked ? "Screenshots and screen recording are not allowed." : "You've left the quiz — return to continue."}
+      </span>
+    </div>
+  );
   const explanationOverlay = explanationFeedback ? <div
     className={`sp-explanation-feedback is-${explanationFeedback.status} is-${explanationFeedback.phase}${postAnswerPhase ? " is-post-answer" : ""}`}
     onTransitionEnd={(event) => {
@@ -231,6 +251,7 @@ export default function StudentPlay() {
 
   if (state?.status === "ENDED" && !waitingForFinalFx && !showFeedback) {
     return (
+      <>
       <FinalLeaderboardView
         dark={dark} exiting={exiting} experienceBgStyle={experienceBgStyle} gameplayAccent={gameplayAccent}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay}
@@ -238,11 +259,14 @@ export default function StudentPlay() {
         scores={scores} myGroupId={myGroupId} myGroup={myGroup} isGroupMode={isGroupMode}
         participantId={participantId} onExit={exitTo}
       />
+      {guardOverlay}
+      </>
     );
   }
 
   if (!state || state.status === "LOBBY" || state.status === "PAUSED") {
     return (
+      <>
       <WaitingRoomView
         dark={dark} waitExperienceBgStyle={waitExperienceBgStyle}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}
@@ -251,21 +275,27 @@ export default function StudentPlay() {
         msg={msg} roster={roster} groups={groups} groupNameDraft={groupNameDraft}
         onGroupNameDraft={setGroupNameDraft} participantId={participantId} onJoinGroup={joinGroup}
       />
+      {guardOverlay}
+      </>
     );
   }
 
   if (state?.status === "LIVE" && countdown > 0) {
     return (
+      <>
       <CountdownView
         experienceBgStyle={experienceBgStyle}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}
         dark={dark} state={state} questions={questions} countdown={countdown}
       />
+      {guardOverlay}
+      </>
     );
   }
 
   if (!currentQ) return null;
   return (
+    <>
     <GameplayView
       dark={dark} experienceBgStyle={experienceBgStyle} gameplayAccent={gameplayAccent}
       experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}
@@ -286,5 +316,7 @@ export default function StudentPlay() {
       isLastQuestion={isLastQuestion} submittedQId={submittedQId}
       selectedBackground={selectedBackground} feedbackPulse={feedbackPulse}
     />
+    {guardOverlay}
+    </>
   );
 }
