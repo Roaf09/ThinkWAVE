@@ -50,7 +50,7 @@ export function WaitingRoomView({
           </div> */}
         </div>
         {waitingSubtitle ? <p className="sp-wait-subtitle" style={{ color: mutedC }}>{waitingSubtitle}</p> : null}
-        <div className="sp-assignment-warning" style={{ fontSize: 12, padding: "6px 12px", marginTop: 4, textAlign: "center" }}>BEWARE: CHEATING IS NOT PROHIBITED</div>
+        <div className="sp-assignment-warning" style={{ fontSize: 12, padding: "6px 12px", marginTop: 4, textAlign: "center" }}>BEWARE: CHEATING IS PROHIBITED</div>
         {msg && <p style={{ color: "#ef4444", fontWeight: 800, textAlign: "center", width: "100%", margin: "12px auto 0" }}>{msg}</p>}
 
         {!isGroupMode && (
