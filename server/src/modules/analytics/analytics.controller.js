@@ -13,6 +13,7 @@ import { normalizeTemplateType } from "../quizzes/templates.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "../sessions/sessionBackground.runtime.js";
 import { drawInfoBlock, drawTable } from "../../utils/pdfTable.js";
+import { ensureIntegrityTable } from "../sessions/integrityEvents.js";
 import { enqueueExport, queueStats } from "../../queue.js";
 import { yieldToLoop } from "../exports/exportStore.js";
 
@@ -221,13 +222,15 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_screenshot_session_participant (session_id, participant_id)
   )`);
+  await ensureIntegrityTable();
   const [allTabMonitoring] = await pool.query(
     `SELECT p.id AS participant_id,
             p.first_name, p.last_name, p.join_type, p.group_name,
             gm.group_id,
             sg.display_name AS assigned_group_name,
             (SELECT COUNT(*) FROM tab_events te WHERE te.participant_id = p.id AND te.session_id = :sid) AS tab_out_count,
-            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id = p.session_id AND se.participant_id = p.id) AS screenshot_count
+            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id = p.session_id AND se.participant_id = p.id) AS screenshot_count,
+            (SELECT COUNT(*) FROM integrity_events ie WHERE ie.session_id = p.session_id AND ie.participant_id = p.id) AS integrity_count
      FROM session_participants p
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id

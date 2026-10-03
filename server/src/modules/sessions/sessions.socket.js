@@ -9,8 +9,11 @@ import { createTTLCache } from "../../utils/ttlCache.js";
 import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { scoreAnswer, scoreCrosswordWord, normalizeTemplateType, TEMPLATE_TYPES } from "../quizzes/templates.js";
 import { resolveCrosswordWordBank, isCrosswordRoundComplete } from "../quizzes/templates/crossword/crossword.js";
+import { toStudentQuestion, toCanonicalMatchingAnswer, liveScope } from "../quizzes/studentView.js";
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
 import { attachCompetitiveTotals, calculateCompetitivePoints, competitiveSpeedMultiplier, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
+import { ensureIntegrityTable, recordIntegrityEvent, countIntegrityEvents } from "./integrityEvents.js";
+import { ensureGuestJoinTable, GUEST_REPEAT_THRESHOLD } from "./guestJoins.js";
 
 
 function normalizeChoiceValue(value) { return String(value ?? "").trim().toLowerCase(); }
@@ -150,6 +153,7 @@ const previousCompetitiveRanks = createTTLCache({ max: 500, ttlMs: 2 * 60 * 60 *
 const scoreBroadcastState = createTTLCache({ max: 500, ttlMs: 10 * 60 * 1000 });
 export function clearSessionMemory(sessionId) {
   const sid = Number(sessionId);
+  clearRevealTimer(sid);
   pausedQuestionState.delete(sid);
   resumedQuestionState.delete(sid);
   previousCompetitiveRanks.delete(sid);
@@ -185,6 +189,92 @@ async function ensureScreenshotTable(){
 }
 // Tab-out anti-cheat is enabled: 1st recorded, 2nd warns, 3rd kicks.
 const AUTO_KICK_AFTER_TAB_OUTS = true;
+// Presence heartbeat: the client sends student:presence {visible, focused}
+// every 5s. Two jobs:
+//  1) Flag connected-but-silent students ("monitoring interrupted").
+//  2) Catch a departure whose real student:tabOut never arrived (blocked or
+//     lost): a hidden/unfocused report counts ONCE per departure, only while
+//     the quiz is LIVE. Deterrent, not proof - a client faking both messages
+//     still passes.
+const presenceLastSeen = new Map(); // participantId -> {sessionId, at}
+// participantId -> when the current departure was counted. Set by tabOut or
+// a hidden report; cleared by the next visible + focused report.
+const presenceLastTab = new Map();
+const presenceFlaggedAt = new Map(); // `${sessionId}:${participantId}` -> last flagged at
+const presenceExtendedScreens = new Map(); // participantId -> bool (window.screen.isExtended)
+let presenceSweepStarted = false;
+function startPresenceSweep(io) {
+  if (presenceSweepStarted) return;
+  presenceSweepStarted = true;
+  setInterval(() => sweepPresence(io).catch((e) => console.error("presence sweep failed:", e?.message || e)), 10_000);
+}
+async function sweepPresence(io) {
+  try {
+    const now = Date.now();
+    const bySession = new Map();
+    for (const [pid, info] of presenceLastSeen) {
+      if (now - info.at <= 15_000) continue;
+      if (!bySession.has(info.sessionId)) bySession.set(info.sessionId, []);
+      bySession.get(info.sessionId).push(pid);
+    }
+    for (const [sid, pids] of bySession) {
+      const [rows] = await pool.query(
+        `SELECT p.id FROM session_participants p JOIN sessions s ON s.id=p.session_id
+         WHERE p.session_id=:sid AND p.kicked_at IS NULL AND p.connected=1
+           AND s.status IN ('LIVE','PAUSED') AND p.id IN (:pids)`,
+        { sid, pids }
+      );
+      const stillThere = new Set(rows.map((r) => Number(r.id)));
+      for (const pid of pids) {
+        if (!stillThere.has(pid)) { presenceLastSeen.delete(pid); presenceLastTab.delete(pid); continue; }
+        const key = `${sid}:${pid}`;
+        if (now - (presenceFlaggedAt.get(key) || 0) < 60_000) continue;
+        presenceFlaggedAt.set(key, now);
+        io.to(roomTeacher(sid)).emit("presence:interrupted", { participantId: pid });
+      }
+    }
+  } catch (e) {
+    console.error("presence sweep failed:", e?.message || e);
+  }
+}
+// Shared tab-out recorder: 1st recorded, 2nd warns, 3rd kicks.
+// Counts only while the quiz is LIVE - never in the lobby, while paused, or
+// after it ends - the same rule the client's useTabOutTracking follows.
+// Heartbeat-based counts also skip a student who already answered the final
+// question (also a client rule: they're done).
+async function recordTabOut(io, sessionId, participantId, { source = "tabOut" } = {}) {
+  const [[participant]] = await pool.query(
+    `SELECT p.id, p.kicked_at, s.status, s.current_question_index AS current_index,
+            JSON_LENGTH(s.questions_snapshot_json) AS question_count,
+            JSON_UNQUOTE(JSON_EXTRACT(s.questions_snapshot_json, CONCAT('$[', s.current_question_index, '].id'))) AS current_question_id
+     FROM session_participants p JOIN sessions s ON s.id=p.session_id
+     WHERE p.id=:pid AND p.session_id=:sid`,
+    { pid: participantId, sid: sessionId }
+  );
+  if (!participant || participant.kicked_at || participant.status !== "LIVE") return null;
+  if (source === "presence") {
+    const lastIndex = Math.max(0, Number(participant.question_count || 0) - 1);
+    if (Number(participant.current_index || 0) >= lastIndex && participant.current_question_id) {
+      const [[answered]] = await pool.query(
+        `SELECT id FROM responses WHERE session_id=:sid AND participant_id=:pid AND question_id=:qid LIMIT 1`,
+        { sid: sessionId, pid: participantId, qid: Number(participant.current_question_id) }
+      );
+      if (answered) return null;
+    }
+  }
+  await pool.query(`INSERT INTO tab_events(session_id, participant_id) VALUES(:sid,:pid)`, { sid:sessionId, pid:participantId });
+  const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM tab_events WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId, pid:participantId });
+  const count = Number(row?.total || 0);
+  io.to(roomTeacher(sessionId)).emit("tab:updated", { participantId:Number(participantId), count });
+  if (count === 2) {
+    io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"We noticed that you tabbed out during the live session." });
+  } else if (count >= 3 && AUTO_KICK_AFTER_TAB_OUTS) {
+    await kickParticipant(io, sessionId, participantId, "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher.");
+    return count;
+  }
+  await broadcastRoster(io, sessionId);
+  return count;
+}
 // A dropped WiFi/tab-throttle blip disconnects and reconnects within seconds.
 // Marking `connected=0` (and broadcasting it) the instant the socket drops
 // made the teacher's online/offline display flicker for students who never
@@ -195,6 +285,7 @@ const AUTO_KICK_AFTER_TAB_OUTS = true;
 const STUDENT_DISCONNECT_GRACE_MS = 8_000;
 
 export function registerSessionSockets(io) {
+  startPresenceSweep(io);
   const teacherDisconnectTimers = new Map();
   const studentDisconnectTimers = new Map();
   // A student can hold more than one live socket at once (a second device, a
@@ -317,6 +408,13 @@ export function registerSessionSockets(io) {
       const [[s]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
       if (!s || s.status !== "LIVE") return;
 
+      // Reveal the closing question's stored results before moving on.
+      try {
+        const snapshot = safeJson(s.questions_snapshot_json) || [];
+        const closing = snapshot[Number(s.current_question_index || 0)] || null;
+        if (closing?.id) await revealQuestion(io, sessionId, Number(closing.id));
+      } catch { /* reveal is best-effort; advance regardless */ }
+      clearRevealTimer(sessionId);
       pausedQuestionState.delete(Number(sessionId));
       resumedQuestionState.delete(Number(sessionId));
       await pool.query(
@@ -330,6 +428,7 @@ export function registerSessionSockets(io) {
       );
       await broadcastState(io, sessionId);
       await broadcastGroups(io, sessionId);
+      await scheduleRevealTimer(io, sessionId);
     });
 
     onTeacher("teacher:setStatus", async ({ sessionId, status }) => {
@@ -341,6 +440,20 @@ export function registerSessionSockets(io) {
         { sid: sessionId }
       );
       if (!session) return;
+
+      // One live session at a time: refuse to (re)start while another session
+      // owned by the same teacher is still active. Resuming this same session
+      // is unaffected (self excluded).
+      if (status === "LIVE" && session.status !== "LIVE") {
+        const [[otherLive]] = await pool.query(
+          `SELECT s.id, q.title AS quiz_title
+            FROM sessions s JOIN quizzes q ON q.id = s.quiz_id
+            WHERE s.teacher_id=:tid AND s.id<>:sid AND s.status IN ('LOBBY','LIVE','PAUSED')
+            ORDER BY s.id DESC LIMIT 1`,
+          { tid: session.teacher_id, sid: sessionId }
+        );
+        if (otherLive) return socket.emit("teacher:error", { message: `You can only host one live session at a time. End "${otherLive.quiz_title}" before starting this one.` });
+      }
 
       if (status === "LIVE" && session.join_mode === "GROUP") {
         const [[quizTpl]] = await pool.query(`SELECT template_type FROM quizzes WHERE id=:qid`, { qid: session.quiz_id });
@@ -369,6 +482,8 @@ export function registerSessionSockets(io) {
         const elapsed = startedUnix != null ? Math.max(0, Math.floor(serverNowUnix - startedUnix)) : 0;
         pausedQuestionState.set(Number(sessionId), { total, remaining: Math.max(0, total - elapsed) });
         resumedQuestionState.delete(Number(sessionId));
+        // Never reveal on pause: the question is still open.
+        clearRevealTimer(sessionId);
         await pool.query(`UPDATE sessions SET status='PAUSED' WHERE id=:sid`, { sid: sessionId });
         await broadcastState(io, sessionId);
         await broadcastGroups(io, sessionId);
@@ -410,6 +525,13 @@ export function registerSessionSockets(io) {
       if (status === "ENDED") {
         pausedQuestionState.delete(Number(sessionId));
         resumedQuestionState.delete(Number(sessionId));
+        // Final reveal of the closing question before the session closes.
+        try {
+          const snapshot = safeJson(session.questions_snapshot_json) || [];
+          const closing = snapshot[Number(session.current_question_index || 0)] || null;
+          if (closing?.id) await revealQuestion(io, sessionId, Number(closing.id));
+        } catch { /* best-effort */ }
+        clearRevealTimer(sessionId);
         await pool.query(
           `UPDATE quizzes q
            JOIN sessions s ON s.quiz_id = q.id
@@ -420,10 +542,20 @@ export function registerSessionSockets(io) {
       }
       await broadcastState(io, sessionId);
       await broadcastGroups(io, sessionId);
+      if (status === "LIVE") {
+        // (Re)start the auto-reveal timer: fresh 3s + limit + 1s on start,
+        // remaining-based on resume (the resume hold above is 3s).
+        const hold = resumedQuestionState.get(Number(sessionId));
+        if (session.status === "PAUSED" && hold) {
+          await scheduleRevealTimer(io, sessionId, 3000 + Math.max(0, Number(hold.remaining || 0)) * 1000 + 1000);
+        } else {
+          await scheduleRevealTimer(io, sessionId);
+        }
+      }
     });
 
     // Student connection flow supports both first join and reconnect.
-    onStudent("student:connect", async ({ sessionId, reconnectKey }) => {
+    onStudent("student:connect", async ({ sessionId, reconnectKey, isExtended }) => {
       if (!allowAction("student:connect", 20, 60_000)) return socket.emit("student:error", { message: "Too many connection attempts." });
       const [[p]] = await pool.query(
         `SELECT * FROM session_participants WHERE session_id=:sid AND reconnect_key=:rk`,
@@ -498,6 +630,10 @@ export function registerSessionSockets(io) {
       }
 
       socket.emit("student:connected", { participantId: p.id, alreadyAnsweredQuestionId });
+      // Second-screen signal (Chromium window.screen.isExtended): the host
+      // gets a badge, not a verdict — a TV or projector looks identical.
+      presenceExtendedScreens.set(Number(p.id), isExtended === true);
+      io.to(roomTeacher(sessionId)).emit("presence:screens", { participantId: Number(p.id), extended: isExtended === true });
       await broadcastRoster(io, sessionId);
       // broadcastState calls broadcastScores internally, which re-sends this
       // participant their leaderboard:update - safe to rely on since the
@@ -601,30 +737,34 @@ export function registerSessionSockets(io) {
 
     socket.on("student:tabOut", async ({ sessionId }) => {
       if (!allowAction("student:tabOut")) return;
-      const participantId = socket.data.participantId;
+      const participantId = Number(socket.data.participantId);
       try {
-        if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || Number(socket.data.participantId) !== Number(participantId)) return;
-        const [[participant]] = await pool.query(
-          `SELECT p.id, p.first_name, p.last_name, p.kicked_at, s.status
-           FROM session_participants p JOIN sessions s ON s.id=p.session_id
-           WHERE p.id=:pid AND p.session_id=:sid`,
-          { pid: participantId, sid: sessionId }
-        );
-        if (!participant || participant.kicked_at || participant.status === "ENDED") return;
-        await pool.query(`INSERT INTO tab_events(session_id, participant_id) VALUES(:sid,:pid)`, { sid:sessionId, pid:participantId });
-        const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM tab_events WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId, pid:participantId });
-        const count = Number(row?.total || 0);
-        io.to(roomTeacher(sessionId)).emit("tab:updated", { participantId:Number(participantId), count });
-        if (count === 2) {
-          io.to(roomParticipant(participantId)).emit("antiCheat:warning", { count, confirmDelaySec:5, message:"We noticed that you tabbed out during the live session." });
-        } else if (count >= 3 && AUTO_KICK_AFTER_TAB_OUTS) {
-          await kickParticipant(io, sessionId, participantId, "You have been removed from this live session after three tab outs. If you think this is an accident, please speak with your teacher.");
-          return;
-        }
-        await broadcastRoster(io, sessionId);
+        if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
+        // The client already counts once per departure. Remember this one so
+        // the heartbeat for the same departure doesn't count it again.
+        presenceLastTab.set(participantId, Date.now());
+        await recordTabOut(io, Number(sessionId), participantId, { source: "tabOut" });
       } catch (error) {
         socket.emit("student:error", { message:"Unable to record the activity warning." });
       }
+    });
+
+    // Presence heartbeat (every 5s, in every state). A visible + focused
+    // report ends the current departure. A hidden/unfocused report adds a
+    // tab-out only if this departure hasn't been counted yet (the real tabOut
+    // never arrived) - so one departure is always exactly one count.
+    onStudent("student:presence", async ({ sessionId, visible, focused }) => {
+      if (!allowAction("student:presence", 30, 60_000)) return;
+      const participantId = Number(socket.data.participantId);
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
+      presenceLastSeen.set(participantId, { sessionId: Number(sessionId), at: Date.now() });
+      if (visible !== false && focused !== false) {
+        presenceLastTab.delete(participantId);
+        return;
+      }
+      if (presenceLastTab.has(participantId)) return;
+      presenceLastTab.set(participantId, Date.now());
+      await recordTabOut(io, Number(sessionId), participantId, { source: "presence" });
     });
 
     socket.on("student:screenshot", async ({ sessionId }) => {
@@ -665,12 +805,17 @@ export function registerSessionSockets(io) {
       const participantId = socket.data.participantId;
       if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
       const [[session]] = await pool.query(
-        `SELECT s.*, q.template_type, q.points_per_question, q.time_limit_sec AS quiz_time_limit_sec
+        `SELECT s.*, q.template_type, q.points_per_question, q.time_limit_sec AS quiz_time_limit_sec,
+                p.kicked_at AS participant_kicked_at
          FROM sessions s JOIN quizzes q ON q.id=s.quiz_id
+         LEFT JOIN session_participants p ON p.id=:pid AND p.session_id=s.id
          WHERE s.id=:sid`,
-        { sid: sessionId }
+        { sid: sessionId, pid: participantId }
       );
       if (!session || session.status !== "LIVE") return;
+      // Second layer under the socket disconnect in kickParticipant: a kicked
+      // seat that somehow still holds a socket gets no further answers.
+      if (session.participant_kicked_at) return;
 
       // A student who was disconnected (or just slow) can still have a stale
       // client pointed at whatever question was live when they last saw it.
@@ -779,12 +924,18 @@ export function registerSessionSockets(io) {
 
         if (["TEACHER", "GUEST_HOST"].includes(role)) {
           await pool.query(`UPDATE sessions SET status='PAUSED', teacher_disconnected_deadline=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=:sid AND status='LIVE'`, { sid: sessionId });
+          clearRevealTimer(sessionId);
           await broadcastState(io, sessionId);
           const existing = teacherDisconnectTimers.get(sessionId);
           if (existing) clearTimeout(existing);
           const timeout = setTimeout(async () => {
             try {
+              const [[closingSession]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid`, { sid: sessionId });
+              const closingSnapshot = safeJson(closingSession?.questions_snapshot_json) || [];
+              const closing = closingSnapshot[Number(closingSession?.current_question_index || 0)] || null;
               await pool.query(`UPDATE sessions SET status='ENDED', ended_at=NOW(), end_reason='TEACHER_DISCONNECTED' WHERE id=:sid AND status IN ('PAUSED','LIVE')`, { sid: sessionId });
+              if (closing?.id) await revealQuestion(io, sessionId, Number(closing.id));
+              clearRevealTimer(sessionId);
               await pool.query(`UPDATE quizzes q JOIN sessions s ON s.quiz_id=q.id SET q.status='BANKED', q.updated_at=NOW() WHERE s.id=:sid AND q.deleted_at IS NULL`, { sid: sessionId });
               await broadcastState(io, sessionId);
               teacherDisconnectTimers.delete(sessionId);
@@ -840,6 +991,117 @@ function roomTeacher(sessionId) { return `session:${sessionId}:teacher`; }
 function roomParticipant(participantId) { return `participant:${participantId}`; }
 function roomGroup(sessionId, groupId) { return `session:${sessionId}:group:${groupId}`; }
 
+// Tamper evidence: scoreAnswer() returns `rejected: "too_many_choices" |
+// "invalid_pairs"` only for shapes the UI can never produce (GameMcq caps
+// picks, MatchingConnectorGame.connect() keeps pairs one-to-one), so the
+// payload was hand-crafted. Persisted for the roster badge + Analytics, then
+// the host room is alerted with the live count; the answer itself is already
+// stored with 0 points, so this is additive only.
+async function flagIntegrity(io, { sessionId, participantId, questionId, reason, viaGroup = false }) {
+  if (!reason) return;
+  try {
+    console.warn("[integrity] rejected answer", JSON.stringify({ sessionId, participantId, questionId, reason, viaGroup }));
+  } catch { /* logging must never break scoring */ }
+  try {
+    await recordIntegrityEvent({ sessionId, participantId, questionId, reason });
+    const count = await countIntegrityEvents(sessionId, participantId);
+    io?.to(roomTeacher(sessionId))?.emit("integrity:flag", { participantId, questionId, reason, viaGroup, count });
+  } catch { /* alert is best-effort */ }
+}
+
+// Deferred feedback for class sessions: hiding correct/wrong alone is not
+// enough because a live leaderboard:update would still reveal the answer via
+// a score jump on a throwaway seat. While a class-session question is open,
+// students get { locked:true, pending:true } and no leaderboard movement;
+// the host still sees answer:received + scores:update live. Everyone's real
+// result goes out via answer:reveal when the question closes. Guest-host
+// sessions (no class) keep instant feedback. Crossword is excluded: its
+// per-word loop needs immediate responses to stay playable.
+function isDeferredSession(session, templateType) {
+  if (!session?.class_id) return false;
+  return normalizeTemplateType(templateType ?? session?.template_type) !== TEMPLATE_TYPES.CROSSWORD;
+}
+
+// Server reveal timers: one per session, fired 3s (client countdown) +
+// time limit + 1s grace after the question opens. Cleared on pause/advance/
+// end and restarted on resume. Revealing on pause would leak the answer
+// while the question is still open, so pause only clears.
+const revealTimers = new Map();
+function clearRevealTimer(sessionId) {
+  const t = revealTimers.get(Number(sessionId));
+  if (t) clearTimeout(t);
+  revealTimers.delete(Number(sessionId));
+}
+function currentQuestionLimitSec(session) {
+  const snapshot = safeJson(session?.questions_snapshot_json) || [];
+  const current = snapshot[Number(session?.current_question_index || 0)] || null;
+  const fromSnapshot = Number(current?.config_json?.timeLimitSec || 0);
+  if (fromSnapshot > 0) return fromSnapshot;
+  return Math.max(0, Number(session?.quiz_time_limit_sec || session?.time_limit_sec || 0));
+}
+function scheduleRevealTimer(io, sessionId, delayMs = null) {
+  clearRevealTimer(sessionId);
+  return (async () => {
+    try {
+      const [[session]] = await pool.query(`SELECT s.*, q.template_type, q.time_limit_sec AS quiz_time_limit_sec FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
+      if (!session || session.status !== "LIVE") return;
+      if (!isDeferredSession(session)) return;
+      const snapshot = safeJson(session.questions_snapshot_json) || [];
+      const current = snapshot[Number(session.current_question_index || 0)] || null;
+      if (!current?.id) return;
+      const ms = delayMs != null ? delayMs : 3000 + currentQuestionLimitSec(session) * 1000 + 1000;
+      const questionId = Number(current.id);
+      const timer = setTimeout(() => {
+        revealTimers.delete(Number(sessionId));
+        revealQuestion(io, sessionId, questionId).catch((e) => console.error("reveal timer failed:", e?.message || e));
+      }, Math.max(1000, ms));
+      revealTimers.set(Number(sessionId), timer);
+    } catch (e) {
+      console.error("schedule reveal failed:", e?.message || e);
+    }
+  })();
+}
+
+// Sends every responder their stored result + explanation, then pushes a
+// full (ungated) leaderboard. Idempotent per question: responses never
+// change once written, so re-revealing just re-sends the same payloads.
+async function revealQuestion(io, sessionId, questionId) {
+  try {
+    const [[session]] = await pool.query(`SELECT s.*, q.template_type, q.points_per_question, q.time_limit_sec AS quiz_time_limit_sec FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
+    if (!session) return;
+    if (!isDeferredSession(session)) return;
+    const [[q]] = await pool.query(`SELECT id, correct_json, config_json FROM quiz_questions WHERE id=:qid AND quiz_id=:quizId AND deleted_at IS NULL`, { qid: questionId, quizId: session.quiz_id });
+    if (!q) return;
+    const correct = safeJson(q.correct_json);
+    const config = safeJson(q.config_json) || {};
+    const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
+    const [rows] = await pool.query(`SELECT participant_id, answer_json, is_correct, points_awarded FROM responses WHERE session_id=:sid AND question_id=:qid`, { sid: sessionId, qid: questionId });
+    for (const r of rows) {
+      const stored = safeJson(r.answer_json) || {};
+      const scored = scoreAnswer({ templateType: session.template_type, correct, answer: stored, config, basePoints });
+      const isCorrect = Number(r.is_correct) === 1;
+      const points = Number(r.points_awarded || 0);
+      io.to(roomParticipant(Number(r.participant_id))).emit("answer:reveal", {
+        questionId: Number(questionId),
+        isCorrect,
+        points,
+        locked: true,
+        feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
+        correctCount: Number(scored.correctCount ?? 0),
+        totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? 0),
+        hasWrongSelected: !!scored.hasWrongSelected,
+        templateType: normalizeTemplateType(session.template_type),
+        explanation: String(config?.explanation || ""),
+        competitivePoints: Number(stored?.__tw_live?.competitivePoints || 0),
+        timeExpired: !!stored?.__tw_live?.timeExpired,
+      });
+    }
+    await broadcastScores(io, sessionId, { force: true, reveal: true });
+  } catch (e) {
+    console.error("revealQuestion failed:", e?.message || e);
+  }
+}
+
 // Privacy + payload split for student/guest rooms. Kick reasons stay in the
 // teacher room. Profile photos are shared with the session room (waiting
 // lobby, groups) so participants see each other's saved pictures, but they
@@ -852,6 +1114,16 @@ export function stripKickReason(row) {
     return rest;
   }
   return row;
+}
+// Student copy of a roster row: classmates see names and photos, never
+// monitoring data (tab-outs, capture keys, tamper flags, guest history) or
+// kick reasons.
+const TEACHER_ONLY_ROSTER_FIELDS = ["kick_reason", "tab_out_count", "screenshot_count", "integrity_count", "guest_visits", "guest_repeat"];
+export function toStudentRosterRow(row) {
+  if (!row || typeof row !== "object") return row;
+  const out = { ...row };
+  for (const field of TEACHER_ONLY_ROSTER_FIELDS) delete out[field];
+  return out;
 }
 export function stripPhotosForStudents(value) {
   if (Array.isArray(value)) return value.map(stripPhotosForStudents);
@@ -921,7 +1193,16 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   const correct = safeJson(q.correct_json);
   const config = safeJson(q.config_json) || {};
   const basePoints = Number((config?.points ?? session.points_per_question ?? 1));
-  const scored = scoreAnswer({ templateType: session.template_type, correct, answer, config, basePoints });
+  // Matching students see a server-shuffled colB; convert shuffled positions
+  // back to original indices before scoring so numbering matches analytics.
+  let canonicalAnswer = answer;
+  if (normalizeTemplateType(session.template_type) === TEMPLATE_TYPES.MATCHING) {
+    try {
+      canonicalAnswer = toCanonicalMatchingAnswer(answer, config, liveScope(sessionId, questionId));
+    } catch { canonicalAnswer = answer; }
+  }
+  const scored = scoreAnswer({ templateType: session.template_type, correct, answer: canonicalAnswer, config, basePoints });
+    if (scored?.rejected) await flagIntegrity(io, { sessionId, participantId, questionId, reason: scored.rejected });
   const isCorrect = !!scored.isCorrect;
   const rawPoints = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
   const timeLimitMs = Math.max(0, Number(config?.timeLimitSec || session.quiz_time_limit_sec || 0)) * 1000;
@@ -933,7 +1214,7 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
   const expiredSubmission = preliminaryExpiredSubmission || (timeLimitMs > 0 && elapsedMs > timeLimitMs + 300);
   const points = expiredSubmission ? 0 : rawPoints;
   const competitivePoints = calculateCompetitivePoints({ templateType: session.template_type, scored, basePoints, elapsedMs, timeLimitMs, timeExpired: expiredSubmission });
-  const storedAnswer = withCompetitiveMeta(answer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
+  const storedAnswer = withCompetitiveMeta(canonicalAnswer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
 
   try {
     await pool.query(
@@ -942,25 +1223,32 @@ async function handleSoloAnswer(io, socket, { session, sessionId, participantId,
       { sid: sessionId, pid: participantId, qid: questionId, ans: JSON.stringify(storedAnswer), ic: isCorrect ? 1 : 0, pts: points }
     );
   } catch {
-    socket.emit("answer:ack", { isCorrect: null, points: 0, locked: true, message: "Answer already submitted" });
+    socket.emit("answer:ack", { questionId: Number(questionId), isCorrect: null, points: 0, locked: true, message: "Answer already submitted" });
     return;
   }
 
   await recalcParticipantScore(sessionId, participantId);
-  socket.emit("answer:ack", {
-    isCorrect,
-    points,
-    locked: true,
-    feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
-    correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
-    totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
-    hasWrongSelected: !!scored.hasWrongSelected,
-    templateType: tt,
-    explanation: String(config?.explanation || ""),
-    competitivePoints,
-    timeExpired: expiredSubmission,
-  });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, choiceKeys: responseChoiceKeys(tt, answer, snapshotQuestionConfig(session, questionId) || config) });
+  const deferred = isDeferredSession(session, session.template_type);
+  if (deferred) {
+    // Real result goes out via answer:reveal when the question closes.
+    socket.emit("answer:ack", { questionId: Number(questionId), locked: true, pending: true, templateType: tt, timeExpired: expiredSubmission });
+  } else {
+    socket.emit("answer:ack", {
+      questionId: Number(questionId),
+      isCorrect,
+      points,
+      locked: true,
+      feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
+      correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
+      totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
+      hasWrongSelected: !!scored.hasWrongSelected,
+      templateType: tt,
+      explanation: String(config?.explanation || ""),
+      competitivePoints,
+      timeExpired: expiredSubmission,
+    });
+  }
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId, questionId, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, rejected: scored?.rejected || null, choiceKeys: responseChoiceKeys(tt, canonicalAnswer, snapshotQuestionConfig(session, questionId) || config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -1323,7 +1611,16 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   const scoreableAnswer = answer && typeof answer === "object" && !Array.isArray(answer)
     ? Object.fromEntries(Object.entries(answer).filter(([key]) => key !== "__tw_time_expired"))
     : answer;
-  const scored = scoreAnswer({ templateType: session.template_type, correct, answer: scoreableAnswer, config, basePoints });
+  // Group proposals stay in shuffled positions so teammates' previews line
+  // up; only the scoring/storage copy is converted back to original indices.
+  let canonicalGroupAnswer = scoreableAnswer;
+  if (normalizeTemplateType(session.template_type) === TEMPLATE_TYPES.MATCHING) {
+    try {
+      canonicalGroupAnswer = toCanonicalMatchingAnswer(scoreableAnswer, config, liveScope(sessionId, proposal.question_id));
+    } catch { canonicalGroupAnswer = scoreableAnswer; }
+  }
+  const scored = scoreAnswer({ templateType: session.template_type, correct, answer: canonicalGroupAnswer, config, basePoints });
+    if (scored?.rejected) await flagIntegrity(io, { sessionId, participantId: proposal.proposer_participant_id, questionId: proposal.question_id, reason: scored.rejected, viaGroup: true });
   const isCorrect = !!scored.isCorrect;
   const rawPoints = Number(scored.pointsAwarded ?? (isCorrect ? basePoints : 0));
   const timeLimitMs = Math.max(0, Number(config?.timeLimitSec || session.quiz_time_limit_sec || 0)) * 1000;
@@ -1335,7 +1632,7 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
   const expiredSubmission = preliminaryExpiredSubmission || (timeLimitMs > 0 && elapsedMs > timeLimitMs + 300);
   const points = expiredSubmission ? 0 : rawPoints;
   const competitivePoints = calculateCompetitivePoints({ templateType: session.template_type, scored, basePoints, elapsedMs, timeLimitMs, timeExpired: expiredSubmission });
-  const storedAnswer = withCompetitiveMeta(scoreableAnswer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
+  const storedAnswer = withCompetitiveMeta(canonicalGroupAnswer, { competitivePoints, responseMs: Math.min(elapsedMs, timeLimitMs || elapsedMs), timeExpired: expiredSubmission });
 
   // 1 trip: INSERT IGNORE semantics — never overwrite an existing solo answer.
   // Recalc is idempotent (SUM), so recalculating all members is safe.
@@ -1352,32 +1649,53 @@ async function resolveGroupProposalIfReady(io, proposalId, sessionId) {
     overwrite: false,
   });
   await batchRecalcGroupScores(sessionId, members.map((m) => m.id));
+  const groupDeferred = isDeferredSession(session, session.template_type);
   for (const member of members) {
-    io.to(roomParticipant(member.id)).emit("answer:ack", {
+    if (groupDeferred) {
+      io.to(roomParticipant(member.id)).emit("answer:ack", {
+        locked: true,
+        pending: true,
+        viaGroup: true,
+        templateType: normalizeTemplateType(session.template_type),
+        timeExpired: expiredSubmission,
+      });
+    } else {
+      io.to(roomParticipant(member.id)).emit("answer:ack", {
+        isCorrect,
+        points,
+        locked: true,
+        viaGroup: true,
+        feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
+        correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
+        totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
+        hasWrongSelected: !!scored.hasWrongSelected,
+        templateType: normalizeTemplateType(session.template_type),
+        explanation: String(config?.explanation || ""),
+        competitivePoints,
+        timeExpired: expiredSubmission,
+      });
+    }
+  }
+
+  if (groupDeferred) {
+    // Teammate previews stay in shuffled positions; correctness/points would
+    // leak via the room, so the room only learns the vote passed.
+    io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
+      proposalId,
+      approved: true,
+      pending: true,
+    });
+  } else {
+    io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
+      proposalId,
+      approved: true,
       isCorrect,
       points,
-      locked: true,
-      viaGroup: true,
-      feedbackType: scored.feedbackType || (isCorrect ? "correct" : points > 0 ? "almost" : "wrong"),
-      correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
-      totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
-      hasWrongSelected: !!scored.hasWrongSelected,
-      templateType: normalizeTemplateType(session.template_type),
-      explanation: String(config?.explanation || ""),
       competitivePoints,
       timeExpired: expiredSubmission,
     });
   }
-
-  io.to(roomGroup(sessionId, proposal.group_id)).emit("group:proposal:resolved", {
-    proposalId,
-    approved: true,
-    isCorrect,
-    points,
-    competitivePoints,
-    timeExpired: expiredSubmission,
-  });
-  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, viaGroup: true, choiceKeys: responseChoiceKeys(session.template_type, scoreableAnswer, snapshotQuestionConfig(session, proposal.question_id) || config) });
+  io.to(roomTeacher(sessionId)).emit("answer:received", { participantId: proposal.proposer_participant_id, questionId: proposal.question_id, isCorrect, points, competitivePoints, timeExpired: expiredSubmission, viaGroup: true, rejected: scored?.rejected || null, choiceKeys: responseChoiceKeys(session.template_type, canonicalGroupAnswer, snapshotQuestionConfig(session, proposal.question_id) || config) });
   await broadcastScores(io, sessionId);
 }
 
@@ -1430,6 +1748,9 @@ async function batchRecalcGroupScores(sessionId, memberIds) {
 }
 
 async function kickParticipant(io, sessionId, participantId, reason) {
+  presenceLastSeen.delete(Number(participantId));
+  presenceLastTab.delete(Number(participantId));
+  presenceExtendedScreens.delete(Number(participantId));
   await pool.query(
     `UPDATE session_participants SET kicked_at=NOW(), kick_reason=:reason, connected=0, left_at=NOW()
      WHERE id=:pid AND session_id=:sid`,
@@ -1458,36 +1779,56 @@ async function kickParticipant(io, sessionId, participantId, reason) {
     for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
   }
   io.to(roomParticipant(participantId)).emit("antiCheat:kicked", { message:reason });
+  // Make the kick stick: drop the socket so a lingering client can't keep
+  // submitting. Reconnects bounce on the kicked_at check in student:connect,
+  // and the page navigates away after 3s anyway.
+  try {
+    io.in(roomParticipant(participantId)).disconnectSockets();
+  } catch { /* best-effort */ }
   io.in(roomParticipant(participantId)).socketsLeave(roomSession(sessionId));
   await broadcastRoster(io, sessionId);
   await broadcastGroups(io, sessionId);
 }
 
 export async function broadcastRoster(io, sessionId) {
-  // The screenshot tally table is created on first use; make sure it exists
-  // before counting from it so fresh databases never error here.
+  // Tally tables are created on first use; make sure they exist before
+  // counting from them so fresh databases never error here.
   await ensureScreenshotTable();
+  await ensureIntegrityTable();
+  await ensureGuestJoinTable();
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
             gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
+            CASE WHEN p.student_user_id IS NULL THEN 1 ELSE 0 END AS is_guest,
+            gj.visit_number AS guest_visits,
             (SELECT COUNT(*) FROM tab_events te WHERE te.session_id=p.session_id AND te.participant_id=p.id) AS tab_out_count,
-            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id=p.session_id AND se.participant_id=p.id) AS screenshot_count
+            (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id=p.session_id AND se.participant_id=p.id) AS screenshot_count,
+            (SELECT COUNT(*) FROM integrity_events ie WHERE ie.session_id=p.session_id AND ie.participant_id=p.id) AS integrity_count
      FROM session_participants p
      LEFT JOIN users u ON u.id = p.student_user_id
      LEFT JOIN student_profiles stp ON stp.user_id = p.student_user_id
      LEFT JOIN session_group_members gm ON gm.participant_id = p.id
      LEFT JOIN session_groups sg ON sg.id = gm.group_id
+     LEFT JOIN guest_session_joins gj ON gj.participant_id = p.id
      WHERE p.session_id=:sid
-     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, stp.profile_image, u.profile_image
+     GROUP BY p.id, gm.group_id, sg.display_name, sg.default_name, stp.profile_image, u.profile_image, gj.visit_number
      ORDER BY p.last_name ASC, p.first_name ASC, p.id ASC`,
     { sid: sessionId }
   );
-  io.to(roomTeacher(sessionId)).emit("roster:update", participants);
+  const teacherRows = participants.map((row) => ({
+    ...row,
+    is_guest: Number(row.is_guest) === 1,
+    guest_visits: row.guest_visits == null ? null : Number(row.guest_visits),
+    guest_repeat: Number(row.is_guest) === 1 && Number(row.guest_visits || 0) >= GUEST_REPEAT_THRESHOLD,
+  }));
+  io.to(roomTeacher(sessionId)).emit("roster:update", teacherRows);
   // Waiting-lobby roster cards render each participant's saved profile photo
   // (falling back to the default icon when none was saved), so the session
-  // room gets photos too. Only kick reasons stay teacher-only.
-  io.to(roomSession(sessionId)).emit("roster:update", participants.map(stripKickReason));
+  // room gets photos too - but none of the teacher-only fields. The host's
+  // socket is in the session room as well, so exclude it: otherwise this
+  // stripped copy arrives last and wipes the host's monitoring columns.
+  io.to(roomSession(sessionId)).except(roomTeacher(sessionId)).emit("roster:update", teacherRows.map(toStudentRosterRow));
 }
 
 export async function broadcastGroups(io, sessionId) {
@@ -1527,7 +1868,7 @@ export async function broadcastGroups(io, sessionId) {
   io.to(roomSession(sessionId)).emit("groups:update", groups);
 }
 
-export async function broadcastScores(io, sessionId, { force = false } = {}) {
+export async function broadcastScores(io, sessionId, { force = false, reveal = false } = {}) {
   const sid = Number(sessionId);
   // Coalesce answer bursts: max 1 full emit per 500ms, trailing call wins.
   if (!force) {
@@ -1537,6 +1878,10 @@ export async function broadcastScores(io, sessionId, { force = false } = {}) {
       if (entry.timer) clearTimeout(entry.timer);
       entry.timer = setTimeout(() => {
         scoreBroadcastState.set(sid, { last: Date.now(), timer: null });
+        // force only skips this 500ms coalescing gate. It must stay: without
+        // it the call sees "just sent", reschedules itself forever and never
+        // emits. The student-leak gate below (deferredOpen) depends on
+        // `reveal`, not `force`, so open questions still stay teacher-only.
         broadcastScores(io, sid, { force: true }).catch((e) => console.error("broadcastScores trailing failed:", e?.message || e));
       }, 500 - (now - entry.last));
       scoreBroadcastState.set(sid, entry);
@@ -1544,7 +1889,14 @@ export async function broadcastScores(io, sessionId, { force = false } = {}) {
     }
     scoreBroadcastState.set(sid, { last: now, timer: null });
   }
-  const [[session]] = await pool.query(`SELECT s.join_mode, q.template_type FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
+  const [[session]] = await pool.query(`SELECT s.join_mode, s.status, s.class_id, q.template_type FROM sessions s JOIN quizzes q ON q.id=s.quiz_id WHERE s.id=:sid`, { sid: sessionId });
+  // Deferred class sessions: while the question is open the teacher's
+  // scores:update stays live but students get nothing — a per-answer
+  // leaderboard:update would reveal correctness via the score jump.
+  // reveal:true (from revealQuestion) and ENDED bypass the gate.
+  const deferredOpen = !reveal && !!session?.class_id
+    && (session.status === "LIVE" || session.status === "PAUSED")
+    && normalizeTemplateType(session.template_type) !== TEMPLATE_TYPES.CROSSWORD;
   let scores;
   if (session?.join_mode === "GROUP") {
     const [rows] = await pool.query(
@@ -1574,13 +1926,15 @@ export async function broadcastScores(io, sessionId, { force = false } = {}) {
        LEFT JOIN users u ON u.id=p.student_user_id
        LEFT JOIN student_profiles stp ON stp.user_id=p.student_user_id
        LEFT JOIN responses r ON r.session_id=sc.session_id AND r.participant_id=sc.participant_id
-       WHERE sc.session_id=:sid
+       WHERE sc.session_id=:sid AND p.kicked_at IS NULL
        GROUP BY sc.participant_id, sc.total_points, p.student_user_id, p.first_name, p.last_name, p.group_name, stp.profile_image, u.profile_image, session_row.started_at, p.joined_at`,
       { sid: sessionId }
     );
     scores = sortScoreRows(await attachCompetitiveTotals(pool, sessionId, rows));
   }
   io.to(roomTeacher(sessionId)).emit("scores:update", scores);
+
+  if (deferredOpen) return;
 
   // Leaderboard rows carry profile photos for the teacher's full
   // scores:update above; per-student rooms get the stripped copy.
@@ -1644,21 +1998,20 @@ async function broadcastState(io, sessionId) {
   state.background_key = normalizeSessionBackgroundKey(state.background_key || getRememberedSessionBackground(sessionId));
 
   const qs = safeJson(state.questions_snapshot_json) || [];
-  // Students must never receive correct answers for templates they answer
-  // blind (MCQ / True-False / Identification / Matching are all scored
-  // server-side; the live clients never read correct_json for them). Without
-  // this, anyone in the room could open devtools and read every answer live.
-  // The template lives on the session (snapshot rows carry no per-question
-  // type). Crossword keeps its answers: the grid is generated from them
-  // client-side and the word list is shown to players by design. Guess Word
-  // keeps its target: the letter bank is built from it client-side.
-  const STUDENT_HIDDEN_CORRECT = new Set(["MCQ", "TRUE_FALSE", "TYPE_ANSWER", "MATCHING"]);
-  const hideCorrect = STUDENT_HIDDEN_CORRECT.has(normalizeTemplateType(state.template_type));
-  const studentQs = hideCorrect && Array.isArray(qs)
-    ? qs.map((q) => {
-        if (!q || typeof q !== "object" || !("correct_json" in q)) return q;
-        const { correct_json, ...rest } = q;
-        return rest;
+  // Students get an allow-list view of one question at a time: future and
+  // past questions are placeholders, and the live question carries only the
+  // fields its game component reads (no answers, stashes, recordings of
+  // answers, explanations, or unshuffled matching orders). The student
+  // client only reads questions[current_question_index] + questions.length.
+  const currentIdx = Number(state.current_question_index || 0);
+  const studentQs = Array.isArray(qs)
+    ? qs.map((q, idx) => {
+        const reveal = (state.status === "LIVE" || state.status === "PAUSED") && idx === currentIdx;
+        try {
+          return toStudentQuestion({ templateType: state.template_type, question: q, scope: liveScope(sessionId, q?.id), reveal });
+        } catch {
+          return q && typeof q === "object" ? { id: q.id, hidden: true } : q;
+        }
       })
     : qs;
   const currentQ = qs[Number(state.current_question_index || 0)] || null;

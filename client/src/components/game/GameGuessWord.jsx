@@ -4,17 +4,31 @@ import { buildLetterBank, countAnswerLetters } from "../../lib/letterBank";
 
 // Shared Guess-Word renderer for live + assignment gameplay.
 // value: { mode?, target?, text?, bank? }, onChange(nextValue).
-// onSubmit: when provided, a Submit button renders between Back and Clear
-// (live gameplay); assignment omits it.
-export function GameGuessWord({ images, target, dummyLetters, value, onChange, disabled, onSubmit, submitDisabled = false }) {
+// onSubmit/submitDisabled are accepted but unused: submitting happens only
+// via the main Submit button below the game (one submit, no duplicates).
+// Server-provided letterBank/answerLength (student view) are used when
+// present so the answer (target) never reaches the student client; teacher
+// preview keeps using target.
+export function GameGuessWord({ images, target, dummyLetters, letterBank, answerLength, value, onChange, disabled }) {
   const [zoomedImage, setZoomedImage] = useState(null);
   const safeImages = Array.isArray(images) ? images : [];
-  const answerLen = Math.max(1, countAnswerLetters(target));
+  const serverBank = Array.isArray(letterBank) && letterBank.length
+    ? letterBank.map((x, i) => (typeof x === "string" ? { id: i, ch: x } : { id: Number(x?.id ?? i), ch: String(x?.ch ?? "") })).filter((t) => t.ch)
+    : null;
+  const serverLen = Number(answerLength) > 0 ? Number(answerLength) : null;
+  const answerLen = serverLen || Math.max(1, countAnswerLetters(target));
+  const serverBankSig = serverBank ? serverBank.map((t) => `${t.id}:${t.ch}`).join("|") : "";
 
   useEffect(() => {
+    if (serverBank) {
+      const curSig = Array.isArray(value?.bank) ? value.bank.map((x) => `${x?.id}:${x?.ch}`).join("|") : "";
+      if (value?.mode === "pics4" && curSig === serverBankSig && value.bank.length) return;
+      onChange({ mode: "pics4", target: "", text: "", bank: serverBank });
+      return;
+    }
     if (value?.mode === "pics4" && value?.target === target && value?.bank?.length) return;
     onChange({ mode: "pics4", target, text: "", bank: buildLetterBank(target, Number(dummyLetters || 6)) });
-  }, [dummyLetters, target]);
+  }, [dummyLetters, target, serverBankSig]);
 
   const bank = Array.isArray(value?.bank) ? value.bank.map((x, i) => typeof x === "string" ? { id: i, ch: x } : x) : [];
   const built = String(value?.text || "");
@@ -78,7 +92,6 @@ export function GameGuessWord({ images, target, dummyLetters, value, onChange, d
           </div>
           <div className="spell-controls">
             <button type="button" className="spell-ctrl back" onClick={backspace} disabled={disabled || !built}>Back</button>
-            {onSubmit && <button type="button" className="spell-ctrl submit-inline" onClick={() => onSubmit?.()} disabled={submitDisabled}>Submit</button>}
             <button type="button" className="spell-ctrl clr" onClick={clear} disabled={disabled || !built}>Clear</button>
           </div>
         </div>

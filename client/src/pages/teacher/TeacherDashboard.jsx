@@ -303,7 +303,7 @@ export default function TeacherDashboard() {
       case "live": return <LiveSessionsTab setActiveTab={setActiveTab} tutorial={tutorial} />;
       case "classes": return <ClassesTab setActiveTab={setActiveTab} tutorial={tutorial} />;
       case "history": return <SessionHistoryTab setActiveTab={setActiveTab} tutorial={tutorial} />;
-      case "profile": return <ProfileTab c={c} roleLabel="Teacher" showInstitution institutionFallback="Basic plan" profile={profile} onStaffSaved={(data) => setProfile(profileFromUser(data))} onLogout={() => setShowLogout(true)} onDeleted={doLogout} />;
+      case "profile": return <ProfileTab c={c} roleLabel="Teacher" showInstitution institutionFallback={planLabel(profile)} profile={profile} onStaffSaved={(data) => setProfile(profileFromUser(data))} onLogout={() => setShowLogout(true)} onDeleted={doLogout} />;
       default: return <HomeTab setActiveTab={setActiveTab} tutorial={tutorial} />;
     }
   }
@@ -392,7 +392,7 @@ function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, 
       <Field label="Last name *" c={c}><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} style={input(c)} /></Field>
       <Field label="Email" c={c}><input disabled value={profile.email} style={{ ...input(c), opacity: .72 }} /></Field>
       <Field label="Contact number" c={c}><input value={profile.contactNumber} onChange={(e) => setProfile({ ...profile, contactNumber: e.target.value })} style={input(c)} /></Field>
-      <Field label="Institution" c={c}><input disabled value={profile.institutionName || "Basic plan"} style={{ ...input(c), opacity: .72 }} /></Field>
+      <Field label="Institution" c={c}><input disabled value={planLabel(profile)} style={{ ...input(c), opacity: .72 }} /></Field>
     </div>
     {error && <div style={{ marginTop: 14, padding: 12, borderRadius: 12, color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, fontWeight: 850 }}>{error}</div>}
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button disabled={!!saving} style={{ ...primary(c), opacity: saving ? .6 : 1, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
@@ -401,7 +401,17 @@ function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, 
 
 function ProfileSavedOverlay() { return <div className="tw-profile-success-backdrop"><div className="tw-profile-success-box"><TwIcon name="check" size={58} strokeWidth={3.4} /></div></div>; }
 function Field({ label, c, children }) { return <label style={{ display: "grid", gap: 7, color: c.textMuted, fontSize: 12, fontWeight: 850 }}>{label}{children}</label>; }
-function profileFromUser(user = {}) { return { firstName: user.first_name || "", lastName: user.last_name || "", contactNumber: user.contact_number || "", email: user.email || "", institutionName: user.institution_name || "", profileImage: user.profile_image || "", birthDate: user.birth_date ? String(user.birth_date).slice(0, 10) : "" }; }
+function profileFromUser(user = {}) { return { firstName: user.first_name || "", lastName: user.last_name || "", contactNumber: user.contact_number || "", email: user.email || "", institutionName: user.institution_name || "", planCode: String(user.plan_code || "BASIC").toUpperCase(), profileImage: user.profile_image || "", birthDate: user.birth_date ? String(user.birth_date).slice(0, 10) : "" }; }
+
+// Plan row: institution members see their school; everyone else sees their
+// actual plan (a Pro teacher with no institution used to read "Basic plan").
+function planLabel(profile = {}) {
+  if (profile.institutionName) return profile.institutionName;
+  const code = String(profile.planCode || "BASIC").toUpperCase();
+  if (code === "PRO") return "ThinkWAVE Pro";
+  if (code === "INSTITUTION") return "ThinkWAVE Institution";
+  return "Basic plan";
+}
 
 const avatarImage = { width: "100%", height: "100%", objectFit: "cover" };
 const modalBackdrop = { position: "fixed", inset: 0, zIndex: 3000, display: "grid", placeItems: "center", padding: 20, background: "rgba(3,7,18,.62)", backdropFilter: "blur(10px)" };

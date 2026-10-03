@@ -10,7 +10,8 @@ import {TwIcon} from "../../components/TwUI";
 import DashboardShell from "../../components/DashboardShell";
 import {ProfileSettingsModal,ProfileSavedOverlay,profileFromUser,useDashboardProfile} from "../../components/ProfileSettings";
 import ProfileTab from "../../components/ProfileTab";
-import {LineChart,DonutChart,BarChart,DualLineChart} from "../../components/SimpleCharts";
+import TeacherManagementTab from "../../components/TeacherManagementTab";
+import {LineChart,DonutChart,BarChart,DualLineChart} from "../../components/Recharts";
 import {manilaDateTime,manilaDate} from "../../lib/dateFormat";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
 
@@ -80,36 +81,37 @@ function InstitutionCard({inst,expanded,onToggle,onAction,c}){
 }
 function teacherRowStatus(t){if(String(t?.approval_status||"").toUpperCase()==="PENDING")return"pending";if(t?.is_active)return"active";return"inactive";}
 function teacherStatusLabel(st){if(st==="active")return"Active";if(st==="inactive")return"Inactive";return"Pending";}
-function teacherConfirmCopy(confirm){const name=((confirm.teacher.first_name||"")+" "+(confirm.teacher.last_name||"")).trim()||confirm.teacher.email||"this teacher";const hosted=Number(confirm.teacher.hosted_sessions_count||0);const classes=Number(confirm.teacher.classes_handled_count||0);if(confirm.action==="remove")return{title:"Remove this teacher?",message:"Remove "+name+"? "+hosted+" hosted sessions and "+classes+" classes will be removed from platform use. Existing records are kept."};if(confirm.action==="activate")return{title:"Activate this teacher?",message:"Activate "+name+"? They will be able to host sessions again."};return{title:"Deactivate this teacher?",message:"Deactivate "+name+"? They will be unable to host new sessions. Their "+classes+" classes and "+hosted+" past sessions are kept."};}
 function Teachers(){
-  const c=useColors();
-  const [items,setItems]=useState([]);
-  const [search,setSearch]=useState("");
-  const [sort,setSort]=useState("az");
-  const [statusFilter,setStatusFilter]=useState("ALL");
-  const [filterOpen,setFilterOpen]=useState(false);
-  const [expanded,setExpanded]=useState(null);
-  const [confirm,setConfirm]=useState(null);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState("");
-  const [copiedEmail,setCopiedEmail]=useState("");
-  const hasActiveTeacherFilters=statusFilter!=="ALL"||sort!=="az";
-  const teacherFilterRef=useRef(null);
-  useEffect(()=>{if(!filterOpen)return undefined;function onDocDown(e){if(teacherFilterRef.current&&!teacherFilterRef.current.contains(e.target))setFilterOpen(false);}function onKey(e){if(e.key==="Escape")setFilterOpen(false);}document.addEventListener("pointerdown",onDocDown);document.addEventListener("keydown",onKey);return()=>{document.removeEventListener("pointerdown",onDocDown);document.removeEventListener("keydown",onKey);};},[filterOpen]);
-  const load=()=>{setLoading(true);setError("");return api.get("/superadmin/teachers/unlinked").then(r=>setItems(Array.isArray(r.data)?r.data:[])).catch(err=>{setItems([]);setError(err?.response?.data?.message||"Unable to load teachers.")}).finally(()=>setLoading(false))};
-  useEffect(()=>{load()},[]);
-  const filtered=useMemo(()=>{const q=search.trim().toLowerCase();const rows=items.filter(x=>{const st=teacherRowStatus(x);if(statusFilter!=="ALL"&&st!==statusFilter.toLowerCase())return false;if(!q)return true;return((x?.first_name||"")+" "+(x?.last_name||"")+" "+(x?.email||"")).toLowerCase().includes(q)});rows.sort((a,b)=>{if(sort==="active")return new Date(b.last_active_at||0).getTime()-new Date(a.last_active_at||0).getTime();if(sort==="sessions")return Number(b.hosted_sessions_count||0)-Number(a.hosted_sessions_count||0);return(sort==="az"?1:-1)*String(a?.last_name||"").localeCompare(String(b?.last_name||""))});return rows},[items,search,sort,statusFilter]);
-  const emptyText=items.length?"No teachers match the current filters.":"No independent teachers yet.";
-  const copy=teacherConfirmCopy(confirm||{action:"deactivate",teacher:{}});
-  async function act(){if(!confirm)return;try{if(confirm.action==="remove")await api.delete("/superadmin/accounts/"+confirm.teacher.id);else await api.post("/superadmin/accounts/"+confirm.teacher.id+"/active",{active:confirm.action==="activate"});setConfirm(null);await load()}catch(err){setError(err?.response?.data?.message||"Unable to update this teacher.");setConfirm(null)}}
-  async function copyEmail(email){if(!email)return;try{await navigator.clipboard.writeText(email)}catch{const ta=document.createElement("textarea");ta.value=email;document.body.appendChild(ta);ta.select();try{document.execCommand("copy")}catch{}ta.remove()}setCopiedEmail(email);setTimeout(()=>setCopiedEmail(""),1600);}
-  return(<div className="container"><Heading title="Teachers"/><p className="tw-notif-sub" style={{color:c.textMuted}}>Teachers without an institution, on any plan.</p><div className="tw-filter-row tw-notif-filter" style={{...card(c),position:"relative",overflow:"visible"}}><div className="tw-search-input"><TwIcon name="search" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search teacher" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/></div><span className="tw-filter-anchor" ref={teacherFilterRef}><SuperPressButton tone="blue" className={"tw-filter-toggle-btn"+(filterOpen?" is-selected":"")+(hasActiveTeacherFilters?" has-active-filters":"")} onClick={()=>setFilterOpen(v=>!v)}><TwIcon name="filter" size={17}/>Filter</SuperPressButton>{filterOpen&&<div className="tw-filter-panel" style={{...card(c),position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:40,width:"max-content",minWidth:250,maxWidth:"min(92vw,360px)"}}><div className="tw-filter-panel-group"><label style={{fontSize:11,fontWeight:900,textTransform:"uppercase",letterSpacing:".06em",color:c.textMuted}}>Status</label><div className="tw-filter-chip-row">{["ALL","ACTIVE","INACTIVE","PENDING"].map(s=><button key={s} type="button" className={"tw-filter-chip"+(statusFilter===s?" is-active":"")} onClick={()=>setStatusFilter(s)}>{s==="ALL"?"All":s==="ACTIVE"?"Active":s==="INACTIVE"?"Inactive":"Pending"}</button>)}</div></div><div className="tw-filter-panel-group"><label style={{fontSize:11,fontWeight:900,textTransform:"uppercase",letterSpacing:".06em",color:c.textMuted}}>Sort by</label><select className="tw-filter-select" value={sort} onChange={e=>setSort(e.target.value)} style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}><option value="az">Name A–Z</option><option value="za">Name Z–A</option><option value="active">Recently active</option><option value="sessions">Most sessions</option></select></div></div>}</span></div>{error&&<ApiMessage text={error}/>}<div className="tw-super-institution-list">{loading?<LoadingCard text="Loading teachers…"/>:filtered.map(t=><TeacherCard key={t.id} t={t} c={c} expanded={expanded===t.id} onToggle={()=>setExpanded(expanded===t.id?null:t.id)} onAction={setConfirm} onCopy={copyEmail} copied={copiedEmail===t.email}/>)} {!loading&&!filtered.length&&<Empty text={emptyText} action={items.length>0&&<button type="button" className="tw-audit-action-btn" onClick={()=>{setSearch("");setStatusFilter("ALL");setSort("az")}}>Clear filters</button>}/>}</div>{expanded&&<div className="tw-admin-detail-backdrop" onClick={()=>setExpanded(null)}/>}{confirm&&<ThemedModal open={!!confirm} icon={<TwIcon name={confirm.action==="remove"?"trash":"warning"} size={28}/>} title={copy.title} message={copy.message} onClose={()=>setConfirm(null)}><button className="btn secondary" onClick={()=>setConfirm(null)}>Cancel</button><SuperPressButton tone="red" onClick={act}>Confirm</SuperPressButton></ThemedModal>}</div>);
+  return <TeacherManagementTab
+    title="Teachers"
+    subtitle="Teachers without an institution, on any plan."
+    fetchUrl="/superadmin/teachers/unlinked"
+    onToggleActive={(id,active)=>api.post(`/superadmin/accounts/${id}/active`,{active})}
+    onRemove={(id)=>api.delete(`/superadmin/accounts/${id}`)}
+    toggleLabels={{deactivate:"Deactivate",activate:"Activate"}}
+    showCopyEmail
+    emptyNone="No independent teachers yet."
+    emptyFiltered="No teachers match the current filters."
+    renderRowExtra={(t)=><small className="tw-inst-ratio" style={{color:"inherit",opacity:.75}}>{String(t.plan_code||"BASIC").toUpperCase()}</small>}
+    renderDetailExtras={(t)=>(
+      <div className="tw-teacher-detail-section">
+        <ChartTitle title="Plan & contact" icon="user"/>
+        <Info label="Contact" value={t.contact_number||"—"}/>
+        <Info label="Plan" value={String(t.plan_code||"BASIC").toUpperCase()}/>
+        <Info label="Plan expires" value={fmt(t.plan_expires_at)}/>
+      </div>
+    )}
+    confirmCopy={({teacher,action})=>{
+      const name=((teacher.first_name||"")+" "+(teacher.last_name||"")).trim()||teacher.email||"this teacher";
+      const hosted=Number(teacher.hosted_sessions_count||0);
+      const classes=Number(teacher.classes_handled_count||0);
+      if(action==="remove")return{title:"Remove this teacher?",message:`Remove ${name}? ${hosted} hosted sessions and ${classes} classes will be removed from platform use. Existing records are kept.`};
+      if(action==="activate")return{title:"Activate this teacher?",message:`Activate ${name}? They will be able to host sessions again.`};
+      return{title:"Deactivate this teacher?",message:`Deactivate ${name}? They will be unable to host new sessions. Their ${classes} classes and ${hosted} past sessions are kept.`};
+    }}
+  />;
 }
-function TeacherCard({t,expanded,onToggle,onAction,onCopy,copied,c}){
-  const st=teacherRowStatus(t);
-  const plan=String(t.plan_code||"BASIC").toUpperCase();
-  return(<article className={"tw-super-teacher-card"+(expanded?" is-expanded":"")} style={{...card(c),padding:0,overflow:"hidden"}}><button type="button" onClick={onToggle} className="tw-super-institution-head" style={{color:c.text}}><div><h3>{t.first_name} {t.last_name}</h3><small style={{color:c.textMuted}}>{t.email||"No email"} · {relTime(t.last_active_at)}</small></div><span className="tw-inst-head-meta"><span className={"tw-status-pill is-"+st}>{teacherStatusLabel(st)}</span><small className="tw-inst-ratio" style={{color:c.textMuted}}>{plan}</small></span><TwIcon name={expanded?"chevronUp":"chevronDown"} size={22}/></button>{expanded&&<div className="tw-super-institution-expanded" style={{borderColor:c.border}}><div className="tw-super-admin-row"><div><small style={{color:c.textMuted}}>Independent teacher</small><h3 style={{color:c.text}}>{t.first_name} {t.last_name}</h3>{t.email&&<small style={{color:c.textMuted}}>{t.email}</small>}</div><div className="tw-super-admin-actions">{t.is_active?<SuperPressButton tone="blue" onClick={()=>onAction({action:"deactivate",teacher:t})}>Deactivate</SuperPressButton>:<SuperPressButton tone="blue" onClick={()=>onAction({action:"activate",teacher:t})}>Activate</SuperPressButton>}<SuperPressButton tone="red" onClick={()=>onAction({action:"remove",teacher:t})}>Remove</SuperPressButton><button type="button" className="tw-audit-action-btn" onClick={()=>onCopy(t.email)}>{copied?"Copied":"Copy email"}</button></div></div><div className="tw-super-institution-detail-grid"><div style={quiet(c)}><Info label="Contact" value={t.contact_number||"—"}/><Info label="Plan" value={plan}/><Info label="Plan expires" value={fmt(t.plan_expires_at)}/><Info label="Joined" value={fmt(t.created_at)}/><Info label="Last active" value={fmt(t.last_active_at)}/></div><div style={quiet(c)}><Info label="Hosted sessions" value={t.hosted_sessions_count||0}/><Info label="Assigned sessions" value={t.assigned_sessions_count||0}/><Info label="Classes handled" value={t.classes_handled_count||0}/><Info label="Last session" value={fmt(t.last_session_at)}/></div></div></div>}</article>);
-}
+
 function ActionDialogSimple({confirm,onClose,onConfirm}){if(!confirm)return null;const blast=confirm.blast||{};const target=confirm.admin?`${confirm.admin.first_name||""} ${confirm.admin.last_name||""}`.trim()||confirm.admin.email||"this administrator":"this administrator";const scope=confirm.admin?.institution_name?` at ${confirm.admin.institution_name}`:"";return <ThemedModal open={!!confirm} icon={<TwIcon name={confirm?.action==="remove"?"trash":"warning"} size={28}/>} title={confirm?.action==="remove"?"Remove this administrator?":"Deactivate this administrator?"} message={confirm?.action==="remove"?`Remove ${target}${scope}? ${Number(blast.teachers||0)} teachers, ${Number(blast.students||0)} students and ${Number(blast.classes||0)} classes will lose platform access. Existing records are kept and can be restored by creating a new admin account.`:`Deactivate ${target}${scope}? They will be unable to access the institution dashboard. Teachers and students keep their existing data.`} onClose={onClose}>{confirm&&<><button className="btn secondary" onClick={onClose}>Cancel</button><SuperPressButton tone="red" onClick={onConfirm}>Confirm</SuperPressButton></>}</ThemedModal>}
 
 function AppField({label,value,corner}){

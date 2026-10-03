@@ -34,7 +34,34 @@
 .quiz-shell-new.has-session-background.theme-dark .qn-prompt-box{
   background:rgba(8,22,50,.76)!important;
 }
-.qn-header{position:relative!important}
+/* Sticky live/assignment header.
+   1) Page-level overflow-x:hidden on html/body/#root (refresh-public.css)
+      turns them into scroll containers that never scroll, so sticky can't
+      stick. Same fix the quiz builder uses (builder-sessions-bank.css):
+      clip hides sideways overflow without creating a scroll container.
+   2) .quiz-shell-new also has overflow:hidden (shell-and-questions.css).
+   3) ONE sticky element: the .qn-sticky-top wrapper. Its parent is the tall
+      .quiz-shell-new, so it has room to stick. Its children stay in normal
+      flow - a sticky child inside a wrapper of its own height can't move. */
+html:has(body .quiz-shell-new),
+body:has(.quiz-shell-new),
+#root:has(.quiz-shell-new){overflow-x:clip}
+.sp-gameplay-page .quiz-shell-new,
+.quiz-shell-new.sp-assigned-shell{overflow:visible!important}
+.quiz-shell-new .qn-sticky-top{position:sticky!important;top:0!important;z-index:80!important;background:transparent!important}
+.quiz-shell-new .qn-sticky-top > .qn-header{position:relative!important;top:auto!important;z-index:auto!important;border-top-left-radius:22px!important;border-top-right-radius:22px!important}
+.quiz-shell-new .qn-sticky-top > .qn-question-progress,
+.quiz-shell-new .qn-sticky-top > .qn-timer-progress{position:relative!important;top:auto!important;z-index:auto!important}
+/* Question text: same wrap behaviour as builder — full-width block, wraps + shrinks.
+   min-width:0 is what lets flex/grid children actually shrink on unbroken strings. */
+.quiz-shell-new .qn-body{min-width:0!important}
+.quiz-shell-new .qn-prompt-box{align-items:stretch!important;text-align:center!important;min-width:0!important;max-width:720px!important}
+.quiz-shell-new .qn-prompt-text{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-break:break-word!important;text-align:center!important;line-height:1.35!important}
+/* Choices: 1fr alone won't shrink past unbroken content — minmax(0,1fr) will. */
+.quiz-shell-new .quiz-choices{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+.quiz-shell-new .choice-btn{min-width:0!important}
+.quiz-shell-new .choice-content{min-width:0!important}
+.quiz-shell-new .choice-text{min-width:0!important;overflow-wrap:anywhere!important;word-break:break-word!important;white-space:pre-wrap!important}
 .qn-title-cluster{display:flex;align-items:center;gap:10px;min-width:0}
 .qn-subject{
   position:absolute!important;
@@ -640,3 +667,35 @@ body.dark-mode .sp-explanation-feedback{background:rgba(10,23,48,.96);color:#f8f
 body.sp-capture-guarded,body.sp-capture-guarded *:not(input):not(textarea){user-select:none!important;-webkit-user-select:none!important}
 body.sp-capture-guarded{-webkit-touch-callout:none}
 body.sp-capture-guarded input,body.sp-capture-guarded textarea{-webkit-touch-callout:default}
+
+/* Desktop trophy collapse: clicking the leaderboard trophy hides the rows while
+   the trophy stays in place, rendered bigger. Clicking again restores it.
+   The aside keeps its fixed spot; it just shrinks to fit the trophy. */
+.sp-live-top5-trophy-toggle{border:0;background:transparent;cursor:pointer;display:inline-grid;place-items:center;color:#d6a400!important;padding:2px;border-radius:10px;line-height:0}
+.sp-live-top5-trophy-toggle:hover{transform:scale(1.12)}
+.sp-live-top5-trophy-toggle svg{width:17px!important;height:17px!important}
+.sp-live-top5.is-trophy-collapsed .sp-live-top5-list,
+.sp-live-top5.is-trophy-collapsed .sp-live-top5-separator,
+.sp-live-top5.is-trophy-collapsed .sp-live-top5-me{display:none!important}
+.sp-live-top5.is-trophy-collapsed{width:auto!important;min-width:0!important}
+.sp-live-top5.is-trophy-collapsed .sp-live-top5-title{margin:0 2px!important}
+.sp-live-top5.is-trophy-collapsed .sp-live-top5-trophy-toggle svg{width:32px!important;height:32px!important}
+/* The question-area TTS / voice-record button stretches full-width with the
+   prompt box (align-items:stretch) - pin it back to the center instead. */
+.quiz-shell-new .qn-prompt-box .tw-question-audio{align-self:center!important}
+
+/* Phase 1: printing the quiz yields a blank page instead of the questions.
+   beforeprint JS already blurs, this is the second net for Save-as-PDF. */
+@media print {
+  body.sp-capture-guarded .quiz-shell-new,
+  body.sp-capture-guarded .sp-gameplay-page,
+  body.sp-capture-guarded .sp-assigned-shell {
+    display: none !important;
+  }
+  body.sp-capture-guarded::after {
+    content: "Printing is disabled during ThinkWAVE gameplay.";
+    display: block;
+    padding: 40px;
+    font: 700 16px/1.6 Inter, system-ui, sans-serif;
+  }
+}

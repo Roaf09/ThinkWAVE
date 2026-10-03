@@ -61,6 +61,8 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  // Title-missing pulse: red highlight with single breath instead of popup.
+  const [titlePulse, setTitlePulse] = useState(0);
 
   // Autosave the setup form so an unexpected crash/refresh keeps the title,
   // category, and template choice instead of losing the whole setup.
@@ -162,7 +164,12 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setMsg("");
-    if (!form.title.trim()) return setMsg("Add a quiz title first.");
+    if (!form.title.trim()) {
+      // No popup: highlight title field in red with single pulse/breath.
+      setTitlePulse((v) => v + 1);
+      try { document.querySelector('[data-tutorial="create-title"]')?.focus?.(); } catch {}
+      return;
+    }
     if (!form.category) return setMsg("Select K-12 or College.");
     if (!form.templateType) return setMsg("Select a quiz template.");
     setSaving(true);
@@ -172,7 +179,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
         timeLimitSec: 30,
         pointsPerQuestion: 1,
         randomizeQuestions: false,
-        shuffleAnswers: false,
+        shuffleAnswers: true,
         deliveryMode: "SYNCHRONOUS",
         availableFrom: null,
         availableUntil: null,
@@ -217,7 +224,7 @@ export default function CreateTab({ guestMode = false, tutorial }) {
       <form onSubmit={handleSubmit} className="grid gap-[22px]">
         <div>
           <label style={labelStyle(c)}>Quiz Title</label>
-          <input data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required className="font-[850] tracking-[0.04em]" style={{ ...inputStyle(c) }} />
+          <input key={titlePulse} data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required className={`font-[850] tracking-[0.04em]${titlePulse && !form.title.trim() ? " tw-create-title-pulse" : ""}`} style={{ ...inputStyle(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
           {form.title.trim() && existingTitles.includes(form.title.trim().toLowerCase()) && (
             <div className="px-[12px] py-[9px] rounded-[12px] text-[12.5px] font-[700] mt-[8px]" style={{ background: c.yellowBg, border: `1px solid ${c.yellowBorder}`, color: c.yellowFg }}>Heads up: this title is already used in another one of your works.</div>
           )}

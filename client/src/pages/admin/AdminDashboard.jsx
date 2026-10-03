@@ -10,7 +10,8 @@ import {TwIcon} from "../../components/TwUI";
 import DashboardShell from "../../components/DashboardShell";
 import {ProfileSettingsModal,ProfileSavedOverlay,profileFromUser,useDashboardProfile} from "../../components/ProfileSettings";
 import ProfileTab from "../../components/ProfileTab";
-import {DualLineChart,DonutChart,BarChart} from "../../components/SimpleCharts";
+import TeacherManagementTab from "../../components/TeacherManagementTab";
+import {DualLineChart,DonutChart,BarChart} from "../../components/Recharts";
 import {manilaDateTime} from "../../lib/dateFormat";
 import { TwLogoLoader } from "../../components/TwLogoLoader";
 
@@ -78,23 +79,23 @@ function Overview({onNavigate}){
 function teacherStatus(t){if(String(t?.approval_status||"").toUpperCase()==="PENDING")return"pending";return t?.is_active?"active":"inactive"}
 function teacherRelTime(v){if(!v)return"Never";const t=new Date(v).getTime();if(!Number.isFinite(t))return"—";const s=Math.max(0,(Date.now()-t)/1e3);if(s<60)return"just now";if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;const d=Math.floor(s/86400);if(d===1)return"yesterday";if(d<30)return`${d}d ago`;return new Date(t).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}
 function Teachers(){
-  const c=useColors();
-  const [items,setItems]=useState([]);
-  const [search,setSearch]=useState("");
-  const [statusFilter,setStatusFilter]=useState("ALL");
-  const [sortBy,setSortBy]=useState("name");
-  const [filterOpen,setFilterOpen]=useState(false);
-  const [selected,setSelected]=useState(null);
-  const [confirm,setConfirm]=useState(null);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState("");
-  const hasActiveTeacherFilters=statusFilter!=="ALL"||sortBy!=="name";
-  const emptyText=items.length?"No teachers match the current filters.":"No teachers found.";
-  const load=()=>{setLoading(true);setError("");return api.get("/admin-dashboard/teachers").then(r=>{const rows=Array.isArray(r.data)?r.data:[];setItems(rows);setSelected(cur=>cur?(rows.find(x=>Number(x.id)===Number(cur.id))||null):null)}).catch(err=>{setItems([]);setSelected(null);setError(err?.response?.data?.message||"Unable to load teachers.")}).finally(()=>setLoading(false))};
-  useEffect(()=>{load()},[]);
-  const filtered=useMemo(()=>{const q=search.trim().toLowerCase();const rows=items.filter(x=>{const st=teacherStatus(x);if(statusFilter!=="ALL"&&st!==statusFilter.toLowerCase())return false;if(!q)return true;return`${x?.first_name||""} ${x?.last_name||""} ${x?.email||""}`.toLowerCase().includes(q)});rows.sort((a,b)=>{if(sortBy==="active")return new Date(b.last_active_at||0).getTime()-new Date(a.last_active_at||0).getTime();if(sortBy==="sessions")return Number(b.hosted_sessions_count||0)-Number(a.hosted_sessions_count||0);return String(a.last_name||"").localeCompare(String(b.last_name||""))||String(a.first_name||"").localeCompare(String(b.first_name||""))});return rows},[items,search,statusFilter,sortBy]);
-  async function toggle(){if(!confirm)return;try{await api.post(`/admin-dashboard/teachers/${confirm.teacher.id}/active`,{active:confirm.action==="activate"});setConfirm(null);await load()}catch(err){setError(err?.response?.data?.message||"Unable to update this teacher.");setConfirm(null)}}
-  return <div className="container"><Heading title="Teachers"/><p className="tw-notif-sub" style={{color:c.textMuted}}>Review teacher access, activity, and workload for your institution.</p><div className="tw-filter-row tw-teacher-filter" style={{...card(c),position:"relative",overflow:"visible"}}><div className="tw-search-input"><TwIcon name="search" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search teacher" style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder}}/></div><AdminPressButton tone="blue" className={`tw-filter-toggle-btn${filterOpen?" is-selected":""}${hasActiveTeacherFilters?" has-active-filters":""}`} onClick={()=>setFilterOpen(v=>!v)}><TwIcon name="filter" size={17}/>Filter</AdminPressButton>{filterOpen&&<div className="tw-filter-panel" style={{...card(c),position:"absolute",top:"calc(100% + 8px)",right:12,left:12,zIndex:40}}><div className="tw-filter-panel-group"><label style={{fontSize:11,fontWeight:900,textTransform:"uppercase",letterSpacing:".06em",color:c.textMuted}}>Status</label><div className="tw-filter-chip-row">{["ALL","ACTIVE","INACTIVE","PENDING"].map(s=><button key={s} type="button" className={`tw-filter-chip${statusFilter===s?" is-active":""}`} onClick={()=>setStatusFilter(s)}>{s==="ALL"?"All":s==="ACTIVE"?"Active":s==="INACTIVE"?"Inactive":"Pending"}</button>)}</div></div><div className="tw-filter-panel-group"><label style={{fontSize:11,fontWeight:900,textTransform:"uppercase",letterSpacing:".06em",color:c.textMuted}}>Sort by</label><select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{background:c.inputBg,color:c.text,borderColor:c.inputBorder,borderRadius:12,padding:"12px 14px",font:"inherit",fontWeight:700}}><option value="name">Name A–Z</option><option value="active">Recently active</option><option value="sessions">Most sessions</option></select></div></div>}</div>{error&&<ApiMessage text={error}/>}<div className="tw-admin-two-panel"><section style={card(c)}>{loading?<LoadingCard text="Loading teachers…"/>:<div style={{display:"grid",gap:10}}>{filtered.map(t=>{const st=teacherStatus(t);return<button key={t.id} className={`tw-teacher-row ${selected?.id===t.id?"selected":""}`} onClick={()=>setSelected(t)} style={{...quiet(c),color:c.text,borderColor:selected?.id===t.id?c.accent:c.border}}><div><b>{t.last_name||""}, {t.first_name||""}</b><small style={{color:c.textMuted}}>{t.email||"No email"}</small></div><span className="tw-teacher-row-meta"><span className={`tw-status-pill is-${st}`}>{st==="active"?"Active":st==="inactive"?"Inactive":"Pending"}</span><small style={{color:c.textMuted}}>{teacherRelTime(t.last_active_at)}</small><small className="tw-teacher-row-sessions" style={{color:c.textMuted}}>{Number(t.hosted_sessions_count||0)} sessions</small></span></button>})}{!filtered.length&&<Empty text={emptyText} action={items.length>0&&<button type="button" className="tw-audit-action-btn" onClick={()=>{setSearch("");setStatusFilter("ALL");setSortBy("name")}}>Clear filters</button>}/>}</div>}</section><section className="tw-admin-teacher-details" style={card(c)}><ChartTitle title="Teacher Details" icon="teacher"/>{selected?<><div style={quiet(c)}><div className="tw-teacher-detail-head"><div><h3 style={{color:c.text,margin:"0 0 5px"}}>{selected.first_name} {selected.last_name}</h3><p style={{color:c.textMuted,margin:0}}>{selected.email}</p></div><span className={`tw-status-pill is-${teacherStatus(selected)}`}>{teacherStatus(selected)==="active"?"Active":teacherStatus(selected)==="inactive"?"Inactive":"Pending"}</span></div></div><div className="tw-teacher-detail-section"><ChartTitle title="Access" icon="lock"/><Info label="Status" value={teacherStatus(selected)==="active"?"Active":teacherStatus(selected)==="inactive"?"Inactive":"Pending approval"}/><Info label="Joined" value={fmt(selected.created_at)}/><Info label="Last active" value={`${fmt(selected.last_active_at)} (${teacherRelTime(selected.last_active_at)})`}/></div><div className="tw-teacher-detail-section"><ChartTitle title="Workload" icon="chart"/><Info label="Hosted sessions" value={selected.hosted_sessions_count||0}/><Info label="Assigned sessions" value={selected.assigned_sessions_count||0}/><Info label="Last hosted session" value={fmt(selected.last_session_at)}/><Info label="Classes handled" value={selected.classes_handled_count||0}/></div><div style={{display:"flex",justifyContent:"center",gap:10,marginTop:18}}><AdminPressButton tone={selected.is_active?"red":"blue"} onClick={()=>setConfirm({teacher:selected,action:selected.is_active?"deactivate":"activate"})}>{selected.is_active?"Remove Teacher":"Activate Teacher"}</AdminPressButton></div></>:<Empty text="Select a teacher to view details."/>}</section></div>{selected&&<div className="tw-admin-detail-backdrop" onClick={()=>setSelected(null)}/>}{confirm&&<ThemedModal icon={<TwIcon name="alert" size={30}/>} title={confirm.action==="deactivate"?"Remove Teacher?":"Activate Teacher?"} message={confirm.action==="deactivate"?`Remove ${confirm.teacher.first_name} ${confirm.teacher.last_name}? They will be unable to host new sessions. Their ${Number(confirm.teacher.classes_handled_count||0)} classes and ${Number(confirm.teacher.hosted_sessions_count||0)} past sessions are kept.`:`Activate ${confirm.teacher.first_name} ${confirm.teacher.last_name}? They will be able to host sessions again.`} onClose={()=>setConfirm(null)}><button className="btn secondary" onClick={()=>setConfirm(null)}>Cancel</button><button className="btn" onClick={toggle}>Confirm</button></ThemedModal>}</div>
+  return <TeacherManagementTab
+    title="Teachers"
+    subtitle="Review teacher access, activity, and workload for your institution."
+    fetchUrl="/admin-dashboard/teachers"
+    onToggleActive={(id,active)=>api.post(`/admin-dashboard/teachers/${id}/active`,{active})}
+    toggleLabels={{deactivate:"Remove Teacher",activate:"Activate Teacher"}}
+    pendingDetailLabel="Pending approval"
+    defaultSort="name"
+    sortOptions={[{value:"name",label:"Name A–Z"},{value:"active",label:"Recently active"},{value:"sessions",label:"Most sessions"}]}
+    emptyNone="No teachers found."
+    emptyFiltered="No teachers match the current filters."
+    confirmCopy={({teacher,action})=>{
+      const name=((teacher.first_name||"")+" "+(teacher.last_name||"")).trim()||teacher.email||"this teacher";
+      if(action==="deactivate")return{title:"Remove Teacher?",message:`Remove ${name}? They will be unable to host new sessions. Their ${Number(teacher.classes_handled_count||0)} classes and ${Number(teacher.hosted_sessions_count||0)} past sessions are kept.`};
+      return{title:"Activate Teacher?",message:`Activate ${name}? They will be able to host sessions again.`};
+    }}
+  />;
 }
 
 function Institution(){

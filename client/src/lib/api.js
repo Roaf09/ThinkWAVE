@@ -8,7 +8,38 @@ import axios from "axios";
 
 export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
-export const api = axios.create({ baseURL: API_BASE + "/api" });
+export const api = axios.create({ baseURL: API_BASE + "/api", timeout: 15000 });
+
+// Timeout gives every loader a ceiling (no more infinite spinner on hung
+// /auth/me, /sessions/:id/state, /quizzes/:id). 401 clears stale token and
+// sends user to login instead of 401-looping in every tab.
+// Login/register/verify endpoints return 401 for bad credentials — that is a
+// validation result for the form to display, not a stale session. Only
+// redirect on 401s from every other endpoint.
+const AUTH_ATTEMPT_PATHS = ["/auth/login", "/auth/register", "/auth/verify", "/auth/password", "/auth/otp", "/auth/resend"];
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.code === "ECONNABORTED" && !err?.response) {
+      err.message = "Request timed out. Please check your connection and retry.";
+    }
+    if (err?.response?.status === 401) {
+      const url = String(err?.config?.url || "");
+      const isAuthAttempt = AUTH_ATTEMPT_PATHS.some((p) => url.includes(p));
+      if (!isAuthAttempt) {
+        try {
+          localStorage.removeItem("qz_token");
+          localStorage.removeItem("qz_role");
+        } catch {}
+        try { delete api.defaults.headers.common.Authorization; } catch {}
+        if (typeof window !== "undefined" && !String(window.location.pathname || "").startsWith("/login")) {
+          window.location.href = "/login";
+        }
+      }
+    }
+    return Promise.reject(err);
+  }
+);
 
 // Attach the latest saved token to every request. This prevents protected pages
 // from firing their first request before App's mount effect restores Axios state.

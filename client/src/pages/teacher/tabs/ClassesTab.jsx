@@ -13,7 +13,9 @@ import { TeacherPressButton, ThinkBotEmptyState, TeacherActionModal } from "../T
 import ThinkBotTutorial from "../../../components/ThinkBotTutorial";
 import { tabCard as card, tabBtn as btn, useIsMobileViewport } from "./teacherTabShared";
 import { buildTree, buildPath, findNode } from "./classes-parts/classTreeUtils";
-import { AssignmentResultRow, ClassReportCard, ClassAnalyticsModal, StudentAnalyticsModal } from "./classes-parts/ClassReportsAndAnalytics";
+import { AssignmentResultRow, ClassReportCard } from "./classes-parts/ClassReportsAndAnalytics";
+import { ClassAnalyticsModal3Tab } from "./classes-parts/ClassAnalyticsTabs";
+import { StudentAnalyticsModal3Tab } from "./classes-parts/StudentAnalyticsTabs";
 import { FolderCard, FolderModal } from "./classes-parts/FolderDialogs";
 import { TwLogoLoader } from "../../../components/TwLogoLoader";
 
@@ -32,6 +34,7 @@ export default function ClassesTab({ tutorial }) {
   const [sessions, setSessions] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [classCode, setClassCode] = useState("");
+  const [classCodeFolderId, setClassCodeFolderId] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -47,6 +50,7 @@ export default function ClassesTab({ tutorial }) {
   const [studentSearch, setStudentSearch] = useState("");
   const [classAnalytics, setClassAnalytics] = useState(null);
   const [classAnalyticsLoading, setClassAnalyticsLoading] = useState(false);
+  const [desktopNudge, setDesktopNudge] = useState(false);
   const [classAnalyticsMode, setClassAnalyticsMode] = useState("LIVE");
   const [studentAnalytics, setStudentAnalytics] = useState(null);
   const [studentAnalyticsLoading, setStudentAnalyticsLoading] = useState(false);
@@ -55,7 +59,7 @@ export default function ClassesTab({ tutorial }) {
   const tutorialSectionId = Number(tutorial?.state?.tutorialSectionId || 0);
 
   useEffect(() => {
-    const modalOpen = Boolean(classAnalytics || studentAnalytics || folderModal || renameModal || removeConfirm || folderAction);
+    const modalOpen = Boolean(classAnalytics || studentAnalytics || folderModal || renameModal || removeConfirm || folderAction || desktopNudge);
     if (!modalOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     const previousOverscroll = document.body.style.overscrollBehavior;
@@ -63,14 +67,14 @@ export default function ClassesTab({ tutorial }) {
     document.body.style.overscrollBehavior = "none";
     // Analytics modals are full-screen on phones: hide the pill tab bar
     // underneath (same mechanism as the other dashboard modals).
-    const hideTabs = Boolean(classAnalytics || studentAnalytics);
+    const hideTabs = Boolean(classAnalytics || studentAnalytics || desktopNudge);
     if (hideTabs) document.body.classList.add("tw-mobile-modal-open");
     return () => {
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
       if (hideTabs) document.body.classList.remove("tw-mobile-modal-open");
     };
-  }, [classAnalytics, studentAnalytics, folderModal, renameModal, removeConfirm, folderAction]);
+  }, [classAnalytics, studentAnalytics, folderModal, renameModal, removeConfirm, folderAction, desktopNudge]);
 
   async function load() {
     setLoading(true);
@@ -135,10 +139,10 @@ export default function ClassesTab({ tutorial }) {
     }
     // The share-code display needs its transient classCode refetched — without
     // it the explain dialog points at nothing after an interruption.
-    if (stage === "classes_share_explain" && hasSection && Number(selectedFolderId) === tutorialSectionId && !classCode) {
+    if (stage === "classes_share_explain" && hasSection && Number(selectedFolderId) === tutorialSectionId && (!classCode || Number(classCodeFolderId) !== Number(tutorialSectionId))) {
       getShareCode();
     }
-  }, [loading, folders, tutorial?.stage, tutorialSubjectId, tutorialSectionId, selectedFolderId, classCode]);
+  }, [loading, folders, tutorial?.stage, tutorialSubjectId, tutorialSectionId, selectedFolderId, classCode, classCodeFolderId]);
 
   useEffect(() => {
     let alive = true;
@@ -147,7 +151,7 @@ export default function ClassesTab({ tutorial }) {
   }, []);
 
   useEffect(() => {
-    if (!selectedFolderId) { setStudents([]); setAsyncResults([]); setClassCode(""); return; }
+    if (!selectedFolderId) { setStudents([]); setAsyncResults([]); setClassCode(""); setClassCodeFolderId(null); return; }
     const refreshStudents = () => api.get(`/classes/${selectedFolderId}/students`).then(({ data }) => setStudents(data || [])).catch(() => setStudents([]));
     const refreshResults = () => api.get(`/classes/${selectedFolderId}/async-results`).then(({ data }) => setAsyncResults(data || [])).catch(() => setAsyncResults([]));
     refreshStudents();
@@ -185,12 +189,14 @@ export default function ClassesTab({ tutorial }) {
 
   async function openClassAnalytics(classId = selectedFolderId) {
     if (!advancedPlan || !classId) return;
+    // Phones stay out: wide charts and tables need a desktop or laptop.
+    if (isMobile) { setDesktopNudge(true); return; }
     setClassAnalyticsLoading(true);
     setClassAnalytics({ loading: true });
     try {
-      const { data } = await api.get(`/classes/${classId}/analytics`);
-      setClassAnalytics(data || { stats: {}, trends: [] });
-      setClassAnalyticsMode("LIVE");
+      // Three-tab view (mockup doc): one call returns performance + learning + participation.
+      const { data } = await api.get(`/classes/${classId}/analytics-full`);
+      setClassAnalytics(data || { performance: null });
     } catch (err) {
       setClassAnalytics(null);
       setMsg(err?.response?.data?.message || "Could not load class analytics.");
@@ -199,6 +205,8 @@ export default function ClassesTab({ tutorial }) {
 
   async function openStudentAnalytics(student) {
     if (!advancedPlan || !selectedFolderId || !student?.id) return;
+    // Phones stay out: wide charts and tables need a desktop or laptop.
+    if (isMobile) { setDesktopNudge(true); return; }
     setStudentAnalyticsLoading(true);
     setStudentAnalytics({ student, loading: true });
     try {
@@ -284,9 +292,11 @@ export default function ClassesTab({ tutorial }) {
 
   async function getShareCode() {
     if (!selectedFolderId) return;
+    const folderId = selectedFolderId;
     try {
-      const { data } = await api.get(`/classes/${selectedFolderId}/code`);
+      const { data } = await api.get(`/classes/${folderId}/code`);
       setClassCode(data.classCode || "");
+      setClassCodeFolderId(folderId);
       setCopiedCode(false);
       if (tutorial?.stage === "classes_ready") tutorial.setStage?.("classes_share_explain");
     } catch (err) {
@@ -358,7 +368,7 @@ export default function ClassesTab({ tutorial }) {
         <div className="flex items-center justify-between gap-[12px] flex-wrap mb-[12px]">
           <div className="font-[900] text-[17px]" style={{ color: c.text }}>My Folders</div>
           <div className="tw-class-header-actions flex gap-[10px] flex-wrap">
-            {isSectionFolder && advancedPlan && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn tw-analytics-back-press" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
+            {isSectionFolder && advancedPlan && (students.length > 0 || liveReports.length > 0 || asyncResults.length > 0) && <TeacherPressButton tone="blue" icon="chart" className="tw-class-analytics-btn tw-analytics-back-press" onClick={() => openClassAnalytics()}>Class Analytics</TeacherPressButton>}
             <TeacherPressButton tone="blue" icon="plus" title="Add Folder" aria-label="Add Folder" className="tw-analytics-back-press tw-class-icon-only-blue" data-tutorial="class-add-folder" onClick={openAddFolder}>Add Folder</TeacherPressButton>
             {isSectionFolder && <TeacherPressButton tone="blue" icon="link" title="Share Code" aria-label="Share Code" className="tw-analytics-back-press tw-class-icon-only-blue" data-tutorial="class-share-code" onClick={getShareCode}>Share Code</TeacherPressButton>}
           </div>
@@ -369,7 +379,7 @@ export default function ClassesTab({ tutorial }) {
           {breadcrumbs.map((b) => <button key={b.id} onClick={() => setSelectedFolderId(b.id)} style={crumbBtn(c, Number(selectedFolderId) === Number(b.id))}>{b.name}</button>)}
         </div>
 
-        {classCode && selectedFolderId && (
+        {classCode && selectedFolderId && Number(classCodeFolderId) === Number(selectedFolderId) && (
           <div data-tutorial="class-code-display" className="mb-[16px] p-[14px] rounded-[14px] font-[900] tracking-[2px]" style={{ border: `1px dashed ${c.accent}`, background: `${c.accent}12`, color: c.accent, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <span>Class Code: {classCode}</span>
             <button type="button" onClick={copyClassCode} title={copiedCode ? "Copied!" : "Copy class code"} aria-label="Copy class code" style={{ border: "none", background: "transparent", color: c.accent, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, font: "inherit", fontSize: 13, letterSpacing: 0 }}>
@@ -390,7 +400,7 @@ export default function ClassesTab({ tutorial }) {
         )}
       </section>
 
-      {isSectionFolder && <section className="tw-class-students-shell" style={card(c)}>
+      {isSectionFolder && students.length > 0 && <section className="tw-class-students-shell" style={card(c)}>
         <div className="tw-class-student-head">
           <div className="font-[900]" style={{ color: c.text }}>Students</div>
           {advancedPlan && <label className="tw-class-student-search" style={{ borderColor: c.inputBorder, background: c.inputBg, color: c.text }}>
@@ -401,7 +411,7 @@ export default function ClassesTab({ tutorial }) {
         {students.length === 0 ? <div style={{ color: c.textMuted }}>No students have joined this class yet.</div> : filteredStudents.length === 0 ? <div style={{ color: c.textMuted }}>No students match your search.</div> : <div className="tw-class-student-list">{filteredStudents.map((st) => <div key={st.id} className={`flex items-center justify-between gap-[12px] p-[12px] rounded-[14px] mb-[8px] flex-wrap${advancedPlan ? " tw-class-student-clickable" : ""}`} onClick={() => openStudentAnalytics(st)} style={row(c)}><span>{st.last_name}, {st.first_name} {st.middle_initial || ""}<br/><small style={{ color: c.textMuted }}>Student ID: {st.student_id}</small></span><button onClick={(event) => { event.stopPropagation(); setRemoveConfirm(st); }} style={{ ...btn(c), color: c.redFg, background: c.redBg, border: `3px solid ${c.redBorder}` }}>Remove</button></div>)}</div>}
       </section>}
 
-      {isSectionFolder && <section className="tw-class-report-columns">
+      {isSectionFolder && students.length > 0 && <section className="tw-class-report-columns">
         <div className="tw-class-report-panel tw-class-live-report-shell" style={card(c)}>
           <h3 className="mt-0">Live Session Reports</h3>
           <div className="tw-class-report-list">
@@ -420,8 +430,9 @@ export default function ClassesTab({ tutorial }) {
       {renameModal && <FolderModal c={c} title="Rename Class" value={folderName} setValue={setFolderName} onSubmit={renameFolder} onClose={() => setRenameModal(null)} confirmLabel="Save" />}
       {folderAction && <TeacherActionModal c={c} textCancel icon={folderAction.type === "delete" ? "trash" : "plus"} tone={folderAction.type === "delete" ? "red" : "blue"} title={folderAction.type === "delete" ? "Delete class?" : "Duplicate class?"} message={`${folderAction.folder.name} will be ${folderAction.type === "delete" ? "permanently deleted" : "copied with its current folder structure"}.`} confirmLabel={folderAction.type === "delete" ? "Delete" : "Duplicate"} onClose={() => setFolderAction(null)} onConfirm={() => folderAction.type === "delete" ? deleteFolder(folderAction.folder) : duplicateFolder(folderAction.folder)} />}
       {removeConfirm && <TeacherActionModal c={c} icon="user" tone="red" title="Remove student?" message={`${removeConfirm.last_name}, ${removeConfirm.first_name} will be removed from this class.`} confirmLabel="Remove" textCancel onClose={() => setRemoveConfirm(null)} onConfirm={() => removeStudent(removeConfirm.id)} />}
-      {classAnalytics && <ClassAnalyticsModal c={c} data={classAnalytics} loading={classAnalyticsLoading} mode={classAnalyticsMode} setMode={setClassAnalyticsMode} onClose={() => setClassAnalytics(null)} />}
-      {studentAnalytics && <StudentAnalyticsModal c={c} data={studentAnalytics} loading={studentAnalyticsLoading} onClose={() => setStudentAnalytics(null)} />}
+      {classAnalytics && <ClassAnalyticsModal3Tab c={c} data={classAnalytics} loading={classAnalyticsLoading} onClose={() => setClassAnalytics(null)} />}
+      {desktopNudge && <TeacherActionModal c={c} icon="host" tone="blue" title="Best viewed on desktop" message="Class Analytics has wide charts, heatmaps, and tables. Please open it on a desktop or laptop to see everything at full size." confirmLabel="Got it" hideCancel onClose={() => setDesktopNudge(false)} onConfirm={() => setDesktopNudge(false)} />}
+      {studentAnalytics && <StudentAnalyticsModal3Tab c={c} data={studentAnalytics} loading={studentAnalyticsLoading} classId={selectedFolderId} onClose={() => setStudentAnalytics(null)} />}
       {tutorialNodes}
     </div>
   );

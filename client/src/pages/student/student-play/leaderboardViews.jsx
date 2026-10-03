@@ -13,6 +13,10 @@ export const LiveLeaderboardPanel = memo(function LiveLeaderboardPanel({ leaderb
   // Starts minimized so it never opens on top of the question by default;
   // the toggle button lets the student pull it out deliberately instead.
   const [minimized, setMinimized] = useState(true);
+  // Desktop-only: clicking the trophy hides the leaderboard rows while the
+  // trophy itself stays in place, rendered bigger. Clicking it again shrinks
+  // it back and restores the rows.
+  const [trophyCollapsed, setTrophyCollapsed] = useState(false);
   const top5 = Array.isArray(leaderboard?.top5) ? leaderboard.top5.slice(0, 5) : [];
   const itemRefs = useRef(new Map());
   const previousTops = useRef(new Map());
@@ -36,12 +40,17 @@ export const LiveLeaderboardPanel = memo(function LiveLeaderboardPanel({ leaderb
   }, [signature]);
 
   const meInTop5 = top5.some((row) => groupMode ? Number(row?.group_id || 0) === Number(leaderboard?.myScore?.group_id || 0) : Number(row?.participant_id || 0) === Number(participantId));
-  return <aside className={`sp-live-top5${minimized ? " is-minimized" : ""}`} aria-label="Live top five leaderboard">
+  return <aside className={`sp-live-top5${minimized ? " is-minimized" : ""}${trophyCollapsed ? " is-trophy-collapsed" : ""}`} aria-label="Live top five leaderboard">
     <button type="button" className="sp-live-top5-toggle" aria-label={minimized ? "Show live leaderboard" : "Hide live leaderboard"} aria-expanded={!minimized} onClick={() => setMinimized((value) => !value)}>
       <TwIcon name={minimized ? "trophy" : "close"} size={16}/>
     </button>
     <div className="sp-live-top5-panel">
-      <div className="sp-live-top5-title"><TwIcon name="trophy" size={16}/> Live Top 5</div>
+      <div className="sp-live-top5-title">
+        <button type="button" className="sp-live-top5-trophy-toggle" aria-label={trophyCollapsed ? "Show live leaderboard" : "Hide live leaderboard"} aria-expanded={!trophyCollapsed} title={trophyCollapsed ? "Show leaderboard" : "Hide leaderboard"} onClick={() => setTrophyCollapsed((value) => !value)}>
+          <TwIcon name="trophy" size={16}/>
+        </button>
+        {!trophyCollapsed && <span>Live Top 5</span>}
+      </div>
       <div className="sp-live-top5-list">
         {Array.from({ length: 5 }).map((_, index) => {
           const row = top5[index];

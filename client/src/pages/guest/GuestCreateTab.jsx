@@ -23,11 +23,16 @@ export default function GuestCreateTab() {
   const [form, setForm] = useState({ title: "", templateType: "" });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [titlePulse, setTitlePulse] = useState(0);
 
   async function createWithTemplate(templateType) {
     const title = form.title.trim();
     setMsg("");
-    if (!title) return setMsg("Enter a quiz title.");
+    if (!title) {
+      setTitlePulse((v) => v + 1);
+      try { document.querySelector('[data-guest-title]')?.focus?.(); } catch {}
+      return;
+    }
     if (!templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
@@ -39,7 +44,7 @@ export default function GuestCreateTab() {
         timeLimitSec: 30,
         pointsPerQuestion: 1,
         randomizeQuestions: false,
-        shuffleAnswers: false,
+        shuffleAnswers: true,
         deliveryMode: "SYNCHRONOUS",
         availableFrom: null,
         availableUntil: null,
@@ -61,7 +66,7 @@ export default function GuestCreateTab() {
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>
         <div>
           <label style={label(c)}>Quiz Title</label>
-          <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" style={input(c)} />
+          <input key={titlePulse} data-guest-title required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" className={titlePulse && !form.title.trim() ? "tw-create-title-pulse" : ""} style={{ ...input(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
         </div>
         <div>
           <label style={label(c)}>Quiz Template</label>

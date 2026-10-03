@@ -7,34 +7,31 @@ import { scoreAnswer, normalizeTemplateType } from "../quizzes/templates.js";
 import { makeReconnectKey } from "../../utils/codes.js";
 import { getRememberedQuizBackground, normalizeQuizBackgroundKey } from "../quizzes/quizBackground.runtime.js";
 import { calculateCompetitivePoints } from "../sessions/leaderboard.js";
+import { toStudentQuestion, toCanonicalMatchingAnswer, assignmentScope, liveScope } from "../quizzes/studentView.js";
 import { getIO } from "../../socketRegistry.js";
 import { broadcastAssignmentLeaderboard } from "./assignment.socket.js";
-import { createTTLCache } from "../../utils/ttlCache.js";
 import { compressDataUrlImage, isDataUrl } from "../../utils/imageStore.js";
 
-// Short-lived answer preview cache: 10min TTL, max 1000 entries.
-// Long-run: old 6h Map + per-key timer grew forever + full-scan delete per submit.
-// Secondary index quizKeys lets submit clear one quiz without scanning all keys.
-const asyncAnswerChecks = createTTLCache({ max: 1000, ttlMs: 10 * 60 * 1000 });
-const asyncAnswerQuizIndex = new Map(); // quizKey `${uid}:${qid}` -> Set<checkKey>
-function trackCheckKey(checkKey, quizKey) {
-  let set = asyncAnswerQuizIndex.get(quizKey);
-  if (!set) {
-    set = new Set();
-    asyncAnswerQuizIndex.set(quizKey, set);
-  }
-  set.add(checkKey);
-  if (set.size > 200) {
-    const oldest = set.values().next().value;
-    set.delete(oldest);
-  }
-}
-function clearQuizChecks(uid, quizId) {
-  const quizKey = `${uid}:${quizId}`;
-  const set = asyncAnswerQuizIndex.get(quizKey);
-  if (!set) return;
-  for (const k of set) asyncAnswerChecks.delete(k);
-  asyncAnswerQuizIndex.delete(quizKey);
+// Server-tracked assignment progress: when each question was opened/locked.
+// opened_at is set once (INSERT IGNORE) so reloads can't restart the clock;
+// locked_at + answer are set once so reloads can't unlock. Anything never
+// locked scores as timed out in finalizeAssignment.
+let asyncAnswerTableReady = false;
+async function ensureAsyncAnswerTable() {
+  if (asyncAnswerTableReady) return;
+  await pool.query(`CREATE TABLE IF NOT EXISTS async_quiz_answers (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    quiz_id BIGINT NOT NULL,
+    student_user_id BIGINT NOT NULL,
+    question_id BIGINT NOT NULL,
+    answer_json JSON NULL,
+    opened_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    locked_at DATETIME(3) NULL,
+    timed_out TINYINT NOT NULL DEFAULT 0,
+    UNIQUE KEY uq_async_answer (quiz_id, student_user_id, question_id),
+    INDEX idx_async_quiz_student (quiz_id, student_user_id)
+  )`);
+  asyncAnswerTableReady = true;
 }
 
 async function buildAssignmentLeaderboard(quizId) {
@@ -190,6 +187,73 @@ function nowWithin(start, end) {
   const a = start ? new Date(start).getTime() : 0;
   const b = end ? new Date(end).getTime() : Number.MAX_SAFE_INTEGER;
   return now >= a && now <= b;
+}
+
+// Single source of truth for per-student assignment ordering. getStudentQuiz,
+// openAssignmentQuestion and finalizeAssignment all use this so "next
+// question" means the same everywhere.
+function buildOrderedAssignmentQuestions(quiz, uid, questionRows) {
+  const template = normalizeTemplateType(quiz.template_type);
+  let questions = questionRows.map((q) => ({ ...q, config_json: safeJson(q.config_json) || {} }));
+  const learnerSeed = `${uid}:${quiz.id}`;
+  if (quiz.randomize_questions) questions = seededShuffleRows(questions, `${learnerSeed}:questions`);
+  if (quiz.shuffle_answers) {
+    questions = questions.map((q) => {
+      const config_json = { ...(q.config_json || {}) };
+      if (template === "MCQ" && Array.isArray(config_json.options)) {
+        config_json.options = seededShuffleRows(config_json.options, `${learnerSeed}:question:${q.id}:choices`);
+      }
+      if (template === "MATCHING") {
+        config_json.shuffleColA = true;
+        config_json.shuffleSeed = `${learnerSeed}:question:${q.id}:matching`;
+      }
+      return { ...q, config_json };
+    });
+  }
+  return { questions, template };
+}
+
+function assignmentQuestionLimitSec(config, quiz) {
+  return Math.max(1, Number(config?.timeLimitSec || quiz?.time_limit_sec || 30));
+}
+
+async function dbNowMs() {
+  const [[row]] = await pool.query(`SELECT NOW(3) AS now3`);
+  const t = row?.now3 instanceof Date ? row.now3.getTime() : new Date(row?.now3).getTime();
+  return Number.isFinite(t) ? t : Date.now();
+}
+
+async function getAsyncProgress(quizId, uid) {
+  await ensureAsyncAnswerTable();
+  const [rows] = await pool.query(
+    `SELECT question_id, answer_json, opened_at, locked_at, timed_out FROM async_quiz_answers WHERE quiz_id=:qid AND student_user_id=:uid`,
+    { qid: quizId, uid }
+  );
+  const byId = new Map();
+  for (const r of rows) byId.set(Number(r.question_id), r);
+  return byId;
+}
+
+// Locks every opened-but-unlocked question whose server deadline has passed.
+// Returns the ids it timed out so callers can report progress accurately.
+async function timeoutOverdueAssignmentQuestions(quiz, uid, ordered, progressById, nowMs) {
+  const timedOutIds = [];
+  for (const q of ordered) {
+    const row = progressById.get(Number(q.id));
+    if (!row || row.locked_at) continue;
+    const openedMs = new Date(row.opened_at).getTime();
+    if (!Number.isFinite(openedMs)) continue;
+    const limitMs = assignmentQuestionLimitSec(safeJson(q.config_json) || q.config_json || {}, quiz) * 1000;
+    if (nowMs > openedMs + limitMs + 2000) {
+      await pool.query(
+        `UPDATE async_quiz_answers SET locked_at=NOW(3), timed_out=1, answer_json=:ans WHERE quiz_id=:qid AND student_user_id=:uid AND question_id=:questionId AND locked_at IS NULL`,
+        { qid: quiz.id, uid, questionId: q.id, ans: JSON.stringify({ timedOut: true }) }
+      );
+      timedOutIds.push(Number(q.id));
+      progressById.set(Number(q.id), { ...row, locked_at: new Date(nowMs), timed_out: 1, answer_json: JSON.stringify({ timedOut: true }) });
+    }
+  }
+  return timedOutIds;
 }
 
 async function getProfile(userId) {
@@ -660,11 +724,19 @@ function questionCorrectDisplay(templateType, correct, config) {
 
 export async function getAssignedStudentAnalytics(req, res) {
   const quizId=Number(req.params.quizId), uid=req.user.sub;
-  const [[submission]] = await pool.query(`SELECT a.*,q.title,q.template_type,c.name AS class_name FROM async_quiz_submissions a JOIN quizzes q ON q.id=a.quiz_id LEFT JOIN classes c ON c.id=a.class_id WHERE a.quiz_id=:qid AND a.student_user_id=:uid`, { qid:quizId, uid });
+  const [[submission]] = await pool.query(`SELECT a.*,q.title,q.template_type,q.available_from,q.available_until,c.name AS class_name FROM async_quiz_submissions a JOIN quizzes q ON q.id=a.quiz_id LEFT JOIN classes c ON c.id=a.class_id WHERE a.quiz_id=:qid AND a.student_user_id=:uid`, { qid:quizId, uid });
   if (!submission) return res.status(404).json({ message:'Completed assigned work not found.' });
+  // Hold the key while classmates can still play: correct answers plus raw
+  // config (explanations, stash, recordings) would let the first finisher
+  // share everything. Sanitized questions only until available_until passes.
+  const released = submission.available_until ? Date.now() > new Date(submission.available_until).getTime() : true;
   const checked=safeJson(submission.answers_json)||[]; const byId=new Map(checked.map(x=>[Number(x.questionId),x]));
   const [questions]=await pool.query(`SELECT id,question_order,prompt,config_json,correct_json FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order`, { qid:quizId });
-  res.json({ session:{ id:quizId,type:'ASSIGNED',title:submission.title,template_type:submission.template_type,class_name:submission.class_name,score:submission.score,max_score:submission.max_score }, questions:questions.map((q,i)=>{ const cfg=safeJson(q.config_json)||{}, cor=safeJson(q.correct_json)||{}, ans=byId.get(Number(q.id))||{}; return { id:q.id,number:i+1,prompt:q.prompt,answer:ans.answer,isCorrect:!!ans.isCorrect,points:ans.points,correctAnswer:questionCorrectDisplay(submission.template_type,cor,cfg),config:cfg }; }) });
+  res.json({ session:{ id:quizId,type:'ASSIGNED',title:submission.title,template_type:submission.template_type,class_name:submission.class_name,score:submission.score,max_score:submission.max_score,answersReleased:released }, questions:questions.map((q,i)=>{ const ans=byId.get(Number(q.id))||{}; let safe=null; try { safe=toStudentQuestion({ templateType:submission.template_type, question:q, scope:assignmentScope(uid,quizId,q.id), reveal:true }); } catch { safe=null; }
+    const base={ id:q.id,number:i+1,prompt:q.prompt,answer:ans.answer,isCorrect:!!ans.isCorrect,points:ans.points,config:(safe?.config_json||{}) };
+    if (!released) return base;
+    const cfg=safeJson(q.config_json)||{}, cor=safeJson(q.correct_json)||{};
+    return { ...base, correctAnswer:questionCorrectDisplay(submission.template_type,cor,cfg) }; }) });
 }
 
 export async function getLiveStudentAnalytics(req, res) {
@@ -674,7 +746,10 @@ export async function getLiveStudentAnalytics(req, res) {
   const snapshot=safeJson(row.questions_snapshot_json)||[];
   const [responses]=await pool.query(`SELECT question_id,answer_json,is_correct,points_awarded FROM responses WHERE session_id=:sid AND participant_id=:pid`, { sid:sessionId,pid:row.participant_id });
   const byId=new Map(responses.map(r=>[Number(r.question_id),r]));
-  res.json({ session:{ id:sessionId,type:'LIVE',title:row.title,template_type:row.template_type,class_name:row.class_name,score:row.total_points }, questions:snapshot.map((q,i)=>{ const response=byId.get(Number(q.id))||{}; return { id:q.id,number:i+1,prompt:q.prompt,answer:safeJson(response.answer_json),isCorrect:response.is_correct===1,points:Number(response.points_awarded||0),correctAnswer:questionCorrectDisplay(row.template_type,q.correct_json||{},q.config_json||{}),config:q.config_json||{} }; }) });
+  // Review after ENDED: keep correctAnswer for the player's own review, but
+  // never hand out raw config (stash, recordings, unshuffled orders) — reuse
+  // of the quiz in another section would leak the key otherwise.
+  res.json({ session:{ id:sessionId,type:'LIVE',title:row.title,template_type:row.template_type,class_name:row.class_name,score:row.total_points }, questions:snapshot.map((q,i)=>{ const response=byId.get(Number(q.id))||{}; let safe=null; try { safe=toStudentQuestion({ templateType:row.template_type, question:q, scope:liveScope(sessionId, q.id), reveal:true }); } catch { safe=null; } return { id:q.id,number:i+1,prompt:q.prompt,answer:safeJson(response.answer_json),isCorrect:response.is_correct===1,points:Number(response.points_awarded||0),correctAnswer:questionCorrectDisplay(row.template_type,q.correct_json||{},q.config_json||{}),config:(safe?.config_json||{}) }; }) });
 }
 
 export async function getStudentQuiz(req, res) {
@@ -699,31 +774,40 @@ export async function getStudentQuiz(req, res) {
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  const template = normalizeTemplateType(quiz.template_type);
-  let questions = questionRows.map((q) => ({ ...q, config_json: safeJson(q.config_json) || {} }));
-  const learnerSeed = `${req.user.sub}:${quizId}`;
-  if (quiz.randomize_questions) questions = seededShuffleRows(questions, `${learnerSeed}:questions`);
-  if (quiz.shuffle_answers) {
-    questions = questions.map((q) => {
-      const config_json = { ...(q.config_json || {}) };
-      if (template === "MCQ" && Array.isArray(config_json.options)) {
-        config_json.options = seededShuffleRows(config_json.options, `${learnerSeed}:question:${q.id}:choices`);
-      }
-      if (template === "MATCHING") {
-        config_json.shuffleColA = true;
-        config_json.shuffleSeed = `${learnerSeed}:question:${q.id}:matching`;
-      }
-      return { ...q, config_json };
-    });
+  const { questions: ordered, template } = buildOrderedAssignmentQuestions(quiz, req.user.sub, questionRows);
+  const progressById = await getAsyncProgress(quizId, req.user.sub);
+  const nowMs = await dbNowMs();
+  await timeoutOverdueAssignmentQuestions(quiz, req.user.sub, ordered, progressById, nowMs);
+  // Placeholders for unopened questions: no peeking ahead. Opened questions
+  // go through the same allow-list live students get.
+  const questions = ordered.map((q) => {
+    if (!progressById.has(Number(q.id))) {
+      const placeholder = { id: q.id, hidden: true };
+      if (q.question_order !== undefined) placeholder.question_order = q.question_order;
+      return placeholder;
+    }
+    try {
+      return toStudentQuestion({ templateType: template, question: q, scope: assignmentScope(req.user.sub, quizId, q.id), reveal: true });
+    } catch {
+      return { id: q.id, hidden: true };
+    }
+  });
+  const opened = ordered.filter((q) => progressById.has(Number(q.id))).map((q) => Number(q.id));
+  const locked = ordered.filter((q) => progressById.get(Number(q.id))?.locked_at).map((q) => Number(q.id));
+  const lockedAnswers = {};
+  for (const q of ordered) {
+    const row = progressById.get(Number(q.id));
+    if (row?.locked_at) {
+      try { lockedAnswers[q.id] = safeJson(row.answer_json) ?? null; } catch { lockedAnswers[q.id] = null; }
+    }
   }
-  res.json({ quiz, questions });
+  res.json({ quiz, questions, progress: { opened, locked, lockedAnswers }, serverNowMs: nowMs });
 }
 
 
-export async function checkStudentQuizAnswer(req, res) {
+export async function openAssignmentQuestion(req, res) {
   const quizId = Number(req.params.quizId);
-  const questionId = Number(req.body.questionId);
-  const answer = req.body.answer ?? null;
+  const questionId = Number(req.params.questionId);
   const [[quiz]] = await pool.query(
     `SELECT q.* FROM quizzes q
      JOIN class_enrollments e ON e.class_id=q.class_id AND e.student_user_id=:uid AND e.removed_at IS NULL
@@ -731,35 +815,53 @@ export async function checkStudentQuizAnswer(req, res) {
     { uid: req.user.sub, qid: quizId }
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found." });
-  if (!nowWithin(quiz.available_from, quiz.available_until)) return res.status(403).json({ message: "This quiz is outside the allowed time." });
-  const checkKey = `${req.user.sub}:${quizId}:${questionId}`;
-  if (asyncAnswerChecks.has(checkKey)) return res.json(asyncAnswerChecks.get(checkKey));
-  const [[question]] = await pool.query(
-    `SELECT id, config_json, correct_json FROM quiz_questions WHERE id=:questionId AND quiz_id=:quizId AND deleted_at IS NULL`,
-    { questionId, quizId }
+  if (!nowWithin(quiz.available_from, quiz.available_until)) return res.status(403).json({ message: "This quiz is not open right now." });
+  const [[submitted]] = await pool.query(`SELECT id FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid LIMIT 1`, { qid: quizId, uid: req.user.sub });
+  if (submitted) return res.status(400).json({ message: "You already submitted this quiz." });
+
+  const [questionRows] = await pool.query(
+    `SELECT id, question_order, prompt, config_json FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
+    { qid: quizId }
   );
-  if (!question) return res.status(404).json({ message: "Question not found." });
-  const config = safeJson(question.config_json) || {};
-  const correct = safeJson(question.correct_json) || {};
-  const basePoints = Math.min(3, Math.max(1, Number(config.points || quiz.points_per_question || 1)));
-  const scored = scoreAnswer({ templateType: normalizeTemplateType(quiz.template_type), correct, answer, config, basePoints });
-  const result = {
-    isCorrect: !!scored.isCorrect,
-    points: Number(scored.pointsAwarded || 0),
-    feedbackType: scored.feedbackType || (scored.isCorrect ? "correct" : Number(scored.pointsAwarded || 0) > 0 ? "almost" : "wrong"),
-    correctCount: Number(scored.correctCount ?? scored.totalWords ?? 0),
-    totalCorrect: Number(scored.totalCorrect ?? scored.totalPairs ?? scored.totalItems ?? scored.requiredWords ?? 0),
-    hasWrongSelected: !!scored.hasWrongSelected,
-    explanation: String(config?.explanation || ""),
-  };
-  asyncAnswerChecks.set(checkKey, result);
-  trackCheckKey(checkKey, `${req.user.sub}:${quizId}`);
-  res.json(result);
+  const { questions: ordered, template } = buildOrderedAssignmentQuestions(quiz, req.user.sub, questionRows);
+  const targetIdx = ordered.findIndex((q) => Number(q.id) === questionId);
+  if (targetIdx < 0) return res.status(404).json({ message: "Question not found." });
+  const progressById = await getAsyncProgress(quizId, req.user.sub);
+  const nowMs = await dbNowMs();
+  await timeoutOverdueAssignmentQuestions(quiz, req.user.sub, ordered, progressById, nowMs);
+  // Sequential unlock: the next question is the first unopened one.
+  const firstUnopenedIdx = ordered.findIndex((q) => !progressById.has(Number(q.id)));
+  if (targetIdx !== firstUnopenedIdx && progressById.has(questionId)) {
+    // Idempotent reopen: return the already-opened question with its deadline.
+    const q = ordered[targetIdx];
+    const row = progressById.get(questionId);
+    const openedMs = new Date(row.opened_at).getTime();
+    const limitMs = assignmentQuestionLimitSec(safeJson(q.config_json) || {}, quiz) * 1000;
+    const question = toStudentQuestion({ templateType: template, question: q, scope: assignmentScope(req.user.sub, quizId, q.id), reveal: true });
+    return res.json({ question, deadlineAtMs: openedMs + limitMs, serverNowMs: nowMs, locked: !!row.locked_at });
+  }
+  if (targetIdx !== firstUnopenedIdx) return res.status(403).json({ message: "Open the questions in order." });
+
+  const q = ordered[targetIdx];
+  await pool.query(
+    `INSERT IGNORE INTO async_quiz_answers(quiz_id, student_user_id, question_id, opened_at) VALUES(:qid,:uid,:questionId,NOW(3))`,
+    { qid: quizId, uid: req.user.sub, questionId }
+  );
+  const [[row]] = await pool.query(
+    `SELECT opened_at, locked_at FROM async_quiz_answers WHERE quiz_id=:qid AND student_user_id=:uid AND question_id=:questionId LIMIT 1`,
+    { qid: quizId, uid: req.user.sub, questionId }
+  );
+  const openedMs = new Date(row.opened_at).getTime();
+  const freshNow = await dbNowMs();
+  const limitMs = assignmentQuestionLimitSec(safeJson(q.config_json) || {}, quiz) * 1000;
+  const question = toStudentQuestion({ templateType: template, question: q, scope: assignmentScope(req.user.sub, quizId, q.id), reveal: true });
+  res.json({ question, deadlineAtMs: openedMs + limitMs, serverNowMs: freshNow, locked: !!row.locked_at });
 }
 
-export async function submitStudentQuiz(req, res) {
+export async function lockAssignmentQuestion(req, res) {
   const quizId = Number(req.params.quizId);
-  const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
+  const questionId = Number(req.params.questionId);
+  const rawAnswer = req.body?.answer ?? null;
   const [[quiz]] = await pool.query(
     `SELECT q.* FROM quizzes q
      JOIN class_enrollments e ON e.class_id=q.class_id AND e.student_user_id=:uid AND e.removed_at IS NULL
@@ -767,24 +869,88 @@ export async function submitStudentQuiz(req, res) {
     { uid: req.user.sub, qid: quizId }
   );
   if (!quiz) return res.status(404).json({ message: "Quiz not found." });
-  if (!nowWithin(quiz.available_from, quiz.available_until)) return res.status(403).json({ message: "This quiz is outside the allowed time." });
-  const [[existing]] = await pool.query(`SELECT id FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid`, { qid: quizId, uid: req.user.sub });
-  if (existing) return res.status(400).json({ message: "You already submitted this quiz." });
+  if (!nowWithin(quiz.available_from, quiz.available_until)) return res.status(403).json({ message: "This quiz is not open right now." });
+  const [[submitted]] = await pool.query(`SELECT id FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid LIMIT 1`, { qid: quizId, uid: req.user.sub });
+  if (submitted) return res.status(400).json({ message: "You already submitted this quiz." });
+  await ensureAsyncAnswerTable();
+  const [[row]] = await pool.query(
+    `SELECT question_id, answer_json, opened_at, locked_at, timed_out FROM async_quiz_answers WHERE quiz_id=:qid AND student_user_id=:uid AND question_id=:questionId LIMIT 1`,
+    { qid: quizId, uid: req.user.sub, questionId }
+  );
+  if (!row) return res.status(403).json({ message: "Open this question first." });
+  if (row.locked_at) {
+    let lockedAnswer = null;
+    try { lockedAnswer = safeJson(row.answer_json) ?? null; } catch { lockedAnswer = null; }
+    return res.json({ ok: true, locked: true, timedOut: !!row.timed_out, answer: lockedAnswer });
+  }
+  const [[qrow]] = await pool.query(
+    `SELECT id, config_json FROM quiz_questions WHERE id=:questionId AND quiz_id=:qid AND deleted_at IS NULL`,
+    { questionId, qid: quizId }
+  );
+  if (!qrow) return res.status(404).json({ message: "Question not found." });
+  const config = safeJson(qrow.config_json) || {};
+  const openedMs = new Date(row.opened_at).getTime();
+  const nowMs = await dbNowMs();
+  const limitMs = assignmentQuestionLimitSec(config, quiz) * 1000;
+  if (nowMs > openedMs + limitMs + 2000) {
+    await pool.query(
+      `UPDATE async_quiz_answers SET locked_at=NOW(3), timed_out=1, answer_json=:ans WHERE quiz_id=:qid AND student_user_id=:uid AND question_id=:questionId AND locked_at IS NULL`,
+      { qid: quizId, uid: req.user.sub, questionId, ans: JSON.stringify({ timedOut: true }) }
+    );
+    return res.json({ ok: true, locked: true, timedOut: true, answer: { timedOut: true } });
+  }
+  // Store the raw answer (shuffled positions for Matching); finalize converts
+  // to canonical indices with the same scope before scoring.
+  const storeAnswer = rawAnswer ?? { timedOut: true };
+  await pool.query(
+    `UPDATE async_quiz_answers SET locked_at=NOW(3), timed_out=0, answer_json=:ans WHERE quiz_id=:qid AND student_user_id=:uid AND question_id=:questionId AND locked_at IS NULL`,
+    { qid: quizId, uid: req.user.sub, questionId, ans: JSON.stringify(storeAnswer) }
+  );
+  res.json({ ok: true, locked: true, timedOut: false, answer: storeAnswer });
+}
+
+export async function finalizeAssignment(uid, quizId, { forced = false } = {}) {
+  const [[quiz]] = await pool.query(
+    `SELECT q.* FROM quizzes q
+     JOIN class_enrollments e ON e.class_id=q.class_id AND e.student_user_id=:uid AND e.removed_at IS NULL
+     WHERE q.id=:qid AND q.delivery_mode='ASYNCHRONOUS' AND q.deleted_at IS NULL`,
+    { uid, qid: quizId }
+  );
+  if (!quiz) {
+    const err = new Error("Quiz not found.");
+    err.status = 404;
+    throw err;
+  }
+  // Idempotent: a forced submit after the kick (or a double-click) returns
+  // the stored submission as success instead of an "already submitted" error.
+  const [[already]] = await pool.query(
+    `SELECT score, max_score, competitive_points, submitted_at FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid LIMIT 1`,
+    { qid: quizId, uid }
+  );
+  if (already) {
+    let leaderboard = [];
+    try { leaderboard = await buildAssignmentLeaderboard(quizId); } catch { leaderboard = []; }
+    const myRank = leaderboard.find((row) => row.student_user_id === Number(uid))?.rank || null;
+    return { ok: true, score: Number(already.score), maxScore: Number(already.max_score), competitivePoints: Number(already.competitive_points || 0), rank: myRank, leaderboard, repeated: true };
+  }
 
   const [questions] = await pool.query(
     `SELECT id, prompt, config_json, correct_json FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  const byId = new Map(answers.map((a) => [Number(a.questionId), a]));
+  const progressById = await getAsyncProgress(quizId, uid);
+  const nowMs = await dbNowMs();
+  // Score the stored rows only — the browser payload is ignored entirely.
+  // Anything never locked counts as timed out.
   let score = 0;
   let maxScore = 0;
   let competitivePoints = 0;
   const checked = [];
+  const template = normalizeTemplateType(quiz.template_type);
   for (const q of questions) {
     const config = safeJson(q.config_json) || {};
     const correct = safeJson(q.correct_json) || {};
     const basePoints = Math.min(3, Math.max(1, Number(config.points || quiz.points_per_question || 1)));
-    const template = normalizeTemplateType(quiz.template_type);
     const wordBank = template === "CROSSWORD"
       ? (Array.isArray(correct.answers) && correct.answers.length ? correct.answers : Array.isArray(config.answers) ? config.answers : [])
       : [];
@@ -794,25 +960,48 @@ export async function submitStudentQuiz(req, res) {
       : template === "MATCHING"
         ? basePoints * matchingPairs
         : basePoints;
-    const entry = byId.get(Number(q.id));
-    const answer = entry?.answer ?? null;
+    const row = progressById.get(Number(q.id));
+    const limitSec = assignmentQuestionLimitSec(config, quiz);
+    let answer = null;
+    let timeExpired = true;
+    let responseMs = limitSec * 1000;
+    if (row?.locked_at) {
+      try { answer = safeJson(row.answer_json) ?? null; } catch { answer = null; }
+      if (template === "MATCHING") {
+        try {
+          answer = toCanonicalMatchingAnswer(answer, config, assignmentScope(uid, quizId, q.id));
+        } catch { /* keep raw on failure; scorer rejects invalid shapes */ }
+      }
+      timeExpired = !!row.timed_out || !!answer?.timedOut;
+      if (!timeExpired) {
+        const openedMs = new Date(row.opened_at).getTime();
+        const lockedMs = new Date(row.locked_at).getTime();
+        if (Number.isFinite(openedMs) && Number.isFinite(lockedMs)) {
+          responseMs = Math.max(0, Math.min(lockedMs - openedMs, limitSec * 1000));
+        } else {
+          responseMs = 0;
+        }
+      } else {
+        responseMs = limitSec * 1000;
+      }
+    } else {
+      answer = { timedOut: true };
+      timeExpired = true;
+      responseMs = limitSec * 1000;
+    }
     const result = scoreAnswer({ templateType: template, correct, answer, config, basePoints });
+    if (result?.rejected) console.warn("[integrity] rejected async submit", JSON.stringify({ quizId, questionId: q.id, student: uid, reason: result.rejected, forced }));
     const points = Number(result.pointsAwarded || 0);
     score += points;
-    // Reuses the exact same formula live sessions use for competitive points,
-    // so the assignment leaderboard is genuinely consistent with live ones.
-    const timeLimitSec = Math.max(1, Number(config.timeLimitSec || quiz.time_limit_sec || 30));
-    const timeExpired = !!answer?.timedOut;
-    const responseMs = Math.max(0, Math.min(Number(entry?.responseMs || 0), timeLimitSec * 1000));
     competitivePoints += calculateCompetitivePoints({
       templateType: template,
       scored: result,
       basePoints,
       elapsedMs: responseMs,
-      timeLimitMs: timeLimitSec * 1000,
+      timeLimitMs: limitSec * 1000,
       timeExpired,
     });
-    checked.push({ questionId: q.id, answer, isCorrect: !!result.isCorrect, points });
+    checked.push({ questionId: q.id, answer, isCorrect: !!result.isCorrect, points, rejected: result?.rejected || null, responseMs, timedOut: timeExpired });
   }
 
   let competitivePointsColumnMissing = false;
@@ -820,29 +1009,46 @@ export async function submitStudentQuiz(req, res) {
     await pool.query(
       `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score,competitive_points)
        VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore,:competitivePoints)`,
-      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore, competitivePoints: Math.round(competitivePoints) }
+      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid, answers: JSON.stringify(checked), score, maxScore, competitivePoints: Math.round(competitivePoints) }
     );
   } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      const [[dup]] = await pool.query(
+        `SELECT score, max_score, competitive_points FROM async_quiz_submissions WHERE quiz_id=:qid AND student_user_id=:uid LIMIT 1`,
+        { qid: quizId, uid }
+      );
+      let leaderboard = [];
+      try { leaderboard = await buildAssignmentLeaderboard(quizId); } catch { leaderboard = []; }
+      const myRank = leaderboard.find((row) => row.student_user_id === Number(uid))?.rank || null;
+      return { ok: true, score: Number(dup.score), maxScore: Number(dup.max_score), competitivePoints: Number(dup.competitive_points || 0), rank: myRank, leaderboard, repeated: true };
+    }
     if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
-    // competitive_points hasn't been added to this database yet - it is
-    // added automatically at server startup. Still record the submission so
-    // the student's answers are never lost; just skip competitive
-    // points/leaderboard until the server has restarted and applied it.
     competitivePointsColumnMissing = true;
     console.warn("[submitStudentQuiz] async_quiz_submissions.competitive_points is missing - restart the server so the startup check can add it. Submission saved without competitive points.");
     await pool.query(
       `INSERT INTO async_quiz_submissions(quiz_id,class_id,teacher_id,student_user_id,answers_json,score,max_score)
        VALUES(:qid,:cid,:tid,:uid,:answers,:score,:maxScore)`,
-      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid: req.user.sub, answers: JSON.stringify(checked), score, maxScore }
+      { qid: quiz.id, cid: quiz.class_id, tid: quiz.teacher_id, uid, answers: JSON.stringify(checked), score, maxScore }
     );
   }
-  clearQuizChecks(req.user.sub, quizId);
+  void nowMs;
   let leaderboard = [];
   let myRank = null;
   if (!competitivePointsColumnMissing) {
     leaderboard = await buildAssignmentLeaderboard(quizId);
     broadcastAssignmentLeaderboard(getIO(), quizId, { quizId, leaderboard });
-    myRank = leaderboard.find((row) => row.student_user_id === Number(req.user.sub))?.rank || null;
+    myRank = leaderboard.find((row) => row.student_user_id === Number(uid))?.rank || null;
   }
-  res.json({ ok: true, score, maxScore, competitivePoints: competitivePointsColumnMissing ? 0 : Math.round(competitivePoints), rank: myRank, leaderboard });
+  return { ok: true, score, maxScore, competitivePoints: competitivePointsColumnMissing ? 0 : Math.round(competitivePoints), rank: myRank, leaderboard };
+}
+
+export async function submitStudentQuiz(req, res) {
+  const quizId = Number(req.params.quizId);
+  try {
+    const out = await finalizeAssignment(req.user.sub, quizId, { forced: false });
+    res.json(out);
+  } catch (err) {
+    if (err?.status === 404) return res.status(404).json({ message: "Quiz not found." });
+    throw err;
+  }
 }

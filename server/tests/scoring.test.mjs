@@ -128,6 +128,45 @@ describe("sortCompetitiveRows", () => {
   });
 });
 
+describe("scoreAnswer exploit rejection", () => {
+  it("MCQ rejects select-every-option payloads with zero points", () => {
+    const r = scoreAnswer({
+      templateType: "MCQ",
+      correct: { choice: "A" },
+      answer: { choices: ["A", "B", "C"] },
+      config: {},
+      basePoints: 2,
+    });
+    assert.equal(r.rejected, "too_many_choices");
+    assert.equal(r.pointsAwarded, 0);
+    assert.equal(r.isCorrect, false);
+  });
+
+  it("MATCHING rejects reused column-B items with zero points", () => {
+    const r = scoreAnswer({
+      templateType: "MATCHING",
+      correct: { pairs: [{ aIndex: 0, bIndex: 0 }, { aIndex: 1, bIndex: 1 }] },
+      answer: { pairs: [{ aIndex: 0, bIndex: 0 }, { aIndex: 1, bIndex: 0 }] },
+      config: { colA: [{ text: "A1" }, { text: "A2" }] },
+      basePoints: 1,
+    });
+    assert.equal(r.rejected, "invalid_pairs");
+    assert.equal(r.pointsAwarded, 0);
+  });
+
+  it("MATCHING rejects more pairs than rows with zero points", () => {
+    const r = scoreAnswer({
+      templateType: "MATCHING",
+      correct: { pairs: [{ aIndex: 0, bIndex: 0 }, { aIndex: 1, bIndex: 1 }] },
+      answer: { pairs: [{ aIndex: 0, bIndex: 0 }, { aIndex: 1, bIndex: 1 }, { aIndex: 0, bIndex: 1 }] },
+      config: { colA: [{ text: "A1" }, { text: "A2" }] },
+      basePoints: 1,
+    });
+    assert.equal(r.rejected, "invalid_pairs");
+    assert.equal(r.pointsAwarded, 0);
+  });
+});
+
 describe("createTTLCache", () => {
   it("evicts oldest past max", () => {
     const c = createTTLCache({ max: 2, ttlMs: 60000 });

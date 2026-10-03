@@ -15,12 +15,13 @@ import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { AntiCheatModal, ExperienceControls } from "./student-play/experienceChrome";
 import { useTabOutTracking } from "./student-play/useTabOutTracking";
 import { useGameplayProtection } from "./student-play/useGameplayProtection";
+import { CaptureWatermark, FullscreenGate } from "./student-play/CaptureWatermark";
 import { useStudentSocket } from "./student-play/useStudentSocket";
 import { useStudentSound } from "./student-play/useStudentSound";
 import { useStudentGameplay } from "./student-play/useStudentGameplay";
 import { CountdownView, WaitingRoomView } from "./student-play/rosterViews";
 import { FinalLeaderboardView } from "./student-play/finalViews";
-import { GameplayView } from "./student-play/gameplayViews";
+import { GameplayView, FeedbackOverlay } from "./student-play/gameplayViews";
 
 // StudentPlay covers the entire student journey after joining: waiting room, current question, group flow, and leaderboard.
 export default function StudentPlay() {
@@ -61,12 +62,6 @@ export default function StudentPlay() {
   const [antiCheat, setAntiCheat] = useState(null);
   const [antiCountdown, setAntiCountdown] = useState(0);
   const [experienceBlur, setExperienceBlur] = useState(false);
-  // Visual away-blur (tracked but never displayed before) + screenshot /
-  // screen-record deterrents for the whole session.
-  // Screenshot attempts are also tallied server-side for the host panel
-  // (silently — the student sees no warning, only the screen blank flash).
-  const guard = useGameplayProtection({ active: true, onCaptureAttempt: () => socketRef.current?.emit("student:screenshot", { sessionId: Number(sessionId) }) });
-
   const socketRef = useRef(null);
   const currentQRef = useRef(null);
   const renameTimer = useRef(null);
@@ -85,6 +80,24 @@ export default function StudentPlay() {
   const questionCountRef = useRef(0);
   const participantId = Number(localStorage.getItem("qz_participantId") || "0");
   const reconnectKey = localStorage.getItem("qz_reconnectKey") || "";
+  // Visual away-blur + screenshot / screen-record deterrents for the whole
+  // session. Screenshot attempts are tallied server-side for the host panel
+  // (silently — the student sees no warning, only the screen blank flash).
+  // Fullscreen is enforced only while LIVE so lobby/waiting stay frictionless.
+  const isLivePlaying = state?.status === "LIVE";
+  const guard = useGameplayProtection({
+    active: true,
+    requireFullscreen: isLivePlaying,
+    onCaptureAttempt: () => socketRef.current?.emit("student:screenshot", { sessionId: Number(sessionId) }),
+  });
+  const blockedByFs = guard.needsFullscreen;
+  // Personal trace burned into any screenshot/record. Shown to the student
+  // only (never host) — teacher sees the tally instead.
+  const myRow = roster.find((r) => Number(r.id) === Number(participantId));
+  const myName = `${myRow?.first_name || ""} ${myRow?.last_name || ""}`.trim();
+  const watermarkText = isLivePlaying
+    ? `${myName || `P${Number(participantId) || "?"}`} • S${Number(sessionId) || "?"}`
+    : "";
 
   const { pageBg, cardBg, cardBor, textC, mutedC } = gameSurfaceColors(dark);
   const selectedBackground = getSessionBackground(state?.background_key);
@@ -142,6 +155,33 @@ export default function StudentPlay() {
   useEffect(() => { stateRef.current = state; questionCountRef.current = questions.length; }, [state, questions.length]);
   useEffect(() => { submittedRef.current = submittedQId; }, [submittedQId]);
   useEffect(() => { timeoutSubmitRef.current = null; }, [currentQ?.id]);
+  // Local per-question reset, independent of the socket: the session:state
+  // handler resets inside a setState updater (unreliable side-effect), so a
+  // missed/coalesced state push left postAnswerPhase stuck at "wait" and
+  // every later question rendered unanswerable. answeredQuestionIds stays
+  // cumulative for progress.
+  useEffect(() => {
+    setPostAnswerPhase(null);
+    setSubmittedQId((cur) => (cur != null && currentQ?.id != null && Number(cur) === Number(currentQ.id) ? cur : null));
+    // Same stale-timer kill as the socket advance path: Q-previous
+    // explanation timers must die with the question, or they leak the old
+    // question's card over the new one. The verdict splash itself is left
+    // alone so it can finish over the next question's countdown; its hide
+    // timer's side effects are guarded to its own question.
+    clearTimeout(feedbackPulseTimer.current);
+    clearTimeout(explanationDockTimer.current);
+    clearTimeout(explanationFadeTimer.current);
+    clearTimeout(explanationClearTimer.current);
+    setExplanationFeedback(null);
+    setFeedbackPulse("");
+    setAnswerText("");
+    setSelectedChoice("");
+    setMatchingMap({});
+    setSpell({ built: "", bank: [] });
+    setSubmitLabel("Submit");
+    setProposalStatus("");
+    setGroupProposal(null);
+  }, [currentQ?.id]);
 
   const {
     timer, myGroupId, myGroup, isGuestHosted, isGroupMode, isLastQuestion,
@@ -151,7 +191,7 @@ export default function StudentPlay() {
   } = useStudentGameplay({
     state, questions, nowMs, clockOffsetMs, currentQ, roster, groups,
     participantId, joinedGroupId, groupNameDraft, selectedChoice, matchingMap, spell,
-    submittedQId, submitLabel, answeredQuestionIds, countdown, postAnswerPhase,
+    submittedQId, submitLabel, answeredQuestionIds, countdown, showFeedback, postAnswerPhase,
     sessionId, socketRef, renameTimer, setCountdown, setGroupNameDraft,
   });
 
@@ -170,15 +210,18 @@ export default function StudentPlay() {
   // Steady submit handler: without this the game board below would redraw on
   // every one-second timer tick. The board only needs to redraw when answers
   // or locks actually change, so the tick only moves the timer text.
+  // Fullscreen gate blocks manual answers (keyboard + clicks via disabled
+  // inputs) while letting time-expired auto-submit through so timers heal.
   const submit = useCallback(function submit(options = {}) {
     const timeExpired = !!options.timeExpired;
+    if (!timeExpired && blockedByFs) return;
     if (!currentQ || submittedQId === currentQ.id) return;
     if (!timeExpired && isLocked) return;
     const answer = buildCurrentAnswer();
     socketRef.current?.emit("answer:submit", { sessionId: Number(sessionId), participantId, questionId: currentQ.id, answer, timeExpired });
     if (timeExpired) setSubmitLabel("Time's up");
     else if (isGroupMode) setSubmitLabel("Waiting for group vote…");
-  }, [currentQ, submittedQId, isLocked, state, selectedChoice, answerText, matchingMap, spell, participantId, sessionId, isGroupMode]);
+  }, [currentQ, submittedQId, isLocked, blockedByFs, state, selectedChoice, answerText, matchingMap, spell, participantId, sessionId, isGroupMode]);
 
   useEffect(() => {
     if (!currentQ || state?.status !== "LIVE" || countdown > 0 || timer.remainingSec !== 0) return;
@@ -191,16 +234,16 @@ export default function StudentPlay() {
     const onKeyDown = (event) => {
       if (event.key !== "Enter" || event.repeat || event.isComposing) return;
       if (event.target?.tagName === "TEXTAREA") return;
-      if (isLocked || groupProposal || state?.status !== "LIVE") return;
+      if (blockedByFs || isLocked || groupProposal || state?.status !== "LIVE") return;
       event.preventDefault();
       submit();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isLocked, groupProposal, state?.status, currentQ?.id, selectedChoice, answerText, matchingMap, spell]);
+  }, [blockedByFs, isLocked, groupProposal, state?.status, currentQ?.id, selectedChoice, answerText, matchingMap, spell]);
 
   function voteGroup(vote) {
-    if (!groupProposal) return;
+    if (!groupProposal || blockedByFs) return;
     socketRef.current?.emit("student:voteGroupAnswer", { sessionId: Number(sessionId), participantId, proposalId: groupProposal.id, vote });
     setProposalStatus(`You voted ${vote.toLowerCase()}. Waiting for the rest of your group…`);
   }
@@ -229,14 +272,19 @@ export default function StudentPlay() {
   // Blur layer for tab-switch (mirrors assignments) and capture attempts.
   // Pointer events stay off so the anti-cheat confirm dialog above it (z 500)
   // remains clickable; this only hides the game, it never locks input.
-  const awayBlocked = experienceBlur || guard.awayBlur;
+  // Fullscreen gate is separate (z 460, clickable button) and also disables
+  // inputs via interactionLocked so typing/clicking requires fullscreen.
+  const awayBlocked = experienceBlur || guard.awayBlur || blockedByFs;
   const guardOverlay = (awayBlocked || guard.shotBlocked) && (
     <div style={{ position: "fixed", inset: 0, zIndex: 400, display: "grid", placeItems: "center", padding: 20, pointerEvents: "none", background: dark ? "rgba(3,10,28,.35)" : "rgba(255,255,255,.25)", backdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)", WebkitBackdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)" }}>
       <span style={{ padding: "10px 18px", borderRadius: 999, background: dark ? "rgba(8,22,50,.9)" : "rgba(255,255,255,.92)", color: dark ? "#e7e9ee" : "#0f172a", fontSize: 13, fontWeight: 800, boxShadow: "0 10px 26px rgba(0,0,0,.22)" }}>
-        {guard.shotBlocked ? "Screenshots and screen recording are not allowed." : "You've left the quiz — return to continue."}
+        {guard.shotBlocked ? "Screenshots and screen recording are not allowed." : blockedByFs ? "Enter fullscreen to continue answering." : "You've left the quiz — return to continue."}
       </span>
     </div>
   );
+  const watermarkOverlay = <CaptureWatermark active={isLivePlaying} text={watermarkText} />;
+  const fullscreenOverlay = <FullscreenGate needsFullscreen={blockedByFs} onEnter={guard.enterFullscreen} dark={dark} />;
+  const lockedByFs = blockedByFs;
   const explanationOverlay = explanationFeedback ? <div
     className={`sp-explanation-feedback is-${explanationFeedback.status} is-${explanationFeedback.phase}${postAnswerPhase ? " is-post-answer" : ""}`}
     onTransitionEnd={(event) => {
@@ -286,14 +334,32 @@ export default function StudentPlay() {
       <CountdownView
         experienceBgStyle={experienceBgStyle}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}
+        feedbackOverlay={<FeedbackOverlay showFeedback={showFeedback} feedbackQ={feedbackQ} feedbackFxKey={feedbackFxKey} />}
         dark={dark} state={state} questions={questions} countdown={countdown}
       />
       {guardOverlay}
+      {watermarkOverlay}
+      {fullscreenOverlay}
       </>
     );
   }
 
-  if (!currentQ) return null;
+  if (!currentQ) {
+    // LIVE with no question = empty snapshot or bad index. Never blank screen.
+    if (state?.status === "LIVE") {
+      return (
+        <div className="grid min-h-[100vh] place-items-center" style={{ background: pageBg, color: textC }}>
+          <div style={{ textAlign: "center", display: "grid", gap: 12, justifyItems: "center", padding: 24 }}>
+            <div style={{ fontWeight: 900 }}>No question available for this session.</div>
+            <div style={{ color: mutedC, fontSize: 13 }}>{msg || "The quiz has no questions or failed to load. Please wait or rejoin."}</div>
+            <button type="button" onClick={() => window.location.reload()} style={{ padding: "10px 18px", borderRadius: 10, border: `1px solid ${cardBor}`, background: cardBg, color: textC, fontWeight: 800, cursor: "pointer" }}>Retry</button>
+          </div>
+          {guardOverlay}
+        </div>
+      );
+    }
+    return null;
+  }
   return (
     <>
     <GameplayView
@@ -310,13 +376,15 @@ export default function StudentPlay() {
       answerText={answerText} onAnswerText={setAnswerText}
       matchingMap={matchingMap} onMatchingMap={setMatchingMap}
       spell={spell} onSpell={setSpell} onSubmit={submit}
-      isLocked={isLocked} interactionLocked={interactionLocked}
+      isLocked={isLocked} interactionLocked={interactionLocked || lockedByFs}
       crosswordSubmitLabel={crosswordSubmitLabel} crosswordAllFound={crosswordAllFound}
-      msg={msg} isMatchingIncomplete={isMatchingIncomplete}
+      msg={blockedByFs ? "Enter fullscreen to continue answering." : msg} isMatchingIncomplete={isMatchingIncomplete}
       isLastQuestion={isLastQuestion} submittedQId={submittedQId}
       selectedBackground={selectedBackground} feedbackPulse={feedbackPulse}
     />
     {guardOverlay}
+    {watermarkOverlay}
+    {fullscreenOverlay}
     </>
   );
 }

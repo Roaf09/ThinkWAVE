@@ -93,8 +93,9 @@ export function MatchingEditor({ q, onChange, ui, c, isMobile = false }) {
     return <div className="tw-builder-choice-record"><span>{label}</span><VoiceRecorderButton value={(Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [])[index] || ""} onChange={(value) => updateRecording(index, value)} /></div>;
   }
   function mediaRow(tileEl, recordEl) {
-    if (tileEl && recordEl) return <div className="tw-mcq-option-media-row">{tileEl}{recordEl}</div>;
-    return <>{tileEl}{recordEl}</>;
+    if (tileEl && recordEl) return <div className="tw-mcq-option-media-row is-dual">{tileEl}{recordEl}</div>;
+    if (tileEl || recordEl) return <div className="tw-mcq-option-media-row is-single">{tileEl}{recordEl}</div>;
+    return null;
   }
   function addDummy() { if (activeDummy.length < maxDummies) emit(colA, pairB, [...activeDummy, { text: "", image: "" }]); }
   function removeDummy(index) { emit(colA, pairB, activeDummy.filter((_, i) => i !== index)); }
@@ -114,8 +115,8 @@ export function MatchingEditor({ q, onChange, ui, c, isMobile = false }) {
           <button
             type="button"
             data-tutorial="builder-matching-add-image"
-            className="tw-builder-press tw-matching-white-action"
-            style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12 }}
+            className={`tw-builder-press tw-matching-white-action${imagesEnabled ? " is-selected" : ""}`}
+            style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, ...(imagesEnabled ? { borderColor: "#f59e0b", boxShadow: "0 0 0 2px rgba(245,158,11,.35)" } : null) }}
             onClick={togglePairImages}
           >{imagesEnabled ? "− Image" : "＋ Image"}</button>
           <button type="button" data-tutorial="builder-matching-add-pair" className="tw-builder-press tw-matching-white-action" style={{ ...ui.secondaryBtn, padding: "7px 12px", fontSize: 12, opacity: colA.length >= maxPairs ? .5 : 1 }} disabled={colA.length >= maxPairs} onClick={addRow}>＋ Pair</button>
@@ -191,12 +192,12 @@ export function MatchingEditor({ q, onChange, ui, c, isMobile = false }) {
           </div>
           <div className={`tw-matching-dummy-grid${activeDummy.length === 1 ? " is-single" : ""}`}>
             {activeDummy.map((row, index) => (
-              <div key={index} className="tw-matching-dummy-card" style={{ border: `3px solid ${ui.templateAccent}`, borderRadius: 8, background: `color-mix(in srgb, ${ui.templateAccent} 12%, #ffffff)`, boxShadow: `0 6px 0 color-mix(in srgb, ${ui.templateAccent} 58%, #0f172a), 0 18px 34px ${ui.templateAccent}59, inset 0 2px 0 rgba(255,255,255,.8)` }}>
+              <div key={index} className="tw-matching-dummy-card" style={imagesEnabled ? { border: `3px solid ${ui.templateAccent}`, borderRadius: 8, background: `color-mix(in srgb, ${ui.templateAccent} 12%, #ffffff)`, boxShadow: `0 6px 0 color-mix(in srgb, ${ui.templateAccent} 58%, #0f172a), 0 18px 34px ${ui.templateAccent}59, inset 0 2px 0 rgba(255,255,255,.8)` } : { border: `1px solid ${c.border}`, borderRadius: 8, background: c.cardBg2, boxShadow: "none" }}>
                 <div className="tw-matching-dummy-label"><label style={ui.smallLabel}>Distractor {index + 1}</label><button type="button" className="tw-builder-press tw-builder-press-red tw-matching-delete-minus" title="Delete distractor" aria-label="Delete distractor" onClick={() => removeDummy(index)}>−</button></div>
-                <div className="tw-matching-dummy-fields">
+                <div className="tw-matching-dummy-fields tw-matching-distractor-like-pair">
                   <textarea rows={3} className="tw-matching-dummy-input tw-matching-distractor-input tw-matching-input" maxLength={255} value={row.text || ""} placeholder="Distractor answer (optional)" onChange={(e) => updateDummy(index, { text: e.target.value.slice(0, 255) })} onInput={(e) => fitMatchingFont(e.currentTarget)} ref={(el) => { if (el) fitMatchingFont(el); }} style={{ ...ui.input, ...insetField, resize: "none", overflow: "hidden", lineHeight: 1.45 }} />
-                  {mediaRow(
-                    <ImageUploadTile compact value={row.image || ""} label="Upload image" onChange={(value) => updateDummy(index, { image: value })} c={c} accent={ui.templateAccent} />,
+                  {(imagesEnabled || cfg.voiceRecord) && mediaRow(
+                    imagesEnabled ? <ImageUploadTile compact value={row.image || ""} label="Upload image" onChange={(value) => updateDummy(index, { image: value })} c={c} accent={ui.templateAccent} /> : null,
                     voiceRecordEl(colA.length + pairB.length + index, `Distractor ${index + 1} recording`)
                   )}
                 </div>

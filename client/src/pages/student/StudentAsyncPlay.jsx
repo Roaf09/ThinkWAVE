@@ -24,6 +24,8 @@ import { templateAccent } from "../../lib/templatePalette";
 import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 
 import soundManager from "../../utils/soundmanager";
+import { useGameplayProtection } from "./student-play/useGameplayProtection";
+import { CaptureWatermark, FullscreenGate } from "./student-play/CaptureWatermark";
 import "./StudentPlay.css";
 
 // Assignment progress is persisted to localStorage so that if a student
@@ -97,13 +99,24 @@ export default function StudentAsyncPlay() {
   const [antiCheat,setAntiCheat]=useState(null);
   const [awayBlur,setAwayBlur]=useState(false);
   const [submittingUi,setSubmittingUi]=useState(false);
+  const done = !!result;
+  // Phase 1+2: same capture deterrents + fullscreen gate as live sessions.
+  // Assignments previously had zero screenshot protection.
+  const isAsyncPlaying = entryStage === "playing" && !done;
+  const guard = useGameplayProtection({ active: isAsyncPlaying, requireFullscreen: isAsyncPlaying });
+  const blockedByFs = guard.needsFullscreen;
+  const combinedAway = awayBlur || guard.awayBlur || blockedByFs;
+  const asyncWatermark = useMemo(() => {
+    if (!isAsyncPlaying) return "";
+    const uid = currentStudentUserId();
+    return `U${uid || "?"} • Q${Number(quizId) || "?"}`;
+  }, [isAsyncPlaying, quizId]);
   const tabCountRef=useRef(0); const awayRef=useRef(false); const submittingRef=useRef(false);
   const assignmentSocketRef=useRef(null); const submitAssignmentRef=useRef(null);
   const transientTimersRef=useRef(new Set());
   const mountedRef=useRef(true);
   const restoredRef=useRef(false);
   const deadlineRef=useRef(null);
-  const responseMsRef=useRef({});
   const scheduleTransient=useCallback((callback,delayMs)=>{const timer=setTimeout(()=>{transientTimersRef.current.delete(timer);if(mountedRef.current)callback();},delayMs);transientTimersRef.current.add(timer);return timer;},[]);
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;for(const timer of transientTimersRef.current)clearTimeout(timer);transientTimersRef.current.clear();};},[]);
 
@@ -125,16 +138,40 @@ export default function StudentAsyncPlay() {
       if (!alive) return;
       const fetchedQuestions = data.questions || [];
       setQuiz(data.quiz); setQuestions(fetchedQuestions);
+      const progress = data.progress || {};
+      const serverLocked = progress.locked || [];
+      const serverOpened = progress.opened || [];
+      const serverAnswers = progress.lockedAnswers || {};
+      // Server is the source of truth for opened/locked. Local drafts only
+      // restore unsaved work-in-progress for the currently unlocked question.
+      const lockedMap = {};
+      const restoredAnswers = {};
+      for (const qid of serverLocked) {
+        const qi = fetchedQuestions.findIndex((x) => Number(x.id) === Number(qid));
+        if (qi >= 0) {
+          lockedMap[qi] = true;
+          if (serverAnswers[qid] !== undefined) restoredAnswers[qi] = serverAnswers[qid];
+        }
+      }
       const saved = loadAssignmentProgress(quizId);
       if (saved && saved.questionCount === fetchedQuestions.length) {
-        // Resume exactly where the student left off instead of restarting -
-        // skip the intro/beware sequence since they've already started once.
-        setAnswers(saved.answers || {});
-        setLocked(saved.locked || {});
-        const restoredActiveIdx = Math.max(0, Math.min(fetchedQuestions.length - 1, Number(saved.activeIdx || 0)));
-        setActiveIdx(restoredActiveIdx);
-        setIdx(Math.max(0, Math.min(fetchedQuestions.length - 1, Number(saved.idx ?? restoredActiveIdx))));
-        deadlineRef.current = saved.activeDeadlineAt || null;
+        for (const [key, draft] of Object.entries(saved.answers || {})) {
+          const qi = Number(key);
+          if (!lockedMap[qi] && draft && restoredAnswers[qi] === undefined) restoredAnswers[qi] = draft;
+        }
+      }
+      if (serverOpened.length || serverLocked.length) {
+        // Resume where the server says we are: first opened-but-unlocked,
+        // else the next unopened slot.
+        let resumeIdx = fetchedQuestions.findIndex((_, i) => !lockedMap[i] && restoredAnswers[i] !== undefined);
+        if (resumeIdx < 0) resumeIdx = fetchedQuestions.findIndex((_, i) => !lockedMap[i]);
+        if (resumeIdx < 0) resumeIdx = fetchedQuestions.length - 1;
+        setAnswers(restoredAnswers);
+        setLocked(lockedMap);
+        setActiveIdx(resumeIdx);
+        setIdx(resumeIdx);
+        deadlineRef.current = null;
+        setRemainingSec(null);
         restoredRef.current = true;
         setBgBlurred(false);
         setEntryStage("playing");
@@ -157,16 +194,46 @@ export default function StudentAsyncPlay() {
     return undefined;
   }, [entryStage, scheduleTransient]);
 
+  // Server is the clock: open returns the revealed question + deadlineAtMs
+  // measured on the DB clock. Remaining is derived from that base so editing
+  // local state can never extend the timer.
+  async function openQuestionByIdx(questionIdx) {
+    const target = questions[questionIdx];
+    if (!target || target.hidden === true && !target.config_json) {
+      // Hidden placeholder without an id? Nothing to open.
+    }
+    const qid = Number(target?.id);
+    if (!qid) return null;
+    try {
+      const { data } = await api.post(`/student/quizzes/${quizId}/questions/${qid}/open`);
+      if (data?.question) {
+        setQuestions((prev) => prev.map((item) => (Number(item.id) === qid ? data.question : item)));
+      }
+      if (data?.locked) {
+        setLocked((prev) => ({ ...prev, [questionIdx]: true }));
+        deadlineRef.current = null;
+        setRemainingSec(0);
+      } else if (data?.deadlineAtMs && data?.serverNowMs) {
+        deadlineRef.current = Date.now() + (Number(data.deadlineAtMs) - Number(data.serverNowMs));
+        setRemainingSec(Math.max(0, Math.round((Number(data.deadlineAtMs) - Number(data.serverNowMs)) / 1000)));
+      }
+      return data;
+    } catch (err) {
+      setMsg(err?.response?.data?.message || "Could not open this question.");
+      return null;
+    }
+  }
+
   function handleStartAssignment() {
     if (lobbyPhase !== "ready") return;
     setEntryStage("beware");
     scheduleTransient(() => {
       setEntryStage("beware-exit");
-      scheduleTransient(() => {
+      scheduleTransient(async () => {
         setBgBlurred(false);
         setEntryStage("playing");
-        // The timer effect below arms itself from remainingSec==null, so no
-        // index juggling is needed here.
+        // Open the first question on the server clock.
+        await openQuestionByIdx(0);
       }, 380);
     }, 2000);
   }
@@ -189,7 +256,6 @@ export default function StudentAsyncPlay() {
   const activeTimeLimit=Math.max(1,Number(activeQ?.config_json?.timeLimitSec || quiz?.time_limit_sec || 30));
   const totalAssignmentSec=useMemo(()=>questions.reduce((sum,item)=>sum+Math.max(1,Number(item?.config_json?.timeLimitSec||quiz?.time_limit_sec||30)),0),[questions,quiz?.time_limit_sec]);
   const activeIsLast = activeIdx >= questions.length - 1;
-  const done = !!result;
   const currentLocked=!!locked[idx];
   const activeLocked=!!locked[activeIdx];
   const currentAnswered=hasAnswer(tt,currentAnswer,q);
@@ -197,22 +263,19 @@ export default function StudentAsyncPlay() {
   const answeredCount=Object.keys(locked).filter((key) => locked[key]).length;
   const questionProgress=questions.length ? Math.round((answeredCount/questions.length)*100) : 0;
 
-  // Single timer effect: arms the per-question deadline and ticks remainingSec
-  // down once per second. Arming is keyed on remainingSec==null (not only on
-  // question/index flips), so a missed arming - e.g. on the first question
-  // right after the beware warning fades - heals itself on the next run
-  // instead of leaving the timer frozen at full time.
+  // Timer follows the server deadline only. Arming (remainingSec==null)
+  // re-opens the active question idempotently so a refresh resumes the same
+  // server clock instead of minting a fresh local deadline.
   useEffect(()=>{
     if(!activeQ||done||introOpen)return;
     if(activeLocked){deadlineRef.current=null;setRemainingSec(0);return;}
     if(remainingSec==null){
       setMsg("");
-      // On a resumed question, keep the deadline restored from localStorage
-      // (so time elapsed while the tab was gone still counts). Anything else
-      // - fresh or re-armed - gets a fresh deadline. goNext nulls a stale
-      // deadline before advancing, so it can never leak across questions.
       if(restoredRef.current){restoredRef.current=false;}
-      if(!deadlineRef.current)deadlineRef.current=Date.now()+activeTimeLimit*1000;
+      if(!deadlineRef.current) {
+        void openQuestionByIdx(activeIdx);
+        return;
+      }
       const deadline=deadlineRef.current;
       setRemainingSec(deadline?Math.max(0,Math.round((deadline-Date.now())/1000)):activeTimeLimit);
       return;
@@ -227,30 +290,38 @@ export default function StudentAsyncPlay() {
   },[activeIdx,activeQ?.id,done,introOpen,activeLocked,remainingSec,activeTimeLimit]);
   useEffect(()=>{
     if(!activeQ||done||introOpen||activeLocked||remainingSec!==0)return;
-    responseMsRef.current[activeIdx]=activeTimeLimit*1000;
-    setAnswers(prev=>({...prev,[activeIdx]:prev[activeIdx]&&hasAnswer(tt,prev[activeIdx],activeQ)?prev[activeIdx]:{timedOut:true}}));
-    setLocked(prev=>({...prev,[activeIdx]:true}));
-    setMsg("Time's up, you can no longer answer this question.");
+    // Server marks this timed out (2s grace) and stores {timedOut:true}.
+    void (async () => {
+      try {
+        await api.post(`/student/quizzes/${quizId}/questions/${Number(activeQ.id)}/lock`, { answer: { timedOut: true } });
+      } catch {}
+      if (!mountedRef.current) return;
+      setAnswers(prev=>({...prev,[activeIdx]:prev[activeIdx]&&hasAnswer(tt,prev[activeIdx],activeQ)?prev[activeIdx]:{timedOut:true}}));
+      setLocked(prev=>({...prev,[activeIdx]:true}));
+      setMsg("Time's up, you can no longer answer this question.");
+    })();
   },[remainingSec,activeIdx,activeLocked,done,introOpen,tt,activeQ,activeTimeLimit]);
 
-  // Persist progress (debounced trailing 1s) so a lost/closed tab can
-  // resume exactly where the student left off, including the timer —
-  // without stringifying the whole crossword grid on every keystroke.
+  // Local drafts only: unsaved work-in-progress for unlocked questions (e.g.
+  // crossword board). Locks, timers and progress live on the server now.
   const progressPendingRef = useRef(null);
   const progressSaveTimer = useRef(null);
   useEffect(()=>{
     if(!quiz||introOpen||done)return;
+    const drafts = {};
+    for (const [key, val] of Object.entries(answers)) {
+      if (!locked[key]) drafts[key] = val;
+    }
     progressPendingRef.current={
       questionCount:questions.length,
-      answers,locked,activeIdx,idx,
-      activeDeadlineAt:deadlineRef.current,
+      answers: drafts,
     };
     clearTimeout(progressSaveTimer.current);
     progressSaveTimer.current=setTimeout(()=>{
       if(progressPendingRef.current){saveAssignmentProgress(quizId,progressPendingRef.current);progressPendingRef.current=null;}
     },1000);
     return()=>clearTimeout(progressSaveTimer.current);
-  },[quiz,introOpen,done,answers,locked,activeIdx,idx,questions.length,quizId]);
+  },[quiz,introOpen,done,answers,locked,questions.length,quizId]);
   useEffect(()=>{ if(done){clearTimeout(progressSaveTimer.current);progressPendingRef.current=null;clearAssignmentProgress(quizId);} },[done,quizId]);
   // Flush a pending debounced save if the tab unmounts mid-debounce.
   useEffect(()=>()=>{ if(progressPendingRef.current){try{saveAssignmentProgress(quizId,progressPendingRef.current);}catch{}} },[quizId]);
@@ -264,17 +335,11 @@ export default function StudentAsyncPlay() {
 
   async function submitAssignment({forced=false,completedOverride=null}={}){
     if(submittingRef.current)return null; submittingRef.current=true;
-    const completed=completedOverride ? {...completedOverride} : {...answers}; if(activeQ&&activeAnswered)completed[activeIdx]=answers[activeIdx];
-    if(!forced){
-      if(!activeLocked&&!activeAnswered){setMsg("Answer this question before submitting.");submittingRef.current=false;return null;}
-      const allReady=questions.every((item,itemIndex)=>hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]||itemIndex===activeIdx);
-      if(!allReady){setMsg("Complete every question before submitting.");submittingRef.current=false;return null;}
-    }
     try{
-      const payload=questions.map((item,itemIndex)=>({questionId:Number(item.id),answer:completed[itemIndex]??{timedOut:true},responseMs:responseMsRef.current[itemIndex]||0}));
+      // Server scores stored locks only; the body is intentionally empty.
       setRemainingSec(0);
       setSubmittingUi(true);
-      const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{answers:payload});
+      const {data}=await api.post(`/student/quizzes/${quizId}/submit`,{});
       await new Promise(resolve=>scheduleTransient(resolve,2000));
       if(!mountedRef.current)return data;
       const initialRows=Array.isArray(data.leaderboard)?data.leaderboard:[];
@@ -301,10 +366,14 @@ export default function StudentAsyncPlay() {
     });
     socket.on("assignment:kicked", async (payload)=>{
       if (Number(payload?.quizId) !== Number(quizId)) return;
-      try { await submitAssignmentRef.current?.({ forced: true }); } catch {}
+      // Server already finalized from stored locks; our submit is idempotent
+      // and just fetches the recorded result.
+      let forcedData = null;
+      try { forcedData = await submitAssignmentRef.current?.({ forced: true }); } catch {}
       if (!mountedRef.current) return;
       setAwayBlur(false);
-      setAntiCheat({ type: "ended", message: "You have been removed from this assignment after tabbing out 3 times. Your current answers were auto-submitted." });
+      const scoreTxt = forcedData?.score ?? payload?.score;
+      setAntiCheat({ type: "ended", message: `You have been removed from this assignment after tabbing out 3 times. Your stored answers were submitted${scoreTxt != null ? ` (score ${scoreTxt}).` : "."}` });
     });
     return ()=>{ try { socket.disconnect(); } catch {} if (assignmentSocketRef.current === socket) assignmentSocketRef.current = null; };
   },[quizId]);
@@ -353,36 +422,40 @@ export default function StudentAsyncPlay() {
   },[quiz,done,introOpen,answers,locked,idx]);
 
   function handleToggleMute(){const next=soundManager.toggleMute();setIsMuted(next);if(!next)void soundManager.startBGM("playing");}
-  const setAnswer = useCallback(function setAnswer(answer){if(!q||done||currentLocked||idx!==activeIdx)return;setMsg("");setAnswers(prev=>({...prev,[idx]:answer}));},[q,done,currentLocked,idx,activeIdx]);
+  const setAnswer = useCallback(function setAnswer(answer){if(!q||done||currentLocked||idx!==activeIdx||blockedByFs)return;setMsg(blockedByFs?"Enter fullscreen to continue answering.":"");if(blockedByFs)return;setAnswers(prev=>({...prev,[idx]:answer}));},[q,done,currentLocked,idx,activeIdx,blockedByFs]);
   async function submitCurrent(){
     if(!q||done||currentLocked||idx!==activeIdx)return;
+    if(blockedByFs){setMsg("Enter fullscreen to continue answering.");return;}
     if(!currentAnswered){setMsg("Answer this question before submitting.");return;}
-    // Assignments don't reveal per-question correctness - lock the answer in
-    // immediately with no correct/incorrect/almost popup, unlike live sessions.
-    const activatedAt=(deadlineRef.current||Date.now())-activeTimeLimit*1000;
-    responseMsRef.current[idx]=Math.max(0,Date.now()-activatedAt);
-    const completed={...answers,[idx]:currentAnswer};
-    setAnswers(completed);
+    // Lock lives on the server: stored once, past-deadline becomes timedOut.
+    try {
+      const { data } = await api.post(`/student/quizzes/${quizId}/questions/${Number(q.id)}/lock`, { answer: currentAnswer });
+      if (data?.timedOut) {
+        setAnswers(prev=>({...prev,[idx]:{timedOut:true}}));
+        setMsg("Time's up — this answer was recorded as timed out.");
+      }
+    } catch (err) {
+      setMsg(err?.response?.data?.message || "Could not lock this answer.");
+      return;
+    }
     setLocked(prev=>({...prev,[idx]:true}));
     setRemainingSec(0);
     setMsg("");
     if(activeIsLast){
-      const allReady=questions.every((item,itemIndex)=>itemIndex===idx||hasAnswer(tt,completed[itemIndex],item)||locked[itemIndex]);
-      if(!allReady){setMsg("Complete every question before submitting the assignment.");return;}
       await new Promise(resolve=>scheduleTransient(resolve,600));
-      await submitAssignment({completedOverride:completed});
+      await submitAssignment({});
     }
   }
   useEffect(()=>{
     const onKeyDown=(event)=>{
       if(event.key!=="Enter"||event.repeat||event.isComposing||event.target?.tagName==="TEXTAREA")return;
-      if(done||introOpen||submittingUi||currentLocked||!currentAnswered||idx!==activeIdx)return;
+      if(done||introOpen||submittingUi||currentLocked||!currentAnswered||idx!==activeIdx||blockedByFs)return;
       event.preventDefault();
       void submitCurrent();
     };
     window.addEventListener("keydown",onKeyDown);
     return()=>window.removeEventListener("keydown",onKeyDown);
-  },[done,introOpen,submittingUi,currentLocked,currentAnswered,idx,activeIdx,currentAnswer,q?.id]);
+  },[done,introOpen,submittingUi,currentLocked,currentAnswered,idx,activeIdx,blockedByFs,currentAnswer,q?.id]);
   function viewQuestion(nextIndex){setIdx(Math.max(0,Math.min(questions.length-1,nextIndex)));setMsg("");}
   function goPrevious(){
     viewQuestion(idx-1);
@@ -390,7 +463,11 @@ export default function StudentAsyncPlay() {
   function goNext(){
     if(idx<activeIdx){viewQuestion(idx+1);return;}
     if(!activeLocked){setMsg("Submit this answer before moving to the next question.");return;}
-    if(activeIdx<questions.length-1){const next=activeIdx+1;deadlineRef.current=null;setActiveIdx(next);setIdx(next);setRemainingSec(null);setMsg("");}
+    if(activeIdx<questions.length-1){
+      const next=activeIdx+1;
+      deadlineRef.current=null;setActiveIdx(next);setIdx(next);setRemainingSec(null);setMsg("");
+      void openQuestionByIdx(next);
+    }
   }
   const canGoPrevious=idx>0;
   const canGoNext=idx<questions.length-1&&(idx<activeIdx||(idx===activeIdx&&activeLocked));
@@ -503,8 +580,17 @@ export default function StudentAsyncPlay() {
     );
   }
 
-  return <div className={awayBlur?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"Inter,'Segoe UI',system-ui,sans-serif"}}>
+  return <div className={combinedAway?"sp-assignment-away":""} style={{minHeight:"100vh",...assignmentBgStyle,color:textC,fontFamily:"Inter,'Segoe UI',system-ui,sans-serif"}}>
     <div className="sp-experience-controls"><SoundTogglePill muted={isMuted} onClick={handleToggleMute}/><ThemeTogglePill dark={dark} onClick={toggleTheme}/></div>
+    <CaptureWatermark active={isAsyncPlaying} text={asyncWatermark} />
+    <FullscreenGate needsFullscreen={blockedByFs} onEnter={guard.enterFullscreen} dark={dark} />
+    {(combinedAway || guard.shotBlocked) && entryStage === "playing" && (
+      <div style={{ position: "fixed", inset: 0, zIndex: 400, display: "grid", placeItems: "center", padding: 20, pointerEvents: "none", background: dark ? "rgba(3,10,28,.35)" : "rgba(255,255,255,.25)", backdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)", WebkitBackdropFilter: guard.shotBlocked ? "blur(22px)" : "blur(12px)" }}>
+        <span style={{ padding: "10px 18px", borderRadius: 999, background: dark ? "rgba(8,22,50,.9)" : "rgba(255,255,255,.92)", color: dark ? "#e7e9ee" : "#0f172a", fontSize: 13, fontWeight: 800, boxShadow: "0 10px 26px rgba(0,0,0,.22)" }}>
+          {guard.shotBlocked ? "Screenshots and screen recording are not allowed." : blockedByFs ? "Enter fullscreen to continue answering." : "You've left the quiz — return to continue."}
+        </span>
+      </div>
+    )}
     {entryStage==="lobby"&&<div className="sp-anticheat-backdrop">
       <div className="sp-wait-card sp-page-enter sp-assignment-lobby-card" style={{background:cardBg,borderColor:cardBor,textAlign:"center"}}>
         <div className="sp-wait-icon-wrap sp-thinkbot-loading" style={{margin:"0 auto 16px",background:dark?"rgba(8,22,50,.88)":"rgba(255,255,255,.92)",borderColor:cardBor}}>
@@ -521,21 +607,22 @@ export default function StudentAsyncPlay() {
       <div className={`sp-assignment-intro sp-page-enter${entryStage==="beware-exit"?" is-leaving":""}`} style={{background:cardBg,borderColor:cardBor,color:textC}}>
         <div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div>
         <p style={{ color: mutedC, fontSize: 19, lineHeight: 1.5 }}>You have a total of <b style={{ color: textC, fontSize: 21 }}>{formatDuration(totalAssignmentSec)}</b> to answer.</p>
-        <div className="sp-assignment-warning">BEWARE: CHEATING IS PROHIBITED</div>
+        <div className="sp-assignment-warning">BEWARE: CHEATING IS PROHIBITED.</div>
       </div>
     </div>}
     {antiCheat&&<div className="sp-anticheat-backdrop"><div className="sp-anticheat-card"><div className={`sp-anticheat-icon ${antiCheat.type==="ended"?"danger":"warning"}`}><TwIcon name={antiCheat.type==="ended"?"logout":"warning"} size={38}/></div><h3>{antiCheat.type==="ended"?"Assignment ended":"Activity warning"}</h3><p>{antiCheat.message}</p><button type="button" className="tw-dialog-press is-blue" onClick={()=>{if(antiCheat.type==="ended")nav('/student');else setAntiCheat(null)}}><span>{antiCheat.type==="ended"?"Back to Dashboard":"Confirm"}</span></button></div></div>}
-    <div className={`quiz-shell-new sp-assigned-shell ${dark?"theme-dark":"theme-light"} ${selectedBackground ? "has-session-background" : ""}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column","--sp-template-accent":gameplayAccent,filter:bgBlurred?"blur(22px)":awayBlur?"blur(12px)":"none",transition:"filter .6s ease",pointerEvents:entryStage==="playing"&&!awayBlur?"auto":"none",userSelect:awayBlur?"none":undefined}}>
-      <div className="qn-header"><div className="qn-title-cluster"><div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">{tt === "MATCHING" ? `Batch ${idx+1}/${questions.length}` : `${idx+1}/${questions.length}`}</div><div className={`qn-timer qn-pixel-timer ${quiz.category==="K12"?"is-k12":""}${(remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><TwIcon name="clock" size={20}/> {fmtTime(remainingSec??activeTimeLimit)}</div></div></div>
+    <div className={`quiz-shell-new sp-assigned-shell ${dark?"theme-dark":"theme-light"} ${selectedBackground ? "has-session-background" : ""}`} style={{width:"100%",minHeight:"100vh",margin:0,display:"flex",flexDirection:"column","--sp-template-accent":gameplayAccent,filter:bgBlurred?"blur(22px)":combinedAway?"blur(12px)":"none",transition:"filter .15s ease",pointerEvents:entryStage==="playing"&&!combinedAway?"auto":"none",userSelect:combinedAway?"none":undefined}}>
+      <div className="qn-sticky-top"><div className="qn-header"><div className="qn-title-cluster"><div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{quiz.title||"Assignment"}</div></div><div className="qn-meta"><div className="qn-qcount">{tt === "MATCHING" ? `Batch ${idx+1}/${questions.length}` : `${idx+1}/${questions.length}`}</div><div className={`qn-timer qn-pixel-timer ${quiz.category==="K12"?"is-k12":""}${(remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><TwIcon name="clock" size={20}/> {fmtTime(remainingSec??activeTimeLimit)}</div></div></div>
       <div className="qn-question-progress" aria-label={`${answeredCount} of ${questions.length} questions answered`}><div className="qn-question-progress-bar" style={{width:`${questionProgress}%`}}/></div>
       <div className={`qn-progress qn-timer-progress${!activeLocked && (remainingSec ?? activeTimeLimit) <= 3 ? " is-danger" : !activeLocked && (remainingSec ?? activeTimeLimit) <= 4 ? " is-warning" : ""}`}><div className="qn-progress-bar" style={{width:`${Math.round(activeLocked?0:((remainingSec??activeTimeLimit)/activeTimeLimit)*100)}%`}}/></div>
+      </div>
       <div className="qn-body" style={{flex:1}}>
-        <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text">{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
-        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx} timeUp={tt === TEMPLATE_TYPES.CROSSWORD && idx === activeIdx && remainingSec === 0}/>
+        <div className="qn-prompt-box">{q?.config_json?.showPromptImage!==false&&q?.config_json?.promptImage?<img src={q.config_json.promptImage} alt="" className="qn-prompt-img"/>:null}<span className="qn-prompt-text" style={{ fontSize: fitPromptTextSize(q?.prompt, 32, 18) }}>{q.prompt}</span><QuestionAudioButton config={q?.config_json} prompt={q.prompt} templateType={tt}/></div>
+        <TemplateBody templateType={tt} q={q} value={currentAnswer} onChange={setAnswer} disabled={done||currentLocked||idx!==activeIdx||blockedByFs} timeUp={tt === TEMPLATE_TYPES.CROSSWORD && idx === activeIdx && remainingSec === 0}/>
         {msg&&<div style={{textAlign:"center",color:"#ef4444",fontWeight:700,marginTop:12}}>{msg}</div>}
         <div className="sp-assigned-navigation">
           <button type="button" className={`sp-assigned-nav-btn is-prev${prevHidden?" is-hidden":""}`} aria-label="Previous question" aria-hidden={prevHidden} onClick={goPrevious} disabled={!canGoPrevious||prevHidden} tabIndex={prevHidden?-1:0}><TwIcon name="arrow" size={16}/><span>Previous</span></button>
-          <button type="button" className="submit-btn" style={{"--sp-submit-accent":gameplayAccent,opacity:(currentLocked||!currentAnswered||idx!==activeIdx)?0.72:1,cursor:(currentLocked||!currentAnswered||idx!==activeIdx)?"not-allowed":"pointer",background:currentLocked?(dark?"linear-gradient(180deg, #27457c 0%, #1b3260 100%)":"linear-gradient(180deg, #8ec9ff 0%, #73b3f4 100%)"):undefined,boxShadow:currentLocked?"none":undefined}} onClick={submitCurrent} disabled={currentLocked||!currentAnswered||idx!==activeIdx}>{currentLocked?"Submitted":"Submit"}</button>
+          <button type="button" className="submit-btn" style={{"--sp-submit-accent":gameplayAccent,opacity:(currentLocked||!currentAnswered||idx!==activeIdx||blockedByFs)?0.72:1,cursor:(currentLocked||!currentAnswered||idx!==activeIdx||blockedByFs)?"not-allowed":"pointer",background:currentLocked?(dark?"linear-gradient(180deg, #27457c 0%, #1b3260 100%)":"linear-gradient(180deg, #8ec9ff 0%, #73b3f4 100%)"):undefined,boxShadow:currentLocked?"none":undefined}} onClick={submitCurrent} disabled={currentLocked||!currentAnswered||idx!==activeIdx||blockedByFs}>{currentLocked?"Submitted":"Submit"}</button>
           <button type="button" className={`sp-assigned-nav-btn is-next${nextHidden?" is-hidden":""}${nextJustEnabled?" is-just-enabled":""}`} style={{"--sp-submit-accent":gameplayAccent}} aria-label="Next question" aria-hidden={nextHidden} onClick={goNext} disabled={!canGoNext||nextHidden} tabIndex={nextHidden?-1:0}><span>Next</span><TwIcon name="arrow" size={16}/></button>
         </div>
       </div>
@@ -554,6 +641,9 @@ function hasAnswer(templateType,answer,q){
   return String(answer.text||"").trim().length>0;
 }
 function fmtTime(sec){const s=Math.max(0,Number(sec||0));return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
+// Gameplay sizing (bigger than the builder's 24 max / 13 min): short prompts
+// start big and shrink slowly, so even 3-line prompts stay easily readable.
+function fitPromptTextSize(text,max=32,min=18){const length=String(text||"").length;if(length<=28)return max;if(length>=150)return min;return Math.max(min,Math.round(max-(length-28)*((max-min)/122)));}
 
 function AsyncShell({ dark, pageBg, backgroundStyle, textC, title, isMuted, onMute, onTheme, children }) {
   const hasBackground = Boolean(backgroundStyle?.backgroundImage);
@@ -620,6 +710,8 @@ function GuessWord4PicsTemplate({ cfg, value, onChange, disabled }) {
       images={cfg.images}
       target={String(cfg.target ?? "")}
       dummyLetters={cfg.dummyLetters}
+      letterBank={cfg.letterBank}
+      answerLength={cfg.answerLength}
       value={value}
       onChange={onChange}
       disabled={disabled}

@@ -154,7 +154,7 @@ export default function HomeTab({ setActiveTab }) {
         <section className="tw-home-top-grid grid gap-[16px] items-stretch grid-cols-[minmax(180px,250px)_minmax(300px,1fr)]">
           <div className="tw-home-quick-metrics grid gap-[14px]">
             <TeacherMetricCard icon="live" label="Ready to Host" value={readyToHost.length} hint="Quizzes currently available in Sessions" tone="blue" onClick={() => setActiveTab?.("live")} />
-            <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" />
+            <TeacherMetricCard icon="warning" label="Warnings" value={warningCount} hint="Draft quizzes or items needing setup" tone="orange" onClick={() => setActiveTab?.("live")} />
           </div>
 
           <div className="tw-home-overview-shell rounded-[18px] p-[18px] grid gap-[16px]" style={shellCard(c)}>
@@ -171,7 +171,7 @@ export default function HomeTab({ setActiveTab }) {
 
             <div className="tw-mini-info-grid grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))]">
               <MiniInfo c={c} label="Class Handled" value={classesHandled} tone="red" onClick={() => setActiveTab?.("classes")} />
-              <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" onClick={() => setActiveTab?.("live")} />
+              <MiniInfo c={c} label="Sent Assignments" value={sentAssignments} tone="blue" onClick={() => setActiveTab?.("classes")} />
               <MiniInfo c={c} label="Draft quizzes" value={draftQuizzes.length} tone="green" onClick={() => setActiveTab?.("live")} />
               <MiniInfo c={c} label="Banked quizzes" value={banked.length} tone="yellow" onClick={() => setActiveTab?.("bank")} />
             </div>

@@ -36,6 +36,15 @@ export function renderAnswerPreview(answer) {
 
 export function fmtTime(sec) { const s = Math.max(0, Number(sec || 0)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
 
+// Gameplay sizing (bigger than the builder's 24 max / 13 min): short prompts
+// start big and shrink slowly, so even 3-line prompts stay easily readable.
+export function fitPromptTextSize(text, max = 32, min = 18) {
+  const length = String(text || "").length;
+  if (length <= 28) return max;
+  if (length >= 150) return min;
+  return Math.max(min, Math.round(max - (length - 28) * ((max - min) / 122)));
+}
+
 export function crosswordRejectLabel(reason) {
   switch (reason) {
     case "duplicate": return "Already found — try another";

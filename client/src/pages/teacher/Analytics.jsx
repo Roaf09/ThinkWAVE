@@ -207,7 +207,7 @@ export default function Analytics({ guestMode = false }) {
         <div className="absolute inset-[0_0_auto_0] h-[5px]" style={{ background: tone.accent }} />
         <div className="tw-analytics-title-row">
           <h2 className="tw-analytics-quiz-title" style={{ color: C.text }}>{session.quiz_title || (assigned ? `Assigned Quiz #${quizId}` : `Session #${sessionId}`)}</h2>
-          <TeacherPressButton tone="blue" className="tw-analytics-back-press" onClick={() => navigate(-1)}>Back</TeacherPressButton>
+          <TeacherPressButton tone="blue" className="tw-analytics-back-press" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={() => navigate(-1)}>Back</TeacherPressButton>
         </div>
         <div className="flex justify-between items-end gap-[14px] flex-wrap mt-[10px]">
           <div className="min-w-0">
@@ -218,7 +218,7 @@ export default function Analytics({ guestMode = false }) {
             <div className="mt-[8px] text-[13px] font-[750] leading-[1.6]" style={{ color: C.muted }}>{guestMode ? formatDate(sessionDisplayTimestamp(session)) : <>{assigned ? "Assigned Session Analytics" : "Session Analytics"} · {session.folder_name || session.class_name || "Unassigned"} · {formatDate(sessionDisplayTimestamp(session))}</>}</div>
           </div>
           {exportAllowed && <div className="tw-analytics-export-row flex gap-[8px] flex-wrap">
-            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn tw-analytics-back-press" onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
+            {advancedPlan && (classId || session.class_id) && <TeacherPressButton type="button" tone="blue" icon="classes" className="tw-class-analytics-btn tw-analytics-back-press" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={openClassAnalytics}>Class Analytics</TeacherPressButton>}
             <button type="button" className="tw-analytics-export-plain tw-export-pdf" aria-label="Export PDF" title={exporting.startsWith("pdf") ? "Preparing export…" : "Export PDF"} disabled={!!exporting} onClick={() => downloadExport("pdf")}><TwIcon name="pdf" size={24} /><span>{exporting.startsWith("pdf") ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "PDF"}</span></button>
             <button type="button" className="tw-analytics-export-plain tw-export-xlsx" aria-label="Export Excel" title={exporting.startsWith("xlsx") ? "Preparing export…" : "Export Excel"} disabled={!!exporting} onClick={() => downloadExport("xlsx")}><TwIcon name="xlsx" size={24} /><span>{exporting.startsWith("xlsx") ? (exporting.endsWith(":preparing") ? "Preparing…" : "Exporting…") : "XLSX"}</span></button>
           </div>}
@@ -297,7 +297,7 @@ function ParticipantBadges({ analytics, assigned, guestMode, C, tone }) {
 function TabShotBadge({ C, tabOutCount, shotCount }) {
   const [showShots, setShowShots] = useState(false);
   const shownCount = showShots ? shotCount : tabOutCount;
-  const shownLabel = showShots ? `screenshot${shotCount === 1 ? "" : "s"}` : `tab out${tabOutCount === 1 ? "" : "s"}`;
+  const shownLabel = showShots ? `capture key${shotCount === 1 ? "" : "s"} pressed` : `tab out${tabOutCount === 1 ? "" : "s"}`;
   const shownStyle = showShots
     ? { color: "#38bdf8", borderColor: "#38bdf8", background: "transparent" }
     : { color: tabOutCount > 0 ? C.redFg : C.muted, borderColor: tabOutCount > 0 ? C.redBorder : C.border, background: tabOutCount > 0 ? C.redBg : C.cardBg };
@@ -305,7 +305,7 @@ function TabShotBadge({ C, tabOutCount, shotCount }) {
     event.stopPropagation();
     setShowShots((v) => !v);
   }
-  return <span role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); } }} title={showShots ? "Click to show tab-out count" : "Click to show screenshot count"} className="tw-analytics-tab-out-badge" style={{ ...pill(C), ...shownStyle, cursor: "pointer" }}>{shownCount} {shownLabel}</span>;
+  return <span role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); } }} title={showShots ? "Capture-key presses (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show capture-key count"} className="tw-analytics-tab-out-badge" style={{ ...pill(C), ...shownStyle, cursor: "pointer" }}>{shownCount} {shownLabel}</span>;
 }
 
 function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedStudentId, setExpandedStudentId, basic = false }) {

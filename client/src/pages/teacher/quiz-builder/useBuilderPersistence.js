@@ -323,7 +323,9 @@ export function useBuilderPersistence({
   function publish() {
     setPublishFlow(true);
     setMsg("");
-    if (!isSaved || ["PUBLISHED", "BANKED"].includes(String(quiz?.status || "").toUpperCase())) return;
+    if (["PUBLISHED", "BANKED"].includes(String(quiz?.status || "").toUpperCase())) { setMsg("This quiz is already published."); return; }
+    if (!isSaved) { setMsg("Save your questions first before publishing."); return; }
+    if (!questions?.length) { setMsg("Add at least one question before publishing."); return; }
     if (checkInvalid().length) return;
     const dupes = findDuplicates(questions);
     if (dupes.length) {

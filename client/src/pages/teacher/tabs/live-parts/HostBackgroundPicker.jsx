@@ -3,7 +3,7 @@ import { TwIcon } from "../../../../components/TwUI";
 import { getSessionBackgroundsForCategory } from "../../../../lib/sessionBackgrounds";
 
 // Extracted verbatim from LiveSessionsTab.jsx (no behavior change).
-export function BackgroundPicker({ selectedKey, onSelect, c, category, autoPlay = false }) {
+export function BackgroundPicker({ selectedKey, onSelect, c, category, autoPlay = false, accent = null }) {
   const visibleCount = 4;
   const pool = useMemo(() => getSessionBackgroundsForCategory(category), [category]);
   const total = pool.length;
@@ -86,7 +86,7 @@ export function BackgroundPicker({ selectedKey, onSelect, c, category, autoPlay 
       <button type="button" aria-label="Previous backgrounds" className="tw-session-background-arrow is-left" onClick={() => move(-1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>
       <div className="tw-session-background-track">
         <div key={startIndex} className={`tw-session-background-track-inner is-${slideDirection}`}>
-          {visible.map((item) => <button type="button" key={item.key} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => handleSelect(item.key)} style={{ borderColor: selectedKey === item.key ? c.accent : c.border, background: c.cardBg2 }} title={item.label}><img src={item.src} alt={item.label} loading="lazy" />{selectedKey === item.key && <span><TwIcon name="check" size={17} /></span>}</button>)}
+          {visible.map((item) => <button type="button" key={item.key} className={`tw-session-background-card${selectedKey === item.key ? " is-selected" : ""}`} onClick={() => handleSelect(item.key)} style={{ borderColor: selectedKey === item.key ? (accent || c.accent) : c.border, background: c.cardBg2, ...(selectedKey === item.key && accent ? { boxShadow: `0 0 0 3px color-mix(in srgb, ${accent} 30%, transparent)` } : null) }} title={item.label}><img src={item.src} alt={item.label} loading="lazy" />{selectedKey === item.key && <span style={accent ? { background: accent } : undefined}><TwIcon name="check" size={17} /></span>}</button>)}
         </div>
       </div>
       <button type="button" aria-label="Next backgrounds" className="tw-session-background-arrow" onClick={() => move(1)} style={{ color: c.text, borderColor: c.border, background: c.cardBg2 }}><TwIcon name="arrow" size={20} /></button>

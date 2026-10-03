@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { TwIcon } from "../TwUI";
 import { choiceValue, normalizeChoiceOption, seededOrder, trimText } from "./gameChoices";
 
 // Shared MCQ renderer for live + assignment gameplay.
@@ -44,10 +45,10 @@ export function GameMcq({ options, mcqMode, answerMode, value, onChange, disable
             onClick={() => !disabled && toggleChoice(choice)}
             disabled={dimOthers ? (disabled && !active) : disabled}
           >
-            <span className="choice-badge">{labels[i] || ""}</span>
+            <span className="choice-badge">{active && isModifiedMcq ? <TwIcon name="check" size={20} /> : (labels[i] || "")}</span>
             <span className="choice-content">
               {o.image ? <img src={o.image} alt="" className="choice-img" loading="lazy" decoding="async" /> : null}
-              {(trimText(o.text) || !o.image) ? <span className="choice-text" style={{ fontSize: textLen > 90 ? 13 : textLen > 55 ? 14 : undefined }}>{trimText(o.text) || `Option ${labels[i] || i + 1}`}</span> : null}
+              {(trimText(o.text) || !o.image) ? <span className="choice-text" style={{ fontSize: textLen > 90 ? 16 : textLen > 55 ? 18 : undefined }}>{trimText(o.text) || `Option ${labels[i] || i + 1}`}</span> : null}
             </span>
           </button>
         );

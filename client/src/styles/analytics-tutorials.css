@@ -89,6 +89,33 @@ body.dark-mode .tw-analytics-result-badge *{color:var(--tw-on-brand)!important}
   border-width:3px!important;
   overscroll-behavior:contain;
 }
+/* Wide analytics window: beats the shared .tw-host-launch-modal !important
+   widths (760/900/980px caps) via higher specificity (two classes).
+   Subtracts the backdrop's sidebar offset so it never runs off the right edge.
+   Single main scroll: the window itself never scrolls, only the gray body. */
+.tw-class-analytics-modal.tw-host-launch-modal,
+.tw-class-student-analytics-modal.tw-host-launch-modal{
+  width:min(calc(96vw - 260px),1100px)!important;
+  max-width:none!important;
+  aspect-ratio:auto!important;
+  overflow:hidden!important;
+  display:flex!important;
+  flex-direction:column!important;
+}
+.tw-class-analytics-modal .tw-class-analytics-scroll{
+  flex:1!important;
+  min-height:0!important;
+}
+@media(max-width:1100px){
+  .tw-class-analytics-modal.tw-host-launch-modal,
+  .tw-class-student-analytics-modal.tw-host-launch-modal{
+    width:min(calc(100vw - 40px),1100px)!important;
+  }
+}
+/* Rounded gray scroll container. */
+.tw-class-analytics-modal .tw-class-analytics-scroll{
+  border-radius:18px;
+}
 .tw-class-analytics-scroll{
   overflow-y:auto;
   overscroll-behavior:contain;

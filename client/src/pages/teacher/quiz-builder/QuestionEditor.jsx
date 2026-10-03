@@ -45,22 +45,30 @@ export function QuestionEditor({ ui, c, quiz, currentQ, updateQ, isMobile, toolb
   return (
     <>
       {currentQ?.config?.locked && <div className="tw-builder-locked-banner"><TwIcon name="lock" size={14} /> This question is locked. Unlock it to make changes.</div>}
+      {/* Mini actions stay clickable when locked: toolbar lives outside the
+          lockable container so move/undo/redo/duplicate/lock/bank/delete
+          still work. Only the prompt + template fields get frozen. */}
+      {toolbar && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 8 }}>
+          {toolbar}
+        </div>
+      )}
       <div className={currentQ?.config?.locked ? "tw-builder-lockable is-locked" : "tw-builder-lockable"}>
       {/* Time limit + points live in the desktop header; the cards below only render on mobile. */}
       {isMobile && (
       <div data-tutorial="builder-meta-grid" style={{ ...ui.metaGrid, gridTemplateColumns: "1fr 1fr" }} className="tw-builder-meta-sidebyside">
         <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
-          <div style={ui.metaLabel}>⏱ Time limit</div>
+          <div style={{ ...ui.metaLabel, display: "flex", alignItems: "center", gap: 6 }}><TwIcon name="clock" size={18} /><span>Time limit</span></div>
           <div style={ui.metaRow}>
-            <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={{ ...ui.metaInput, width: 125 }}>
+            <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={{ ...ui.metaInput, width: "100%", maxWidth: 140, fontSize: 16 }} className="tw-builder-time-select">
               {buildTimeOptions(currentQ.timeLimitSec).map((seconds) => <option key={seconds} value={seconds}>{formatTimeLimit(seconds)}</option>)}
             </select>
           </div>
         </div>
         <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
-          <div style={ui.metaLabel}>⭐ Points</div>
+          <div style={{ ...ui.metaLabel, display: "flex", alignItems: "center", gap: 6 }}><TwIcon name="spark" size={18} /><span>Points</span></div>
           <div style={ui.metaRow}>
-            <select value={clampQuestionPoints(currentQ.points)} onChange={(e) => updateQ({ points: Number(e.target.value) })} style={{ ...ui.metaInput, width: 125 }}>
+            <select value={clampQuestionPoints(currentQ.points)} onChange={(e) => updateQ({ points: Number(e.target.value) })} style={{ ...ui.metaInput, width: "100%", maxWidth: 140, fontSize: 16 }}>
               {[1, 2, 3].map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
             <span style={ui.metaSuffix}>{normalizeTemplateType(quiz.template_type) === "CROSSWORD" ? "per word" : normalizeTemplateType(quiz.template_type) === "MATCHING" ? "per pair" : "per question"}</span>
@@ -77,7 +85,6 @@ export function QuestionEditor({ ui, c, quiz, currentQ, updateQ, isMobile, toolb
               Question
               <span className="text-[11px] opacity-[0.55] ml-2">{(currentQ.prompt || "").length}/255</span>
             </label>
-            {toolbar}
           </div>
           {/* Builder question area follows the template color like the header and form. */}
           <div className="tw-builder-prompt-box" style={{ background: boxFill, borderRadius: 8, padding: "20px 24px", minHeight: 130, marginBottom: 0, border: `3px solid ${accent}`, boxShadow: `0 6px 0 ${boxBase}, 0 18px 34px ${accent}59, inset 0 2px 0 rgba(255,255,255,.8)`, boxSizing: "border-box", display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center" }}>

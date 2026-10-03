@@ -7,7 +7,7 @@ import { tabCard as card, tabMenuBtn as menuBtn, Badge } from "../teacherTabShar
 
 // Extracted verbatim from LiveSessionsTab.jsx (no behavior change).
 // Minor cleanup: dropped unused `institutionPlan` / `dark` props (never read).
-export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, onHost, onAssign, onDelete, onCopyToBank, onDuplicate, onPreview, c, expanded, onToggle }) {
+export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, blockingSession, onHost, onAssign, onDelete, onCopyToBank, onDuplicate, onPreview, c, expanded, onToggle }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
   const tone = templateTone(quiz.template_type, c, false);
@@ -15,6 +15,12 @@ export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, onHo
   // hostable, so it reads/behaves the same as PUBLISHED here.
   const isPublished = quiz.status === "PUBLISHED" || quiz.status === "BANKED";
   const inSession = !!activeSession;
+  const questionCount = Number(quiz.question_count ?? 1);
+  const isEmpty = Number.isFinite(questionCount) && questionCount === 0;
+  // One live session at a time: this quiz has no session of its own, but
+  // another quiz does - hosting is disabled until that session is ended.
+  const hostBlocked = !inSession && !!blockingSession;
+  const hostBlockedTitle = hostBlocked ? `You can only host one live session at a time. End "${blockingSession?.quiz_title || "your current session"}" first.` : null;
   const builderPath = guestMode ? `/guest/quizzes/${quiz.id}/builder` : `/teacher/quizzes/${quiz.id}/builder`;
   const hostPath = guestMode ? `/guest/sessions/${activeSession?.id}/live` : `/teacher/sessions/${activeSession?.id}/live`;
 
@@ -40,8 +46,8 @@ export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, onHo
         <div className="flex justify-between gap-[12px] items-center flex-wrap">
           <div><div className="text-[12px] uppercase tracking-[0.08em] font-[800] mb-[8px]" style={{ color: c.textSub }}>Quiz overview</div><div className="flex gap-[8px] flex-wrap"><Badge c={c} label={templateLabel(quiz.template_type)} /><Badge c={c} label={quiz.category} />{!guestMode && (activeSession?.class_name || folderLabel) && <Badge c={c} label={activeSession?.class_name || folderLabel} tone="blue" />}</div></div>
           <div data-session-actions={quiz.id} style={{ display: "flex", gap: 8, position: "relative", flexWrap: "wrap", zIndex: moreOpen ? 12001 : 1 }}>
-            <TeacherPressButton data-tutorial="session-host-live" tone="blue" onClick={() => (inSession ? navigate(hostPath) : onHost(quiz))} disabled={!isPublished && !inSession} title={inSession ? "Open the host panel for the active live session." : !isPublished ? "Publish this quiz first to host it live." : "Host this quiz live"}>{inSession ? "Open Host Panel" : "Host Live"}</TeacherPressButton>
-            {!guestMode && <TeacherPressButton data-tutorial="session-assign" tone="neutral" className="tw-session-assign-btn" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished}>Assign</TeacherPressButton>}
+            <TeacherPressButton data-tutorial="session-host-live" tone="blue" className="tw-session-host-live-btn" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} onClick={() => (inSession ? navigate(hostPath) : onHost(quiz))} disabled={(!isPublished && !inSession) || hostBlocked || (isEmpty && !inSession)} title={hostBlocked ? hostBlockedTitle : inSession ? "Open the host panel for the active live session." : isEmpty ? "Add at least one question before hosting live." : !isPublished ? "Publish this quiz first to host it live." : "Host this quiz live"}>{inSession ? "Open Host Panel" : "Host Live"}</TeacherPressButton>
+            {!guestMode && <TeacherPressButton data-tutorial="session-assign" tone="neutral" className="tw-session-assign-btn" style={{ "--tw-press-face": c.cardBg2, "--tw-press-base": c.border, "--tw-press-border": c.border, color: c.text }} onClick={() => onAssign(quiz)} disabled={!isPublished || isEmpty} title={isEmpty ? "Add at least one question before assigning." : undefined}>Assign</TeacherPressButton>}
             <div className="tw-session-more-wrap" style={{ position: "relative" }}>
               <button aria-label="More actions" title="More actions" onClick={() => setMoreOpen((value) => !value)} className="tw-bank-more-button">⋮</button>
               {moreOpen && <div className="tw-session-quick-menu" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 220, zIndex: 12002, ...card(c, { padding: 8, boxShadow: "0 24px 60px rgba(0,0,0,.26)" }) }}>
@@ -55,6 +61,8 @@ export function LiveQuizCard({ quiz, guestMode, folderLabel, activeSession, onHo
           </div>
         </div>
       </div>
+
+      {hostBlocked && <div className="text-[12.5px] font-[700]" style={{ color: c.textMuted }}>Only one live session at a time — end “{blockingSession?.quiz_title || "your current session"}” first.</div>}
 
       {activeSession && <div style={card(c, { padding: 0, overflow: "hidden", borderColor: tone.border })}>
         <div className="px-[18px] py-[16px]" style={{ background: tone.softBg, borderBottom: `1px solid ${tone.border}` }}><div className="font-[900] text-[18px]" style={{ color: tone.accent }}>Session Ready</div></div>

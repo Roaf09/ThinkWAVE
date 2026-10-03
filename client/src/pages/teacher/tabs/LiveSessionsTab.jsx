@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 import { useColors, useTheme } from "../../../context/ThemeContext";
 import { TEMPLATE_PALETTES } from "../../../lib/templatePalette";
+import { normalizeTemplateType } from "../../../lib/templateTypes";
 import QuizPreviewModal from "../../../components/QuizPreviewModal";
 import { isInstitutionPlan } from "../../../lib/planLimits";
 import { ProfileSavedOverlay } from "../../../components/ProfileSettings";
@@ -30,6 +31,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   const [loading, setLoading] = useState(true);
   const [previewQuiz, setPreviewQuiz] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
+  const [confirmError, setConfirmError] = useState("");
   const [assignQuiz, setAssignQuiz] = useState(null);
   const [hostSetupQuiz, setHostSetupQuiz] = useState(null);
   const [flash, setFlash] = useState(null);
@@ -57,6 +59,10 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   const folderPathMap = useMemo(() => buildFolderPathMap(folders), [folders]);
   const folderOptions = useMemo(() => folders.map((folder) => ({ ...folder, pathLabel: folderPathMap.get(Number(folder.id)) || folder.name })), [folders, folderPathMap]);
   const activeByQuizId = useMemo(() => new Map(activeSessions.map((session) => [Number(session.quiz_id), session])), [activeSessions]);
+  // One live session at a time: a quiz without its own active session cannot
+  // be hosted while another quiz holds one. The blocking session (if any) is
+  // passed per-card so the Host button can explain which session to end first.
+  const blockingSessionFor = (quizId) => activeSessions.find((session) => Number(session.quiz_id) !== Number(quizId)) || null;
 
   function showFlash(text, kind = "success") {
     setFlash({ text, kind });
@@ -95,6 +101,13 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   }
 
   function openHostSetup(selectedQuiz) {
+    // Client mirror of the server's one-session-at-a-time rule (the server is
+    // still the backstop and surfaces the same message inside the modal).
+    const blocker = blockingSessionFor(selectedQuiz.id);
+    if (blocker) {
+      showFlash(`You can only host one live session at a time. End your current session ("${blocker.quiz_title || "active session"}") before starting another.`, "error");
+      return;
+    }
     setHostSetupQuiz(selectedQuiz);
     setHostLaunchError("");
     closeMainTutorialBranch();
@@ -214,9 +227,26 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
     }
   }
 
-  async function deleteQuiz(quiz) { try { await api.delete(`/quizzes/${quiz.id}`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to delete quiz.", "error"); } }
-  async function addToQuizBank(quiz) { try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); await load(); } catch (error) { showFlash(error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.", "error"); } }
-  async function duplicateQuiz(quiz) { try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); await load(); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); } catch (error) { showFlash(error?.response?.data?.message || "Failed to duplicate quiz.", "error"); } }
+  async function deleteQuiz(quiz) { try { await api.delete(`/quizzes/${quiz.id}`); setConfirmState(null); setConfirmError(""); await load(); } catch (error) { const m = error?.response?.data?.message || "Failed to delete quiz."; setConfirmError(m); showFlash(m, "error"); } }
+  async function addToQuizBank(quiz) {
+    try { await api.post(`/quizzes/${quiz.id}/copy-to-bank`); setConfirmState(null); setConfirmError(""); await load(); }
+    catch (error) {
+      const m = error?.response?.data?.message || "Failed to copy quiz to Quiz Bank.";
+      // Keep modal open with inline message below buttons for duplicate-bank case.
+      if (/already exists/i.test(m)) { setConfirmError("A quiz-bank copy already exists for this quiz."); }
+      else { setConfirmError(m); }
+      showFlash(m, "error");
+    }
+  }
+  async function duplicateQuiz(quiz) {
+    try { const { data } = await api.post(`/quizzes/${quiz.id}/duplicate`); setConfirmState(null); setConfirmError(""); await load(); if (data?.id) window.setTimeout(() => window.location.assign(`/teacher/quizzes/${data.id}/builder`), 200); }
+    catch (error) {
+      const m = error?.response?.data?.message || "Failed to duplicate quiz.";
+      if (/only one duplicate/i.test(m)) { setConfirmError("Only one duplicate copy is allowed for each quiz."); }
+      else { setConfirmError(m); }
+      showFlash(m, "error");
+    }
+  }
 
   if (loading) return <div className="container"><div style={card(c)}><TwLogoLoader minHeight="60vh" /></div></div>;
 
@@ -253,11 +283,12 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
         guestMode={guestMode}
         folderLabel={folderPathMap.get(Number(quiz.class_id)) || ""}
         activeSession={activeByQuizId.get(Number(quiz.id)) || null}
+        blockingSession={activeByQuizId.get(Number(quiz.id)) ? null : blockingSessionFor(quiz.id)}
         onHost={(selectedQuiz) => openHostSetup(selectedQuiz)}
         onAssign={openAssignSetup}
-        onDelete={(selectedQuiz) => setConfirmState({ type: "delete", quiz: selectedQuiz })}
-        onCopyToBank={(selectedQuiz) => setConfirmState({ type: "bank", quiz: selectedQuiz })}
-        onDuplicate={(selectedQuiz) => setConfirmState({ type: "duplicate", quiz: selectedQuiz })}
+        onDelete={(selectedQuiz) => { setConfirmError(""); setConfirmState({ type: "delete", quiz: selectedQuiz }); }}
+        onCopyToBank={(selectedQuiz) => { setConfirmError(""); setConfirmState({ type: "bank", quiz: selectedQuiz }); }}
+        onDuplicate={(selectedQuiz) => { setConfirmError(""); setConfirmState({ type: "duplicate", quiz: selectedQuiz }); }}
         onPreview={setPreviewQuiz}
         c={c}
         expanded={Number(openQuizId) === Number(quiz.id)}
@@ -291,6 +322,17 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       </ThinkBotTutorial>
     )}
 
-    {confirmState && <TeacherActionModal c={c} textCancel tone={confirmState.type === "delete" ? "red" : "blue"} icon={confirmState.type === "delete" ? "trash" : confirmState.type === "bank" ? "bank" : "plus"} title={confirmState.type === "delete" ? "Delete quiz?" : confirmState.type === "bank" ? "Add to Quiz Bank?" : "Duplicate quiz?"} message={`${confirmState.quiz.title} will be ${confirmState.type === "delete" ? "permanently deleted" : confirmState.type === "bank" ? "copied to the Quiz Bank" : "copied as a new editable quiz"}.`} confirmLabel={confirmState.type === "delete" ? "Delete" : confirmState.type === "bank" ? "Add to Quiz Bank" : "Duplicate"} onClose={() => setConfirmState(null)} onConfirm={() => confirmState.type === "delete" ? deleteQuiz(confirmState.quiz) : confirmState.type === "bank" ? addToQuizBank(confirmState.quiz) : duplicateQuiz(confirmState.quiz)} />}
+    {confirmState && (() => {
+      const q = confirmState.quiz;
+      const count = Number(q?.question_count ?? NaN);
+      const isBatch = ["MATCHING", "CROSSWORD"].includes(normalizeTemplateType(q?.template_type));
+      const unit = Number.isFinite(count) ? `${count} ${isBatch ? `batch${count === 1 ? "" : "es"}` : `question${count === 1 ? "" : "s"}`}` : null;
+      const message = confirmState.type === "delete"
+        ? (unit ? `Delete ${q.title}? This will permanently remove ${unit}.` : `${q.title} will be permanently deleted.`)
+        : confirmState.type === "bank"
+          ? `${q.title} will be copied to the Quiz Bank.`
+          : `${q.title} will be copied as a new editable quiz.`;
+      return <TeacherActionModal c={c} textCancel tone={confirmState.type === "delete" ? "red" : "blue"} icon={confirmState.type === "delete" ? "trash" : confirmState.type === "bank" ? "bank" : "plus"} title={confirmState.type === "delete" ? "Delete quiz?" : confirmState.type === "bank" ? "Add to Quiz Bank?" : "Duplicate quiz?"} message={message} confirmLabel={confirmState.type === "delete" ? "Delete" : confirmState.type === "bank" ? "Add to Quiz Bank" : "Duplicate"} footerNote={confirmError} onClose={() => { setConfirmState(null); setConfirmError(""); }} onConfirm={() => confirmState.type === "delete" ? deleteQuiz(confirmState.quiz) : confirmState.type === "bank" ? addToQuizBank(confirmState.quiz) : duplicateQuiz(confirmState.quiz)} />;
+    })()}
   </>;
 }

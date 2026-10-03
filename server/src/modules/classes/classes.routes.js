@@ -10,7 +10,7 @@ import { z } from "zod";
 import { requireAuth } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { validateBody } from "../../middleware/validate.js";
-import { listClasses, createClass, updateClass, softDeleteClass, restoreClass, getOrCreateClassCode, listClassStudents, removeClassStudent, listClassAsyncResults, exportClassAsyncPdf, exportClassAsyncXlsx, duplicateClass, getClassAsyncAnalytics, getClassAnalytics, getClassStudentAnalytics } from "./classes.controller.js";
+import { listClasses, createClass, updateClass, softDeleteClass, restoreClass, getOrCreateClassCode, listClassStudents, removeClassStudent, listClassAsyncResults, exportClassAsyncPdf, exportClassAsyncXlsx, duplicateClass, getClassAsyncAnalytics, getClassAnalytics, getClassAnalyticsFull, exportClassAnalyticsPdf, exportClassAnalyticsXlsx, getClassStudentAnalytics, exportStudentAnalyticsPdf } from "./classes.controller.js";
 
 export const classesRouter = Router();
 
@@ -28,7 +28,11 @@ classesRouter.post("/:id/restore", requireAuth, requireRole("TEACHER","ADMIN"), 
 classesRouter.get("/:id/code", requireAuth, requireRole("TEACHER"), asyncHandler(getOrCreateClassCode));
 classesRouter.get("/:id/students", requireAuth, requireRole("TEACHER"), asyncHandler(listClassStudents));
 classesRouter.get("/:id/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAnalytics));
+classesRouter.get("/:id/analytics-full", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAnalyticsFull));
+classesRouter.get("/:id/analytics/export/pdf", requireAuth, requireRole("TEACHER"), asyncHandler(exportClassAnalyticsPdf));
+classesRouter.get("/:id/analytics/export/xlsx", requireAuth, requireRole("TEACHER"), asyncHandler(exportClassAnalyticsXlsx));
 classesRouter.get("/:id/students/:enrollmentId/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassStudentAnalytics));
+classesRouter.get("/:id/students/:enrollmentId/analytics/export/pdf", requireAuth, requireRole("TEACHER"), asyncHandler(exportStudentAnalyticsPdf));
 classesRouter.delete("/:id/students/:enrollmentId", requireAuth, requireRole("TEACHER"), asyncHandler(removeClassStudent));
 classesRouter.get("/:id/async-results", requireAuth, requireRole("TEACHER"), asyncHandler(listClassAsyncResults));
 classesRouter.get("/:id/async-results/:quizId/analytics", requireAuth, requireRole("TEACHER"), asyncHandler(getClassAsyncAnalytics));

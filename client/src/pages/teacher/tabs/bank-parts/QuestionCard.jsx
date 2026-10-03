@@ -1,4 +1,4 @@
-import { templateCardChrome, templateLabel, templateTone, GAME_CHOICE_PALETTE } from "../../../../lib/templatePalette";
+import { templateCardChrome, templateLabel, templateTone, GAME_CHOICE_PALETTE, TRUE_FALSE_TILES } from "../../../../lib/templatePalette";
 import { TwIcon } from "../../../../components/TwUI";
 import { TeacherPressButton } from "../../TeacherUI";
 import { buildCrosswordGrid, buildCrosswordSeed, buildCrosswordSignature } from "../../../../lib/crossword";
@@ -79,13 +79,13 @@ function ModifiedMcqBankPreview({ cfg, correct }) {
 }
 
 function TrueFalseBankAnswers({ correct, accent }) {
-  const ink = accent || "#14b8a6";
   const selected = String(correct.choice ?? correct.text ?? "").trim().toLowerCase();
-  return <div className="tw-bank-true-false" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, width: "100%" }}>{["True", "False"].map((value) => {
-    const isCorrect = selected === value.toLowerCase();
-    return <div key={value} className="tw-bank-tf-option" style={{ background: `color-mix(in srgb, ${ink} 12%, #ffffff)`, border: `3px solid ${ink}`, borderRadius: 14, boxShadow: isCorrect ? `0 1px 0 ${ink}, 0 8px 18px ${ink}59` : `0 6px 0 ${ink}, 0 18px 34px ${ink}59, inset 0 2px 0 rgba(255,255,255,.8)`, transform: isCorrect ? "translateY(3px)" : "none", padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "#0f172a", fontWeight: 900, fontSize: 17, lineHeight: 1.45, boxSizing: "border-box", minHeight: 48, width: "100%" }}>
-      {isCorrect && <TwIcon name="check" size={18} strokeWidth={3.2} />}
-      <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
+  // Same 3D tiles as quiz builder TrueFalseEditor: green True, red False, 56px badge + check.
+  return <div className="tw-bank-true-false" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>{TRUE_FALSE_TILES.map((tile) => {
+    const isCorrect = selected === String(tile.value).toLowerCase();
+    return <div key={tile.value} className="tw-bank-tf-option" style={{ display: "flex", alignItems: "center", gap: 14, padding: 22, borderRadius: 20, border: `4px solid ${tile.border}`, background: tile.face, color: tile.ink, boxShadow: isCorrect ? `0 1px 0 ${tile.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${tile.base}, 0 16px 28px rgba(15,23,42,.16)`, transform: isCorrect ? "translateY(5px)" : "translateY(-3px)", fontWeight: 900, fontSize: 18, lineHeight: 1.45, boxSizing: "border-box", minHeight: 48 }}>
+      <span style={{ width: 56, height: 56, flex: "none", borderRadius: "50%", border: `4px solid ${tile.border}`, background: tile.badge, color: tile.ink, boxShadow: `0 3px 0 ${tile.base}`, fontWeight: 1000, fontSize: 24, display: "grid", placeItems: "center" }}>{isCorrect ? <TwIcon name="check" size={22} strokeWidth={3.2} /> : tile.short}</span>
+      <span style={{ flex: "1 1 auto", textAlign: "center", fontSize: 36 }}>{tile.value}</span>
     </div>;
   })}</div>;
 }

@@ -8,7 +8,7 @@
 import fs from "fs";
 import PDFDocument from "pdfkit";
 import { pool } from "../../db.js";
-import { enqueueExport } from "../../queue.js";
+import { enqueueExport, queueStats } from "../../queue.js";
 import { getTeacherPlan } from "../plans/plan.js";
 import { buildFullAnalyticsData, buildSessionWorkbook, renderSessionPdf } from "../analytics/analytics.controller.js";
 import { getAsyncExportData, buildAsyncWorkbook, loadAsyncAnalysis, renderAsyncPdf } from "../classes/classes.controller.js";
@@ -133,6 +133,13 @@ export async function createExport(req, res) {
   }
 
   const jobId = await createExportJob({ teacherId, kind, format, refSessionId, refClassId, refQuizId });
+  // Bound the queue: concurrency 1 + unbounded growth = legit jobs starve.
+  try {
+    const stats = queueStats();
+    if (Number(stats.exportSize || 0) > 20) {
+      return res.status(429).json({ message: "Export queue is busy. Please try again in a minute." });
+    }
+  } catch {}
   // Fire-and-forget: the POST responds now, the queue builds the file.
   enqueueExport(async () => {
     try {
@@ -161,7 +168,7 @@ export async function getExport(req, res) {
     jobId: job.id,
     status: job.status,
     error: job.error || null,
-    downloadUrl: job.status === "DONE" ? `/api/exports/${job.id}/download` : null,
+    downloadUrl: job.status === "DONE" ? `/exports/${job.id}/download` : null,
     fileName: job.status === "DONE" ? friendlyName(job) : null,
   });
 }
@@ -179,5 +186,12 @@ export async function downloadExport(req, res) {
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   }
   res.setHeader("Content-Disposition", `attachment; filename="${friendlyName(job)}"`);
-  fs.createReadStream(absPath).pipe(res);
+  const stream = fs.createReadStream(absPath);
+  stream.on("error", () => {
+    try {
+      if (!res.headersSent) return res.status(410).json({ message: "Export file expired. Please create a new export." });
+      res.end();
+    } catch {}
+  });
+  stream.pipe(res);
 }

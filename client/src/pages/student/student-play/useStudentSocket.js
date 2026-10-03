@@ -56,10 +56,24 @@ export function useStudentSocket({
   // Real-time connection. Student screens stay updated from socket events instead of repeated polling.
   // proposalClearTimer is local: the 1400ms group-resolve notice must not fire after unmount.
   const proposalClearTimer = useRef(null);
+  // Tracks the last seen question index so per-question resets run in the
+  // event body, where side-effects are safe.
+  const prevQuestionIdxRef = useRef(undefined);
+  // Guards the result splash against duplicate deliveries of the same
+  // question's answer (replayed ack/reveal re-triggers the animation and
+  // cuts the first run off). Keyed by question so legitimate next-question
+  // splashes always play; crossword is exempt (many legit acks per question).
+  const splashShownRef = useRef(null);
+  // Remembers which question a visible verdict belongs to, so the hide
+  // timer's side effects (explanation card, wait-lock) can be skipped when
+  // the teacher already advanced past it. Set for every splash, including
+  // crossword ones (which never touch splashShownRef).
+  const feedbackQidRef = useRef(null);
   useEffect(() => {
     const s = makeSocket();
     socketRef.current = s;
-    s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey }));
+    const extendedScreens = typeof window !== "undefined" && !!window.screen?.isExtended;
+    s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey, isExtended: extendedScreens }));
     s.on("student:connected", (payload = {}) => {
       void soundManager.startBGM("lobby");
       // A reconnect (network blip, refresh) doesn't carry over this
@@ -78,27 +92,40 @@ export function useStudentSocket({
       antiRemovalTimer.current=setTimeout(()=>navigate(getRole()==="STUDENT"?"/student":"/"),3000);
     });
     s.on("session:state", (payload) => {
-      setState((prev) => {
-        const prevIdx = prev?.current_question_index;
-        const newIdx = payload.state?.current_question_index;
-        if (prevIdx !== undefined && prevIdx !== newIdx) {
-          setPostAnswerPhase(null);
-          setAnswerText("");
-          setSelectedChoice("");
-          setMatchingMap({});
-          setSpell({ built: "", bank: [] });
-          setSubmittedQId(null);
-          timeoutSubmitRef.current = null;
-          setSubmitLabel("Submit");
-          setProposalStatus("");
-          setGroupProposal(null);
-          if (pendingLeaderboardRef.current) {
-            setLiveLeaderboard(pendingLeaderboardRef.current);
-            leaderboardAppliedRef.current = true;
-          }
+      // Per-question reset on advance. Done here in the event body (not
+      // inside the setState updater below — updater side-effects are
+      // unreliable and a missed reset locked every later question), with the
+      // StudentPlay currentQ effect as a second net for missed pushes.
+      const newIdx = payload.state?.current_question_index;
+      if (prevQuestionIdxRef.current !== undefined && prevQuestionIdxRef.current !== newIdx) {
+        // Kill Q-previous timers first. The verdict splash itself is NOT
+        // killed here: it stays up over the next question's countdown until
+        // its own hide timer runs out. That timer's post-hide side effects
+        // (explanation card, wait-lock) are guarded to the question the
+        // verdict belongs to, so they never leak into the new question.
+        clearTimeout(feedbackPulseTimer.current);
+        clearTimeout(explanationDockTimer.current);
+        clearTimeout(explanationFadeTimer.current);
+        clearTimeout(explanationClearTimer.current);
+        setExplanationFeedback(null);
+        setFeedbackPulse("");
+        setPostAnswerPhase(null);
+        setAnswerText("");
+        setSelectedChoice("");
+        setMatchingMap({});
+        setSpell({ built: "", bank: [] });
+        setSubmittedQId(null);
+        timeoutSubmitRef.current = null;
+        setSubmitLabel("Submit");
+        setProposalStatus("");
+        setGroupProposal(null);
+        if (pendingLeaderboardRef.current) {
+          setLiveLeaderboard(pendingLeaderboardRef.current);
+          leaderboardAppliedRef.current = true;
         }
-        return payload.state;
-      });
+      }
+      prevQuestionIdxRef.current = newIdx;
+      setState(payload.state);
       setQuestions(payload.questions || []);
       if (payload.state?.server_now_ms != null) setClockOffsetMs(Date.now() - Number(payload.state.server_now_ms));
       else if (payload.state?.server_now) setClockOffsetMs(Date.now() - new Date(payload.state.server_now).getTime());
@@ -145,19 +172,11 @@ export function useStudentSocket({
         setProposalStatus("");
       }, 1400);
     });
-    s.on("answer:ack", (a) => {
+    // Shared feedback screen: answer:ack (instant sessions) and
+    // answer:reveal (deferred class sessions) both land here.
+    const showAnswerFeedback = (a) => {
       const tt = normalizeTemplateType(stateRef.current?.template_type);
       const isCrossword = tt === "CROSSWORD" || normalizeTemplateType(a.templateType) === "CROSSWORD";
-
-      if (a?.locked && currentQRef.current?.id) {
-        const answeredId = Number(currentQRef.current.id);
-        setSubmittedQId(currentQRef.current.id);
-        setAnsweredQuestionIds((current) => {
-          const next = new Set(current);
-          next.add(answeredId);
-          return next;
-        });
-      }
 
       if (a.message && !isCrossword) {
         setSubmitLabel(a.message);
@@ -167,6 +186,13 @@ export function useStudentSocket({
       clearTimeout(feedbackHideTimer.current);
       clearTimeout(feedbackPulseTimer.current);
       clearTimeout(antiRemovalTimer.current);
+      // A fast teacher advance can leave the previous question's explanation
+      // docked while the new Correct/Incorrect splash appears — dismiss it so
+      // the feedback always shows first, explanation after.
+      clearTimeout(explanationDockTimer.current);
+      clearTimeout(explanationFadeTimer.current);
+      clearTimeout(explanationClearTimer.current);
+      setExplanationFeedback(null);
 
       if (isCrossword) {
         if (a.crossword) {
@@ -190,13 +216,19 @@ export function useStudentSocket({
         if (a.isCorrect !== null && a.isCorrect !== undefined) {
           setFeedbackQ({ ...a, status: feedbackStatus(a) });
           setShowFeedback(true);
+          feedbackQidRef.current = currentQRef.current?.id ?? a?.questionId ?? null;
           setFeedbackFxKey((v) => v + 1);
           setFeedbackPulse(feedbackStatus(a));
           feedbackHideTimer.current = setTimeout(() => {
             setShowFeedback(false);
             setFeedbackQ(null);
+            // The teacher may have advanced while this verdict was showing -
+            // in that case it just fades over the new question: no explanation
+            // card and no wait-lock for a question it doesn't belong to.
+            const stillCurrent = currentQRef.current?.id != null && feedbackQidRef.current != null
+              && Number(feedbackQidRef.current) === Number(currentQRef.current.id);
             const explanation = a?.locked ? String(a?.explanation || currentQRef.current?.config_json?.explanation || "").trim() : "";
-            if (explanation) {
+            if (explanation && stillCurrent) {
               clearTimeout(explanationDockTimer.current);
               clearTimeout(explanationFadeTimer.current);
               clearTimeout(explanationClearTimer.current);
@@ -205,8 +237,8 @@ export function useStudentSocket({
               explanationFadeTimer.current = setTimeout(() => setExplanationFeedback((current) => current ? { ...current, phase: "leaving" } : current), 9200);
               explanationClearTimer.current = setTimeout(() => setExplanationFeedback(null), 10350);
             }
-            if (a?.locked) setPostAnswerPhase("wait");
-          }, 1750);
+            if (a?.locked && stillCurrent) setPostAnswerPhase("wait");
+          }, 3500);
           feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
           const effectPromise = feedbackStatus(a) === "wrong" ? soundManager.play("wrong") : soundManager.play("correct");
           void effectPromise;
@@ -228,17 +260,40 @@ export function useStudentSocket({
         return;
       }
 
+      // Duplicate/stale-delivery guard: a replayed ack/reveal must neither
+      // re-trigger the splash nor lock the current question, and a late
+      // payload for a previous question is ignored entirely.
+      {
+        const splashTt = normalizeTemplateType(stateRef.current?.template_type);
+        const splashX = splashTt === "CROSSWORD" || normalizeTemplateType(a.templateType) === "CROSSWORD";
+        const currentId = currentQRef.current?.id != null ? Number(currentQRef.current.id) : null;
+        const splashQid = a?.questionId != null ? Number(a.questionId) : currentId;
+        if (!splashX) {
+          if (a?.questionId != null && currentId != null && splashQid !== currentId) return;
+          if (splashQid != null) {
+            if (splashShownRef.current === splashQid) return;
+            splashShownRef.current = splashQid;
+          }
+        }
+      }
+
       if (a?.locked && currentQRef.current?.id) setSubmittedQId(currentQRef.current.id);
 
       setFeedbackQ({ ...a, status: feedbackStatus(a) });
       setShowFeedback(true);
+      feedbackQidRef.current = currentQRef.current?.id ?? a?.questionId ?? null;
       setFeedbackFxKey((v) => v + 1);
       setFeedbackPulse(feedbackStatus(a));
       feedbackHideTimer.current = setTimeout(() => {
         setShowFeedback(false);
         setFeedbackQ(null);
+        // The teacher may have advanced while this verdict was showing -
+        // in that case it just fades over the new question: no explanation
+        // card and no wait-lock for a question it doesn't belong to.
+        const stillCurrent = currentQRef.current?.id != null && feedbackQidRef.current != null
+          && Number(feedbackQidRef.current) === Number(currentQRef.current.id);
         const explanation = String(a?.explanation || currentQRef.current?.config_json?.explanation || "").trim();
-        if (explanation) {
+        if (explanation && stillCurrent) {
           clearTimeout(explanationDockTimer.current);
           clearTimeout(explanationFadeTimer.current);
           clearTimeout(explanationClearTimer.current);
@@ -247,8 +302,8 @@ export function useStudentSocket({
           explanationFadeTimer.current = setTimeout(() => setExplanationFeedback((current) => current ? { ...current, phase: "leaving" } : current), 9200);
           explanationClearTimer.current = setTimeout(() => setExplanationFeedback(null), 10350);
         }
-        setPostAnswerPhase("wait");
-      }, 1750);
+        if (stillCurrent) setPostAnswerPhase("wait");
+      }, 3500);
       feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
 
       setSubmitLabel(a.viaGroup ? "Group Submitted ✓" : a.isCorrect ? "Submitted ✓" : "Submitted");
@@ -257,15 +312,66 @@ export function useStudentSocket({
 
       if (isLast) {
         setWaitingForFinalFx(true);
-        const feedbackDelay = new Promise((resolve) => setTimeout(resolve, 1750));
+        const feedbackDelay = new Promise((resolve) => setTimeout(resolve, 3500));
         Promise.all([Promise.resolve(effectPromise), feedbackDelay]).finally(() => {
           setWaitingForFinalFx(false);
           setPostAnswerPhase("wait");
         });
       }
+    };
+
+    const markAnsweredLocked = (a) => {
+      if (a?.locked && currentQRef.current?.id) {
+        const answeredId = Number(currentQRef.current.id);
+        setSubmittedQId(currentQRef.current.id);
+        setAnsweredQuestionIds((current) => {
+          const next = new Set(current);
+          next.add(answeredId);
+          return next;
+        });
+      }
+    };
+
+    s.on("answer:ack", (a) => {
+      markAnsweredLocked(a);
+      const tt = normalizeTemplateType(stateRef.current?.template_type);
+      const isCrossword = tt === "CROSSWORD" || normalizeTemplateType(a.templateType) === "CROSSWORD";
+      // Deferred class sessions: the real result arrives via answer:reveal
+      // when the question closes. Just park the UI in "locked in".
+      if (a?.pending && !isCrossword) {
+        setSubmitLabel("Answer locked in ✓");
+        setPostAnswerPhase("wait");
+        return;
+      }
+      showAnswerFeedback(a);
     });
 
+    s.on("answer:reveal", (a) => {
+      // Stale-reveal guard: a late reveal for a previous question must not
+      // mark the current question as answered.
+      if (a?.questionId != null && currentQRef.current?.id != null
+        && Number(a.questionId) !== Number(currentQRef.current.id)) return;
+      // Let the reveal's leaderboard:update apply immediately instead of
+      // waiting for the next question change.
+      leaderboardAppliedRef.current = false;
+      markAnsweredLocked(a);
+      showAnswerFeedback(a);
+    });
+
+    // Presence heartbeat (deterrent, not proof): hidden tabs throttle
+    // timers, so silence itself is the signal the server watches for.
+    const presenceTimer = setInterval(() => {
+      try {
+        s.emit("student:presence", {
+          sessionId: Number(sessionId),
+          visible: typeof document !== "undefined" ? document.visibilityState === "visible" : true,
+          focused: typeof document !== "undefined" ? document.hasFocus() : true,
+        });
+      } catch {}
+    }, 5000);
+
     return () => {
+      clearInterval(presenceTimer);
       clearTimeout(completeTimer.current);
       clearTimeout(feedbackHideTimer.current);
       clearTimeout(feedbackPulseTimer.current);

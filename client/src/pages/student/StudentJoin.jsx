@@ -10,6 +10,47 @@ import { api } from "../../lib/api";
 import { useTheme } from "../../context/ThemeContext";
 import ThemeIconButton from "../../components/ThemeIconButton";
 
+// Same browser key the Guest dashboard uses, so one browser = one guest identity.
+const GUEST_IDENTITY_KEY = "thinkwave_guest_identity_v1";
+function getOrCreateGuestKey() {
+  const current = localStorage.getItem(GUEST_IDENTITY_KEY) || "";
+  if (/^[a-f0-9]{64}$/i.test(current)) return current;
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const next = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  localStorage.setItem(GUEST_IDENTITY_KEY, next);
+  return next;
+}
+
+// Shown from a guest's 3rd live session of the same class. No seat exists
+// yet, so the student decides before anything is created.
+function GuestAccountPrompt({ prompt, dark, loading, onCreateAccount, onContinue }) {
+  // Same 3D prompt-box language as the quiz-builder question area and the
+  // host panel question prompt: 3px accent border + 6px solid slab + glow +
+  // top highlight. Dark mode uses the builder's tinted-solid recipe.
+  const accent = "#2b6cff";
+  const cardBg = dark ? `color-mix(in srgb, ${accent} 18%, #172a46)` : `color-mix(in srgb, ${accent} 12%, #ffffff)`;
+  const textC = dark ? "#e7e9ee" : "#0f172a";
+  const mutedC = dark ? "#a9b8dd" : "#5a6a9a";
+  const slabBase = `color-mix(in srgb, ${accent} 58%, #0f172a)`;
+  return (
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[50] grid place-items-center px-5" style={{ background: "rgba(2,6,23,0.55)" }}>
+      <div className="w-[min(100%,420px)]" style={{ background: cardBg, color: textC, border: `3px solid ${accent}`, borderRadius: 20, padding: "28px 26px", boxSizing: "border-box", boxShadow: `0 6px 0 ${slabBase}, 0 18px 34px ${accent}59, inset 0 2px 0 rgba(255,255,255,.8)` }}>
+        <p className="font-black text-lg m-[0_0_8px]" style={{ textAlign: "center" }}>Keep your records?</p>
+        <p className="text-[14px] leading-[1.6] m-[0_0_18px]" style={{ color: mutedC }}>
+          You&apos;ve joined <b style={{ color: textC }}>{prompt.className}</b>&apos;s live sessions {prompt.visits} times as a guest.
+          Guest results aren&apos;t saved to a student account, so they can be lost. You can create a student account and ask
+          your teacher for the class code, or continue as a guest. It&apos;s your choice.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button type="button" onClick={onCreateAccount} className="tw-guest-join-primary p-[13px_16px] rounded-full border-0 bg-brand text-white font-extrabold cursor-pointer" style={{ boxShadow: "0 4px 0 color-mix(in srgb, #2b6cff 58%, #0f172a)" }}>Create a student account</button>
+          <button type="button" onClick={onContinue} disabled={loading} className="p-[12px_16px] rounded-full font-bold cursor-pointer" style={{ background: "transparent", color: textC, border: `1px solid ${mutedC}`, opacity: loading ? 0.6 : 1 }}>{loading ? "Joining…" : "Continue as guest"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // StudentJoin handles the code-entry flow before the live player screen opens.
 export default function StudentJoin() {
   const nav = useNavigate();
@@ -22,6 +63,7 @@ export default function StudentJoin() {
   const [lastName, setLastName] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountPrompt, setAccountPrompt] = useState(null);
 
   useEffect(() => {
     if (!prefilled) nav("/?join=guest", { replace: true });
@@ -29,8 +71,8 @@ export default function StudentJoin() {
 
   if (!prefilled) return null;
 
-  async function handleJoin(e) {
-    e.preventDefault();
+  async function handleJoin(e, { continueAsGuest = false } = {}) {
+    e?.preventDefault?.();
     setMsg("");
     setLoading(true);
     try {
@@ -39,6 +81,8 @@ export default function StudentJoin() {
         code: code.trim().toUpperCase(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        guestKey: getOrCreateGuestKey(),
+        ...(continueAsGuest ? { continueAsGuest: true } : {}),
         // Same-browser seat recovery: proves an earlier seat is ours so the
         // server hands it back instead of minting a duplicate row.
         ...(storedKey.length >= 20 ? { reconnectKey: storedKey.slice(0, 64) } : {}),
@@ -47,19 +91,16 @@ export default function StudentJoin() {
       localStorage.setItem("qz_participantId", String(data.participantId));
       localStorage.setItem("qz_sessionId", String(data.sessionId));
       localStorage.setItem("qz_joinMode", data.joinMode || "SOLO");
-      const isGuestHostVisitor = localStorage.getItem("qz_guest_mode") === "1";
-      if (isGuestHostVisitor) {
-        const key = `tw_guest_join_count_${code.trim().toUpperCase()}`;
-        const count = Number(localStorage.getItem(key) || 0) + 1;
-        localStorage.setItem(key, String(count));
-        if (count === 2) {
-          const create = window.confirm("We noticed that you have joined this teacher's class twice. Would you like to create a student account?");
-          if (create) { nav("/student-login?mode=register"); return; }
-        }
-      }
       nav(`/play/${data.sessionId}`);
     } catch (err) {
-      setMsg(err?.response?.data?.message || "Could not join. Check your code and try again.");
+      const data = err?.response?.data || {};
+      if (data.code === "GUEST_ACCOUNT_SUGGESTED") {
+        setAccountPrompt({ visits: Number(data.visits || 3), className: data.className || "this class" });
+        setLoading(false);
+        return;
+      }
+      setAccountPrompt(null);
+      setMsg(data.message || "Could not join. Check your code and try again.");
       setLoading(false);
     }
   }
@@ -97,6 +138,8 @@ export default function StudentJoin() {
             <button type="button" onClick={() => nav("/?join=guest")} className="bg-transparent border-0 text-[13px] cursor-pointer font-bold" style={{ color: mutedC }}>Change code</button>
           </form>
         </div>
+
+      {accountPrompt && <GuestAccountPrompt prompt={accountPrompt} dark={dark} loading={loading} onCreateAccount={() => nav("/student-login?mode=register")} onContinue={() => handleJoin(null, { continueAsGuest: true })} />}
 
       <p className="text-xs mt-5 z-[1]" style={{ color: mutedC, fontSize: 12, marginTop: 20, zIndex: 1 }}>No account needed · Just your name and code</p>
     </div>

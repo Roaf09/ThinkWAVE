@@ -1,11 +1,8 @@
 import { useEffect, useRef } from "react";
 import { API_BASE } from "../../../lib/api";
 
-// Revision 10.20 turned this off "temporarily ... during gameplay testing" and
-// it was never turned back on, which is why every participant sat at 0 tab
-// outs no matter what they did. Removal-on-tab-out is still off separately,
-// server-side (AUTO_KICK_AFTER_TAB_OUTS in sessions.socket.js) - this only
-// controls whether the activity is recorded at all.
+// Tab-outs are recorded here; the server kicks automatically on the 3rd
+// tab-out (AUTO_KICK_AFTER_TAB_OUTS in sessions.socket.js).
 const TAB_OUT_TRACKING_ENABLED = true;
 
 export function useTabOutTracking({ sessionId, participantId, socketRef, stateRef, questionCountRef, currentQRef, submittedRef, setExperienceBlur }) {

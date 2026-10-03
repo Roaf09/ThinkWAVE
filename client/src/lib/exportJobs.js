@@ -62,7 +62,9 @@ export async function downloadExportJob({ kind, format, sessionId, classId, quiz
     const { data } = await api.get(`/exports/${jobId}`);
     if (data?.status === "DONE" && data?.downloadUrl) {
       onStatus?.("building");
-      const resp = await api.get(data.downloadUrl, { responseType: "blob" });
+      // downloadUrl from server is /api/exports/:id/download but api already prefixes /api.
+      const path = String(data.downloadUrl || "").replace(/^\/api/, "") || `/exports/${jobId}/download`;
+      const resp = await api.get(path, { responseType: "blob" });
       triggerBlobDownload(resp.data, data.fileName || fileName, mime);
       return { via: "async" };
     }

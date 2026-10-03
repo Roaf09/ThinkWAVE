@@ -14,6 +14,7 @@ import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { attachCompetitiveTotals, sortCompetitiveRows } from "./leaderboard.js";
 import { SESSION_BACKGROUND_KEY_PATTERN, getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
 import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
+import { GUEST_REPEAT_THRESHOLD, countPreviousGuestVisits, guestDeviceHash, guestNameKey, isGuestDeviceKicked, recordGuestJoin } from "./guestJoins.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
 function safeJson(v) {
@@ -144,6 +145,19 @@ export async function createSession(req, res) {
     return res.status(200).json({ id: active.id, joinCode: active.join_code, joinMode: active.join_mode, existing: true });
   }
 
+  // One live session at a time per teacher. A second LOBBY/LIVE/PAUSED session
+  // strands the first one (its quiz gets banked on end while the teacher thinks
+  // both are running) and leaves stale "Active session" badges behind.
+  // Reopening the same quiz above stays allowed.
+  const [[otherActive]] = await pool.query(
+    `SELECT s.id, q.title AS quiz_title
+      FROM sessions s JOIN quizzes q ON q.id = s.quiz_id
+      WHERE s.teacher_id=:tid AND s.quiz_id<>:qid AND s.status IN ('LOBBY','LIVE','PAUSED')
+      ORDER BY s.id DESC LIMIT 1`,
+    { tid: req.user.sub, qid: quizId }
+  );
+  if (otherActive) return res.status(400).json({ message: `You can only host one live session at a time. End your current session ("${otherActive.quiz_title}") before starting another.` });
+
   let code = makeJoinCode();
   for (let i = 0; i < 3; i++) {
     const [c] = await pool.query(`SELECT id FROM sessions WHERE join_code=:code`, { code });
@@ -163,6 +177,9 @@ export async function createSession(req, res) {
   }
 
   const snapshot = await buildQuestionsSnapshot(quizId, quiz.randomize_questions, quiz.shuffle_answers);
+  if (!snapshot.length) {
+    return res.status(400).json({ message: "Add at least one question before hosting live. Empty quizzes cannot be hosted." });
+  }
   // Capacity is now automatic instead of being exposed as a teacher-facing field.
   const maxCap = plan.code === "BASIC" ? BASIC_LIMITS.live.maxStudents : null;
 
@@ -409,6 +426,18 @@ export async function startSession(req, res) {
   const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid AND teacher_id=:tid`, { sid: sessionId, tid: req.user.sub });
   if (!session) return res.status(404).json({ message: "Session not found" });
 
+  // One live session at a time: refuse to start while another session is active.
+  if (session.status !== "LIVE") {
+    const [[otherLive]] = await pool.query(
+      `SELECT s.id, q.title AS quiz_title
+        FROM sessions s JOIN quizzes q ON q.id = s.quiz_id
+        WHERE s.teacher_id=:tid AND s.id<>:sid AND s.status IN ('LOBBY','LIVE','PAUSED')
+        ORDER BY s.id DESC LIMIT 1`,
+      { tid: req.user.sub, sid: sessionId }
+    );
+    if (otherLive) return res.status(400).json({ message: `You can only host one live session at a time. End your current session ("${otherLive.quiz_title}") before starting this one.` });
+  }
+
   if (session.join_mode === "GROUP") {
     const [[counts]] = await pool.query(
       `SELECT
@@ -579,8 +608,12 @@ export async function joinSession(req, res) {
   if (!fn) return res.status(400).json({ message: "Please enter your first name." });
 
   const [[session]] = await pool.query(
-    `SELECT s.*, CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
-     FROM sessions s JOIN users u ON u.id=s.teacher_id WHERE s.join_code=:code`,
+    `SELECT s.*, c.name AS class_name,
+            CASE WHEN u.email LIKE '%@thinkwave.guest' THEN 1 ELSE 0 END AS is_guest_host
+     FROM sessions s
+     JOIN users u ON u.id=s.teacher_id
+     LEFT JOIN classes c ON c.id=s.class_id
+     WHERE s.join_code=:code`,
     { code: code.toUpperCase() }
   );
   if (!session) return res.status(404).json({ message: "Invalid code / session not active" });
@@ -598,7 +631,7 @@ export async function joinSession(req, res) {
   // retries/rejoins carry the reconnectKey the server issued before, so they
   // still recover their seat; everyone else claims a fresh seat under their
   // own name. A lost-response retry (key never received) mints one extra row
-  // instead of recovering — rare, and strictly better than impersonation.
+  // instead of recovering - rare, and strictly better than impersonation.
   const providedKey = String(req.body?.reconnectKey || "");
   let rejoin = null;
   if (providedKey.length >= 20) {
@@ -621,6 +654,33 @@ export async function joinSession(req, res) {
   }
   // No (valid) key: always a fresh seat below. Never hand back another
   // participant's row on name match alone.
+
+  // Guests may join class sessions (adviser decision). Throwaway seats can't
+  // probe answers there anyway: class sessions hold every result until the
+  // question closes (isDeferredSession in sessions.socket.js).
+  const deviceHash = guestDeviceHash(req.body?.guestKey);
+  const nameKey = guestNameKey(fn, ln);
+
+  // A kicked guest can't come straight back in from the same browser.
+  if (await isGuestDeviceKicked({ sessionId: session.id, deviceHash })) {
+    return res.status(403).json({ code: "GUEST_REMOVED", message: "You were removed from this session and cannot rejoin." });
+  }
+
+  // From the 3rd live session of the same class, ask whether to create a
+  // student account. Nothing is created until the guest chooses; picking
+  // "Continue as guest" resends with continueAsGuest: true.
+  const visitNumber = session.class_id
+    ? (await countPreviousGuestVisits({ classId: session.class_id, sessionId: session.id, deviceHash, nameKey })) + 1
+    : 1;
+  if (session.class_id && visitNumber >= GUEST_REPEAT_THRESHOLD && req.body?.continueAsGuest !== true) {
+    const className = session.class_name || "this class";
+    return res.status(409).json({
+      code: "GUEST_ACCOUNT_SUGGESTED",
+      visits: visitNumber,
+      className,
+      message: `You've joined ${className}'s live sessions ${visitNumber} times as a guest.`,
+    });
+  }
 
   // Atomic seat claim: the INSERT only lands when a seat is actually free
   // (kicked seats don't count) or the plan is unlimited. One statement, so a
@@ -650,7 +710,7 @@ export async function joinSession(req, res) {
     if (cur && ['LOBBY', 'LIVE', 'PAUSED'].includes(cur.status)
         && Number(cur.max_participants || 0) > 0
         && Number(cur.seats || 0) >= Number(cur.max_participants)) {
-      // No student names here — seat counts only, for diagnosing the next
+      // No student names here - seat counts only, for diagnosing the next
       // "couldn't enter the session" report without leaking PII to logs.
       console.warn(`[join] session ${session.id} full (${cur.seats}/${cur.max_participants} seats, code ${code.toUpperCase()})`);
       return res.status(400).json({ message: 'Session is full.' });
@@ -663,12 +723,21 @@ export async function joinSession(req, res) {
     { sid: session.id, pid: claimed.insertId }
   );
 
+  // Remember this guest seat: repeat-guest count for the host's badge, and
+  // the kicked-guest check above. Tracking must never block a join.
+  try {
+    await recordGuestJoin({ participantId: claimed.insertId, sessionId: session.id, classId: session.class_id, deviceHash, nameKey, visitNumber });
+  } catch (e) {
+    console.error("guest join tracking failed:", e?.message || e);
+  }
+
   res.json({
     sessionId: session.id,
     participantId: claimed.insertId,
     reconnectKey,
     joinMode: session.join_mode,
     isGuestHost: !!session.is_guest_host,
+    guestVisits: session.class_id ? visitNumber : null,
   });
 }
 
@@ -682,15 +751,14 @@ export async function logTabEvent(req, res) {
     // connection, so it must present the reconnectKey instead — otherwise any
     // client could forge tab-outs for any sequential participantId and frame
     // another student. Same guards as the socket handler beyond that, so a
-    // stale beacon can't add tab-outs to an ended session or a seat that
-    // isn't theirs.
+    // stale beacon can't add tab-outs outside a LIVE quiz.
     const [[participant]] = await pool.query(
       `SELECT p.id, p.kicked_at, s.status
        FROM session_participants p JOIN sessions s ON s.id=p.session_id
        WHERE p.id=:pid AND p.session_id=:sid AND p.reconnect_key=:rk`,
       { pid: participantId, sid: sessionId, rk: reconnectKey }
     );
-    if (!participant || participant.kicked_at || participant.status === "ENDED") return res.json({ ok: true, recorded: false });
+    if (!participant || participant.kicked_at || participant.status !== "LIVE") return res.json({ ok: true, recorded: false });
     await pool.query(
       `INSERT INTO tab_events(session_id, participant_id) VALUES(:sid,:pid)`,
       { sid: sessionId, pid: participantId }

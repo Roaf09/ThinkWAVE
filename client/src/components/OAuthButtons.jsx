@@ -48,7 +48,9 @@ export default function OAuthButtons({ adminInvite = "", role = "", mode = "sign
   }, []);
 
   if (!providers) return null;
-  if (!providers.length) {
+  // Facebook login removed: filter it out everywhere (login, signup, enter).
+  const visibleProviders = (providers || []).filter((p) => String(p?.id || "").toLowerCase() !== "facebook");
+  if (!visibleProviders.length) {
     // No providers configured: a trailing item (Guest) still renders alone.
     if (variant === "enter" && trailing) return <div className="tw-enter-oauth">{trailing}</div>;
     return null;
@@ -67,15 +69,15 @@ export default function OAuthButtons({ adminInvite = "", role = "", mode = "sign
   // button (tw-enter-*), not the auth-pilot tokens. Two shapes: icon row
   // beside Guest on the chooser, full-width list inside login/signup cards.
   if (variant === "enter") {
-    // Chooser order: Facebook, Google, then anything trailing (Guest).
-    const ordered = [...providers].sort((a, b) => {
-      const rank = (id) => (id === "facebook" ? 0 : id === "google" ? 1 : 2);
+    // Chooser order: Google, then anything trailing (Guest).
+    const ordered = [...visibleProviders].sort((a, b) => {
+      const rank = (id) => (id === "google" ? 0 : 1);
       return rank(a.id) - rank(b.id);
     });
     if (layout === "wide") {
       return (
         <div className="tw-enter-oauth-list">
-          {providers.map((p) =>
+          {visibleProviders.map((p) =>
             needsPick ? (
               <button key={p.id} type="button" onClick={onRequireRole} className="tw-enter-oauth-wide">
                 {MARKS[p.id] || null}
@@ -135,7 +137,7 @@ export default function OAuthButtons({ adminInvite = "", role = "", mode = "sign
         <span className="text-xs font-semibold">or continue with</span>
         <span className="flex-1 h-px bg-auth-border dark:bg-auth-border-dark" aria-hidden="true" />
       </div>
-      {providers.map((p) => (
+      {visibleProviders.map((p) => (
         <a
           key={p.id}
           href={hrefFor(p.id)}

@@ -1,6 +1,7 @@
 import { TeacherPressButton } from "../TeacherUI";
 import { BankModal, BuilderModal } from "./QuizBuilderParts";
 import { validateQuestion } from "./quizBuilderUtils";
+import { normalizeTemplateType } from "../../../lib/templateTypes";
 
 export function BuilderModals({
   modal,
@@ -40,7 +41,7 @@ export function BuilderModals({
           tone="red"
           icon="trash"
           title="Delete Quiz?"
-          message={<>Delete <b style={{ color: c.text }}>{quiz.title}</b>? This cannot be undone.</>}
+          message={<>Delete <b style={{ color: c.text }}>{quiz.title}</b>? This will permanently remove <b style={{ color: c.text }}>{questions.length} {normalizeTemplateType(quiz?.template_type) === "MATCHING" || normalizeTemplateType(quiz?.template_type) === "CROSSWORD" ? `batch${questions.length === 1 ? "" : "es"}` : `question${questions.length === 1 ? "" : "s"}`}</b>.</>}
           onClose={() => setModal(null)}
           ui={ui}
           c={c}

@@ -30,6 +30,8 @@ export function GuessWord4PicsTemplate({ disabled, cfg, spell, setSpell, onSubmi
       images={cfg.images}
       target={String(cfg.target ?? "")}
       dummyLetters={cfg.dummyLetters}
+      letterBank={cfg.letterBank}
+      answerLength={cfg.answerLength}
       value={{ mode: spell.mode, target: spell.target, text: spell.built, bank: spell.bank }}
       onChange={(next) => setSpell((s) => ({ ...s, built: next.text ?? s.built, bank: next.bank ?? s.bank, mode: next.mode ?? s.mode, target: next.target ?? s.target }))}
       disabled={disabled}

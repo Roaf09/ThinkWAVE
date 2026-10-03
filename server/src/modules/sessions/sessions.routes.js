@@ -45,6 +45,11 @@ const JoinSchema = z.object({
   lastName: z.string().optional(),
   // Same-browser seat recovery: the key this browser was issued before, if any.
   reconnectKey: z.string().min(20).max(64).optional(),
+  // Persistent guest browser key (thinkwave_guest_identity_v1). Malformed
+  // keys are ignored by guestDeviceHash rather than failing the join.
+  guestKey: z.string().max(128).optional(),
+  // The guest saw the "create a student account?" prompt and chose to stay a guest.
+  continueAsGuest: z.boolean().optional(),
 });
 
 const CodeSchema = z.object({

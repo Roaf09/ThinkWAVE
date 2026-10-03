@@ -132,10 +132,19 @@ export default function HostLive({ guestMode = false }) {
   const [state, setState] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [guestNotices, setGuestNotices] = useState([]);
+  const notifiedGuestIdsRef = useRef(new Set());
+  useEffect(() => {
+    const fresh = (roster || []).filter((row) => row.guest_repeat && !row.kicked_at && !notifiedGuestIdsRef.current.has(Number(row.id)));
+    if (!fresh.length) return;
+    fresh.forEach((row) => notifiedGuestIdsRef.current.add(Number(row.id)));
+    setGuestNotices((list) => [...list, ...fresh.map((row) => ({ id: Number(row.id), name: `${row.first_name || ""} ${row.last_name || ""}`.trim(), visits: Number(row.guest_visits || 0) }))].slice(-3));
+  }, [roster]);
   const [groups, setGroups] = useState([]);
   const [scores, setScores] = useState([]);
   const [scoreMode, setScoreMode] = useState("normal");
   const [msg, setMsg] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [starting, setStarting] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -199,6 +208,7 @@ export default function HostLive({ guestMode = false }) {
     : { pageBg: `linear-gradient(180deg,#f8fbff,${accent}14 55%,#e6eeff)`, cardBg: "#ffffff", cardBg2: `${accent}0d`, border: `${accent}4f`, text: "#0f172a", muted: "#4b5f92", accent, headerBg: "#f5f8ff" }, [accent, dark]);
 
   useEffect(() => {
+    setLoadError("");
     Promise.all([api.get(`/sessions/${id}/state`), api.get("/auth/me")])
       .then(([sessionRes, meRes]) => {
         const data = sessionRes.data;
@@ -237,7 +247,11 @@ export default function HostLive({ guestMode = false }) {
           writeTutorialState(uid, { tutorialDemoSessionId: Number(id), tutorialDemoHostStage: "participants" });
         }
       })
-      .catch(() => { if (!guestMode) setMsg("Could not load session."); });
+      .catch((err) => {
+        const message = err?.response?.data?.message || err?.message || "Could not load session.";
+        setMsg(message);
+        setLoadError(message);
+      });
   }, [id]);
 
   useEffect(() => {
@@ -300,6 +314,9 @@ export default function HostLive({ guestMode = false }) {
     });
     socket.on("tab:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, tab_out_count: count } : row)));
     socket.on("screenshot:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, screenshot_count: count } : row)));
+    socket.on("presence:interrupted", ({ participantId }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, presenceInterrupted: true } : row)));
+    socket.on("presence:screens", ({ participantId, extended }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, extendedScreens: !!extended } : row)));
+    socket.on("integrity:flag", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, integrity_count: Number(count || Number(row.integrity_count || 0) + 1) } : row)));
     const heartbeat = setInterval(() => socket.emit("teacher:heartbeat", { sessionId: Number(id) }), 5000);
     return () => {
       clearInterval(heartbeat);
@@ -754,7 +771,10 @@ export default function HostLive({ guestMode = false }) {
     : C.pageBg, [selectedBackground, dark, C.pageBg]);
 
 
-  if (!state) return <div className="grid min-h-[100vh] place-items-center" style={{ background: C.pageBg, color: C.muted }}><TwLogoLoader minHeight="60vh" /></div>;
+  if (!state) {
+    if (loadError) return <div className="grid min-h-[100vh] place-items-center" style={{ background: C.pageBg, color: C.text }}><div style={{ textAlign: "center", display: "grid", gap: 12, justifyItems: "center" }}><div style={{ fontWeight: 900 }}>{loadError}</div><button type="button" onClick={() => window.location.reload()} style={{ padding: "10px 18px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.cardBg, color: C.text, fontWeight: 800, cursor: "pointer" }}>Retry</button></div></div>;
+    return <div className="grid min-h-[100vh] place-items-center" style={{ background: C.pageBg, color: C.muted }}><TwLogoLoader minHeight="60vh" /></div>;
+  }
 
   const startLabel = starting ? `Starting in ${countdown}…` : isLive ? "Pause" : isPaused ? "Resume" : "Start";
   const sideBorder = `color-mix(in srgb, ${accent} ${dark ? 72 : 62}%, ${dark ? "#dbeafe" : "#0f172a"})`;
@@ -902,6 +922,8 @@ export default function HostLive({ guestMode = false }) {
 
     {tabTutorialOpen && <ThinkBotTutorial accentColor={accent} target='[data-tutorial="host-tab-out"]' placement="left" square clickAnywhere allowTargetInteraction={false} onClickAnywhere={() => { if (tutorialUserId) writeTutorialState(tutorialUserId, { fiveStudentTabSeen: true }); setTabTutorialOpen(false); }}><p>This counts the amount of times they leave the session.</p><p>When they reach <strong>2 counts</strong>, ThinkWAVE gives a warning. Reaching <strong>3</strong> will kick them out of the session due to suspicious actions.</p></ThinkBotTutorial>}
 
+    <GuestRepeatNotice notices={guestNotices} accent={accent} onDismiss={(nid) => setGuestNotices((list) => list.filter((n) => n.id !== nid))} />
+
     <ActionDialog open={!!confirmAction} plainIcon flatSurface tone={confirmAction === "end" ? "red" : "blue"} icon={<TwIcon name={confirmAction === "end" ? "stop" : isLive ? "pause" : "play"} size={46}/>} title={confirmAction === "end" ? "End this session?" : isLive ? "Pause this session?" : isPaused ? "Resume this session?" : "Start this session?"} message={isLive && confirmAction !== "end" ? "The question timer and gameplay will pause for everyone." : ""} onClose={() => setConfirmAction(null)}><button className="tw-dialog-text-cancel" onClick={() => setConfirmAction(null)}>Cancel</button><TeacherPressButton tone={confirmAction === "end" ? "red" : "blue"} onClick={runConfirmed}>{confirmAction === "end" ? "End" : isLive ? "Pause" : isPaused ? "Resume" : "Start"}</TeacherPressButton></ActionDialog>
     <ActionDialog open={allAnsweredPrompt} icon={<TwIcon name="check" size={28}/>} title={advanceReason === "timeup" ? "Time is up" : "Everyone has answered"} message={advanceReason === "timeup" ? "Moving to the next question even if some participants did not submit." : ""} onClose={() => setAllAnsweredPrompt(false)}><TeacherPressButton tone="blue" className="tw-host-dialog-blue-no-outline" onClick={() => { setAllAnsweredPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "PAUSED" }); }}>Wait</TeacherPressButton><TeacherPressButton tone="blue" style={{ "--tw-press-face": accent, "--tw-press-base": `color-mix(in srgb, ${accent} 62%, #071024)`, "--tw-press-border": `color-mix(in srgb, ${accent} 58%, #fff)` }} onClick={() => { setAllAnsweredPrompt(false); nextQuestion(); }}>Go to next ({autoNextCount})</TeacherPressButton></ActionDialog>
     <ActionDialog open={finishedPrompt} plainIcon flatSurface tone="blue" icon={<TwIcon name="trophy" size={46}/>} title="Everyone has finished answering" message="You can end the session when you are ready." onClose={() => setFinishedPrompt(false)}><TeacherPressButton tone="blue" className="tw-host-dialog-blue-no-outline" onClick={() => { setFinishedPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "PAUSED" }); }}>Review scores</TeacherPressButton><TeacherPressButton tone="red" onClick={() => { setFinishedPrompt(false); socketRef.current?.emit("teacher:setStatus", { sessionId: Number(id), status: "ENDED" }); }}>End session</TeacherPressButton></ActionDialog>
@@ -922,7 +944,29 @@ const Podium = memo(function Podium({ leaders, scoreMode = "competitive", onTogg
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const tabCount = Number(row.tab_out_count || 0); const shotCount = Number(row.screenshot_count || 0); const [showShots, setShowShots] = useState(false); const kicked = !!row.kicked_at; const indicator = kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = tabCount >= 3 ? "#ef4444" : tabCount === 2 ? "#f97316" : "#94a3b8"; const shownCount = showShots ? shotCount : tabCount; const shownColor = showShots ? "#38bdf8" : tabColor; const shownLabel = showShots ? `screenshot${shotCount === 1 ? "" : "s"}` : `tab out${tabCount === 1 ? "" : "s"}`; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2 }}><span className="tw-host-online-dot" style={{ background: indicator }}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}</span><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : <span/>}<button type="button" data-tutorial="host-tab-out" onClick={() => setShowShots((v) => !v)} title={showShots ? "Click to show tab-out count" : "Click to show screenshot count"} className="text-[12px] font-extrabold" style={{ color: shownColor, background: "transparent", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "right" }}>{shownCount} {shownLabel}</button></div>; });
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const tabCount = Number(row.tab_out_count || 0); const shotCount = Number(row.screenshot_count || 0); const integrityCount = Number(row.integrity_count || 0); const [showShots, setShowShots] = useState(false); const kicked = !!row.kicked_at; const indicator = row.presenceInterrupted ? "#f97316" : kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = tabCount >= 3 ? "#ef4444" : tabCount === 2 ? "#f97316" : "#94a3b8"; const shownCount = showShots ? shotCount : tabCount; const shownColor = tabColor; const shownLabel = showShots ? `screen capture${shotCount === 1 ? "" : "s"}` : `tab out${tabCount === 1 ? "" : "s"}`; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2, gridTemplateColumns: "10px minmax(0,1fr) auto" }}><span className="tw-host-online-dot" style={{ background: indicator }} title={row.presenceInterrupted ? "Monitoring interrupted — no heartbeat for 15s+ while connected" : undefined}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}{row.is_guest ? <em title={row.guest_repeat ? `Guest for the ${ordinal(row.guest_visits)} time in this class — records aren't saved to an account.` : "Joined as a guest (no student account)."} className="ml-[4px] text-[11px] not-italic" style={row.guest_repeat ? { color: "#f97316", fontWeight: 800 } : { opacity: 0.7 }}>{row.guest_repeat ? `(Guest · ${ordinal(row.guest_visits)} visit)` : "(Guest)"}</em> : null}{integrityCount > 0 ? <em title="Answers in a shape the quiz screen can't produce — sent by a modified page or script. Scored 0." className="ml-[4px] text-[11px] not-italic" style={{ color: "#ef4444", fontWeight: 800 }}>(⚠ {integrityCount} tampered)</em> : null}{row.extendedScreens ? <em title="Student device reports multiple displays — could be a projector, not proof of anything." className="ml-[4px] text-[11px] not-italic opacity-70">(2 screens)</em> : null}{row.presenceInterrupted ? <em title="No presence heartbeat for 15s+ while connected — tab may be frozen or messages blocked." className="ml-[4px] text-[11px] not-italic opacity-70">(signal lost)</em> : null}</span><span style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "end", whiteSpace: "nowrap" }}><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : null}<button type="button" data-tutorial="host-tab-out" onClick={() => setShowShots((v) => !v)} title={showShots ? "Screen captures (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show screen-capture count"} className="text-[12px] font-extrabold" style={{ color: shownColor, background: "transparent", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "right" }}>{shownCount} {shownLabel}</button></span></div>; });
+function ordinal(n) {
+  const v = Number(n) || 0;
+  const s = ["th", "st", "nd", "rd"];
+  const m = v % 100;
+  return `${v}${s[(m - 20) % 10] || s[m] || s[0]}`;
+}
+
+// One-time notice when a guest reaches their 3rd+ live session of this class.
+// Same 3D prompt-box language as the host question prompt: accent border +
+// solid slab + glow + top highlight.
+function GuestRepeatNotice({ notices, onDismiss, accent = "#f97316" }) {
+  if (!notices.length) return null;
+  const slabBase = `color-mix(in srgb, ${accent} 58%, #0f172a)`;
+  return <div role="status" aria-live="polite" style={{ position: "fixed", right: 18, bottom: 18, zIndex: 60, display: "grid", gap: 10, width: "min(92vw, 360px)" }}>
+    {notices.map((notice) => <div key={notice.id} style={{ background: `color-mix(in srgb, ${accent} 12%, #ffffff)`, color: "#0f172a", border: `3px solid ${accent}`, borderRadius: 14, padding: "12px 14px", boxShadow: `0 6px 0 ${slabBase}, 0 18px 34px ${accent}59, inset 0 2px 0 rgba(255,255,255,.8)` }}>
+      <div style={{ fontWeight: 900, marginBottom: 4 }}>Repeat guest</div>
+      <div style={{ fontSize: 13, lineHeight: 1.5 }}><b>{notice.name || "A guest"}</b> has joined this class&apos;s live sessions {notice.visits} times as a guest. Their results aren&apos;t saved to an account. Consider sharing the class code so they can sign up.</div>
+      <button type="button" onClick={() => onDismiss(notice.id)} style={{ marginTop: 8, background: "transparent", border: 0, padding: 0, color: "#5a6a9a", fontWeight: 800, cursor: "pointer" }}>Dismiss</button>
+    </div>)}
+  </div>;
+}
+
 // Groupings replaces Student Attendance in GROUP mode (solo keeps AttendanceRow).
 // Students self-join groups; the teacher only adds/deletes them (LOBBY only,
 // enforced server-side). Single-expand mirrors the analytics per-question

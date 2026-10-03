@@ -121,9 +121,23 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
   }
 
   function setAnswerMode(nextMode) {
-    const nextCorrect = nextMode === "TWO"
-      ? { ...cor, choices: correctChoices.slice(0, 2), choice: correctChoices[0] || "" }
-      : { ...cor, choice: correctChoices[0] || "", choices: correctChoices[0] ? [correctChoices[0]] : [] };
+    // Persist 2nd answer across toggles: stashing TWO picks so disabling
+    // then re-enabling restores the 2nd selection instead of resetting.
+    if (nextMode === "ONE") {
+      const stash = correctChoices.slice(0, 2);
+      onChange({ config: { ...cfg, options: opts, answerMode: nextMode, mcqMode, answerTwoStash: stash }, correct: { ...cor, choice: correctChoices[0] || "", choices: correctChoices[0] ? [correctChoices[0]] : [] }, points: clampQuestionPoints(q.points, 3) });
+      return;
+    }
+    let restored = [...correctChoices];
+    const stashed = Array.isArray(cfg.answerTwoStash) ? cfg.answerTwoStash : [];
+    for (const s of stashed) {
+      if (restored.length >= 2) break;
+      if (!restored.some((choice) => choiceMatchesValue({ id: s, text: s }, choice)) && opts.some((row) => choiceMatchesValue(row, s))) {
+        restored.push(s);
+      }
+    }
+    restored = restored.slice(0, 2);
+    const nextCorrect = { ...cor, choices: restored, choice: restored[0] || "" };
     onChange({ config: { ...cfg, options: opts, answerMode: nextMode, mcqMode }, correct: nextCorrect, points: clampQuestionPoints(q.points, 3) });
   }
 
@@ -142,7 +156,7 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
     }
     const exists = correctChoices.some((choice) => choiceMatchesValue(opt, choice));
     const nextChoices = exists ? correctChoices.filter((choice) => !choiceMatchesValue(opt, choice)) : [...correctChoices, value].slice(0, 2);
-    onChange({ correct: { ...cor, choice: nextChoices[0] || "", choices: nextChoices } });
+    onChange({ config: { ...cfg, answerTwoStash: nextChoices }, correct: { ...cor, choice: nextChoices[0] || "", choices: nextChoices } });
   }
 
   // Drag-and-drop swaps the two choices: the dragged card and the drop
@@ -249,7 +263,7 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
           };
           if (mcqMode === "MODIFIED") {
             return <div key={opt.id || i} className={`tw-mcq-image-choice${isCorrect ? " is-correct" : ""}`} style={{ border: `4px solid ${pal.border}`, borderRadius: 20, background: pal.face, color: pal.ink, boxShadow: isCorrect ? `0 1px 0 ${pal.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${pal.base}, 0 16px 28px rgba(15,23,42,.16)`, transform: isCorrect ? "translateY(5px)" : "translateY(-3px)", transition: "transform .13s ease, filter .16s ease, box-shadow .13s ease" }}>
-              <button type="button" className="tw-mcq-correct-dot tw-mcq-image-correct-letter" title={`Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ border: `4px solid ${pal.border}`, background: pal.badge, color: pal.ink, boxShadow: `0 3px 0 ${pal.base}` }}>{isCorrect ? <TwIcon name="check" size={30} /> : letter}</button>
+              <button type="button" className={`tw-mcq-correct-dot tw-mcq-image-correct-letter${answerMode === "TWO" ? " is-two-answer" : ""}`} title={`Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ border: `4px solid ${pal.border}`, borderRadius: answerMode === "TWO" ? 12 : "50%", background: pal.badge, color: pal.ink, boxShadow: `0 3px 0 ${pal.base}`, transition: "border-radius .28s cubic-bezier(.22,1,.36,1), transform .24s ease, background .22s ease, border-color .22s ease" }}>{isCorrect ? <TwIcon name="check" size={30} /> : letter}</button>
               <ImageUploadTile value={opt.image} label={`Upload image ${letter}`} onChange={(value) => updateImage(i, value)} c={c} accent={pal.border} />
             </div>;
           }
@@ -412,10 +426,12 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
                   textAlign: "center",
                 } : { ...ui.input, resize: "none", overflow: "hidden", lineHeight: 1.45, minHeight: 38, textAlign: "center" }}
               />
-              {(mcqImagesEnabled || cfg.voiceRecord) && <div className="tw-mcq-option-media-row">
-                {mcqImagesEnabled && <ImageUploadTile compact value={opt.image} label={`Upload option ${letter} image`} onChange={(value) => updateImage(i, value)} c={c} accent={pal.border} />}
-                {cfg.voiceRecord && <div className="tw-builder-choice-record"><span>Choice {letter} recording</span><VoiceRecorderButton value={(Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [])[i] || ""} onChange={(value) => updateRecording(i, value)} /></div>}
-              </div>}
+              {(mcqImagesEnabled || cfg.voiceRecord) && (
+                <div className={`tw-mcq-option-media-row${mcqImagesEnabled && cfg.voiceRecord ? " is-dual" : " is-single"}`}>
+                  {mcqImagesEnabled && <span className="tw-mcq-media-fixed-square"><ImageUploadTile compact value={opt.image} label={`Upload option ${letter} image`} onChange={(value) => updateImage(i, value)} c={c} accent={pal.border} /></span>}
+                  {cfg.voiceRecord && <div className="tw-builder-choice-record"><span>Choice {letter} recording</span><VoiceRecorderButton value={(Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [])[i] || ""} onChange={(value) => updateRecording(i, value)} /></div>}
+                </div>
+              )}
             </div>
             <button
               type="button"

@@ -175,6 +175,13 @@ body::before {
 }
 
 /* ── Header ── */
+/* Sticky header cluster: title bar + both progress bars stay pinned while
+   the question body scrolls. The header keeps its own theme background. */
+.qn-sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 70;
+}
 .qn-header {
   display: flex;
   align-items: center;
@@ -324,9 +331,9 @@ body::before {
 .quiz-shell-new .choice-btn {
   border: none;
   border-radius: 999px;
-  min-height: 82px;
+  min-height: 96px;
   padding: 0 26px 0 0;
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 800;
   color: #fff;
   display: flex;
@@ -408,15 +415,15 @@ body::before {
 
 /* Circle letter badge */
 .quiz-shell-new .choice-badge {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 26px;
+  font-size: 28px;
   line-height: 1;
   color: #fff;
 }
@@ -445,7 +452,7 @@ body::before {
 
 /* Answer text */
 .quiz-shell-new .choice-text {
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 800;
   letter-spacing: 0.2px;
   min-width: 0;
@@ -485,8 +492,8 @@ body::before {
   }
 
   .quiz-shell-new .choice-btn {
-    min-height: 58px;
-    font-size: 16px;
+    min-height: 64px;
+    font-size: 18px;
   }
 
   .quiz-shell-new .choice-badge {

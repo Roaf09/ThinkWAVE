@@ -50,7 +50,7 @@ export function WaitingRoomView({
           </div> */}
         </div>
         {waitingSubtitle ? <p className="sp-wait-subtitle" style={{ color: mutedC }}>{waitingSubtitle}</p> : null}
-        <div className="sp-assignment-warning" style={{ fontSize: 12, padding: "6px 12px", marginTop: 4, textAlign: "center" }}>BEWARE: CHEATING IS PROHIBITED</div>
+        <div className="sp-assignment-warning" style={{ fontSize: 12, padding: "6px 12px", marginTop: 4, textAlign: "center" }}>BEWARE: CHEATING IS PROHIBITED.</div>
         {msg && <p style={{ color: "#ef4444", fontWeight: 800, textAlign: "center", width: "100%", margin: "12px auto 0" }}>{msg}</p>}
 
         {!isGroupMode && (
@@ -113,6 +113,7 @@ export function CountdownView({
   experienceControls,
   antiCheatOverlay,
   explanationOverlay,
+  feedbackOverlay,
   dark,
   state,
   questions,
@@ -120,7 +121,7 @@ export function CountdownView({
 }) {
   return (
     <div style={{ minHeight: "100vh", ...experienceBgStyle, fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s" }}>
-      {experienceControls}{antiCheatOverlay}{explanationOverlay}
+      {experienceControls}{antiCheatOverlay}{explanationOverlay}{feedbackOverlay}
       <div className="countdown-overlay" style={{ background: dark ? undefined : "radial-gradient(circle at center, rgba(255,255,255,0.86), rgba(219,230,255,0.95))" }}>
         <div className="countdown-card">
           <h3 className="countdown-title" style={{ color: dark ? "#fff" : "#17305f" }}>{Number(state?.current_question_index||0)===0 ? "Get Ready" : Number(state?.current_question_index||0)>=questions.length-1 ? "This will be the last question!" : "Next question coming in..."}</h3>

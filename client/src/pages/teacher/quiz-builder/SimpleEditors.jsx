@@ -282,7 +282,7 @@ export function GuessWordEditor({ q, onChange, ui, c }) {
               placeholder="Enter the answer"
               onFocus={() => { if (!trimText(cfg.explanation)) setGuessAnswerBlurred(false); }}
               onBlur={() => { if (trimText(cor.text)) setGuessAnswerBlurred(true); }}
-              onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Number(cfg.dummyLetters || 6) } })}
+              onChange={(e) => onChange({ correct: { ...cor, text: e.target.value.slice(0, 255) }, config: { ...cfg, images, target: e.target.value.slice(0, 255), dummyLetters: Math.min(6, Math.max(3, Number(cfg.dummyLetters ?? 6) || 6)) } })}
               onInput={(e) => fitGuessWord(e.currentTarget)}
               ref={(el) => { if (el) fitGuessWord(el); }}
               className="font-[850] tracking-[.04em] tw-guess-word-input"
@@ -293,22 +293,22 @@ export function GuessWordEditor({ q, onChange, ui, c }) {
         <div data-tutorial="builder-guess-distractors">
           <label className="block mb-2" style={ui.smallLabel}>Distractor letters</label>
           <div style={guessBox}>
-            <input
-              type="number"
-              min={0}
-              max={12}
-              value={Number(cfg.dummyLetters || 6)}
-              onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(12, Math.max(0, Number(e.target.value) || 0)) } })}
+            <select
+              value={String(Math.min(6, Math.max(3, Number(cfg.dummyLetters ?? 6) || 6)))}
+              onChange={(e) => onChange({ config: { ...cfg, images, target: cfg.target ?? cor.text ?? "", dummyLetters: Math.min(6, Math.max(3, Number(e.target.value) || 6)) } })}
               className="font-[850]"
-              style={{ ...guessInput, height: 126, fontSize: 30 }}
-            />
+              style={{ ...guessInput, height: 126, fontSize: 30, width: "100%" }}
+              aria-label="Distractor letters (3 to 6)"
+            >
+              {[3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
         </div>
         {guessAnswerBlurred && trimText(cor.text) && (
           <div className="tw-guess-word-explanation">
             <CorrectAnswerExplanation
               value={cfg.explanation || ""}
-              onChange={(explanation) => onChange({ config: { ...cfg, images, target: cor.text ?? cfg.target ?? "", dummyLetters: Number(cfg.dummyLetters || 6), explanation } })}
+              onChange={(explanation) => onChange({ config: { ...cfg, images, target: cor.text ?? cfg.target ?? "", dummyLetters: Math.min(6, Math.max(3, Number(cfg.dummyLetters ?? 6) || 6)), explanation } })}
               ui={ui}
               c={c}
             />

@@ -346,7 +346,7 @@ export function validateQuestion(q, templateType) {
     if (word.length > 255) issues.push("correct word must be 255 characters or fewer");
     if (!/^[A-Za-z0-9\s-]+$/.test(word)) issues.push("correct word should use letters only (spaces allowed)");
     const dummy = Number(cfg.dummyLetters ?? 6);
-    if (!Number.isFinite(dummy) || dummy < 0 || dummy > 12) issues.push("distractor letter count must be between 0 and 12");
+    if (!Number.isFinite(dummy) || dummy < 3 || dummy > 6) issues.push("distractor letters must be between 3 and 6");
   }
 
   if (tt === "MATCHING") {

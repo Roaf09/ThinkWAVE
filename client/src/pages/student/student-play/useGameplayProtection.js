@@ -3,29 +3,70 @@ import { useEffect, useRef, useState } from "react";
 // Shared gameplay protection for live sessions + assignments.
 //
 // Two jobs:
-// 1. awayBlur — mirrors the assignment behavior on the live side: while the
-//    tab is hidden the gameplay is visually blurred out. (Live already
-//    *counts* tab-outs server-side; it just never showed anything.)
+// 1. awayBlur — while the tab is hidden / window loses focus the gameplay is
+//    visually blurred out. Live already *counts* tab-outs server-side.
 // 2. Capture deterrents — best-effort only. Browsers expose no API that can
 //    truly block OS screenshots or screen recording, so this blanks the
-//    screen the moment a capture keystroke is seen (PrintScreen fires
-//    keydown *before* the OS grabs the frame), blocks print/save shortcuts,
-//    and disables copy + context menu outside answer inputs.
+//    screen the moment a capture keystroke/combo is seen (PrintScreen fires
+//    keydown *before* the OS grabs the frame; Snip / Game Bar / macOS
+//    shortcuts steal focus which fires window blur), blocks print/save
+//    shortcuts, and disables copy + context menu outside answer inputs.
+// 3. Fullscreen gate — optional. When requireFullscreen is true the quiz
+//    stays blurred + non-interactive until the student enters fullscreen.
+//    iOS Safari (no Fullscreen API) is auto-exempt so it never deadlocks.
 //
 // `active` gates everything so lobby/intro screens stay unrestricted.
-export function useGameplayProtection({ active, onCaptureAttempt }) {
+// `requireFullscreen` gates only the fullscreen block (pass LIVE/playing).
+export function useGameplayProtection({ active, requireFullscreen = false, onCaptureAttempt }) {
   const [awayBlur, setAwayBlur] = useState(false);
   const [shotBlocked, setShotBlocked] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => typeof document !== "undefined" && !!document.fullscreenElement
+  );
+  const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const activeRef = useRef(active);
   activeRef.current = active;
   const captureRef = useRef(onCaptureAttempt);
   captureRef.current = onCaptureAttempt;
   const shotTimer = useRef(null);
 
+  // Fullscreen availability: iPhone Safari has no Fullscreen API —
+  // exempt it instead of soft-locking the quiz.
+  useEffect(() => {
+    try {
+      setFullscreenSupported(
+        !!document.fullscreenEnabled && !!document.documentElement?.requestFullscreen
+      );
+    } catch {
+      setFullscreenSupported(false);
+    }
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+      // Re-entering fullscreen clears the blur immediately.
+      if (document.fullscreenElement) setAwayBlur(false);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  function enterFullscreen() {
+    try {
+      const p = document.documentElement?.requestFullscreen?.();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch {}
+  }
+
+  const needsFullscreen =
+    !!requireFullscreen && !!active && !!fullscreenSupported && !isFullscreen;
+
   useEffect(() => {
     function flashShotBlock() {
       if (!activeRef.current) return;
       setShotBlocked(true);
+      // Instant opaque cover: Snip / Game Bar overlays steal window focus,
+      // so the blur below (onWindowBlur) is already up — this extends it so
+      // the captured frame stays blurred.
+      setAwayBlur(true);
       // Silent tally for the host panel (no warning to the student): one
       // count per distinct key press. Held keys must not spam the count.
       try { captureRef.current?.(); } catch {}
@@ -35,24 +76,75 @@ export function useGameplayProtection({ active, onCaptureAttempt }) {
         if (done?.catch) done.catch(() => {});
       } catch {}
       clearTimeout(shotTimer.current);
-      shotTimer.current = setTimeout(() => setShotBlocked(false), 1800);
+      shotTimer.current = setTimeout(() => {
+        setShotBlocked(false);
+        // Keep awayBlur only if the page is genuinely hidden / unfocused.
+        try {
+          if (!document.hidden && document.hasFocus()) setAwayBlur(false);
+        } catch {
+          setAwayBlur(false);
+        }
+      }, 1800);
+    }
+
+    function isPrintScreen(e) {
+      try {
+        if (e.key === "PrintScreen" || e.code === "PrintScreen") return true;
+        if (Number(e.keyCode) === 44) return true;
+      } catch {}
+      return false;
     }
 
     function onKeyDown(e) {
       if (!activeRef.current) return;
       if (e.repeat) return;
-      if (e.key === "PrintScreen" || e.code === "PrintScreen") {
+      // 1. Physical PrintScreen (keydown fires before OS grab on Windows).
+      if (isPrintScreen(e)) {
         try { e.preventDefault(); } catch {}
         flashShotBlock();
         return;
       }
+      const key = String(e.key || "").toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
+      // 2. Snip: Win+Shift+S / Ctrl+Shift+S / Cmd+Shift+S.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "s") {
+        try { e.preventDefault(); } catch {}
+        flashShotBlock();
+        return;
+      }
+      // 3. macOS screenshots: Cmd+Shift+3/4/5/6 (also blocks Cmd+Shift+4 crop).
+      if (e.metaKey && e.shiftKey && ["3", "4", "5", "6"].includes(key)) {
+        try { e.preventDefault(); } catch {}
+        flashShotBlock();
+        return;
+      }
+      // 4. Xbox Game Bar: Win+G (overlay) / Win+Alt+R (record toggle).
+      if (e.metaKey && (key === "g" || (e.altKey && key === "r"))) {
+        try { e.preventDefault(); } catch {}
+        flashShotBlock();
+        return;
+      }
+      // 5. DevTools quick-open raises the bar slightly (menu still exists).
+      // F12 included for consistency — it does not block DevTools.
+      if (key === "f12" || ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i", "j", "c"].includes(key))) {
+        try { e.preventDefault(); } catch {}
+        return;
+      }
       if (!mod || !e.key) return;
-      const key = String(e.key).toLowerCase();
       // Print / save-as would export the questions; Meta+P/S cover macOS too.
       if (key === "p" || key === "s" || key === "u") {
         try { e.preventDefault(); } catch {}
         if (key === "p") flashShotBlock();
+      }
+    }
+
+    // Some browsers (notably Chrome on certain layouts) fire PrintScreen on
+    // keyup only — catch it there too.
+    function onKeyUp(e) {
+      if (!activeRef.current) return;
+      if (isPrintScreen(e)) {
+        try { e.preventDefault(); } catch {}
+        flashShotBlock();
       }
     }
 
@@ -81,17 +173,57 @@ export function useGameplayProtection({ active, onCaptureAttempt }) {
       if (!document.hidden) setAwayBlur(false);
     }
 
+    // Snip / Game Bar / Alt-Tab / screen-record control-center all steal
+    // window focus without hiding the document. Blurring instantly here is
+    // what makes the captured frame come out blurred.
+    function onWindowBlur() {
+      if (activeRef.current) setAwayBlur(true);
+    }
+
+    function onWindowFocus() {
+      try {
+        if (!document.hidden) setAwayBlur(false);
+      } catch {
+        setAwayBlur(false);
+      }
+    }
+
+    function onBeforePrint(e) {
+      if (!activeRef.current) return;
+      try { e.preventDefault(); } catch {}
+      flashShotBlock();
+      setAwayBlur(true);
+    }
+
+    function onAfterPrint() {
+      try {
+        if (!document.hidden) setAwayBlur(false);
+      } catch {
+        setAwayBlur(false);
+      }
+    }
+
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
     document.addEventListener("copy", onCopy);
     document.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("focus", onShow);
+    window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("beforeprint", onBeforePrint);
+    window.addEventListener("afterprint", onAfterPrint);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("focus", onShow);
+      window.removeEventListener("focus", onWindowFocus);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("beforeprint", onBeforePrint);
+      window.removeEventListener("afterprint", onAfterPrint);
       clearTimeout(shotTimer.current);
     };
   }, []);
@@ -106,5 +238,5 @@ export function useGameplayProtection({ active, onCaptureAttempt }) {
     return () => document.body.classList.remove("sp-capture-guarded");
   }, [active]);
 
-  return { awayBlur, shotBlocked };
+  return { awayBlur, shotBlocked, isFullscreen, needsFullscreen, enterFullscreen, fullscreenSupported };
 }

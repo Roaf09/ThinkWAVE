@@ -657,7 +657,7 @@ export default function ProfileTab({
           </RowActions>
           {delMsg && <RowMsg c={c} kind="error" text={delMsg} />}
         </ExpandableRow>
-        <div style={{ padding: "4px 0" }}>
+        <div className="tw-profile-logout-row" style={{ padding: "4px 0" }}>
           <button type="button" onClick={() => onLogout?.()} style={{ width: "100%", display: "flex", alignItems: "center", padding: "15px 16px", border: "none", background: "transparent", color: "inherit", font: "inherit", fontSize: 14, fontWeight: 800, cursor: "pointer", textAlign: "left" }}>
             Log out
           </button>

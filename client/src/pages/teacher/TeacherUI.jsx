@@ -47,7 +47,7 @@ export function ThinkBotEmptyState({ title, actionLabel, onAction, actionProps =
   );
 }
 
-export function TeacherActionModal({ c, icon = "alert", title, message, tone = "blue", confirmLabel = "Confirm", cancelLabel = "Cancel", onConfirm, onClose, hideCancel = false, textCancel = false, children }) {
+export function TeacherActionModal({ c, icon = "alert", title, message, tone = "blue", confirmLabel = "Confirm", cancelLabel = "Cancel", onConfirm, onClose, hideCancel = false, textCancel = false, children, footerNote = "" }) {
   if (typeof document === "undefined") return null;
   const isLogoutExit = String(icon || "").toLowerCase() === "logout" || /log\s?out|exit/i.test(String(title || ""));
   return createPortal(
@@ -62,6 +62,7 @@ export function TeacherActionModal({ c, icon = "alert", title, message, tone = "
             {!hideCancel && (textCancel ? <button type="button" className="tw-teacher-text-cancel" onClick={onClose}>{cancelLabel}</button> : <TeacherPressButton tone="blue" onClick={onClose}>{cancelLabel}</TeacherPressButton>)}
             <TeacherPressButton tone={tone} onClick={onConfirm}>{confirmLabel}</TeacherPressButton>
           </div>
+          {footerNote && <div role="alert" style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13, fontWeight: 800, textAlign: "center" }}>{footerNote}</div>}
         </section>
       </div>
     </>,

@@ -3,7 +3,23 @@ import { QuestionAudioButton } from "../../../components/AudioControls";
 import thinkBotLogo from "../../../assets/thinkbot-logo.png";
 import { LiveLeaderboardPanel } from "./leaderboardViews";
 import { TemplateBody } from "./questionViews";
-import { feedbackCopy, feedbackStatus, fmtTime, renderAnswerPreview } from "./studentPlayUtils";
+import { feedbackCopy, feedbackStatus, fitPromptTextSize, fmtTime, renderAnswerPreview } from "./studentPlayUtils";
+
+export function FeedbackOverlay({ showFeedback, feedbackQ, feedbackFxKey }) {
+  if (!showFeedback || !feedbackQ) return null;
+  const status = feedbackQ.status || feedbackStatus(feedbackQ);
+  const copy = feedbackCopy(feedbackQ);
+  return <div className={`sp-feedback-overlay is-${status}`}>
+    <div className="sp-feedback-burst" aria-hidden="true">
+      {Array.from({ length: 10 }).map((_, i) => <span key={i} style={{ "--i": i }} />)}
+    </div>
+    <div key={feedbackFxKey} className={`sp-feedback-card is-${status}`}>
+      <div className="sp-feedback-icon"><TwIcon name={copy.icon} size={44} /></div>
+      <div className="sp-feedback-title">{copy.title}</div>
+      <div className="sp-feedback-subtitle">{copy.subtitle}</div>
+    </div>
+  </div>;
+}
 
 export function GameplayView({
   dark,
@@ -57,20 +73,7 @@ export function GameplayView({
     <div className={`sp-gameplay-page ${dark ? "theme-dark" : "theme-light"}`} style={{ minHeight: "100vh", ...experienceBgStyle, display: "flex", flexDirection: "column", fontFamily: "Inter,'Segoe UI',system-ui,sans-serif", transition: "background 0.45s", "--sp-template-accent": gameplayAccent }}>
         {experienceControls}{antiCheatOverlay}{explanationOverlay}
       <LiveLeaderboardPanel leaderboard={liveLeaderboard} participantId={participantId} groupMode={isGroupMode} />
-      {showFeedback && feedbackQ && (() => {
-        const status = feedbackQ.status || feedbackStatus(feedbackQ);
-        const copy = feedbackCopy(feedbackQ);
-        return <div className={`sp-feedback-overlay is-${status}`}>
-          <div className="sp-feedback-burst" aria-hidden="true">
-            {Array.from({ length: 10 }).map((_, i) => <span key={i} style={{ "--i": i }} />)}
-          </div>
-          <div key={feedbackFxKey} className={`sp-feedback-card is-${status}`}>
-            <div className="sp-feedback-icon"><TwIcon name={copy.icon} size={44}/></div>
-            <div className="sp-feedback-title">{copy.title}</div>
-            <div className="sp-feedback-subtitle">{copy.subtitle}</div>
-          </div>
-        </div>;
-      })()}
+      <FeedbackOverlay showFeedback={showFeedback} feedbackQ={feedbackQ} feedbackFxKey={feedbackFxKey} />
 
       {groupProposal && isGroupMode && (
         <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: dark ? "rgba(0,0,0,0.56)" : "rgba(30,45,85,0.24)", backdropFilter: "blur(6px)" }}>
@@ -92,6 +95,7 @@ export function GameplayView({
       )}
 
       <div className={`quiz-shell-new ${dark ? "theme-dark" : "theme-light"} ${selectedBackground ? "has-session-background" : ""} ${feedbackPulse ? `feedback-hit-${feedbackPulse}` : ""}`} style={{ width: "100%", minHeight: "100vh", margin: 0, display: "flex", flexDirection: "column", "--sp-template-accent": gameplayAccent }}>
+        <div className="qn-sticky-top">
         <div className="qn-header">
           <div className="qn-title-cluster">
             <div className="qn-brand"><img src={thinkBotLogo} alt="ThinkBot" className="qn-brand-bot"/><span>Think</span><span>WAVE</span></div><div className="qn-subject">{state.quiz_title || "Quiz"}</div>
@@ -103,6 +107,7 @@ export function GameplayView({
         </div>
         <div className="qn-question-progress" aria-label={`${completedLiveCount} of ${questions.length} questions answered`}><div className="qn-question-progress-bar" style={{ width: `${liveQuestionProgress}%` }} /></div>
         <div className={`qn-progress qn-timer-progress${timer.remainingSec <= 3 ? " is-danger" : timer.remainingSec <= 4 ? " is-warning" : ""}`}><div className="qn-progress-bar" style={{ width: `${Math.round((timer.progress || 0) * 100)}%` }} /></div>
+        </div>
 
         <div className="qn-body" style={{ flex: 1 }}>
         {isGroupMode && myGroup && (
@@ -115,7 +120,7 @@ export function GameplayView({
         )}
         <div className="qn-prompt-box">
           {currentQ?.config_json?.showPromptImage !== false && currentQ?.config_json?.promptImage ? <img src={currentQ.config_json.promptImage} alt="" className="qn-prompt-img" /> : null}
-          <span className="qn-prompt-text">{currentQ.prompt}</span>
+          <span className="qn-prompt-text" style={{ fontSize: fitPromptTextSize(currentQ?.prompt, 32, 18) }}>{currentQ.prompt}</span>
           <QuestionAudioButton config={currentQ?.config_json} prompt={currentQ?.prompt} templateType={ttNormalized}/>
         </div>
         <TemplateBody disabled={interactionLocked} templateType={ttNormalized} q={currentQ} selectedChoice={selectedChoice} setSelectedChoice={onSelectedChoice} answerText={answerText} setAnswerText={onAnswerText} matchingMap={matchingMap} setMatchingMap={onMatchingMap} spell={spell} setSpell={onSpell} crosswordTimeUp={crosswordTimeUp} shuffleChoices={!!state?.shuffle_answers} participantSeed={participantId} onSubmitGuess={onSubmit} guessSubmitDisabled={isLocked} />

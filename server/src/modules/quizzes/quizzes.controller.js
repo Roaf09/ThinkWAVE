@@ -210,10 +210,26 @@ export async function upsertQuestions(req, res) {
 }
 
 export async function publishQuiz(req, res) {
-  await pool.query(
+  const [[quiz]] = await pool.query(
+    `SELECT id, status FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
+    { id: req.params.id, tid: req.user.sub }
+  );
+  if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+  if (["PUBLISHED", "BANKED"].includes(String(quiz.status || "").toUpperCase())) {
+    return res.json({ ok: true, status: quiz.status });
+  }
+  const [[count]] = await pool.query(
+    `SELECT COUNT(*) AS c FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL`,
+    { qid: req.params.id }
+  );
+  if (Number(count?.c || 0) === 0) {
+    return res.status(400).json({ message: "Add at least one question before publishing." });
+  }
+  const [r] = await pool.query(
     `UPDATE quizzes SET status='PUBLISHED' WHERE id=:id AND teacher_id=:tid`,
     { id: req.params.id, tid: req.user.sub }
   );
+  if (!r.affectedRows) return res.status(404).json({ message: "Quiz not found" });
   res.json({ ok: true });
 }
 
@@ -265,19 +281,34 @@ export async function copyQuizToBank(req, res) {
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
+  if (!questions.length) {
+    await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId });
+    return res.status(400).json({ message: "Add at least one question before copying to bank." });
+  }
 
-  for (const q of questions) {
-    await pool.query(
-      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const q of questions) {
+      await conn.query(
+        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      {
-        qid: created.insertId,
-        ord: q.question_order,
-        prompt: q.prompt,
-        cfg: reencodeJsonColumn(q.config_json),
-        corr: reencodeJsonColumn(q.correct_json),
-      }
-    );
+        {
+          qid: created.insertId,
+          ord: q.question_order,
+          prompt: q.prompt,
+          cfg: reencodeJsonColumn(q.config_json),
+          corr: reencodeJsonColumn(q.correct_json),
+        }
+      );
+    }
+    await conn.commit();
+  } catch (e) {
+    try { await conn.rollback(); } catch {}
+    try { await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId }); } catch {}
+    throw e;
+  } finally {
+    conn.release();
   }
 
   res.status(201).json({ ok: true, status: 'BANKED', id: created.insertId });
@@ -327,19 +358,34 @@ export async function duplicateQuiz(req, res) {
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
+  if (!questions.length) {
+    await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId });
+    return res.status(400).json({ message: "Add at least one question before duplicating." });
+  }
 
-  for (const q of questions) {
-    await pool.query(
-      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+  const conn2 = await pool.getConnection();
+  try {
+    await conn2.beginTransaction();
+    for (const q of questions) {
+      await conn2.query(
+        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      {
-        qid: created.insertId,
-        ord: q.question_order,
-        prompt: q.prompt,
-        cfg: reencodeJsonColumn(q.config_json),
-        corr: reencodeJsonColumn(q.correct_json),
-      }
-    );
+        {
+          qid: created.insertId,
+          ord: q.question_order,
+          prompt: q.prompt,
+          cfg: reencodeJsonColumn(q.config_json),
+          corr: reencodeJsonColumn(q.correct_json),
+        }
+      );
+    }
+    await conn2.commit();
+  } catch (e) {
+    try { await conn2.rollback(); } catch {}
+    try { await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId }); } catch {}
+    throw e;
+  } finally {
+    conn2.release();
   }
 
   res.status(201).json({ ok: true, id: created.insertId });
@@ -397,12 +443,27 @@ export async function assignQuiz(req, res) {
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  for (const q of questions) {
-    await pool.query(
-      `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+  if (!questions.length) {
+    await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId });
+    return res.status(400).json({ message: "Add at least one question before assigning." });
+  }
+  const conn3 = await pool.getConnection();
+  try {
+    await conn3.beginTransaction();
+    for (const q of questions) {
+      await conn3.query(
+        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
        VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-      { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: reencodeJsonColumn(q.config_json), corr: reencodeJsonColumn(q.correct_json) }
-    );
+        { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: reencodeJsonColumn(q.config_json), corr: reencodeJsonColumn(q.correct_json) }
+      );
+    }
+    await conn3.commit();
+  } catch (e) {
+    try { await conn3.rollback(); } catch {}
+    try { await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId }); } catch {}
+    throw e;
+  } finally {
+    conn3.release();
   }
 
   // Once scheduled, return the reusable source quiz to Quiz Bank rather than
@@ -419,6 +480,16 @@ export async function assignQuiz(req, res) {
 
 export async function reuseQuiz(req, res) {
   const classId = req.body.classId ?? null;
+  // A reused quiz must come back as a fresh "Ready" card. If its previous life
+  // left a lobby that never started (e.g. banked via Assign while a lobby was
+  // open), that stale row would keep the Sessions tab showing "Active session"
+  // for a session that never began. Close those; a session already in play
+  // (LIVE/PAUSED) is left alone.
+  await pool.query(
+    `UPDATE sessions SET status='ENDED', ended_at=NOW()
+      WHERE quiz_id=:id AND teacher_id=:tid AND status='LOBBY' AND started_at IS NULL`,
+    { id: req.params.id, tid: req.user.sub }
+  );
   await pool.query(
     `UPDATE quizzes
      SET status='PUBLISHED', class_id=:cid, updated_at=NOW()
@@ -429,10 +500,11 @@ export async function reuseQuiz(req, res) {
 }
 
 export async function softDeleteQuiz(req, res) {
-  await pool.query(
+  const [r] = await pool.query(
     `UPDATE quizzes SET deleted_at=NOW() WHERE id=:id AND teacher_id=:tid`,
     { id: req.params.id, tid: req.user.sub }
   );
+  if (!r.affectedRows) return res.status(404).json({ message: "Quiz not found" });
   res.json({ ok: true });
 }
 
@@ -458,7 +530,7 @@ export async function restoreQuiz(req, res) {
 
 export async function updateQuizMeta(req, res) {
   const { title } = req.body;
-  await pool.query(
+  const [r] = await pool.query(
     `UPDATE quizzes
      SET title = :title, updated_at = NOW()
      WHERE id = :id AND teacher_id = :tid AND deleted_at IS NULL`,
@@ -468,6 +540,7 @@ export async function updateQuizMeta(req, res) {
       tid: req.user.sub,
     }
   );
+  if (!r.affectedRows) return res.status(404).json({ message: "Quiz not found" });
   res.json({ ok: true });
 }
 

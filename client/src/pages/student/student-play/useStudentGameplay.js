@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { normalizeTemplateType } from "../../../lib/templateTypes";
 import { templateAccent } from "../../../lib/templatePalette";
 import {
@@ -24,6 +24,7 @@ export function useStudentGameplay({
   submitLabel,
   answeredQuestionIds,
   countdown,
+  showFeedback,
   postAnswerPhase,
   sessionId,
   socketRef,
@@ -53,14 +54,23 @@ export function useStudentGameplay({
     return () => clearTimeout(renameTimer.current);
   }, [groupNameDraft, myGroupId, myGroup?.display_name, participantId, sessionId]);
 
+  // While a verdict splash is up, the 3-2-1 ticks hold so the countdown only
+  // starts once the feedback has had its moment. Read via ref (not a dep):
+  // re-running this effect when feedback shows would restart the countdown.
+  const showFeedbackRef = useRef(showFeedback);
+  useEffect(() => { showFeedbackRef.current = showFeedback; }, [showFeedback]);
+
   useEffect(() => {
     if (state?.status !== "LIVE") { setCountdown(null); return; }
     setCountdown(3);
-    const iv = setInterval(() => setCountdown((v) => {
-      if (v === null) return null;
-      if (v <= 1) { clearInterval(iv); return 0; }
-      return v - 1;
-    }), 1000);
+    const iv = setInterval(() => {
+      if (showFeedbackRef.current) return;
+      setCountdown((v) => {
+        if (v === null) return null;
+        if (v <= 1) { clearInterval(iv); return 0; }
+        return v - 1;
+      });
+    }, 1000);
     return () => clearInterval(iv);
   }, [state?.status, state?.current_question_index]);
 

@@ -52,7 +52,6 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
 
   switch (normalizeTemplateType(templateType)) {
     case TEMPLATE_TYPES.MCQ: {
-      const selected = Array.isArray(answer?.choices) ? answer.choices : [answer?.choice].filter(Boolean);
       const correctChoices = Array.isArray(correct?.choices) && correct.choices.length
         ? correct.choices
         : [correct?.choice].filter(Boolean);
@@ -61,6 +60,14 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       // legacy or hand-crafted payloads with 3+ correct choices.
       const scorableChoices = correctChoices.slice(0, 2);
       const totalCorrect = Math.max(1, scorableChoices.length);
+      // Server-side shape check: the UI allows 1 pick (2 in TWO mode), so a
+      // payload with more distinct picks than that can only be hand-crafted
+      // ("select every option" to guarantee the correct one). Zero it.
+      const selected = distinctChoiceSelections(answer, config);
+      const maxSelectable = String(config?.answerMode || "").toUpperCase() === "TWO" || scorableChoices.length > 1 ? 2 : 1;
+      if (selected.length > maxSelectable) {
+        return { isCorrect: false, partial: false, feedbackType: "wrong", correctCount: 0, totalCorrect, hasWrongSelected: true, pointsAwarded: 0, rejected: "too_many_choices" };
+      }
       let correctSelectedCount = 0;
       for (const choice of scorableChoices) {
         if (selected.some((sel) => isChoiceCorrect(sel, choice, config))) correctSelectedCount += 1;
@@ -105,9 +112,15 @@ export function scoreAnswer({ templateType, correct, answer, config = {}, basePo
       return scoreCrosswordBatch({ correct, answer, config, basePoints, questionId: config?.questionId });
 
     case TEMPLATE_TYPES.MATCHING: {
-      const submitted = Array.isArray(answer?.pairs) ? answer.pairs : [];
       const expected = Array.isArray(correct?.pairs) ? correct.pairs : [];
       const expectedMap = new Map(expected.map((pair) => [Number(pair.aIndex), Number(pair.bIndex)]));
+      // Server-side shape check: the connector UI is strictly one-to-one, so a
+      // repeated row, a reused column-B item, or more pairs than rows can only
+      // be hand-crafted (e.g. every A x B combination, or one row x50).
+      const submitted = oneToOnePairs(answer?.pairs, Math.max(expectedMap.size, Array.isArray(config?.colA) ? config.colA.length : 0));
+      if (!submitted) {
+        return { isCorrect: false, partial: false, feedbackType: "wrong", correctCount: 0, totalPairs: expectedMap.size, pointsAwarded: 0, rejected: "invalid_pairs" };
+      }
       let correctCount = 0;
       for (const pair of submitted) {
         if (expectedMap.get(Number(pair.aIndex)) === Number(pair.bIndex)) correctCount += 1;
@@ -222,6 +235,46 @@ export function scoreCrosswordWord({
     refillCounter: refillCounter + 1,
     streak: nextStreak,
   };
+}
+
+// Distinct picks, canonicalised to option ids when the pick matches an option
+// by id or text, so "b" and "Cebu" for the same option count once.
+function distinctChoiceSelections(answer, config = {}) {
+  const raw = Array.isArray(answer?.choices) ? answer.choices : [answer?.choice];
+  const options = Array.isArray(config?.options) ? config.options.map(normalizeChoiceOption) : [];
+  const keys = new Set();
+  const out = [];
+  for (const value of raw) {
+    const key = norm(value);
+    if (!key) continue;
+    const option = options.find((opt) => norm(opt.id) === key || norm(opt.text) === key);
+    const canonical = option ? `id:${norm(option.id)}` : `raw:${key}`;
+    if (keys.has(canonical)) continue;
+    keys.add(canonical);
+    out.push(value);
+  }
+  return out;
+}
+
+// Returns the pairs when they form a valid partial one-to-one mapping, else
+// null. maxPairs guards against padding with out-of-range rows.
+function oneToOnePairs(pairs, maxPairs) {
+  if (pairs == null) return [];
+  if (!Array.isArray(pairs)) return null;
+  if (pairs.length > Math.max(0, maxPairs)) return null;
+  const seenA = new Set();
+  const seenB = new Set();
+  const out = [];
+  for (const pair of pairs) {
+    const a = Number(pair?.aIndex);
+    const b = Number(pair?.bIndex);
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return null;
+    if (seenA.has(a) || seenB.has(b)) return null;
+    seenA.add(a);
+    seenB.add(b);
+    out.push({ aIndex: a, bIndex: b });
+  }
+  return out;
 }
 
 function norm(s) {

@@ -14,5 +14,12 @@ export function makeSocket() {
   // instead of falling back - the client then retries in a tight loop,
   // which is what was burning through the student:connect rate limit and
   // surfacing as "too many requests" on join.
-  return io(API_BASE, { transports: ["websocket", "polling"], auth: { token: getToken() } });
+  return io(API_BASE, {
+    transports: ["websocket", "polling"],
+    auth: { token: getToken() },
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 10000,
+  });
 }

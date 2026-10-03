@@ -113,7 +113,20 @@ export function registerAssignmentSockets(io) {
         );
         const count = Number(countRow?.total || 0);
         if (count >= 3) {
-          socket.emit("assignment:kicked", { quizId: qid, count });
+          // Real kick: finalize server-side from stored answers before telling
+          // the client. The browser payload is ignored, so ignoring this event
+          // no longer avoids submission.
+          let forcedResult = null;
+          try {
+            const { finalizeAssignment } = await import("./student.controller.js");
+            forcedResult = await finalizeAssignment(uid, qid, { forced: true });
+          } catch { forcedResult = null; }
+          socket.emit("assignment:kicked", {
+            quizId: qid,
+            count,
+            score: forcedResult?.score ?? null,
+            maxScore: forcedResult?.maxScore ?? null,
+          });
         } else if (count === 2) {
           socket.emit("assignment:warning", { quizId: qid, count });
         } else {
