@@ -238,7 +238,7 @@ export function useStudentSocket({
               explanationClearTimer.current = setTimeout(() => setExplanationFeedback(null), 10350);
             }
             if (a?.locked && stillCurrent) setPostAnswerPhase("wait");
-          }, 3500);
+          }, 2000);
           feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
           const effectPromise = feedbackStatus(a) === "wrong" ? soundManager.play("wrong") : soundManager.play("correct");
           void effectPromise;
@@ -303,7 +303,7 @@ export function useStudentSocket({
           explanationClearTimer.current = setTimeout(() => setExplanationFeedback(null), 10350);
         }
         if (stillCurrent) setPostAnswerPhase("wait");
-      }, 3500);
+      }, 2000);
       feedbackPulseTimer.current = setTimeout(() => setFeedbackPulse(""), 820);
 
       setSubmitLabel(a.viaGroup ? "Group Submitted ✓" : a.isCorrect ? "Submitted ✓" : "Submitted");
@@ -312,7 +312,7 @@ export function useStudentSocket({
 
       if (isLast) {
         setWaitingForFinalFx(true);
-        const feedbackDelay = new Promise((resolve) => setTimeout(resolve, 3500));
+        const feedbackDelay = new Promise((resolve) => setTimeout(resolve, 2000));
         Promise.all([Promise.resolve(effectPromise), feedbackDelay]).finally(() => {
           setWaitingForFinalFx(false);
           setPostAnswerPhase("wait");

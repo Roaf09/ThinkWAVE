@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useColors, useTheme } from "../../context/ThemeContext";
-import { IconBubble } from "../../components/TwUI";
+import { IconBubble, TwIcon } from "../../components/TwUI";
 import { normalizeTemplateType } from "../../lib/templateTypes";
 import { templateTone, templateAccent } from "../../lib/templatePalette";
 import { TeacherPressButton } from "../teacher/TeacherUI";
@@ -20,10 +20,11 @@ export default function GuestCreateTab() {
   const navigate = useNavigate();
   const c = useColors();
   const { dark } = useTheme();
-  const [form, setForm] = useState({ title: "", templateType: "" });
+  const [form, setForm] = useState({ title: "", category: "", templateType: "" });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [titlePulse, setTitlePulse] = useState(0);
+  const [categoryPulse, setCategoryPulse] = useState(0);
 
   async function createWithTemplate(templateType) {
     const title = form.title.trim();
@@ -33,12 +34,17 @@ export default function GuestCreateTab() {
       try { document.querySelector('[data-guest-title]')?.focus?.(); } catch {}
       return;
     }
+    if (!form.category) {
+      setCategoryPulse((v) => v + 1);
+      setMsg("Select K-12 or College.");
+      return;
+    }
     if (!templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
       const { data } = await api.post("/quizzes", {
         title,
-        category: "K12",
+        category: form.category || "K12",
         templateType,
         classId: null,
         timeLimitSec: 30,
@@ -66,7 +72,23 @@ export default function GuestCreateTab() {
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 22 }}>
         <div>
           <label style={label(c)}>Quiz Title</label>
-          <input key={titlePulse} data-guest-title required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" className={titlePulse && !form.title.trim() ? "tw-create-title-pulse" : ""} style={{ ...input(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
+          <input key={titlePulse} data-guest-title value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter a quiz title" className={titlePulse && !form.title.trim() ? "tw-create-title-pulse" : ""} style={{ ...input(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
+          {titlePulse > 0 && !form.title.trim() && (
+            <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13, marginTop: 8 }}>Enter a quiz title to continue.</div>
+          )}
+        </div>
+        <div>
+          <label style={label(c)}>Category</label>
+          <div key={categoryPulse} style={{ display: "flex", gap: 10, maxWidth: 560 }}>
+            {["K12", "COLLEGE"].map((cat) => (
+              <button key={cat} type="button" onClick={() => setForm((current) => ({ ...current, category: cat }))} className={categoryPulse && !form.category ? "tw-create-title-pulse" : ""} style={{ ...segmentBtn(c, form.category === cat), ...(categoryPulse && !form.category ? { borderColor: "#ef4444", borderWidth: 2 } : null) }}>
+                <TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}
+              </button>
+            ))}
+          </div>
+          {categoryPulse > 0 && !form.category && (
+            <div style={{ padding: "12px 14px", borderRadius: 14, background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg, fontSize: 13, marginTop: 8 }}>Select K-12 or College to continue.</div>
+          )}
         </div>
         <div>
           <label style={label(c)}>Quiz Template</label>
@@ -105,3 +127,4 @@ function templateInk(value, dark) {
 function card(c) { return { width: "100%", boxSizing: "border-box", background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 20, padding: 26, boxShadow: c.pageBg === "#eef2ff" ? "0 18px 40px rgba(43,108,255,.09)" : "0 18px 40px rgba(0,0,0,.18)" }; }
 function label(c) { return { display: "block", marginBottom: 7, fontSize: 13, color: c.textMuted, fontWeight: 800 }; }
 function input(c) { return { width: "100%", boxSizing: "border-box", padding: "13px 15px", borderRadius: 14, border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text, fontSize: 14, fontFamily: "inherit" }; }
+function segmentBtn(c, active) { return { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 14px", borderRadius: 14, border: `${active ? 4 : 2}px solid ${active ? c.accent : c.border}`, background: active ? `${c.accent}18` : c.cardBg2, color: active ? c.accent : c.textMuted, fontWeight: 850, cursor: "pointer" }; }

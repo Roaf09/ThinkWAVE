@@ -487,8 +487,8 @@ function ExpandedQuestionDetail({ C, tt, question, showCounts, onToggleCounts, i
   </div>;
 }
 
-function AggregateChoices({ question, showLetters = false, imageOnly = false, showCounts = false, onToggleCounts, isGroup = false }) {
-  return <div className="tw-analytics-choice-grid">{(question.choice_stats || []).map((choice, index) => <div key={choice.id || index} className={`tw-analytics-choice-row ${choice.is_correct ? "is-correct" : "is-wrong"}${showLetters ? "" : " no-letter"}`}>{showLetters && <span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span>}<span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}{!choice.image && !choice.text && <b>Choice {index + 1}</b>}</span><ChoiceStatToggle choice={choice} showCount={showCounts} onToggle={onToggleCounts} unit={isGroup ? "groups" : "students"} /></div>)}</div>;
+function AggregateChoices({ C, question, showLetters = false, imageOnly = false, showCounts = false, onToggleCounts, isGroup = false }) {
+  return <div className="tw-analytics-choice-grid">{(question.choice_stats || []).map((choice, index) => <div key={choice.id || index} className={`tw-analytics-choice-row ${choice.is_correct ? "is-correct" : "is-wrong"}${showLetters ? "" : " no-letter"}`}>{showLetters && <span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span>}<span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}{!choice.image && !choice.text && <b>Choice {index + 1}</b>}</span><span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{choice.is_correct && <span className="tw-student-answer-tag tw-student-correct-tag" style={{background:C?.greenBg,border:`1px solid ${C?.greenBorder}`,color:C?.greenFg}}>Correct</span>}<ChoiceStatToggle choice={choice} showCount={showCounts} onToggle={onToggleCounts} unit={isGroup ? "groups" : "students"} /></span></div>)}</div>;
 }
 
 function ChoiceStatToggle({ choice, showCount, onToggle, unit = "students" }) {
@@ -516,12 +516,25 @@ function StudentTemplateAnswer({ C, tt, question, response }) {
     const imageOnly = String(question.config_json?.mcqMode || "").toUpperCase() === "MODIFIED";
     return <div className="tw-analytics-choice-grid">{(question.choice_stats || []).map((choice, index) => {
       const chosen = selected.has(index); const cls = choice.is_correct ? "is-correct" : chosen ? "is-student-choice" : "is-wrong";
-      return <div key={choice.id || index} className={`tw-analytics-choice-row ${cls}`}><span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span><span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}</span>{chosen && <span className="tw-student-answer-tag">Chosen</span>}</div>;
+      return <div key={choice.id || index} className={`tw-analytics-choice-row ${cls}`}><span className="tw-analytics-choice-letter">{String.fromCharCode(65 + index)}</span><span className="tw-analytics-choice-content">{choice.image && <img src={choice.image} alt="" loading="lazy" decoding="async" />}{!imageOnly && choice.text && <b>{choice.text}</b>}</span><span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{chosen && <span className="tw-student-answer-tag">Chosen</span>}{choice.is_correct && <span className="tw-student-answer-tag tw-student-correct-tag" style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,color:C.greenFg}}>Correct</span>}</span></div>;
     })}</div>;
   }
   if (tt === "TRUE_FALSE") {
-    const selected = String(answer.choice || "").toLowerCase();
-    return <div className="tw-analytics-choice-grid">{["True", "False"].map((value) => <div key={value} className={`tw-analytics-choice-row ${selected === value.toLowerCase() ? (response?.is_correct ? "is-correct" : "is-wrong") : "is-neutral"}`}><b>{value}</b>{selected === value.toLowerCase() && <span className="tw-student-answer-tag">Chosen</span>}</div>)}</div>;
+    const selected = String(answer.choice || answer?.text || "").toLowerCase();
+    const stats = Array.isArray(question.choice_stats) ? question.choice_stats : [];
+    const correctLookup = {};
+    stats.forEach((s) => { if (s.is_correct) correctLookup[String(s.text || "").toLowerCase()] = true; });
+    if (!Object.keys(correctLookup).length) {
+      const cj = String(question.correct_json?.choice || question.correct_json?.text || "").toLowerCase();
+      if (cj === "true" || cj === "false") correctLookup[cj] = true;
+    }
+    return <div className="tw-analytics-choice-grid">{["True", "False"].map((value) => {
+      const key = value.toLowerCase();
+      const chosen = selected === key;
+      const isCorrect = !!correctLookup[key];
+      const cls = isCorrect ? "is-correct" : chosen ? "is-wrong" : "is-neutral";
+      return <div key={value} className={`tw-analytics-choice-row ${cls}`}><span className="tw-analytics-choice-letter">{value.charAt(0)}</span><span className="tw-analytics-choice-content"><b>{value}</b></span><span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{chosen && <span className="tw-student-answer-tag">Chosen</span>}{isCorrect && <span className="tw-student-answer-tag tw-student-correct-tag" style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,color:C.greenFg}}>Correct</span>}</span></div>;
+    })}</div>;
   }
   if (tt === "TYPE_ANSWER") return <StudentTypedAnswer C={C} text={answer.text || "No answer submitted"} correct={!!response?.is_correct} />;
   if (tt === "GUESS_WORD_4PICS") return <><AnalyticsImages images={question.config_json?.images || []} /><StudentTypedAnswer C={C} text={answer.text || "No answer submitted"} correct={!!response?.is_correct} /></>;

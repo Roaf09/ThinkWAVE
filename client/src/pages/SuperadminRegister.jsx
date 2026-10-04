@@ -100,7 +100,7 @@ export default function SuperadminRegister() {
                 <label className="text-[13px] font-semibold" style={s.label(c)}>Secret Password</label>
                 <div className="relative">
                   <input type={showSecret ? "text" : "password"} className="px-[13px] py-[10px] rounded-[11px] text-sm w-full box-border outline-none" style={{ ...s.input(c), paddingRight: 48 }} value={form.bootstrapSecret} onChange={(e) => set({ bootstrapSecret: e.target.value })} placeholder="Enter secret password" required />
-                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowSecret((v) => !v)}><TwIcon name={showSecret ? "eyeOff" : "eye"} size={19}/></button>
+                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0 tw-superadmin-eye" onClick={() => setShowSecret((v) => !v)}><TwIcon name={showSecret ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
               </div>
 
@@ -108,7 +108,7 @@ export default function SuperadminRegister() {
                 <label className="text-[13px] font-semibold" style={s.label(c)}>Password</label>
                 <div className="relative">
                   <input type={showPw ? "text" : "password"} className="px-[13px] py-[10px] rounded-[11px] text-sm w-full box-border outline-none" style={{ ...s.input(c), paddingRight: 48 }} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
+                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0 tw-superadmin-eye" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
               </div>
 
@@ -116,7 +116,7 @@ export default function SuperadminRegister() {
                 <label className="text-[13px] font-semibold" style={s.label(c)}>Confirm password</label>
                 <div className="relative">
                   <input type={showConfPw ? "text" : "password"} className="px-[13px] py-[10px] rounded-[11px] text-sm w-full box-border outline-none" style={{ ...s.input(c), paddingRight: 48 }} value={form.confirmPassword} onChange={(e) => set({ confirmPassword: e.target.value })} placeholder="••••••••" required />
-                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
+                  <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0 tw-superadmin-eye" onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={19}/></button>
                 </div>
                 {form.confirmPassword && (
                   <span className="text-xs mt-1" style={{ color: matches ? (dark ? "#86efac" : "#166534") : (dark ? "#fca5a5" : "#b91c1c") }}>

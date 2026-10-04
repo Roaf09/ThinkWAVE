@@ -1,83 +1,8 @@
-import { useEffect, useState } from "react";
+// Student-side trace watermark (Phase 2) — disabled per request; component
+// kept as a no-op so existing imports keep working.
 
-// Student-side trace watermark (Phase 2).
-// Shows ONLY on the student's own gameplay screen — never on host panel.
-// If a screenshot / screen recording leaks, the leaker's identity is burned
-// into the image itself. Works on desktop + mobile because it is plain DOM.
-// Pointer-events none so it never blocks answering; faint so it doesn't
-// distract, but readable in a capture.
-const SPOTS = [
-  { top: "12%", left: "6%", transform: "rotate(-12deg)" },
-  { top: "18%", left: "62%", transform: "rotate(-12deg)" },
-  { top: "46%", left: "30%", transform: "rotate(-12deg)" },
-  { top: "68%", left: "8%", transform: "rotate(-12deg)" },
-  { top: "72%", left: "58%", transform: "rotate(-12deg)" },
-];
-
-export function CaptureWatermark({ active, text }) {
-  const [spot, setSpot] = useState(0);
-  useEffect(() => {
-    if (!active) return undefined;
-    // Hop corners so it can't be cropped out of every question.
-    const t = setInterval(() => setSpot((i) => (i + 1) % SPOTS.length), 5000);
-    return () => clearInterval(t);
-  }, [active]);
-
-  if (!active || !text) return null;
-  const pos = SPOTS[spot % SPOTS.length];
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 390,
-        pointerEvents: "none",
-        userSelect: "none",
-        WebkitUserSelect: "none",
-        overflow: "hidden",
-      }}
-    >
-      {/* faint full-screen diagonal repeat — survives cropping */}
-      <div
-        style={{
-          position: "absolute",
-          inset: "-20%",
-          display: "grid",
-          placeItems: "center",
-          opacity: 0.07,
-          fontSize: 28,
-          fontWeight: 900,
-          letterSpacing: 2,
-          transform: "rotate(-18deg)",
-          whiteSpace: "nowrap",
-          color: "currentColor",
-        }}
-      >
-        {text} &nbsp;•&nbsp; {text}
-      </div>
-      {/* moving pill — readable in screenshots */}
-      <div
-        style={{
-          position: "absolute",
-          top: pos.top,
-          left: pos.left,
-          transform: pos.transform,
-          opacity: 0.5,
-          fontSize: 12,
-          fontWeight: 800,
-          padding: "5px 12px",
-          borderRadius: 999,
-          background: "rgba(15,23,42,.42)",
-          color: "#fff",
-          boxShadow: "0 4px 14px rgba(0,0,0,.18)",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
+export function CaptureWatermark() {
+  return null;
 }
 
 // Fullscreen entry gate (Phase 2).

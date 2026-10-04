@@ -83,7 +83,7 @@ export default function AdminLogin({ onLoginSuccess }) {
                   style={{ ...s.input, paddingRight: 64 }}
                   value={password} onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••" required />
-                <button type="button" style={s.showBtn} onClick={() => setShowPw(v => !v)}>
+                <button type="button" className="tw-admin-eye" style={s.showBtn} onClick={() => setShowPw(v => !v)}>
                   {showPw ? "Hide" : "Show"}
                 </button>
               </div>
@@ -110,7 +110,7 @@ export default function AdminLogin({ onLoginSuccess }) {
 
             <p style={{ textAlign: "center", fontSize: 12, opacity: 0.45, margin: 0 }}>
               Are you a teacher?{" "}
-              <Link to="/login" style={{ color: "#8a9bc4" }}>Teacher login →</Link>
+              <Link to="/enter?mode=login" style={{ color: "#8a9bc4" }}>Teacher login →</Link>
             </p>
           </form>
         </div>

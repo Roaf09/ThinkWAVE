@@ -14,12 +14,11 @@ import Register            from "./pages/Register.jsx";
 import SuperadminRegister  from "./pages/SuperadminRegister.jsx";
 import SuperadminLogin     from "./pages/SuperadminLogin.jsx";
 import VerifyOtp           from "./pages/VerifyOtp.jsx";
-import Login               from "./pages/Login.jsx";
 import ForgotPassword      from "./pages/ForgotPassword.jsx";
 import OAuthCallback       from "./pages/OAuthCallback.jsx";
 import StudentJoin         from "./pages/student/StudentJoin.jsx";
 import StudentAuth         from "./pages/student/StudentAuth.jsx";
-// Heavy pages load on demand so the first paint (landing/login) stays light.
+// Heavy pages load on demand so the first paint (landing/enter) stays light.
 // Each becomes its own JS chunk; Suspense shows the logo spinner meanwhile.
 const TeacherDashboard    = lazy(() => import("./pages/teacher/TeacherDashboard.jsx"));
 const QuizBuilder         = lazy(() => import("./pages/teacher/QuizBuilder.jsx"));
@@ -50,7 +49,7 @@ function White({ children }) {
 function Guard({ role, children }) {
   const token = getToken();
   const r     = getRole();
-  if (!token)             return <Navigate to="/login" replace />;
+  if (!token)             return <Navigate to="/enter?mode=login" replace />;
   if (role && r !== role) return <Navigate to="/"     replace />;
   return children;
 }
@@ -208,9 +207,10 @@ export default function App() {
         <Route path="/superadmin-register" element={<White><SuperadminRegister /></White>} />
         <Route path="/superadmin-login"    element={<White><SuperadminLogin onLoginSuccess={handleLoginSuccess} /></White>} />
         <Route path="/admin-register"      element={<Navigate to="/register?role=admin" replace />} />
-        <Route path="/admin-login"         element={<Navigate to="/login?role=admin" replace />} />
+        <Route path="/admin-login"         element={<Navigate to="/enter?mode=login" replace />} />
         <Route path="/verify"              element={<White><VerifyOtp /></White>} />
-        <Route path="/login"               element={<White><Login onLoginSuccess={handleLoginSuccess} /></White>} />
+        {/* Legacy /login (Login.jsx) is retired — fold old bookmarks into Enter. */}
+        <Route path="/login"               element={<Navigate to="/enter?mode=login" replace />} />
         <Route path="/forgot-password"     element={<White><ForgotPassword /></White>} />
         <Route path="/oauth/callback"      element={<White><OAuthCallback onLoginSuccess={handleLoginSuccess} /></White>} />
 

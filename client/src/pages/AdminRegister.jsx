@@ -69,7 +69,7 @@ export default function AdminRegister() {
           <span style={s.think}>Think</span><span style={s.wave}>WAVE</span>
           <span style={s.adminTag}>ADMIN</span>
         </Link>
-        <Link to="/login" style={s.headerBtn}>Login</Link>
+        <Link to="/enter?mode=login" style={s.headerBtn}>Login</Link>
       </header>
 
       <main style={s.main}>
@@ -102,7 +102,7 @@ export default function AdminRegister() {
               <label style={s.label}>Password</label>
               <div style={s.pwWrap}>
                 <input type={showPw?"text":"password"} style={{...s.input,paddingRight:64}} value={form.password} onChange={e=>set({password:e.target.value})} placeholder="••••••••" required />
-                <button type="button" style={s.showBtn} onClick={()=>setShowPw(v=>!v)}>{showPw?"Hide":"Show"}</button>
+                <button type="button" className="tw-admin-eye" style={s.showBtn} onClick={()=>setShowPw(v=>!v)}>{showPw?"Hide":"Show"}</button>
               </div>
             </div>
 
@@ -119,7 +119,7 @@ export default function AdminRegister() {
               <label style={s.label}>Confirm password</label>
               <div style={s.pwWrap}>
                 <input type={showCon?"text":"password"} style={{...s.input,paddingRight:64,borderColor:form.confirm?(matches?"#22c55e":"#ef4444"):BORDER_C}} value={form.confirm} onChange={e=>set({confirm:e.target.value})} placeholder="••••••••" required />
-                <button type="button" style={s.showBtn} onClick={()=>setShowCon(v=>!v)}>{showCon?"Hide":"Show"}</button>
+                <button type="button" className="tw-admin-eye" style={s.showBtn} onClick={()=>setShowCon(v=>!v)}>{showCon?"Hide":"Show"}</button>
               </div>
               {form.confirm && <span style={{fontSize:12,color:matches?"#22c55e":"#f87171",marginTop:4}}>{matches?"✓ Passwords match":"✗ Passwords do not match"}</span>}
             </div>
@@ -141,7 +141,7 @@ export default function AdminRegister() {
             </div>
 
             <p style={{textAlign:"center",fontSize:13,opacity:0.6,margin:0}}>
-              Already have an account? <Link to="/login" style={{color:"#2b6cff",fontWeight:700,textDecoration:"underline"}}>Log in here</Link>
+              Already have an account? <Link to="/enter?mode=login" style={{color:"#2b6cff",fontWeight:700,textDecoration:"underline"}}>Log in here</Link>
             </p>
           </form>
         </div>

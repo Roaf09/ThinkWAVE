@@ -392,7 +392,8 @@ function TeacherProfileModal({ c, profile, setProfile, error, saving, onSubmit, 
       <Field label="Last name *" c={c}><input required value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} style={input(c)} /></Field>
       <Field label="Email" c={c}><input disabled value={profile.email} style={{ ...input(c), opacity: .72 }} /></Field>
       <Field label="Contact number" c={c}><input value={profile.contactNumber} onChange={(e) => setProfile({ ...profile, contactNumber: e.target.value })} style={input(c)} /></Field>
-      <Field label="Institution" c={c}><input disabled value={planLabel(profile)} style={{ ...input(c), opacity: .72 }} /></Field>
+      <Field label="Plan" c={c}><input disabled value={planLabel(profile)} style={{ ...input(c), opacity: .72 }} /></Field>
+      {!!profile.institutionName && <Field label="Institution" c={c}><input disabled value={profile.institutionName} style={{ ...input(c), opacity: .72 }} /></Field>}
     </div>
     {error && <div style={{ marginTop: 14, padding: 12, borderRadius: 12, color: c.redFg, background: c.redBg, border: `1px solid ${c.redBorder}`, fontWeight: 850 }}>{error}</div>}
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}><button disabled={!!saving} style={{ ...primary(c), opacity: saving ? .6 : 1, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Saving…" : "Save"}</button></div>
@@ -403,14 +404,14 @@ function ProfileSavedOverlay() { return <div className="tw-profile-success-backd
 function Field({ label, c, children }) { return <label style={{ display: "grid", gap: 7, color: c.textMuted, fontSize: 12, fontWeight: 850 }}>{label}{children}</label>; }
 function profileFromUser(user = {}) { return { firstName: user.first_name || "", lastName: user.last_name || "", contactNumber: user.contact_number || "", email: user.email || "", institutionName: user.institution_name || "", planCode: String(user.plan_code || "BASIC").toUpperCase(), profileImage: user.profile_image || "", birthDate: user.birth_date ? String(user.birth_date).slice(0, 10) : "" }; }
 
-// Plan row: institution members see their school; everyone else sees their
-// actual plan (a Pro teacher with no institution used to read "Basic plan").
+// Plan row: institution members see "ThinkWAVE Institution"; everyone else
+// sees their actual plan. A separate Institution row shows the school name.
 function planLabel(profile = {}) {
-  if (profile.institutionName) return profile.institutionName;
+  if (profile.institutionName) return "ThinkWAVE Institution";
   const code = String(profile.planCode || "BASIC").toUpperCase();
   if (code === "PRO") return "ThinkWAVE Pro";
   if (code === "INSTITUTION") return "ThinkWAVE Institution";
-  return "Basic plan";
+  return "ThinkWAVE Basic";
 }
 
 const avatarImage = { width: "100%", height: "100%", objectFit: "cover" };

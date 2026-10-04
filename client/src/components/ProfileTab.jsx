@@ -628,7 +628,14 @@ export default function ProfileTab({
             {staffTextRow("lastName", "Last name", true)}
             {staffTextRow("contactNumber", "Contact number", false)}
             <StaticRow label="Email" value={profile.email} />
-            {showInstitution && <StaticRow label="Plan" value={profile.institutionName || institutionFallback} />}
+            {showInstitution && (profile.planCode !== undefined ? (
+              <>
+                <StaticRow label="Plan" value={institutionFallback} />
+                {!!profile.institutionName && <StaticRow label="Institution" value={profile.institutionName} />}
+              </>
+            ) : (
+              <StaticRow label="Plan" value={profile.institutionName || institutionFallback} />
+            ))}
             {birthdayRow(false)}
           </>
         )}

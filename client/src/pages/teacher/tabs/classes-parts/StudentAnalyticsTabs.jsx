@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, ReferenceDot, Cell,
+  BarChart, Bar, ReferenceDot, Cell, LabelList,
 } from "recharts";
 import { TwIcon } from "../../../../components/TwUI";
 import { api } from "../../../../lib/api";
@@ -94,16 +94,20 @@ function PerformanceTab({ c, perf }) {
           <span><i style={{ display: "inline-block", width: 18, height: 4, borderRadius: 2, background: GRAY, marginRight: 5, verticalAlign: "middle" }} />Class average</span>
         </span>}>
         {lineData.length ? (
-          <InnerScroll axis="x" style={{ overflowX: "auto" }}>
+          <InnerScroll axis="x" style={{ overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", paddingBottom: 6 }}>
             <div style={{ minWidth: Math.max(560, lineData.length * 72) }}>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={lineData} margin={{ top: 16, right: 10, bottom: 0, left: -10 }}>
+                <LineChart data={lineData} margin={{ top: 24, right: 10, bottom: 0, left: -10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
                   <XAxis dataKey="name" tick={t.tick} interval={0} />
                   <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={t.tick} width={44} />
                   <Tooltip formatter={(v) => (v == null ? "missed" : `${v}%`)} labelFormatter={(v) => lineData.find((d) => d.name === v)?.fullTitle || v} {...t.tooltip} />
-                  <Line type="monotone" dataKey="student" stroke={BLUE} strokeWidth={3} dot={{ r: 4, fill: BLUE }} connectNulls={false} />
-                  <Line type="monotone" dataKey="classAvg" stroke={GRAY} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="student" stroke={BLUE} strokeWidth={3} dot={{ r: 4, fill: BLUE }} connectNulls={false}>
+                    <LabelList dataKey="student" position="top" formatter={(v) => (v == null ? "" : `${v}%`)} fill={c.text} fontSize={11} fontWeight={800} />
+                  </Line>
+                  <Line type="monotone" dataKey="classAvg" stroke={GRAY} strokeWidth={2} strokeDasharray="6 4" dot={{ r: 3, fill: c.cardBg, stroke: GRAY, strokeWidth: 2 }} connectNulls>
+                    <LabelList dataKey="classAvg" position="bottom" formatter={(v) => (v == null ? "" : `${v}%`)} fill={c.textMuted} fontSize={10} fontWeight={700} />
+                  </Line>
                   {lineData.filter((d) => d.missed).map((d, i) => (
                     <ReferenceDot key={i} x={d.name} y={50} r={9} fill={RED} stroke="#fff" strokeWidth={2} label={{ value: "✕", fill: "#fff", fontSize: 11, fontWeight: 900, position: "center" }} />
                   ))}
@@ -178,7 +182,7 @@ function LearningTab({ c, learning }) {
         </span>}>
         {accData.length ? (
           <ResponsiveContainer width="100%" height={Math.max(220, accData.length * 52)}>
-            <BarChart data={accData} margin={{ top: 16, right: 10, bottom: 0, left: -18 }} barGap={4}>
+            <BarChart data={accData} margin={{ top: 24, right: 10, bottom: 0, left: -18 }} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 12, fill: c.textMuted }} interval={0} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={t.tick} />
@@ -186,9 +190,9 @@ function LearningTab({ c, learning }) {
               <Legend formatter={t.legend} />
               <Bar dataKey="accuracy" name="Student" fill={BLUE} radius={[6, 6, 0, 0]}
                 label={{ position: "top", fontSize: 12, fontWeight: 900, formatter: (v) => `${v}%`, fill: c.text }}>
-                {accData.map((r, i) => <Cell key={i} fill={r.classAccuracy != null && r.accuracy < r.classAccuracy ? RED : BLUE} />)}
               </Bar>
-              <Bar dataKey="classAccuracy" name="Class average" fill={GRAY} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="classAccuracy" name="Class average" fill={GRAY} radius={[6, 6, 0, 0]}
+                label={{ position: "top", fontSize: 11, fontWeight: 700, formatter: (v) => (v == null ? "" : `${v}%`), fill: c.textMuted }} />
             </BarChart>
           </ResponsiveContainer>
         ) : <div style={{ color: c.textMuted }}>No answers yet.</div>}
@@ -248,7 +252,7 @@ function ParticipationTab({ c, part }) {
           <span><i style={{ display: "inline-block", width: 12, height: 12, borderRadius: 999, background: RED, marginRight: 4 }} />Missed</span>
         </span>}>
         {strip.length ? (
-          <InnerScroll axis="x" style={{ overflowX: "auto" }}>
+          <InnerScroll axis="x" style={{ overflowX: "auto", overflowY: "hidden" }}>
             <div style={{ minWidth: Math.max(560, strip.length * 88), position: "relative", padding: "6px 4px 0" }}>
               <div style={{ position: "absolute", left: 28, right: 28, top: 26, height: 3, background: c.border, borderRadius: 2 }} />
               <div style={{ display: "flex", justifyContent: "space-between", position: "relative" }}>

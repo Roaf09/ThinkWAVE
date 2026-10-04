@@ -5,9 +5,11 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import PublicHeader from "../components/PublicHeader";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { useColors } from "../context/ThemeContext";
 import { TwIcon } from "../components/TwUI";
 import OAuthButtons from "../components/OAuthButtons";
 
@@ -42,6 +44,7 @@ const LABEL = "text-[13px] font-semibold text-auth-text dark:text-auth-text-dark
 export default function Register() {
   const nav = useNavigate();
   const loc = useLocation();
+  const c = useColors();
   const [searchParams] = useSearchParams();
   const adminInviteToken = searchParams.get("adminInvite") || "";
   const isAdminReg = !!adminInviteToken;
@@ -62,7 +65,7 @@ export default function Register() {
   const enterClass = (loc.state?.authFrom || sessionStorage.getItem("tw_auth_from")) === "right" ? "from-right" : "from-left";
   function moveToLogin() {
     setExitClass("exit-right");
-    window.setTimeout(() => nav("/login", { state: { authFrom: "left" } }), 200);
+    window.setTimeout(() => nav("/enter?mode=login"), 200);
   }
 
   useEffect(() => {
@@ -105,7 +108,7 @@ export default function Register() {
       const { data } = await api.post("/auth/register", payload);
       if (data.converted) {
         setError(`✓ ${data.message || "Your account is now an Administrator account. Please log in."}`);
-        setTimeout(() => nav("/admin-login", { state: { email: form.email } }), 2200);
+        setTimeout(() => nav("/enter?mode=login", { state: { email: form.email } }), 2200);
         return;
       }
       const label = data.role === "ADMIN" ? "Administrator" : "Teacher";
@@ -123,6 +126,86 @@ export default function Register() {
 
   if (isAdminReg && inviteState !== "valid") return (
     <div className="tw-force-white tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "Inter,'Segoe UI',system-ui,sans-serif" }}><PublicHeader compact hideSuper hideTheme/><main className="tw-auth-main flex-1 flex items-start sm:items-center justify-center w-full px-5 py-9"><div className={`tw-auth-form-shell ${exitClass || enterClass} my-auto rounded-[20px] px-6 sm:px-[44px] pt-10 pb-9 w-full max-w-[800px] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-[16px] border border-solid bg-auth-card dark:bg-auth-card-dark border-auth-border dark:border-auth-border-dark`}><div className="mb-7 text-center"><h1 className="m-[0_0_8px] text-[26px] font-black tracking-[-0.5px] text-auth-text dark:text-auth-text-dark">{inviteState === "checking" ? "Checking invitation" : "Admin invitation unavailable"}</h1><p className="m-0 text-sm leading-[1.6] text-auth-muted dark:text-auth-muted-dark">{inviteState === "checking" ? "Please wait while ThinkWAVE validates this registration link." : error}</p></div></div></main></div>
+  );
+
+  // Admin invitation signup mirrors the normal Enter teacher/student signup
+  // card (tw-enter-card + tw-enter-form), minus the student/teacher role
+  // selector. First/last/email stay prefilled from the application below;
+  // email is read-only because the invitation is pinned to it.
+  if (isAdminReg) return (
+    <div className="tw-force-white tw-starry-page tw-auth-page min-h-screen flex flex-col bg-auth-page dark:bg-auth-page-dark text-auth-text dark:text-auth-text-dark" style={{ fontFamily: "Inter,'Segoe UI',system-ui,sans-serif" }}>
+      <PublicHeader compact hideSuper hideTheme />
+
+      <main className="tw-enter-main">
+        <div className="tw-enter-card" style={{ background: "#fff", border: `1px solid ${c.border}` }}>
+          <form onSubmit={submit} className="tw-enter-form">
+            <h1>Create your admin account</h1>
+            <p className="tw-enter-sub" style={{ color: c.textMuted }}>
+              {`Register an admin account${inviteInstitution ? ` for ${inviteInstitution}` : " for your institution"}. Your name and email from the application are already filled in.`}
+            </p>
+            <div className="tw-enter-namerow">
+              <label className="tw-enter-field">
+                <span>First name</span>
+                <input value={form.firstName} onChange={(e) => set({ firstName: onlyLetters(e.target.value) })} placeholder="Juan" required style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+              </label>
+              <label className="tw-enter-field">
+                <span>Last name</span>
+                <input value={form.lastName} onChange={(e) => set({ lastName: onlyLetters(e.target.value) })} placeholder="Dela Cruz" required style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+              </label>
+            </div>
+            <label className="tw-enter-field">
+              <span>Email address</span>
+              <input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="you@example.com" readOnly required style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+            </label>
+            <label className="tw-enter-field">
+              <span className="tw-enter-pwlabelrow"><span>Password</span><button type="button" className="tw-pw-help-btn" aria-label="Password requirements" onClick={() => setShowPwHelp(true)}><TwIcon name="help" size={16} /></button></span>
+              <span className={`tw-enter-pwwrap${isStrong ? " has-check" : ""}`}>
+                <input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => set({ password: e.target.value })} placeholder="••••••••" required autoComplete="new-password" style={{ border: `1px solid ${c.inputBorder}`, background: c.inputBg, color: c.text }} />
+                {isStrong && <span className="tw-pw-strong-check" aria-label="Password meets all requirements"><TwIcon name="check" size={16} /></span>}
+                <button type="button" className="tw-enter-iconbtn" aria-label={showPw ? "Hide password" : "Show password"} onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={18} /></button>
+              </span>
+            </label>
+            <label className="tw-enter-field">
+              <span>Confirm password</span>
+              <span className={`tw-enter-pwwrap${matches ? " has-check" : ""}`}>
+                <input type={showConfPw ? "text" : "password"} value={form.confirmPassword} onChange={(e) => set({ confirmPassword: e.target.value })} placeholder="••••••••" required autoComplete="new-password" style={{ border: `1px solid ${form.confirmPassword ? (matches ? "#22c55e" : "#ef4444") : c.inputBorder}`, background: c.inputBg, color: c.text }} />
+                {matches && <span className="tw-pw-strong-check" aria-label="Passwords match"><TwIcon name="check" size={16} /></span>}
+                <button type="button" className="tw-enter-iconbtn" aria-label={showConfPw ? "Hide password" : "Show password"} onClick={() => setShowConfPw((v) => !v)}><TwIcon name={showConfPw ? "eyeOff" : "eye"} size={18} /></button>
+              </span>
+            </label>
+            {error && (isSuccess
+              ? <p className="tw-enter-success">{error}</p>
+              : <p role="alert" className="tw-enter-msg">{error}</p>)}
+            <button type="submit" className="tw-enter-role is-submit is-blue">Create Admin Account</button>
+            {showPwHelp && createPortal(
+              <div className="tw-pw-help-backdrop tw-enter-pw-help" onClick={() => setShowPwHelp(false)}>
+                <div className="tw-pw-help-modal" style={{ background: "#fff", border: `1px solid ${c.inputBorder}`, color: c.text }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div className="text-[13px] font-bold" style={{ color: c.text }}>Password requirements</div>
+                    <button type="button" className="tw-pw-help-close" aria-label="Close password requirements" onClick={() => setShowPwHelp(false)} style={{ border: 0, background: "transparent", color: c.textMuted, fontSize: 20, lineHeight: 1, cursor: "pointer", padding: 4 }}>×</button>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    {Object.entries(REQ_LABELS).map(([key, label]) => (
+                      <div key={key} className="flex items-center gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: checks[key] ? "#16a34a" : c.inputBorder, boxShadow: checks[key] ? "0 0 6px rgba(34,197,94,0.35)" : "none" }} />
+                        <span className="text-[13px]" style={{ color: checks[key] ? "#166534" : c.textMuted }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-[5px] rounded-full overflow-hidden mt-1.5" style={{ background: c.inputBorder }}>
+                    <div className="h-full rounded-full" style={{ width: `${(strengthCount / 5) * 100}%`, background: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }} />
+                  </div>
+                  <div className="text-xs text-center mt-1 font-bold" style={{ color: isStrong ? "#22c55e" : strengthCount >= 3 ? "#f59e0b" : "#ef4444" }}>
+                    {isStrong ? "Strong ✓" : strengthCount >= 3 ? "Medium — keep going" : "Weak — add more variety"}
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
+          </form>
+        </div>
+      </main>
+    </div>
   );
 
   return (

@@ -104,7 +104,7 @@ export default function ForgotPassword() {
     try {
       await api.post("/auth/password/confirm-reset", { resetToken: token, newPassword: pw });
       flash("Password changed successfully.", "success");
-      window.setTimeout(() => nav("/login"), 1000);
+      window.setTimeout(() => nav("/enter?mode=login"), 1000);
     } catch (error) { flash(error?.response?.data?.message || "Password reset failed."); }
     finally { setBusy(false); }
   }

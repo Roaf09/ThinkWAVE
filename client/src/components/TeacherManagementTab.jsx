@@ -177,7 +177,7 @@ export default function TeacherManagementTab({
   return (
     <div className="container">
       <Heading title={title} />
-      <p className="tw-notif-sub" style={{ color: c.textMuted }}>{subtitle}</p>
+      {!!subtitle && <p className="tw-notif-sub" style={{ color: c.textMuted }}>{subtitle}</p>}
       <div className="tw-filter-row tw-teacher-filter" style={{ ...card(c), position: "relative", overflow: "visible" }}>
         <div className="tw-search-input">
           <TwIcon name="search" size={18} />

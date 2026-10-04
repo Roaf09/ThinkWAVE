@@ -63,6 +63,7 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 /* Mobile public header: logo + Join Code + Login only, 8px outline buttons. */
 .tw-header-joincode { display: none !important; }
 .tw-public-header .tw-public-logo { display: inline-flex; align-items: center; line-height: 1; }
+.tw-plan-page-header .tw-public-logo { display: inline-flex; align-items: center; line-height: 1; }
 @media (max-width: 760px) {
   .tw-public-header { align-items: center; }
   .tw-public-header .tw-public-nav { display: none !important; }
@@ -335,6 +336,41 @@ body:not(.dark-mode) .tw-public-header.is-minimal .tw-header-joincode { color: #
 }
 .tw-auth-form-shell button.absolute:active {
   transform: translateY(-50%) scale(.94) !important;
+}
+/* Superadmin eye buttons: pinned vertically (no hover shift), red only here.
+   Overrides the blue .tw-auth-form-shell rule above and the base.css
+   button:hover lift. No scale on any state so the icon never moves. */
+.tw-auth-form-shell button.absolute.tw-superadmin-eye,
+button.tw-superadmin-eye {
+  translate: none !important;
+  transform: translateY(-50%) !important;
+  color: #ef4444 !important;
+  border-radius: 8px !important;
+  transition: color .15s ease, background .15s ease !important;
+}
+.tw-auth-form-shell button.absolute.tw-superadmin-eye:hover,
+.tw-auth-form-shell button.absolute.tw-superadmin-eye:focus-visible,
+button.tw-superadmin-eye:hover,
+button.tw-superadmin-eye:focus-visible {
+  translate: none !important;
+  transform: translateY(-50%) !important;
+  color: #dc2626 !important;
+  background: rgba(239,68,68,.12) !important;
+}
+.tw-auth-form-shell button.absolute.tw-superadmin-eye:active,
+button.tw-superadmin-eye:active {
+  translate: none !important;
+  transform: translateY(-50%) !important;
+  color: #b91c1c !important;
+  background: rgba(239,68,68,.18) !important;
+}
+/* Admin Show/Hide buttons: same pin (they use inline down-50% styles),
+   kept blue. Guards against the base.css hover lift. */
+button.tw-admin-eye,
+button.tw-admin-eye:hover,
+button.tw-admin-eye:focus-visible,
+button.tw-admin-eye:active {
+  transform: translateY(-50%) !important;
 }
 /* Forgot-password eye buttons share the same hover/click feedback. */
 .tw-forgot-modern-card button.absolute {
@@ -635,6 +671,7 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
 
 /* ---- UI tweaks: landing header logo, stacked hero, solid templates, white lower ---- */
 .tw-public-header .tw-public-logoimg,
+.tw-plan-page-header .tw-public-logoimg,
 .tw-landing-footer .tw-public-logoimg,
 .tw-enter-header .tw-enter-logoimg {
   height: 30px !important;
@@ -1254,4 +1291,30 @@ body[data-theme="dark"] .tw-template-landing-card p { color: #fff !important; }
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+}
+
+/* Pro / Institution application pages (desktop): vertically centered, exact
+   viewport fit so there is no leftover gap below and no page scroll.
+   Mobile + short viewports keep their scroll fallback. Imported last so this wins. */
+@media (min-width: 901px) and (min-height: 761px) {
+  .tw-plan-page {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .tw-plan-page-main {
+    height: calc(100dvh - 78px) !important;
+    max-height: calc(100dvh - 78px) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    align-items: center !important;
+    align-content: center !important;
+    padding: 8px 0 !important;
+  }
+  .tw-plan-page-copy,
+  .tw-plan-application {
+    align-self: center !important;
+    margin: 0 !important;
+  }
 }

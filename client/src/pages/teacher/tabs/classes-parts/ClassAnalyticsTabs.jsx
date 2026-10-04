@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  BarChart, Bar, ReferenceLine, Cell,
+  BarChart, Bar, ReferenceLine, Cell, LabelList,
 } from "recharts";
 import { TwIcon } from "../../../../components/TwUI";
 import { api } from "../../../../lib/api";
@@ -96,16 +96,20 @@ function PerformanceTab({ c, perf }) {
           <span><i style={{ display: "inline-block", width: 18, height: 4, borderRadius: 2, background: PURPLE, marginRight: 5, verticalAlign: "middle" }} />Assignment</span>
         </span>}>
         {lineData.length ? (
-          <InnerScroll axis="x" style={{ overflowX: "auto" }}>
+          <InnerScroll axis="x" style={{ overflowX: "auto", overflowY: "hidden" }}>
             <div style={{ minWidth: Math.max(560, lineData.length * 72) }}>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={lineData} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                <LineChart data={lineData} margin={{ top: 20, right: 10, bottom: 0, left: -10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
                   <XAxis dataKey="name" tick={t.tick} interval={0} />
                   <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={t.tick} width={44} />
                   <Tooltip formatter={(v) => (v == null ? "—" : `${v}%`)} labelFormatter={(v) => lineData.find((d) => d.name === v)?.fullTitle || v} {...t.tooltip} />
-                  <Line type="monotone" dataKey="Live" stroke={BLUE} strokeWidth={3} dot={{ r: 4, fill: BLUE }} connectNulls />
-                  <Line type="monotone" dataKey="Assigned" stroke={PURPLE} strokeWidth={3} dot={{ r: 4, fill: PURPLE, strokeWidth: 2 }} connectNulls />
+                  <Line type="monotone" dataKey="Live" stroke={BLUE} strokeWidth={3} dot={{ r: 4, fill: BLUE }} connectNulls>
+                    <LabelList dataKey="Live" position="top" formatter={(v) => (v == null ? "" : `${v}%`)} fill={c.text} fontSize={11} fontWeight={800} />
+                  </Line>
+                  <Line type="monotone" dataKey="Assigned" stroke={PURPLE} strokeWidth={3} dot={{ r: 4, fill: PURPLE, strokeWidth: 2 }} connectNulls>
+                    <LabelList dataKey="Assigned" position="top" formatter={(v) => (v == null ? "" : `${v}%`)} fill={c.text} fontSize={11} fontWeight={800} />
+                  </Line>
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -163,10 +167,10 @@ function LearningTab({ c, learning }) {
         </Section>
         <Section c={c} title="Time used vs time limit" sub="Bar = average % of the time limit used · number inside = timeouts">
           {(learning.timeByActivity || []).length ? (
-            <InnerScroll axis="x" style={{ overflowX: "auto" }}>
+            <InnerScroll axis="x" style={{ overflowX: "auto", overflowY: "hidden" }}>
               <div style={{ minWidth: Math.max(420, learning.timeByActivity.length * 64) }}>
                 <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={(learning.timeByActivity || []).map((r) => ({ ...r, name: truncTitle(r.title, 14), fullTitle: r.title }))} margin={{ top: 10, right: 10, bottom: 0, left: -18 }}>
+                  <BarChart data={(learning.timeByActivity || []).map((r) => ({ ...r, name: truncTitle(r.title, 14), fullTitle: r.title }))} margin={{ top: 20, right: 10, bottom: 0, left: -18 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
                     <XAxis dataKey="name" tick={t.tick} interval={0} />
                     <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={t.tick} />
@@ -174,6 +178,7 @@ function LearningTab({ c, learning }) {
                     <ReferenceLine y={75} stroke={AMBER} strokeDasharray="5 4" label={{ value: "limit may be tight", fontSize: 11, fill: "#b45309", position: "insideTopRight" }} />
                     <Bar dataKey="avgPct" radius={[6, 6, 0, 0]} label={{ position: "insideTop", fill: "#fff", fontSize: 12, fontWeight: 900, formatter: (v, e) => e?.payload?.timeouts ?? "" }}>
                       {(learning.timeByActivity || []).map((r, i) => <Cell key={i} fill={r.avgPct >= 75 ? AMBER : BLUE} />)}
+                      <LabelList dataKey="avgPct" position="top" formatter={(v) => `${v}%`} fill={c.text} fontSize={11} fontWeight={800} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -285,9 +290,15 @@ function ParticipationTab({ c, part, activities }) {
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 13, fill: c.textMuted }} width={110} />
                   <Tooltip labelFormatter={(v, payload) => payload?.[0]?.payload?.fullTitle || v} {...t.tooltip} />
                   <Legend formatter={t.legend} />
-                  <Bar dataKey="tabOuts" stackId="s" name="Tab-outs" fill={AMBER} />
-                  <Bar dataKey="captures" stackId="s" name="Capture keys" fill={SKY} />
-                  <Bar dataKey="kicks" stackId="s" name="Kicks" fill={c.text} radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="tabOuts" stackId="s" name="Tab-outs" fill={AMBER}>
+                    <LabelList dataKey="tabOuts" position="center" formatter={(v) => (Number(v) > 0 ? v : "")} fill="#fff" fontSize={11} fontWeight={800} />
+                  </Bar>
+                  <Bar dataKey="captures" stackId="s" name="Capture keys" fill={SKY}>
+                    <LabelList dataKey="captures" position="center" formatter={(v) => (Number(v) > 0 ? v : "")} fill="#fff" fontSize={11} fontWeight={800} />
+                  </Bar>
+                  <Bar dataKey="kicks" stackId="s" name="Kicks" fill={c.text} radius={[0, 6, 6, 0]}>
+                    <LabelList dataKey="kicks" position="center" formatter={(v) => (Number(v) > 0 ? v : "")} fill="#fff" fontSize={11} fontWeight={800} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </InnerScroll>

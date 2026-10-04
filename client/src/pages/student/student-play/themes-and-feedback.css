@@ -236,7 +236,7 @@
   overflow: hidden;
   pointer-events: none;
   backdrop-filter: blur(8px);
-  animation: twFadeOut 3.5s cubic-bezier(.22,.61,.36,1) forwards;
+  animation: twFadeOut 2s cubic-bezier(.22,.61,.36,1) forwards;
 }
 
 .sp-feedback-overlay.is-correct {
@@ -374,9 +374,8 @@
 }
 
 @keyframes twFadeOut {
-  0%, 60% { opacity: 1; }
-  78% { opacity: .82; }
-  90% { opacity: .42; }
+  0%, 45% { opacity: 1; }
+  70% { opacity: .75; }
   100% { opacity: 0; }
 }
 

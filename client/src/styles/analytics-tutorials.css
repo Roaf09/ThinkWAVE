@@ -534,7 +534,7 @@ body.dark-mode .tw-template-preview-dual .tw-template-preview-mobile{
 .tw-plan-benefits{gap:14px!important}
 .tw-plan-benefits p{font-size:17px!important;line-height:1.48!important;font-weight:780!important;margin-top:1px!important}
 @media(min-width:901px){
-  .tw-plan-page-main{height:auto!important;min-height:calc(100dvh - 78px)!important;overflow:visible!important;padding-bottom:34px!important}
+  .tw-plan-page-main{height:calc(100dvh - 78px)!important;max-height:calc(100dvh - 78px)!important;min-height:0!important;overflow:hidden!important;align-items:center!important;align-content:center!important;padding-bottom:0!important}
   .tw-plan-page-copy>p{font-size:18px!important}
   .tw-plan-benefits{gap:13px!important;margin-top:20px!important}
   .tw-plan-benefits p{font-size:16px!important}
@@ -916,7 +916,7 @@ body.dark-mode .tw-thinkbot-tutorial.is-transparent{
 .tw-metric-expandable.is-shrunk{padding:10px!important;opacity:.88}
 .tw-metric-expandable.is-shrunk .tw-metric-value{font-size:19px!important}
 .tw-analytics-metrics-grid{grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch}
-.tw-analytics-metrics-grid.has-expanded-highest{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr) minmax(0,1.65fr) minmax(0,.7fr)}
+.tw-analytics-metrics-grid.has-expanded-highest{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.65fr) minmax(0,.7fr)}
 .tw-analytics-metrics-grid.has-expanded-lowest{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,1.65fr)}
 .tw-analytics-metrics-grid.has-expanded-highest .tw-metric-expandable.is-shrunk,
 .tw-analytics-metrics-grid.has-expanded-lowest .tw-metric-expandable.is-shrunk{align-self:stretch}

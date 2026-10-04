@@ -17,7 +17,7 @@ client/.env
 !*.env.example
 !server/.env.example
 !client/.env.example
-server/uploads/
+server/uploads
 # Keys / certs
 *.pem
 *.key

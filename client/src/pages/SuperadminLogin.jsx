@@ -62,7 +62,7 @@ export default function SuperadminLogin({ onLoginSuccess }) {
               <label className="text-[13px] font-semibold" style={s.label(c)}>Password</label>
               <div className="relative">
                 <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="px-[14px] py-[11px] rounded-xl text-sm w-full box-border" style={{ ...s.input(c), paddingRight: 48 }} />
-                <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
+                <button type="button" className="absolute right-[14px] top-1/2 -translate-y-1/2 border-0 bg-transparent! text-brand! dark:text-brand-dark! text-[13px] font-bold cursor-pointer p-0 tw-superadmin-eye" onClick={() => setShowPw((v) => !v)}><TwIcon name={showPw ? "eyeOff" : "eye"} size={19}/></button>
               </div>
             </div>
 

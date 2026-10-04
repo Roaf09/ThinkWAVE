@@ -63,6 +63,8 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   const [draftRestored, setDraftRestored] = useState(false);
   // Title-missing pulse: red highlight with single breath instead of popup.
   const [titlePulse, setTitlePulse] = useState(0);
+  // Category-missing pulse: same red highlight + text warning as guest.
+  const [categoryPulse, setCategoryPulse] = useState(0);
 
   // Autosave the setup form so an unexpected crash/refresh keeps the title,
   // category, and template choice instead of losing the whole setup.
@@ -162,15 +164,20 @@ export default function CreateTab({ guestMode = false, tutorial }) {
   function patch(next) { setForm((prev) => ({ ...prev, ...next })); }
 
   async function handleSubmit(event) {
-    event.preventDefault();
+    if (event?.preventDefault) event.preventDefault();
     setMsg("");
     if (!form.title.trim()) {
-      // No popup: highlight title field in red with single pulse/breath.
+      // No popup: highlight title field in red with single pulse/breath (same as guest).
       setTitlePulse((v) => v + 1);
       try { document.querySelector('[data-tutorial="create-title"]')?.focus?.(); } catch {}
       return;
     }
-    if (!form.category) return setMsg("Select K-12 or College.");
+    if (!form.category) {
+      // Same red highlight + text warning as guest when category is missing.
+      setCategoryPulse((v) => v + 1);
+      setMsg("Select K-12 or College.");
+      return;
+    }
     if (!form.templateType) return setMsg("Select a quiz template.");
     setSaving(true);
     try {
@@ -224,7 +231,10 @@ export default function CreateTab({ guestMode = false, tutorial }) {
       <form onSubmit={handleSubmit} className="grid gap-[22px]">
         <div>
           <label style={labelStyle(c)}>Quiz Title</label>
-          <input key={titlePulse} data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" required className={`font-[850] tracking-[0.04em]${titlePulse && !form.title.trim() ? " tw-create-title-pulse" : ""}`} style={{ ...inputStyle(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
+          <input key={titlePulse} data-tutorial="create-title" value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Quiz 1 – Biology Chapter 3" className={`font-[850] tracking-[0.04em]${titlePulse && !form.title.trim() ? " tw-create-title-pulse" : ""}`} style={{ ...inputStyle(c), ...(titlePulse && !form.title.trim() ? { borderColor: "#ef4444", borderWidth: 2 } : null) }} />
+          {titlePulse > 0 && !form.title.trim() && (
+            <div className="px-[12px] py-[9px] rounded-[12px] text-[12.5px] font-[700] mt-[8px]" style={{ background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg }}>Enter a quiz title to continue.</div>
+          )}
           {form.title.trim() && existingTitles.includes(form.title.trim().toLowerCase()) && (
             <div className="px-[12px] py-[9px] rounded-[12px] text-[12.5px] font-[700] mt-[8px]" style={{ background: c.yellowBg, border: `1px solid ${c.yellowBorder}`, color: c.yellowFg }}>Heads up: this title is already used in another one of your works.</div>
           )}
@@ -232,9 +242,12 @@ export default function CreateTab({ guestMode = false, tutorial }) {
 
         <div data-tutorial="create-category" className="tw-create-category-tutorial-target inline-grid rounded-[16px] w-[min(100%,560px)]">
           <label style={labelStyle(c)}>Category</label>
-          <div className="flex gap-[10px] max-w-[560px]">
-            {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => { patch({ category: cat }); if (tutorial?.stage === "create_choose_category") tutorial.setStage?.("create_choose_template"); }} style={segmentBtn(c, form.category === cat)}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
+          <div key={categoryPulse} className="flex gap-[10px] max-w-[560px]">
+            {["K12", "COLLEGE"].map((cat) => <button key={cat} type="button" onClick={() => { patch({ category: cat }); if (tutorial?.stage === "create_choose_category") tutorial.setStage?.("create_choose_template"); }} className={categoryPulse && !form.category ? "tw-create-title-pulse" : ""} style={{ ...segmentBtn(c, form.category === cat), ...(categoryPulse && !form.category ? { borderColor: "#ef4444", borderWidth: 2 } : null) }}><TwIcon name={cat === "K12" ? "classes" : "student"} size={16} /> {cat === "K12" ? "K-12" : "College"}</button>)}
           </div>
+          {categoryPulse > 0 && !form.category && (
+            <div className="px-[12px] py-[9px] rounded-[12px] text-[12.5px] font-[700] mt-[8px]" style={{ background: c.redBg, border: `1px solid ${c.redBorder}`, color: c.redFg }}>Select K-12 or College to continue.</div>
+          )}
         </div>
 
         <div data-tutorial="create-template-section" className="tw-create-template-tutorial-target">

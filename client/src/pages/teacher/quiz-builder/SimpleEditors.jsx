@@ -261,12 +261,10 @@ export function GuessWordEditor({ q, onChange, ui, c }) {
     <div style={ui.innerCard}>
       <h4 style={ui.innerTitle}>Guess Word</h4>
       <style>{`.tw-guess-word-input::placeholder{color:rgba(20,83,45,.45)}`}</style>
-      <div className="tw-guess-word-grid" data-tutorial="builder-guess-images">
+      <div className="tw-mcq-modified-grid" data-tutorial="builder-guess-images">
         {images.slice(0, 4).map((src, index) => (
-          <div key={index} className="tw-guess-word-image" draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", String(index))} onDragOver={(e) => e.preventDefault()} onDrop={(e) => reorderImage(Number(e.dataTransfer.getData("text/plain")), index)}>
-            <div style={{ border: "4px solid #35a159", borderRadius: 20, background: "#7fd09a", boxShadow: "0 8px 0 #25753f, 0 16px 28px rgba(15,23,42,.16)", padding: 8, height: "100%", boxSizing: "border-box", overflow: "hidden" }}>
-              <ImageUploadTile value={src} label={`Upload image ${index + 1}`} onChange={(value) => setImage(index, value)} c={c} accent={ui.templateAccent} />
-            </div>
+          <div key={index} className="tw-mcq-image-choice" draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", String(index))} onDragOver={(e) => e.preventDefault()} onDrop={(e) => reorderImage(Number(e.dataTransfer.getData("text/plain")), index)} style={{ border: "4px solid #35a159", borderRadius: 20, background: "#7fd09a", color: "#14532d", boxShadow: "0 8px 0 #25753f, 0 16px 28px rgba(15,23,42,.16)", transform: "translateY(-3px)" }}>
+            <ImageUploadTile value={src} label={`Upload image ${index + 1}`} onChange={(value) => setImage(index, value)} c={c} accent="#35a159" />
           </div>
         ))}
       </div>
