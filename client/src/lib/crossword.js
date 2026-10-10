@@ -229,7 +229,7 @@ export function resolveCrosswordWordBank({ config = {}, correct = {} }) {
 
 /**
  * Match a student spelling to a teacher word. Returns the canonical bank key, or null.
- * Order of teacher list does not matter; letter order on the grid may differ (anagram).
+ * Order of teacher list does not matter; the letters must be spelled in the right order.
  */
 export function matchCrosswordWord(candidate, wordBank) {
   const attempt = normalizeCrosswordWordKey(candidate);
@@ -237,7 +237,9 @@ export function matchCrosswordWord(candidate, wordBank) {
   for (const teacherWord of wordBank || []) {
     const canonical = normalizeCrosswordWordKey(teacherWord);
     if (!canonical) continue;
-    if (attempt === canonical || isAnagramOf(attempt, canonical)) return canonical;
+    // Exact spelling only, in selection order. A rearrangement of the word
+    // (e.g. "licnep" for "pencil", or the word read backwards) is NOT a match.
+    if (attempt === canonical) return canonical;
   }
   return null;
 }

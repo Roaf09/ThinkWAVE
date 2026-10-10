@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   buildCrosswordSignature,
   getPathLinePoints,
@@ -49,6 +49,11 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
   const pendingPointRef = useRef(null);
   const storeRef = useRef(store);
   storeRef.current = store;
+  // A wrong attempt (long enough, not an accepted word) is drawn as a red line
+  // for a moment, then cleared. { path, label } or null.
+  const [wrongFlash, setWrongFlash] = useState(null);
+  const wrongTimerRef = useRef(0);
+  const wrongSeqRef = useRef(0);
 
   useEffect(() => {
     if (store?.mode === "wordhunt-batch" && store.sig === sig && Array.isArray(store.grid) && store.grid.length) return;
@@ -98,6 +103,20 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
       const nextFound = [...latestFound, { text, path }];
       return patch({ foundEntries: nextFound, words: nextFound, selected: [], built: "" });
     }
+    // Wrong attempt: a real try (long enough, not already found) that was not
+    // accepted -> show that exact line in red. A word spelled backwards gets its
+    // own hint; anything else is just "not on the word list".
+    if (path.length > 1 && text.length >= minWordLength && !(matchedKey && latestFoundSet.has(matchedKey))) {
+      const reversedKey = matchCrosswordWord(text.split("").reverse().join(""), wordBank);
+      const label = reversedKey && !latestFoundSet.has(reversedKey) ? "Spelled backwards" : "Not a correct word";
+      wrongSeqRef.current += 1;
+      const seq = wrongSeqRef.current;
+      clearTimeout(wrongTimerRef.current);
+      setWrongFlash({ path, label });
+      wrongTimerRef.current = setTimeout(() => {
+        if (wrongSeqRef.current === seq) setWrongFlash(null);
+      }, 1200);
+    }
     patch({ selected: [], built: "" });
   }
 
@@ -116,13 +135,15 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
 
   useEffect(() => () => {
     if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
+    clearTimeout(wrongTimerRef.current);
   }, []);
 
   const linePoints = selected.length > 1 ? getPathLinePoints(selected, activeGridSize, 48, cellGap) : [];
   const foundLines = foundEntries
     .map((entry) => Array.isArray(entry?.path) && entry.path.length > 1 ? getPathLinePoints(entry.path.map(Number), activeGridSize, 48, cellGap) : [])
     .filter((points) => points.length > 1);
-  const previewStatus = !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchCrosswordWord(built, wordBank)) ? "Already found" : matchCrosswordWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
+  const wrongPoints = wrongFlash && !built ? getPathLinePoints(wrongFlash.path, activeGridSize, 48, cellGap) : [];
+  const previewStatus = !built && wrongPoints.length > 1 ? wrongFlash.label : !built ? "" : built.length < minWordLength ? `Need at least ${minWordLength} letters` : foundSet.has(matchCrosswordWord(built, wordBank)) ? "Already found" : matchCrosswordWord(built, wordBank) ? "Release to add this word" : "Not on the word list";
 
   return (
     <div className="bword-wrap">
@@ -165,9 +186,10 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
               </button>
             ))}
           </div>
-          {(foundLines.length > 0 || linePoints.length > 1) && (
+          {(foundLines.length > 0 || linePoints.length > 1 || wrongPoints.length > 1) && (
             <svg className="bword-path-line" viewBox={`0 0 ${activeGridSize * 56} ${activeGridSize * 56}`} preserveAspectRatio="none">
               {foundLines.map((points, index) => <polyline key={`found-line-${index}`} className="is-found" points={points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(34,197,94,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />)}
+              {wrongPoints.length > 1 && <polyline key="wrong-line" className="is-wrong" points={wrongPoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(239,68,68,.98)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />}
               {linePoints.length > 1 && <polyline key={`active-${selected.join("-")}`} className="is-active" points={linePoints.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="rgba(134, 239, 172, 0.95)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
             </svg>
           )}
@@ -176,7 +198,7 @@ export function GameCrossword({ config: cfg, correct = {}, store, onStore, disab
           <div className="spell-display bword-current-word">
             {(built || "•").split("").map((c, i) => <div key={i} className="spell-char" style={{ width: 32, height: 34, background: c === "•" ? "rgba(255,255,255,0.08)" : "var(--sp-spell-char-bg)" }}>{c}</div>)}
           </div>
-          <div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`}>{previewStatus}</div>
+          <div className={`bword-preview-status${previewStatus.includes("Release") ? " ok" : ""}`} style={wrongPoints.length > 1 ? { color: "#ef4444", fontWeight: 800 } : undefined}>{previewStatus}</div>
         </div>
         {timeUp && (
           <div className="bword-summary bword-summary-inside">

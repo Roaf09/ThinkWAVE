@@ -203,7 +203,9 @@ export function matchCrosswordWord(candidate, wordBank) {
   for (const teacherWord of wordBank || []) {
     const canonical = normalizeCrosswordWordKey(teacherWord);
     if (!canonical) continue;
-    if (attempt === canonical || isAnagramOf(attempt, canonical)) return canonical;
+    // Exact spelling only, in selection order. A rearrangement of the word
+    // (e.g. "licnep" for "pencil", or the word read backwards) is NOT a match.
+    if (attempt === canonical) return canonical;
   }
   return null;
 }
