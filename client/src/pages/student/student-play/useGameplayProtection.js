@@ -27,7 +27,10 @@ import { useEffect, useRef, useState } from "react";
 //
 // `active` gates everything so lobby/intro screens stay unrestricted.
 // `requireFullscreen` gates only the fullscreen block (pass LIVE/playing).
-export function useGameplayProtection({ active, requireFullscreen = false, onCaptureAttempt }) {
+// `captureActive` (optional, defaults to `active`) gates ONLY screenshot /
+// capture detection (tally + capture blur), so a screen can keep the other
+// protections on while not counting captures (e.g. the live waiting lobby).
+export function useGameplayProtection({ active, requireFullscreen = false, captureActive, onCaptureAttempt }) {
   const [awayBlur, setAwayBlur] = useState(false);
   const [shotBlocked, setShotBlocked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(
@@ -36,6 +39,8 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const activeRef = useRef(active);
   activeRef.current = active;
+  const captureActiveRef = useRef(captureActive ?? active);
+  captureActiveRef.current = captureActive ?? active;
   const captureRef = useRef(onCaptureAttempt);
   captureRef.current = onCaptureAttempt;
   const shotTimer = useRef(null);
@@ -74,7 +79,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
 
   useEffect(() => {
     function flashShotBlock() {
-      if (!activeRef.current) return;
+      if (!activeRef.current || !captureActiveRef.current) return;
       lastShotAtRef.current = Date.now();
       setShotBlocked(true);
       // Instant opaque cover: Snip / Game Bar overlays steal window focus,
@@ -110,7 +115,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
     // Mobile detections can overlap (3-finger swipe + the blur it causes), so
     // count at most one capture per 2.5s. Desktop key paths are unaffected.
     function flashMobileShot() {
-      if (!activeRef.current) return;
+      if (!activeRef.current || !captureActiveRef.current) return;
       if (Date.now() - lastShotAtRef.current < 2500) return;
       flashShotBlock();
     }

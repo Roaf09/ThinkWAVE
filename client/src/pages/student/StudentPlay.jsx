@@ -88,6 +88,9 @@ export default function StudentPlay() {
   const guard = useGameplayProtection({
     active: true,
     requireFullscreen: isLivePlaying,
+    // Screenshots are only detected/counted once the quiz is LIVE - not in the
+    // waiting lobby or while paused.
+    captureActive: isLivePlaying,
     onCaptureAttempt: () => socketRef.current?.emit("student:screenshot", { sessionId: Number(sessionId) }),
   });
   const blockedByFs = guard.needsFullscreen;
