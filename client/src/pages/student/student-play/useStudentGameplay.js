@@ -31,6 +31,7 @@ export function useStudentGameplay({
   renameTimer,
   setCountdown,
   setGroupNameDraft,
+  holdCountdown = false,
 }) {
   const myParticipant = useMemo(() => roster.find((p) => Number(p.id) === participantId) || null, [roster, participantId]);
   const myGroupId = Number(myParticipant?.group_id || joinedGroupId || 0) || null;
@@ -63,6 +64,7 @@ export function useStudentGameplay({
   useEffect(() => {
     if (state?.status !== "LIVE") { setCountdown(null); return; }
     setCountdown(3);
+    if (holdCountdown) return undefined; // pre-start notice is up; 3-2-1 begins after it
     const iv = setInterval(() => {
       if (showFeedbackRef.current) return;
       setCountdown((v) => {
@@ -72,7 +74,7 @@ export function useStudentGameplay({
       });
     }, 1000);
     return () => clearInterval(iv);
-  }, [state?.status, state?.current_question_index]);
+  }, [state?.status, state?.current_question_index, holdCountdown]);
 
   const timer = useMemo(() => {
     const total = Number(currentQ?.config_json?.timeLimitSec || state?.time_limit_sec || 0);

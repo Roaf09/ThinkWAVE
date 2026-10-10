@@ -32,9 +32,11 @@ export default function StudentPlay() {
   const { dark, toggleTheme } = useTheme();
 
   const [state, setState] = useState(null);
-  // Pre-start "2 answers" notice: shown once in the lobby, then dismissed.
+  // Pre-start "2 answers" notice: shown once when the live session starts, then dismissed.
   const [twoNoticeSeen, setTwoNoticeSeen] = useState(false);
   const dismissTwoNotice = useCallback(() => setTwoNoticeSeen(true), []);
+  // Shown once when the host starts the live session (first question), before the 3-2-1 countdown.
+  const showTwoNotice = state?.status === "LIVE" && !!state?.has_two_answer_questions && Number(state?.current_question_index || 0) === 0 && !twoNoticeSeen;
   const [questions, setQuestions] = useState([]);
   const [scores, setScores] = useState([]);
   const [liveLeaderboard, setLiveLeaderboard] = useState({ top5: [], myRank: 0, myScore: null });
@@ -201,6 +203,7 @@ export default function StudentPlay() {
     participantId, joinedGroupId, groupNameDraft, selectedChoice, matchingMap, spell,
     submittedQId, submitLabel, answeredQuestionIds, countdown, showFeedback, postAnswerPhase,
     sessionId, socketRef, renameTimer, setCountdown, setGroupNameDraft,
+    holdCountdown: showTwoNotice,
   });
 
   function buildCurrentAnswer() {
@@ -332,9 +335,6 @@ export default function StudentPlay() {
   if (!state || state.status === "LOBBY" || state.status === "PAUSED") {
     return (
       <>
-      {state?.status === "LOBBY" && state?.has_two_answer_questions && !twoNoticeSeen && (
-        <TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} onDone={dismissTwoNotice} />
-      )}
       <WaitingRoomView
         dark={dark} waitExperienceBgStyle={waitExperienceBgStyle}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}
@@ -357,6 +357,9 @@ export default function StudentPlay() {
         feedbackOverlay={<FeedbackOverlay showFeedback={showFeedback} feedbackQ={feedbackQ} feedbackFxKey={feedbackFxKey} />}
         dark={dark} state={state} questions={questions} countdown={countdown}
       />
+      {showTwoNotice && (
+        <TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} onDone={dismissTwoNotice} />
+      )}
       {guardOverlay}
       {watermarkOverlay}
       {fullscreenOverlay}
