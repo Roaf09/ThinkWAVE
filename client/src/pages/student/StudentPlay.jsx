@@ -349,6 +349,18 @@ export default function StudentPlay() {
   }
 
   if (state?.status === "LIVE" && countdown > 0) {
+    // Two-answer notice goes first, alone (no countdown behind it); 3-2-1 starts after it.
+    if (showTwoNotice) {
+      return (
+        <>
+        <div className="min-h-[100vh]" style={experienceBgStyle} />
+        <TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} durationMs={3000} onDone={dismissTwoNotice} />
+        {guardOverlay}
+        {watermarkOverlay}
+        {fullscreenOverlay}
+        </>
+      );
+    }
     return (
       <>
       <CountdownView
@@ -357,9 +369,6 @@ export default function StudentPlay() {
         feedbackOverlay={<FeedbackOverlay showFeedback={showFeedback} feedbackQ={feedbackQ} feedbackFxKey={feedbackFxKey} />}
         dark={dark} state={state} questions={questions} countdown={countdown}
       />
-      {showTwoNotice && (
-        <TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} onDone={dismissTwoNotice} />
-      )}
       {guardOverlay}
       {watermarkOverlay}
       {fullscreenOverlay}
