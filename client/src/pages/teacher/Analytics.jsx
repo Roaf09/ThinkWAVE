@@ -297,7 +297,7 @@ function ParticipantBadges({ analytics, assigned, guestMode, C, tone }) {
 function TabShotBadge({ C, tabOutCount, shotCount }) {
   const [showShots, setShowShots] = useState(false);
   const shownCount = showShots ? shotCount : tabOutCount;
-  const shownLabel = showShots ? `capture key${shotCount === 1 ? "" : "s"} pressed` : `tab out${tabOutCount === 1 ? "" : "s"}`;
+  const shownLabel = showShots ? `screenshot${shotCount === 1 ? "" : "s"}` : `tab out${tabOutCount === 1 ? "" : "s"}`;
   const shownStyle = showShots
     ? { color: "#38bdf8", borderColor: "#38bdf8", background: "transparent" }
     : { color: tabOutCount > 0 ? C.redFg : C.muted, borderColor: tabOutCount > 0 ? C.redBorder : C.border, background: tabOutCount > 0 ? C.redBg : C.cardBg };
@@ -305,7 +305,7 @@ function TabShotBadge({ C, tabOutCount, shotCount }) {
     event.stopPropagation();
     setShowShots((v) => !v);
   }
-  return <span role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); } }} title={showShots ? "Capture-key presses (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show capture-key count"} className="tw-analytics-tab-out-badge" style={{ ...pill(C), ...shownStyle, cursor: "pointer" }}>{shownCount} {shownLabel}</span>;
+  return <span role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(event); } }} title={showShots ? "Detected screenshots (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show screenshot count"} className="tw-analytics-tab-out-badge" style={{ ...pill(C), ...shownStyle, cursor: "pointer" }}>{shownCount} {shownLabel}</span>;
 }
 
 function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedStudentId, setExpandedStudentId, basic = false }) {

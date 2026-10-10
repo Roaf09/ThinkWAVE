@@ -103,7 +103,13 @@ export default function StudentAsyncPlay() {
   // Phase 1+2: same capture deterrents + fullscreen gate as live sessions.
   // Assignments previously had zero screenshot protection.
   const isAsyncPlaying = entryStage === "playing" && !done;
-  const guard = useGameplayProtection({ active: isAsyncPlaying, requireFullscreen: isAsyncPlaying });
+  // onCaptureAttempt reports screenshot / screen-capture detections (desktop
+  // keys + the mobile heuristics) to the server's silent assignment tally.
+  const guard = useGameplayProtection({
+    active: isAsyncPlaying,
+    requireFullscreen: isAsyncPlaying,
+    onCaptureAttempt: () => { try { assignmentSocketRef.current?.emit("assignment:screenshot", { quizId: Number(quizId) }); } catch {} },
+  });
   const blockedByFs = guard.needsFullscreen;
   const combinedAway = awayBlur || guard.awayBlur || blockedByFs;
   const asyncWatermark = useMemo(() => {

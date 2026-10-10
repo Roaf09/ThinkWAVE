@@ -47,6 +47,28 @@ async function loadAssignmentTabCounts(quizId) {
   }
 }
 
+// Assignment screenshot tally (written by assignment.socket.js). Read-only here;
+// the table is created lazily so older databases keep working.
+async function loadAssignmentShotCounts(quizId) {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS assignment_screenshot_events (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      quiz_id BIGINT NOT NULL,
+      student_user_id BIGINT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_assignment_shot_quiz_student (quiz_id, student_user_id)
+    )`);
+    const [rows] = await pool.query(
+      `SELECT student_user_id, COUNT(*) AS screenshot_count
+       FROM assignment_screenshot_events WHERE quiz_id=:qid GROUP BY student_user_id`,
+      { qid: Number(quizId) }
+    );
+    return new Map(rows.map((r) => [Number(r.student_user_id), Number(r.screenshot_count || 0)]));
+  } catch {
+    return new Map();
+  }
+}
+
 // Same Asia/Manila pinning as analytics.controller.js's fmtDate - without an
 // explicit timeZone this renders in whatever zone the Node process runs in
 // (UTC on Render), not Philippine time.
@@ -292,7 +314,11 @@ export async function getAsyncExportData(classId, quizId, teacherId) {
     { qid: quizId, cid: classId, tid: teacherId }
   );
   const tabCounts = await loadAssignmentTabCounts(quizId);
-  for (const r of rows) r.tab_out_count = tabCounts.get(Number(r.student_user_id)) || 0;
+  const shotCounts = await loadAssignmentShotCounts(quizId);
+  for (const r of rows) {
+    r.tab_out_count = tabCounts.get(Number(r.student_user_id)) || 0;
+    r.screenshot_count = shotCounts.get(Number(r.student_user_id)) || 0;
+  }
   return { quiz, rows };
 }
 
@@ -318,15 +344,15 @@ export async function buildAsyncWorkbook(data) {
   ]);
   sheet.getRow(1).font = { bold: true, size: 16 };
   sheet.columns = [
-    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 28 },
+    { width: 24 }, { width: 24 }, { width: 14 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 13 }, { width: 28 },
   ];
-  sheet.addRow(["Last Name", "First Name", "M.I.", "Student ID", "Score", "Max", "Tab outs", "Submitted At"]).font = { bold: true };
+  sheet.addRow(["Last Name", "First Name", "M.I.", "Student ID", "Score", "Max", "Tab outs", "Screenshots", "Submitted At"]).font = { bold: true };
   // Pre-format submitted_at rather than handing exceljs a raw Date - it
   // serializes date cells on its own UTC/local convention, which is the same
   // timezone mismatch fmtExportDate exists to avoid.
   let i = 0;
   for (const r of data.rows) {
-    sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", Number(r.tab_out_count || 0), r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]);
+    sheet.addRow([r.last_name, r.first_name, r.middle_initial || "", r.student_id, r.score ?? "—", r.max_score ?? "—", Number(r.tab_out_count || 0), Number(r.screenshot_count || 0), r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted"]);
     if (++i % 500 === 0) await yieldToLoop();
   }
   return workbook;
@@ -420,14 +446,15 @@ export function renderAsyncPdf(doc, data, analysis) {
     y,
     title: "Student Results",
     columns: [
-      { label: "Last Name", width: 84 },
-      { label: "First Name", width: 78 },
+      { label: "Last Name", width: 76 },
+      { label: "First Name", width: 70 },
       { label: "M.I.", width: 28 },
-      { label: "Student ID", width: 68 },
-      { label: "Score", width: 38, align: "right" },
-      { label: "Max", width: 34, align: "right" },
+      { label: "Student ID", width: 62 },
+      { label: "Score", width: 34, align: "right" },
+      { label: "Max", width: 30, align: "right" },
       { label: "Tab", width: 30, align: "right" },
-      { label: "Submitted At", width: 152 },
+      { label: "Shots", width: 40, align: "right" },
+      { label: "Submitted At", width: 142 },
     ],
     rows: data.rows.map((r) => [
       r.last_name,
@@ -437,6 +464,7 @@ export function renderAsyncPdf(doc, data, analysis) {
       r.score ?? "—",
       r.max_score ?? "—",
       Number(r.tab_out_count || 0),
+      Number(r.screenshot_count || 0),
       r.submitted_at ? fmtExportDate(r.submitted_at) : "Not submitted",
     ]),
   });
@@ -583,6 +611,7 @@ export async function getClassAsyncAnalytics(req, res) {
   const min = scores.length ? Math.min(...scores) : 0;
   const max = scores.length ? Math.max(...scores) : 0;
   const tabCounts = await loadAssignmentTabCounts(quizId);
+  const shotCounts = await loadAssignmentShotCounts(quizId);
 
   const sessionPayload = {
     ...quiz,
@@ -605,6 +634,7 @@ export async function getClassAsyncAnalytics(req, res) {
       max_score: Number(row.max_score || 0),
       joined_at: row.submitted_at,
       tab_out_count: tabCounts.get(Number(row.student_user_id)) || 0,
+      screenshot_count: shotCounts.get(Number(row.student_user_id)) || 0,
       responses: buildStudentResponseDetails(responsesByStudent[Number(row.student_user_id)] || []),
     })),
     questions: detailedQuestions,
@@ -614,6 +644,7 @@ export async function getClassAsyncAnalytics(req, res) {
       first_name: row.first_name || "Student",
       last_name: row.last_name || row.student_id || "",
       tab_out_count: tabCounts.get(Number(row.student_user_id)) || 0,
+      screenshot_count: shotCounts.get(Number(row.student_user_id)) || 0,
     })),
   });
 }
@@ -936,6 +967,7 @@ async function buildStudentAnalyticsData(classId, enrollmentId, req) {
   const integRows = [];
   const hasShot = await tableExists("screenshot_events");
   const hasAssignTab = await tableExists("assignment_tab_events");
+  const hasAssignShot = await tableExists("assignment_screenshot_events");
   for (const a of acts) {
     if (a.mode === "LIVE") {
       const part = partBySession.get(a.sessionId);
@@ -954,14 +986,20 @@ async function buildStudentAnalyticsData(classId, enrollmentId, req) {
       const kicked = part.kicked ? 1 : 0;
       if (tabOuts || captures || kicked) integRows.push({ activity: a.title, date: a.completed_at, tabOuts, captures, kicked: kicked ? "Yes" : "No" });
     } else {
-      let tabOuts = 0;
+      let tabOuts = 0; let captures = 0;
       if (hasAssignTab) {
         try {
           const [[row]] = await pool.query(`SELECT COUNT(*) AS c FROM assignment_tab_events WHERE quiz_id=:qid AND student_user_id=:uid`, { qid: a.quizId, uid: student.student_user_id });
           tabOuts = Number(row?.c || 0);
         } catch {}
       }
-      if (tabOuts) integRows.push({ activity: a.title, date: a.completed_at, tabOuts, captures: 0, kicked: "No" });
+      if (hasAssignShot) {
+        try {
+          const [[row]] = await pool.query(`SELECT COUNT(*) AS c FROM assignment_screenshot_events WHERE quiz_id=:qid AND student_user_id=:uid`, { qid: a.quizId, uid: student.student_user_id });
+          captures = Number(row?.c || 0);
+        } catch {}
+      }
+      if (tabOuts || captures) integRows.push({ activity: a.title, date: a.completed_at, tabOuts, captures, kicked: "No" });
     }
   }
   const integTotals = {
@@ -1529,6 +1567,7 @@ async function buildClassAnalyticsFullData(classId, req) {
   const hasShot = await tableExists("screenshot_events");
   const hasInteg = await tableExists("integrity_events");
   const hasAssignTab = await tableExists("assignment_tab_events");
+  const hasAssignShot = await tableExists("assignment_screenshot_events");
   const integrityByActivity = await Promise.all(activities.map(async (a) => {
     if (a.mode === "LIVE") {
       let tabOuts = 0; let captures = 0; let tamper = 0;
@@ -1557,14 +1596,20 @@ async function buildClassAnalyticsFullData(classId, req) {
       } catch {}
       return { key: a.key, short: a.short, title: a.title, tabOuts, captures, tamper, kicks, total: tabOuts + captures + tamper + kicks };
     }
-    let tabOuts = 0;
+    let tabOuts = 0; let captures = 0;
     if (hasAssignTab) {
       try {
         const [[row]] = await pool.query(`SELECT COUNT(*) AS c FROM assignment_tab_events WHERE quiz_id=:qid`, { qid: a.quizId });
         tabOuts = Number(row?.c || 0);
       } catch {}
     }
-    return { key: a.key, short: a.short, title: a.title, tabOuts, captures: 0, tamper: 0, kicks: 0, total: tabOuts };
+    if (hasAssignShot) {
+      try {
+        const [[row]] = await pool.query(`SELECT COUNT(*) AS c FROM assignment_screenshot_events WHERE quiz_id=:qid`, { qid: a.quizId });
+        captures = Number(row?.c || 0);
+      } catch {}
+    }
+    return { key: a.key, short: a.short, title: a.title, tabOuts, captures, tamper: 0, kicks: 0, total: tabOuts + captures };
   }));
   const lastHourSubs = asyncSubs.filter((s) => {
     const q = asyncQuizzes.find((x) => Number(x.quiz_id) === Number(s.quiz_id));
