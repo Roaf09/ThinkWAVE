@@ -20,6 +20,19 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
   const complete = !!form.classId && !!form.availableFrom && !!form.availableUntil && !isEmptyQuiz;
   const selected = folders.find((folder) => Number(folder.id) === Number(form.classId));
   const tone = templateTone(normalizeLiveTemplate(quiz.template_type), c, dark);
+  // "Start now": stamps the schedule start with the moment of the click so the
+  // assignment opens right away. The end time is kept if it is still valid
+  // (in the future and within the 1-week limit from now); otherwise it
+  // defaults to 3 days from now, the same length the schedule editor suggests.
+  function startNow() {
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+    const currentEnd = form.availableUntil ? new Date(form.availableUntil) : null;
+    let until = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd > now ? currentEnd : new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    if (until.getTime() - now.getTime() > WEEK_MS) until = new Date(now.getTime() + WEEK_MS);
+    setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(now), availableUntil: toLocalDateTimeValue(until) }));
+    if (tutorialStage === "assign_schedule") onTutorialStage?.("assign_class");
+  }
   function submit(event) { event.preventDefault(); if (complete) { if (tutorialStage === "assign_create") onTutorialFinish?.(); onSubmit(quiz, form); } }
   useEffect(() => {
     document.body.classList.add("tw-mobile-modal-open");
@@ -49,7 +62,7 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
       {isEmptyQuiz && <div role="alert" style={{ background: c.redBg, color: c.redFg, border: `1px solid ${c.redBorder}`, borderRadius: 12, padding: "10px 14px", fontSize: 13, fontWeight: 800 }}>This quiz has no questions yet. Add at least one question before assigning.</div>}
       <div data-tutorial="assign-schedule" role="button" tabIndex={0} onClick={() => setEditing(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setEditing(true); } }} style={{ ...card(c, { boxShadow: "none", padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: c.cardBg2, borderColor: tone.accent }), cursor: "pointer", "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }} className="tw-template-themed">
         <div className="flex gap-[14px] items-center"><span style={{ color: tone.accent }}><TwIcon name="calendar" size={28} /></span><div><div className="text-[13px] font-[800]" style={{ color: c.textMuted }}>Schedule</div><div className="font-[900] tw-assign-schedule-value" style={{ color: c.text }}>{form.availableFrom && form.availableUntil ? `${formatSchedule(form.availableFrom)} → ${formatSchedule(form.availableUntil)}` : "Set start and end date/time"}</div></div></div>
-        <button type="button" onClick={(event) => { event.stopPropagation(); setEditing(true); }} style={{ ...btn(c), borderColor: tone.accent, color: tone.accent }}>Edit</button>
+        <div className="flex gap-[8px] items-center"><button type="button" data-tutorial="assign-start-now" title="Open the assignment for students right now" onClick={(event) => { event.stopPropagation(); startNow(); }} style={{ ...btn(c), background: tone.accent, borderColor: tone.accent, color: "#fff" }}>Start now</button><button type="button" onClick={(event) => { event.stopPropagation(); setEditing(true); }} style={{ ...btn(c), borderColor: tone.accent, color: tone.accent }}>Edit</button></div>
       </div>
       <div className="text-[13px]" style={{ color: c.textMuted }}>Students will only be able to answer within the selected schedule.</div>
       <button data-tutorial="assign-class" type="button" className="tw-host-class-field tw-template-themed" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: selected ? tone.accent : c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
