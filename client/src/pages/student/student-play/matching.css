@@ -489,3 +489,30 @@
 .quiz-shell-new.theme-dark .match-connect-content{color:#f8fafc}
 .quiz-shell-new.theme-dark .match-connect-content img{border-color:rgba(255,255,255,.2)}
 @media(max-width:760px){.match-connect{gap:28px;padding-inline:10px}.match-connect-card{min-height:76px}.match-connect-content{padding:10px 15px;font-size:13px;gap:8px}.match-connect-content img{width:48px;height:48px;min-width:48px}.match-connect-dot{width:20px;height:20px}.match-connect-dot.is-right{right:-11px}.match-connect-dot.is-left{left:-11px}}
+
+/* Matching on phones: a card with an image shows the image on top and the text
+   below it, instead of squeezing the text into a few pixels beside the image. */
+@media(max-width:600px){
+  /* More room for the words: slimmer column box and card padding, keeping
+     clearance next to the connector dot on the inner edge of each card. */
+  .match-connect .match-connect-column{padding:8px!important;border-width:3px!important}
+  .match-connect-column-a .match-connect-card .match-connect-content{padding:8px 13px 8px 6px!important}
+  .match-connect-column-b .match-connect-card .match-connect-content{padding:8px 6px 8px 13px!important}
+  .match-connect-card .match-connect-content.has-img{
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center;
+    text-align:center;
+    gap:6px!important;
+  }
+  .match-connect-card .match-connect-content.has-img img{
+    order:-1;
+    width:100%!important;
+    height:auto!important;
+    min-width:0!important;
+    aspect-ratio:4/3;
+    max-height:84px;
+    object-fit:cover;
+  }
+  .match-connect-card .match-connect-content.has-img span{width:100%;text-align:center}
+}

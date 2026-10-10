@@ -478,3 +478,105 @@
   .bword-game-panel{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.94)!important}
   .theme-dark .bword-game-panel{background:rgba(6,18,42,.94)!important}
 }
+
+/* ---------------------------------------------------------------------------
+   Answer cards (text / image / text + image) on phones, and the assignment
+   Previous | Submit | Next row. Kept at the END of the student stylesheet and
+   written with extra specificity so older conflicting rules cannot win.
+   --------------------------------------------------------------------------- */
+
+/* Previous | Submit | Next: one row, equal height, aligned at every width. */
+.quiz-shell-new .sp-assigned-navigation{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr)!important;
+  grid-auto-flow:row!important;
+  align-items:center!important;
+  justify-content:stretch!important;
+  gap:10px!important;
+  width:100%;
+  max-width:560px;
+  margin:20px auto 0!important;
+}
+.quiz-shell-new .sp-assigned-navigation>button{
+  grid-row:1!important;
+  justify-self:stretch!important;
+  align-self:center!important;
+  box-sizing:border-box;
+  width:100%!important;
+  min-width:0!important;
+  height:46px!important;
+  min-height:46px!important;
+  margin:0!important;
+  padding:0 12px!important;
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  white-space:nowrap;
+}
+.quiz-shell-new .sp-assigned-navigation>.sp-assigned-nav-btn.is-prev{grid-column:1!important}
+.quiz-shell-new .sp-assigned-navigation>.submit-btn{grid-column:2!important}
+.quiz-shell-new .sp-assigned-navigation>.sp-assigned-nav-btn.is-next{grid-column:3!important}
+@media(max-width:420px){
+  .quiz-shell-new .sp-assigned-navigation{gap:8px!important}
+  .quiz-shell-new .sp-assigned-navigation>button{height:44px!important;min-height:44px!important;padding:0 8px!important;font-size:13px!important}
+}
+
+/* Phones: an answer with an image shows the image on TOP and the text BELOW it
+   (normal horizontal text), instead of squeezing the text beside the image. */
+@media(max-width:600px){
+  .quiz-shell-new .quiz-choices .choice-btn.has-choice-img{
+    flex-direction:column!important;
+    align-items:stretch!important;
+    justify-content:flex-start!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:10px!important;
+    gap:8px!important;
+    border-radius:24px!important;
+    text-align:center;
+  }
+  .quiz-shell-new .quiz-choices .choice-btn.has-choice-img .choice-badge{
+    position:absolute!important;
+    top:16px;
+    left:16px;
+    width:34px!important;
+    height:34px!important;
+    font-size:16px!important;
+    z-index:5!important; /* above .choice-content (z-index:2) so it sits on the image */
+    box-shadow:0 2px 8px rgba(0,0,0,.32);
+  }
+  .quiz-shell-new .quiz-choices .choice-btn.has-choice-img .choice-content{
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    width:100%;
+    padding:0!important;
+    gap:8px!important;
+  }
+  .quiz-shell-new .quiz-choices .choice-btn.has-choice-img .choice-img{
+    width:100%!important;
+    height:auto!important;
+    aspect-ratio:4/3;
+    max-height:170px;
+    border-radius:16px;
+    object-fit:cover;
+  }
+  .quiz-shell-new .quiz-choices .choice-btn.has-choice-img .choice-text{
+    width:100%;
+    text-align:center;
+    font-size:17px;
+    line-height:1.25;
+    padding-bottom:2px;
+  }
+  /* Text-only answers: slimmer badge so the words get the room. */
+  .quiz-shell-new .quiz-choices .choice-btn:not(.has-choice-img):not(.modified-mcq-choice) .choice-badge{
+    width:42px!important;
+    height:42px!important;
+    font-size:18px!important;
+  }
+  .quiz-shell-new .quiz-choices .choice-btn:not(.has-choice-img):not(.modified-mcq-choice){
+    gap:10px!important;
+    padding-right:14px!important;
+  }
+}

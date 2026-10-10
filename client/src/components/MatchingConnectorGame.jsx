@@ -296,7 +296,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
             const item = colA[index] || {};
             const paired = valueMap?.[index] !== undefined;
             return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "A", index)} onClick={(event) => handlePressClick(event, "A", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
-              <div className="match-connect-content">
+              <div className={`match-connect-content${item.image ? " has-img" : ""}`}>
                 {textOf(item, `Item ${index + 1}`) ? <span>{textOf(item, `Item ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
               </div>
@@ -313,7 +313,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
             const paired = usedB.has(index);
             return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "B", index)} onClick={(event) => handlePressClick(event, "B", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
               <button type="button" data-match-side="B" data-match-index={index} className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onPointerDown={(event) => handleDotPress(event, "B", index)} onClick={() => handleDotClick("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} style={{ touchAction: "none" }} />
-              <div className="match-connect-content">
+              <div className={`match-connect-content${item.image ? " has-img" : ""}`}>
                 {textOf(item, `Answer ${index + 1}`) ? <span>{textOf(item, `Answer ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
               </div>

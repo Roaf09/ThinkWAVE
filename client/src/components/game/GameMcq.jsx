@@ -41,7 +41,7 @@ export function GameMcq({ options, mcqMode, answerMode, value, onChange, disable
           <button
             key={o.id || i}
             type="button"
-            className={`choice-btn ${isModifiedMcq ? "modified-mcq-choice" : ""} ${active ? "active" : ""} ${isDimmed ? "dimmed" : ""}`}
+            className={`choice-btn ${isModifiedMcq ? "modified-mcq-choice" : ""} ${active ? "active" : ""} ${isDimmed ? "dimmed" : ""}${o.image && !isModifiedMcq ? " has-choice-img" : ""}`}
             onClick={() => !disabled && toggleChoice(choice)}
             disabled={dimOthers ? (disabled && !active) : disabled}
           >
