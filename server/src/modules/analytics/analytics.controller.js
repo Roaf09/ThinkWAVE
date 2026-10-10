@@ -462,6 +462,8 @@ export async function buildSessionWorkbook(data) {
     if (qi % 500 === 0) await yieldToLoop();
   }
   qSheet.getRow(1).font = { bold: true };
+  // Left-align every cell (numbers and percentages default to the right).
+  qSheet.eachRow((row) => row.eachCell((cell) => { cell.alignment = { ...cell.alignment, horizontal: "left" }; }));
 
   const tabSheet = workbook.addWorksheet("Tab Monitoring");
   tabSheet.columns = [
@@ -592,11 +594,11 @@ export function renderSessionPdf(data, doc, sessionId) {
     y,
     title: "Per-question Percentage",
     columns: [
-      { label: "#", width: 26, align: "left" },
+      { label: "#", width: 26, align: "right" },
       { label: "Prompt", width: 225 },
-      { label: "Answers", width: 52, align: "left" },
-      { label: "Correct", width: 106, align: "left" },
-      { label: "Incorrect", width: 106, align: "left" },
+      { label: "Answers", width: 52, align: "right" },
+      { label: "Correct", width: 106, align: "right" },
+      { label: "Incorrect", width: 106, align: "right" },
     ],
     rows: data.questions.map((q, idx) => [
       Number(q.question_order ?? idx) + 1,
