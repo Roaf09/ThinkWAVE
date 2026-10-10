@@ -148,7 +148,7 @@ export function BuilderModals({
           c={c}
           message={(
             <div>
-              <p style={{ margin: "0 0 12px", color: c.textMuted, fontSize: 14 }}>The following questions are very similar. Please review before saving:</p>
+              <p style={{ margin: "0 0 12px", color: c.textMuted, fontSize: 14 }}>These questions are duplicates or too similar, so the quiz cannot be saved. Edit or delete one question in each pair, then save again:</p>
               {dupeList.map((d, i) => (
                 <div key={i} style={ui.warnItem}><strong>Q{d.i} and Q{d.j}</strong><span style={{ opacity: 0.75 }}> — {d.score}% similar</span></div>
               ))}
@@ -157,14 +157,7 @@ export function BuilderModals({
           actions={builderTutorialStage === "save" ? (
             <button type="button" className="tw-teacher-text-cancel tw-builder-review-duplicates" onClick={() => { setModal(null); setBuilderTutorialStage("save_review"); }}>Review questions</button>
           ) : (
-            <>
-              <button type="button" className="tw-teacher-text-cancel tw-builder-review-duplicates" onClick={() => setModal(null)}>Review questions</button>
-              <TeacherPressButton tone="blue" style={builderDialogActionStyle} onClick={async () => {
-                setModal(null);
-                const saved = await _doSave({ showModal: !publishFlow && builderTutorialStage !== "save" });
-                if (publishFlow && saved) await confirmPublish();
-              }}>{publishFlow ? "Publish Anyway" : "Save Anyway"}</TeacherPressButton>
-            </>
+            <button type="button" className="tw-teacher-text-cancel tw-builder-review-duplicates" onClick={() => setModal(null)}>Review questions</button>
           )}
         />
       )}

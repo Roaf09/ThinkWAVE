@@ -198,6 +198,14 @@ export function useBuilderPersistence({
     // paired with the server transaction so double-clicks, delayed responses,
     // retries, and publish/save races cannot create duplicate active rows.
     if (savePromiseRef.current) return savePromiseRef.current;
+    // Duplicate questions can never be saved, whichever path got us here
+    // (Save button, lock toggle, or any future caller).
+    const duplicateQuestions = findDuplicates(questions);
+    if (duplicateQuestions.length) {
+      setDupeList(duplicateQuestions);
+      setModal("duplicates");
+      return false;
+    }
     const saveVersion = editVersionRef.current;
     const payload = prepareForSave();
     setIsSaving(true);
@@ -236,6 +244,9 @@ export function useBuilderPersistence({
     if (savePromiseRef.current) return savePromiseRef.current;
     const valid = questions.filter((q) => trimText(q?.prompt));
     if (!valid.length) return false;
+    // Never persist duplicates, not even quietly. Autosave stays silent (no
+    // modal); the manual Save / Publish paths explain what to fix.
+    if (findDuplicates(questions).length) return false;
     const payload = valid.map((q) => {
       const idx = questions.indexOf(q);
       const extra = quiz?.template_type === "MATCHING"
@@ -302,6 +313,12 @@ export function useBuilderPersistence({
     if (list.length) {
       setInvalidList(list);
       setModal("invalid");
+      return;
+    }
+    const dupes = findDuplicates(questions);
+    if (dupes.length) {
+      setDupeList(dupes);
+      setModal("duplicates");
       return;
     }
     setModal("confirmSave");
