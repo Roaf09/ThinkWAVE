@@ -211,7 +211,9 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
   async function createAssignment(quiz, payload) {
     try {
       await api.post(`/quizzes/${quiz.id}/assign`, payload);
-      const selectedClass = folderOptions.find((folder) => Number(folder.id) === Number(payload?.classId));
+      const chosenClassIds = (payload?.classIds?.length ? payload.classIds : [payload?.classId]).map(Number);
+      const selectedClasses = folderOptions.filter((folder) => chosenClassIds.includes(Number(folder.id)));
+      const classLabel = selectedClasses.length > 1 ? `${selectedClasses.length} classes` : (selectedClasses[0]?.name || selectedClasses[0]?.pathLabel || "your class");
       setAssignQuiz(null);
       await load();
       setAssignmentSaved(true);
@@ -219,7 +221,7 @@ export default function LiveSessionsTab({ setActiveTab, guestMode = false, tutor
       // confirmation to repeat on every assignment - show it once per teacher.
       if (tutorial?.userId && !readTutorialState(tutorial.userId).assignmentLiveNoticeSeen) {
         writeTutorialState(tutorial.userId, { assignmentLiveNoticeSeen: true });
-        setAssignmentNotice({ className: selectedClass?.name || selectedClass?.pathLabel || "your class" });
+        setAssignmentNotice({ className: classLabel });
       }
       window.setTimeout(() => setAssignmentSaved(false), 2000);
     } catch (error) {

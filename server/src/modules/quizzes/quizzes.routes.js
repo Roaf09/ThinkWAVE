@@ -65,11 +65,12 @@ const ReuseSchema = z.object({
 });
 
 const AssignSchema = z.object({
-  classId: z.coerce.number().int().positive(),
+  classId: z.coerce.number().int().positive().optional().nullable(),
+  classIds: z.array(z.coerce.number().int().positive()).max(100).optional(),
   availableFrom: z.string().min(1),
   availableUntil: z.string().min(1),
   backgroundKey: z.string().regex(SESSION_BACKGROUND_KEY_PATTERN).optional().nullable(),
-});
+}).refine((value) => (value.classIds && value.classIds.length > 0) || value.classId, { message: "Choose at least one class.", path: ["classIds"] });
 
 quizzesRouter.get("/",    requireAuth, requireRole("TEACHER", "GUEST_HOST"), asyncHandler(listQuizzes));
 quizzesRouter.post("/",   requireAuth, requireRole("TEACHER", "GUEST_HOST"), validateBody(QuizSchema), asyncHandler(createQuiz));

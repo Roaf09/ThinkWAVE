@@ -394,7 +394,7 @@ export async function duplicateQuiz(req, res) {
 export async function assignQuiz(req, res) {
   const quizId = Number(req.params.id);
   const teacherId = req.user.sub;
-  const { classId, availableFrom, availableUntil, backgroundKey = null } = req.body;
+  const { classId, classIds, availableFrom, availableUntil, backgroundKey = null } = req.body;
 
   const [[quiz]] = await pool.query(
     `SELECT * FROM quizzes WHERE id=:id AND teacher_id=:tid AND deleted_at IS NULL`,
@@ -407,63 +407,87 @@ export async function assignQuiz(req, res) {
   if (Number.isNaN(fromTime) || Number.isNaN(untilTime)) return res.status(400).json({ message: "Start and end time are not valid." });
   if (untilTime <= fromTime) return res.status(400).json({ message: "End time must be after start time." });
   if (untilTime - fromTime > 7 * 24 * 60 * 60 * 1000) return res.status(400).json({ message: "Assignments can be open for up to 1 week only." });
-  const [[ownedClass]] = await pool.query(
-    `SELECT id FROM classes WHERE id=:cid AND teacher_id=:tid AND deleted_at IS NULL LIMIT 1`,
-    { cid: classId, tid: teacherId }
-  );
-  if (!ownedClass) return res.status(400).json({ message: "Choose an available class for this assignment." });
 
-  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
-  const [created] = await pool.query(
-    quizzesHaveBackground
-      ? `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until,background_key)
-         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt,:backgroundKey)`
-      : `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
-         VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
-    {
-      tid: teacherId,
-      cid: Number(ownedClass.id),
-      sourceId: quizId,
-      title: quiz.title,
-      cat: quiz.category,
-      tt: quiz.template_type,
-      tls: quiz.time_limit_sec,
-      ppq: quiz.points_per_question,
-      rq: quiz.randomize_questions ? 1 : 0,
-      sa: quiz.shuffle_answers ? 1 : 0,
-      fromDt: toMysqlDateTime(availableFrom),
-      untilDt: toMysqlDateTime(availableUntil),
-      backgroundKey: normalizeQuizBackgroundKey(backgroundKey || quiz.background_key),
-    }
+  // One assignment can go to several classes/sections at once. `classIds` is
+  // the multi-class field; the single `classId` still works for older callers.
+  const requestedClassIds = [...new Set(
+    (Array.isArray(classIds) && classIds.length ? classIds : [classId])
+      .map(Number)
+      .filter((value) => Number.isInteger(value) && value > 0)
+  )];
+  if (!requestedClassIds.length) return res.status(400).json({ message: "Choose at least one class for this assignment." });
+  const [ownedClasses] = await pool.query(
+    `SELECT id FROM classes WHERE id IN (:cids) AND teacher_id=:tid AND deleted_at IS NULL`,
+    { cids: requestedClassIds, tid: teacherId }
   );
-  rememberQuizBackground(created.insertId, normalizeQuizBackgroundKey(backgroundKey || quiz.background_key));
+  if (ownedClasses.length !== requestedClassIds.length) return res.status(400).json({ message: "Choose available classes for this assignment." });
 
   const [questions] = await pool.query(
     `SELECT question_order, prompt, config_json, correct_json
      FROM quiz_questions WHERE quiz_id=:qid AND deleted_at IS NULL ORDER BY question_order ASC`,
     { qid: quizId }
   );
-  if (!questions.length) {
-    await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId });
-    return res.status(400).json({ message: "Add at least one question before assigning." });
-  }
-  const conn3 = await pool.getConnection();
-  try {
-    await conn3.beginTransaction();
-    for (const q of questions) {
-      await conn3.query(
-        `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
-       VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
-        { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: reencodeJsonColumn(q.config_json), corr: reencodeJsonColumn(q.correct_json) }
-      );
+  if (!questions.length) return res.status(400).json({ message: "Add at least one question before assigning." });
+
+  const quizzesHaveBackground = await hasDatabaseColumn("quizzes", "background_key");
+  const resolvedBackgroundKey = normalizeQuizBackgroundKey(backgroundKey || quiz.background_key);
+  const createdIds = [];
+  // All-or-nothing: if any class fails, the assignments already made for the
+  // earlier classes are removed so the teacher never gets a partial set.
+  async function discardCreated() {
+    for (const id of createdIds) {
+      try { await pool.query(`DELETE FROM quiz_questions WHERE quiz_id=:id`, { id }); } catch {}
+      try { await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id }); } catch {}
     }
-    await conn3.commit();
+  }
+  try {
+    for (const targetClassId of requestedClassIds) {
+      const [created] = await pool.query(
+        quizzesHaveBackground
+          ? `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until,background_key)
+             VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt,:backgroundKey)`
+          : `INSERT INTO quizzes(teacher_id,class_id,source_quiz_id,title,category,template_type,time_limit_sec,points_per_question,randomize_questions,shuffle_answers,status,delivery_mode,available_from,available_until)
+             VALUES(:tid,:cid,:sourceId,:title,:cat,:tt,:tls,:ppq,:rq,:sa,'PUBLISHED','ASYNCHRONOUS',:fromDt,:untilDt)`,
+        {
+          tid: teacherId,
+          cid: Number(targetClassId),
+          sourceId: quizId,
+          title: quiz.title,
+          cat: quiz.category,
+          tt: quiz.template_type,
+          tls: quiz.time_limit_sec,
+          ppq: quiz.points_per_question,
+          rq: quiz.randomize_questions ? 1 : 0,
+          sa: quiz.shuffle_answers ? 1 : 0,
+          fromDt: toMysqlDateTime(availableFrom),
+          untilDt: toMysqlDateTime(availableUntil),
+          backgroundKey: resolvedBackgroundKey,
+        }
+      );
+      createdIds.push(created.insertId);
+      rememberQuizBackground(created.insertId, resolvedBackgroundKey);
+
+      const conn3 = await pool.getConnection();
+      try {
+        await conn3.beginTransaction();
+        for (const q of questions) {
+          await conn3.query(
+            `INSERT INTO quiz_questions(quiz_id, question_order, prompt, config_json, correct_json)
+           VALUES(:qid,:ord,:prompt,:cfg,:corr)`,
+            { qid: created.insertId, ord: q.question_order, prompt: q.prompt, cfg: reencodeJsonColumn(q.config_json), corr: reencodeJsonColumn(q.correct_json) }
+          );
+        }
+        await conn3.commit();
+      } catch (e) {
+        try { await conn3.rollback(); } catch {}
+        throw e;
+      } finally {
+        conn3.release();
+      }
+    }
   } catch (e) {
-    try { await conn3.rollback(); } catch {}
-    try { await pool.query(`DELETE FROM quizzes WHERE id=:id`, { id: created.insertId }); } catch {}
+    await discardCreated();
     throw e;
-  } finally {
-    conn3.release();
   }
 
   // Once scheduled, return the reusable source quiz to Quiz Bank rather than
@@ -475,7 +499,7 @@ export async function assignQuiz(req, res) {
     { id: quizId, tid: teacherId }
   );
 
-  res.status(201).json({ ok: true, id: created.insertId });
+  res.status(201).json({ ok: true, id: createdIds[0], ids: createdIds });
 }
 
 export async function reuseQuiz(req, res) {

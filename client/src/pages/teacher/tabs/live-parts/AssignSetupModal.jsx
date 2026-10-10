@@ -11,14 +11,16 @@ import { ClassPicker } from "./ClassPicker";
 // normalizeLiveTemplate is now the shared normalizeBankTemplate (identical mapping).
 // modalBackdrop + schedule/calendar helpers stay local (Live-specific styling).
 export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutorialStage, onTutorialStage, onTutorialFinish }) {
-  const [form, setForm] = useState({ classId: null, availableFrom: "", availableUntil: "", backgroundKey: null });
+  const [form, setForm] = useState({ classId: null, classIds: [], availableFrom: "", availableUntil: "", backgroundKey: null });
   const isMobile = useIsMobileViewport();
   const [editing, setEditing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const emptyCount = Number(quiz.question_count ?? NaN);
   const isEmptyQuiz = Number.isFinite(emptyCount) && emptyCount === 0;
-  const complete = !!form.classId && !!form.availableFrom && !!form.availableUntil && !isEmptyQuiz;
-  const selected = folders.find((folder) => Number(folder.id) === Number(form.classId));
+  const complete = form.classIds.length > 0 && !!form.availableFrom && !!form.availableUntil && !isEmptyQuiz;
+  const selectedClasses = form.classIds.map((id) => folders.find((folder) => Number(folder.id) === Number(id))).filter(Boolean);
+  const selected = selectedClasses.length > 0;
+  const classFieldLabel = selectedClasses.length > 1 ? `${selectedClasses.length} classes selected` : (selectedClasses[0]?.pathLabel || "Choose class(es)");
   const tone = templateTone(normalizeLiveTemplate(quiz.template_type), c, dark);
   // "Start now": stamps the schedule start with the moment of the click so the
   // assignment opens right away. The end time is kept if it is still valid
@@ -65,16 +67,16 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
         <div className="flex gap-[8px] items-center"><button type="button" data-tutorial="assign-start-now" title="Open the assignment for students right now" onClick={(event) => { event.stopPropagation(); startNow(); }} style={{ ...btn(c), background: tone.accent, borderColor: tone.accent, color: "#fff" }}>Start now</button><button type="button" onClick={(event) => { event.stopPropagation(); setEditing(true); }} style={{ ...btn(c), borderColor: tone.accent, color: tone.accent }}>Edit</button></div>
       </div>
       <div className="text-[13px]" style={{ color: c.textMuted }}>Students will only be able to answer within the selected schedule.</div>
-      <button data-tutorial="assign-class" type="button" className="tw-host-class-field tw-template-themed" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: selected ? tone.accent : c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span>{selected?.pathLabel || "Choose a class"}</span><TwIcon name="chevronDown" size={18} /></button>
+      <button data-tutorial="assign-class" type="button" className="tw-host-class-field tw-template-themed" onClick={() => setPickerOpen(true)} style={{ background: c.inputBg, borderColor: selected ? tone.accent : c.inputBorder, color: selected ? c.text : c.textMuted, "--tw-template-accent": tone.accent, "--tw-template-soft": tone.softBg }}><TwIcon name="classes" size={20} /><span title={selectedClasses.map((folder) => folder.pathLabel || folder.name).join(", ")}>{classFieldLabel}</span><TwIcon name="chevronDown" size={18} /></button>
       <div className="tw-assignment-primary-actions flex justify-end items-center gap-[14px] mt-[4px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton data-tutorial="assign-create" type="submit" tone="blue" icon="send" className="tw-template-themed" style={{ "--tw-press-face": tone.accent, "--tw-press-base": `color-mix(in srgb, ${tone.accent} 62%, #000)`, "--tw-press-border": tone.border }} disabled={!complete}>Send Assignment</TeacherPressButton></div>
       <BackgroundPicker selectedKey={form.backgroundKey} autoPlay={tutorialStage === "assign_background"} onSelect={(backgroundKey) => { setForm((current) => ({ ...current, backgroundKey })); if (tutorialStage === "assign_background") onTutorialStage?.("assign_create"); }} c={c} category={quiz.category} accent={tone.accent} />
     </div>
     {tutorialStage === "assign_schedule" && !editing && <ThinkBotTutorial target='[data-tutorial="assign-schedule"]' placement="left" square><p>Assignments are completed by students on their own time. Start by deciding when students can access this activity.</p></ThinkBotTutorial>}
-    {tutorialStage === "assign_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="assign-class"]' placement="left" square highlightMode="target"><p>Now choose which class should receive the assignment.</p></ThinkBotTutorial>}
+    {tutorialStage === "assign_class" && !pickerOpen && <ThinkBotTutorial target='[data-tutorial="assign-class"]' placement="left" square highlightMode="target"><p>Now choose which class (or classes) should receive the assignment.</p></ThinkBotTutorial>}
     {tutorialStage === "assign_background" && <ThinkBotTutorial target='[data-tutorial="session-backgrounds"]' placement={isMobile ? "above" : "left"} square><p>Browse through the available gameplay backgrounds and pick the one you want your students to see.</p></ThinkBotTutorial>}
     {tutorialStage === "assign_create" && <ThinkBotTutorial target='[data-tutorial="assign-create"]' placement="above" square highlightMode="target"><p>Ready? Create the assignment and ThinkWAVE will take care of the rest.</p></ThinkBotTutorial>}
     {editing && <ScheduleEditor c={c} accent={tone.accent} form={form} setForm={setForm} onClose={() => setEditing(false)} onApply={() => tutorialStage === "assign_schedule" && onTutorialStage?.("assign_class")} />}
-    {pickerOpen && <ClassPicker c={c} dark={dark} accent={tone.accent} folders={folders} selectedId={form.classId} onClose={() => setPickerOpen(false)} onSelect={(id) => { setForm((current) => ({ ...current, classId: id })); setPickerOpen(false); if (tutorialStage === "assign_class") onTutorialStage?.("assign_background"); }} />}
+    {pickerOpen && <ClassPicker c={c} dark={dark} accent={tone.accent} folders={folders} multiple selectedIds={form.classIds} onClose={() => setPickerOpen(false)} onSelectMany={(ids) => { setForm((current) => ({ ...current, classIds: ids, classId: ids[0] ?? null })); setPickerOpen(false); if (tutorialStage === "assign_class") onTutorialStage?.("assign_background"); }} />}
   </form></div>;
 }
 
