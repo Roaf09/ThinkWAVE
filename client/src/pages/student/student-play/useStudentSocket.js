@@ -74,7 +74,35 @@ export function useStudentSocket({
     socketRef.current = s;
     const extendedScreens = typeof window !== "undefined" && !!window.screen?.isExtended;
     s.on("connect", () => s.emit("student:connect", { sessionId: Number(sessionId), reconnectKey, isExtended: extendedScreens }));
+    // Offline detection on the device itself. The server only notices a drop
+    // after the socket times out, so short outages were never logged. Remember
+    // when the connection was lost and which question was on screen, then
+    // report it as soon as the student is connected again.
+    const offlineRef = { at: null, questionId: null };
+    const beginOffline = () => {
+      if (offlineRef.at != null) return;
+      offlineRef.at = Date.now();
+      offlineRef.questionId = currentQRef.current?.id ?? null;
+    };
+    const flushOffline = () => {
+      if (offlineRef.at == null || !s.connected) return;
+      const durationMs = Date.now() - offlineRef.at;
+      const questionId = offlineRef.questionId;
+      offlineRef.at = null;
+      offlineRef.questionId = null;
+      if (durationMs >= 2000) s.emit("student:offline-report", { sessionId: Number(sessionId), questionId, durationMs });
+    };
+    const onBrowserOffline = () => beginOffline();
+    const onBrowserOnline = () => {
+      // The client gives up after a few retries; bring it back when the network returns.
+      if (!s.connected) s.connect();
+      else flushOffline();
+    };
+    window.addEventListener("offline", onBrowserOffline);
+    window.addEventListener("online", onBrowserOnline);
+    s.on("disconnect", (reason) => { if (reason !== "io client disconnect") beginOffline(); });
     s.on("student:connected", (payload = {}) => {
+      flushOffline();
       void soundManager.startBGM("lobby");
       // A reconnect (network blip, refresh) doesn't carry over this
       // component's own "have I answered this one" state, which otherwise
@@ -371,6 +399,8 @@ export function useStudentSocket({
     }, 5000);
 
     return () => {
+      window.removeEventListener("offline", onBrowserOffline);
+      window.removeEventListener("online", onBrowserOnline);
       clearInterval(presenceTimer);
       clearTimeout(completeTimer.current);
       clearTimeout(feedbackHideTimer.current);

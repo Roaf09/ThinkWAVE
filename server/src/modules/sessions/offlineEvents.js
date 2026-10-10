@@ -21,6 +21,13 @@ export async function ensureOfflineTable() {
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_offline_session_participant (session_id, participant_id)
   )`);
+  // When the participant came back (NULL = never returned). Added later, so
+  // older tables are migrated in place.
+  try {
+    await pool.query(`ALTER TABLE offline_events ADD COLUMN back_online_at TIMESTAMP NULL DEFAULT NULL`);
+  } catch (e) {
+    if (e?.code !== "ER_DUP_FIELDNAME") throw e;
+  }
   offlineTableReady = true;
 }
 
@@ -87,4 +94,65 @@ export async function getOfflineSummary(sessionId, participantId) {
     count: rows.length,
     questions: rows.map((r) => (r.question_order == null ? null : Number(r.question_order))).filter((n) => n != null),
   };
+}
+
+// Stamps the return time on every still-open offline row for this participant.
+export async function markBackOnline({ sessionId, participantId }) {
+  try {
+    await ensureOfflineTable();
+    await pool.query(
+      `UPDATE offline_events SET back_online_at=NOW()
+       WHERE session_id=:sid AND participant_id=:pid AND back_online_at IS NULL`,
+      { sid: sessionId, pid: participantId }
+    );
+  } catch {
+    /* best-effort only */
+  }
+}
+
+// The student's own device reports a drop it saw (browser offline event or
+// socket disconnect) once it is back online. The server alone only notices a
+// drop after the socket times out plus the reconnect grace window, so short
+// outages were never logged. If the server already logged this same drop, the
+// report only fills in the return time instead of counting twice.
+export async function recordClientOfflineReport({ sessionId, participantId, questionId, durationMs }) {
+  try {
+    const ms = Number(durationMs);
+    if (!Number.isFinite(ms) || ms < 2000 || ms > 6 * 60 * 60 * 1000) return null;
+    const context = await loadOfflineContext(sessionId, participantId);
+    if (!context) return null; // not LIVE, or the student already finished the last question
+    await ensureOfflineTable();
+    const seconds = Math.round(ms / 1000);
+    // Same drop already logged by the server-side detection? Then just stamp it.
+    const [dupe] = await pool.query(
+      `SELECT id FROM offline_events
+       WHERE session_id=:sid AND participant_id=:pid
+         AND created_at >= DATE_SUB(NOW(), INTERVAL :win SECOND) LIMIT 1`,
+      { sid: sessionId, pid: participantId, win: seconds + 60 }
+    );
+    if (dupe.length) {
+      await markBackOnline({ sessionId, participantId });
+      return await getOfflineSummary(sessionId, participantId);
+    }
+    // Prefer the question the student reported (the one they were on when the
+    // connection dropped); fall back to whatever is live now.
+    let questionOrder = context.questionOrder;
+    let qid = context.questionId;
+    const reportedId = Number(questionId);
+    if (Number.isFinite(reportedId) && reportedId > 0) {
+      const [[snap]] = await pool.query(`SELECT questions_snapshot_json FROM sessions WHERE id=:sid`, { sid: sessionId });
+      let list = snap?.questions_snapshot_json;
+      if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+      const at = Array.isArray(list) ? list.findIndex((q) => Number(q?.id) === reportedId) : -1;
+      if (at >= 0) { questionOrder = at + 1; qid = reportedId; }
+    }
+    await pool.query(
+      `INSERT INTO offline_events(session_id, participant_id, question_id, question_order, created_at, back_online_at)
+       VALUES(:sid,:pid,:qid,:qo, DATE_SUB(NOW(), INTERVAL :sec SECOND), NOW())`,
+      { sid: sessionId, pid: participantId, qid: qid ?? null, qo: questionOrder ?? null, sec: seconds }
+    );
+    return await getOfflineSummary(sessionId, participantId);
+  } catch {
+    return null;
+  }
 }

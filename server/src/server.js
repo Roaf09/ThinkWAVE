@@ -92,7 +92,11 @@ const httpServer = http.createServer(app);
 
 // Socket.IO powers the live classroom features (host panel, student play, scores, roster, etc.).
 const io = new IOServer(httpServer, {
-  cors: { origin: env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN], methods: ["GET", "POST"], credentials: true }
+  cors: { origin: env.CLIENT_ORIGINS || [env.CLIENT_ORIGIN], methods: ["GET", "POST"], credentials: true },
+  // Default is 25s + 20s, so a participant who lost their connection was only
+  // noticed ~45s later. Tighter pings let the host's offline log react in ~18s.
+  pingInterval: 10_000,
+  pingTimeout: 8_000
 });
 
 io.use(async (socket, next) => {

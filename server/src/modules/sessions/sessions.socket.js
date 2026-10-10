@@ -13,7 +13,7 @@ import { toStudentQuestion, toCanonicalMatchingAnswer, liveScope } from "../quiz
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
 import { attachCompetitiveTotals, calculateCompetitivePoints, competitiveSpeedMultiplier, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
 import { ensureIntegrityTable, recordIntegrityEvent, countIntegrityEvents } from "./integrityEvents.js";
-import { ensureOfflineTable, loadOfflineContext, recordOfflineEvent } from "./offlineEvents.js";
+import { ensureOfflineTable, loadOfflineContext, recordOfflineEvent, markBackOnline, recordClientOfflineReport } from "./offlineEvents.js";
 import { ensureGuestJoinTable, GUEST_REPEAT_THRESHOLD } from "./guestJoins.js";
 
 
@@ -593,6 +593,7 @@ export function registerSessionSockets(io) {
       socket.join(roomParticipant(p.id));
 
       await pool.query(`UPDATE session_participants SET connected=1, left_at=NULL WHERE id=:pid`, { pid: p.id });
+      await markBackOnline({ sessionId, participantId: p.id });
 
       const [[groupRow]] = await pool.query(`SELECT group_id FROM session_group_members WHERE participant_id=:pid`, { pid: p.id });
       if (groupRow?.group_id) {
@@ -766,6 +767,15 @@ export function registerSessionSockets(io) {
       if (presenceLastTab.has(participantId)) return;
       presenceLastTab.set(participantId, Date.now());
       await recordTabOut(io, Number(sessionId), participantId, { source: "presence" });
+    });
+
+    // Offline drop seen by the student's own device (see recordClientOfflineReport).
+    onStudent("student:offline-report", async ({ sessionId, questionId, durationMs }) => {
+      if (!allowAction("student:offline-report", 10, 60_000)) return;
+      const participantId = Number(socket.data.participantId);
+      if (socket.data.role !== "STUDENT" || Number(socket.data.sessionId) !== Number(sessionId) || !participantId) return;
+      const offline = await recordClientOfflineReport({ sessionId: Number(sessionId), participantId, questionId, durationMs });
+      if (offline) io.to(roomTeacher(Number(sessionId))).emit("offline:updated", { participantId, count: offline.count, questions: offline.questions });
     });
 
     socket.on("student:screenshot", async ({ sessionId }) => {

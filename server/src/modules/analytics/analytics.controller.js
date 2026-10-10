@@ -32,6 +32,15 @@ function safeJson(v) {
 // value is already a correct absolute instant (mysql2 parses it under the
 // pool's Asia/Manila convention, see db.js), so only the display step was
 // picking the wrong timezone.
+// Offline Log times need seconds so "went offline" and "back online" within the
+// same minute still read differently.
+function fmtDateTimeSec(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function fmtDate(value) {
   if (!value) return "—";
   const d = new Date(value);
@@ -247,7 +256,7 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
   // Full offline log (one row per drop, with the question it happened on) for
   // the Offline Log sheet/table in the exports.
   const [offlineLogRows] = await pool.query(
-    `SELECT oe.participant_id, oe.question_order, oe.created_at,
+    `SELECT oe.participant_id, oe.question_order, oe.created_at, oe.back_online_at,
             p.first_name, p.last_name, sg.display_name AS assigned_group_name
      FROM offline_events oe
      JOIN session_participants p ON p.id = oe.participant_id
@@ -257,7 +266,16 @@ export async function buildFullAnalyticsData(sessionId, teacherId) {
      ORDER BY oe.id ASC`,
     { sid: sessionId }
   );
-  const offlineLog = (offlineLogRows || []).filter((row) => !excludedIds.has(Number(row.participant_id)));
+  // "Offline" column: which drop this is for that participant (1, 2, 3...).
+  const offlineRunning = new Map();
+  const offlineLog = (offlineLogRows || [])
+    .filter((row) => !excludedIds.has(Number(row.participant_id)))
+    .map((row) => {
+      const pid = Number(row.participant_id);
+      const nth = (offlineRunning.get(pid) || 0) + 1;
+      offlineRunning.set(pid, nth);
+      return { ...row, offline_number: nth };
+    });
 
   const students = studentsRaw.map((row) => ({
     ...row,
@@ -365,27 +383,6 @@ export async function sessionQuestionStats(req, res) {
   res.json(data.questions);
 }
 
-// "3,5" -> "Q3, Q5" for the offline log columns in analytics and exports.
-function formatOfflineQuestions(list) {
-  const nums = (Array.isArray(list) ? list : String(list || "").split(","))
-    .map((v) => Number(v))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  return nums.map((n) => `Q${n}`).join(", ");
-}
-// Group exports merge every member's offline questions into one sorted line.
-function mergeOfflineQuestions(memberIds, rows) {
-  const ids = new Set((memberIds || []).map(Number));
-  const nums = [];
-  for (const r of rows || []) {
-    if (!ids.has(Number(r.participant_id))) continue;
-    for (const v of String(r.offline_questions || "").split(",")) {
-      const n = Number(v);
-      if (Number.isFinite(n) && n > 0) nums.push(n);
-    }
-  }
-  return formatOfflineQuestions(nums.sort((a, b) => a - b));
-}
-
 // Shared workbook builder: one layout for sync download + async file jobs.
 // Row adds yield every 500 rows so a big export interleaves with live sockets.
 export async function buildSessionWorkbook(data) {
@@ -473,14 +470,11 @@ export async function buildSessionWorkbook(data) {
     { header: "Group", key: "assigned_group_name", width: 24 },
     { header: "Tab Out Count", key: "tab_out_count", width: 16 },
     { header: "Screenshot Count", key: "screenshot_count", width: 18 },
-    { header: "Offline Count", key: "offline_count", width: 16 },
-    { header: "Offline On Question(s)", key: "offline_questions", width: 26 },
   ];
   // GROUP mode sums tab-outs and screenshots per group instead of listing students.
   if (isGroupExport) {
     const tabByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.tab_out_count || 0)]));
     const shotByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.screenshot_count || 0)]));
-    const offByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.offline_count || 0)]));
     let i = 0;
     for (const g of data.groups) {
       tabSheet.addRow({
@@ -489,15 +483,13 @@ export async function buildSessionWorkbook(data) {
         assigned_group_name: g.display_name,
         tab_out_count: (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0),
         screenshot_count: (g.member_ids || []).reduce((sum, pid) => sum + (shotByPid.get(Number(pid)) || 0), 0),
-        offline_count: (g.member_ids || []).reduce((sum, pid) => sum + (offByPid.get(Number(pid)) || 0), 0),
-        offline_questions: mergeOfflineQuestions(g.member_ids, data.tabMonitoring),
       });
       if (++i % 500 === 0) await yieldToLoop();
     }
   } else {
     let i = 0;
     for (const r of data.tabMonitoring) {
-      tabSheet.addRow({ ...r, screenshot_count: Number(r.screenshot_count || 0), offline_count: Number(r.offline_count || 0), offline_questions: formatOfflineQuestions(r.offline_questions) });
+      tabSheet.addRow({ ...r, screenshot_count: Number(r.screenshot_count || 0) });
       if (++i % 500 === 0) await yieldToLoop();
     }
   }
@@ -509,8 +501,10 @@ export async function buildSessionWorkbook(data) {
     { header: "Last Name", key: "last_name", width: 24 },
     { header: "First Name", key: "first_name", width: 24 },
     { header: "Group", key: "assigned_group_name", width: 24 },
+    { header: "Offline", key: "offline_number", width: 10 },
     { header: "Question No.", key: "question_no", width: 14 },
     { header: "Went Offline At", key: "went_offline_at", width: 24 },
+    { header: "Back Online", key: "back_online_at", width: 24 },
   ];
   let oi = 0;
   for (const e of data.offlineLog || []) {
@@ -518,8 +512,10 @@ export async function buildSessionWorkbook(data) {
       last_name: e.last_name,
       first_name: e.first_name,
       assigned_group_name: e.assigned_group_name,
+      offline_number: Number(e.offline_number || 0),
       question_no: e.question_order == null ? "" : Number(e.question_order),
-      went_offline_at: fmtDate(e.created_at),
+      went_offline_at: fmtDateTimeSec(e.created_at),
+      back_online_at: e.back_online_at ? fmtDateTimeSec(e.back_online_at) : "Not back online",
     });
     if (++oi % 500 === 0) await yieldToLoop();
   }
@@ -618,20 +614,17 @@ export function renderSessionPdf(data, doc, sessionId) {
     columns: [
       { label: "Last Name", width: 85 },
       { label: "First Name", width: 85 },
-      { label: "Group", width: 85 },
-      { label: "Tab Outs", width: 50, align: "right" },
-      { label: "Shots", width: 45, align: "right" },
-      { label: "Offline", width: 50, align: "right" },
-      { label: "Offline On", width: 115 },
+      { label: "Group", width: 110 },
+      { label: "Tab Outs", width: 85, align: "right" },
+      { label: "Shots", width: 85, align: "right" },
     ],
     rows: isGroupPdf
       ? (() => {
           const tabByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.tab_out_count || 0)]));
           const shotByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.screenshot_count || 0)]));
-          const offByPid = new Map((data.tabMonitoring || []).map((r) => [Number(r.participant_id), Number(r.offline_count || 0)]));
-          return data.groups.map((g) => [g.display_name, `${g.member_count} member${g.member_count === 1 ? "" : "s"}`, g.display_name, (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0), (g.member_ids || []).reduce((sum, pid) => sum + (shotByPid.get(Number(pid)) || 0), 0), (g.member_ids || []).reduce((sum, pid) => sum + (offByPid.get(Number(pid)) || 0), 0), mergeOfflineQuestions(g.member_ids, data.tabMonitoring)]);
+          return data.groups.map((g) => [g.display_name, `${g.member_count} member${g.member_count === 1 ? "" : "s"}`, g.display_name, (g.member_ids || []).reduce((sum, pid) => sum + (tabByPid.get(Number(pid)) || 0), 0), (g.member_ids || []).reduce((sum, pid) => sum + (shotByPid.get(Number(pid)) || 0), 0)]);
         })()
-      : data.tabMonitoring.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.tab_out_count || 0, Number(r.screenshot_count || 0), Number(r.offline_count || 0), formatOfflineQuestions(r.offline_questions)]),
+      : data.tabMonitoring.map((r) => [r.last_name, r.first_name, r.assigned_group_name, r.tab_out_count || 0, Number(r.screenshot_count || 0)]),
   });
 
   // Every offline drop in order, with the question it happened on.
@@ -640,13 +633,15 @@ export function renderSessionPdf(data, doc, sessionId) {
     y,
     title: "Offline Log",
     columns: [
-      { label: "Last Name", width: 110 },
-      { label: "First Name", width: 110 },
-      { label: "Group", width: 100 },
-      { label: "Question", width: 55, align: "right" },
-      { label: "Went Offline At", width: 140 },
+      { label: "Last Name", width: 80 },
+      { label: "First Name", width: 80 },
+      { label: "Group", width: 65 },
+      { label: "Offline", width: 45, align: "right" },
+      { label: "Question", width: 50, align: "right" },
+      { label: "Went Offline At", width: 98 },
+      { label: "Back Online", width: 97 },
     ],
-    rows: (data.offlineLog || []).map((e) => [e.last_name, e.first_name, e.assigned_group_name, e.question_order == null ? "" : `Q${Number(e.question_order)}`, fmtDate(e.created_at)]),
+    rows: (data.offlineLog || []).map((e) => [e.last_name, e.first_name, e.assigned_group_name, Number(e.offline_number || 0), e.question_order == null ? "" : `Q${Number(e.question_order)}`, fmtDateTimeSec(e.created_at), e.back_online_at ? fmtDateTimeSec(e.back_online_at) : "Not back online"]),
   });
 }
 
