@@ -15,6 +15,7 @@ import { getSessionBackground } from "../../lib/sessionBackgrounds";
 import { AntiCheatModal, ExperienceControls } from "./student-play/experienceChrome";
 import { useTabOutTracking } from "./student-play/useTabOutTracking";
 import { useGameplayProtection } from "./student-play/useGameplayProtection";
+import { AnswerWaitOverlay } from "./student-play/AnswerWaitOverlay";
 import { CaptureWatermark, FullscreenGate } from "./student-play/CaptureWatermark";
 import { useStudentSocket } from "./student-play/useStudentSocket";
 import { useStudentSound } from "./student-play/useStudentSound";
@@ -286,6 +287,15 @@ export default function StudentPlay() {
     </div>
   );
   const watermarkOverlay = <CaptureWatermark active={isLivePlaying} text={watermarkText} />;
+  // Once this participant's answer is locked, cover the question with the
+  // lobby-style "Answer Submitted!" -> "Waiting for other participants..."
+  // card over a blurred screen, until the next question. A participant who
+  // simply ran out of time ("Time's up") did not submit, so they don't get it.
+  const answerLocked = isLivePlaying && !!currentQ && submittedQId != null
+    && Number(submittedQId) === Number(currentQ.id) && submitLabel !== "Time's up";
+  const answerWaitOverlay = answerLocked
+    ? <AnswerWaitOverlay key={currentQ.id} dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} />
+    : null;
   const fullscreenOverlay = <FullscreenGate needsFullscreen={blockedByFs} onEnter={guard.enterFullscreen} dark={dark} />;
   const lockedByFs = blockedByFs;
   const explanationOverlay = explanationFeedback ? <div
@@ -385,6 +395,7 @@ export default function StudentPlay() {
       isLastQuestion={isLastQuestion} submittedQId={submittedQId}
       selectedBackground={selectedBackground} feedbackPulse={feedbackPulse}
     />
+    {answerWaitOverlay}
     {guardOverlay}
     {watermarkOverlay}
     {fullscreenOverlay}
