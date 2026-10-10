@@ -11,6 +11,16 @@ import { useEffect, useRef, useState } from "react";
 //    keydown *before* the OS grabs the frame; Snip / Game Bar / macOS
 //    shortcuts steal focus which fires window blur), blocks print/save
 //    shortcuts, and disables copy + context menu outside answer inputs.
+//    Mobile (touch-first devices) has no keyboard shortcut to catch, and no
+//    browser API reports a screenshot. So two best-effort signals are used:
+//      a) a 3+ finger touch (the 3-finger-swipe screenshot gesture on many
+//         Android phones), and
+//      b) a very short window blur -> focus round trip where the page never
+//         became hidden (what the system screenshot flash / overlay does on
+//         many phones; a real app switch hides the page and is already
+//         counted as a tab-out, so it is excluded here).
+//    Both feed the same flashShotBlock() path as PrintScreen: instant blur +
+//    the same server tally (the host panel's "screen captures" count).
 // 3. Fullscreen gate — optional. When requireFullscreen is true the quiz
 //    stays blurred + non-interactive until the student enters fullscreen.
 //    iOS Safari (no Fullscreen API) is auto-exempt so it never deadlocks.
@@ -29,6 +39,9 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
   const captureRef = useRef(onCaptureAttempt);
   captureRef.current = onCaptureAttempt;
   const shotTimer = useRef(null);
+  const lastShotAtRef = useRef(0);
+  const blurAtRef = useRef(0);
+  const hiddenSinceBlurRef = useRef(false);
 
   // Fullscreen availability: iPhone Safari has no Fullscreen API —
   // exempt it instead of soft-locking the quiz.
@@ -62,6 +75,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
   useEffect(() => {
     function flashShotBlock() {
       if (!activeRef.current) return;
+      lastShotAtRef.current = Date.now();
       setShotBlocked(true);
       // Instant opaque cover: Snip / Game Bar overlays steal window focus,
       // so the blur below (onWindowBlur) is already up — this extends it so
@@ -85,6 +99,25 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
           setAwayBlur(false);
         }
       }, 1800);
+    }
+
+    // Primary input is touch (phones/tablets). Touch-screen laptops keep a
+    // fine primary pointer, so Alt-Tab / Snip there are not misread as phones.
+    function isTouchFirst() {
+      try { return !!window.matchMedia?.("(pointer: coarse)")?.matches; } catch { return false; }
+    }
+
+    // Mobile detections can overlap (3-finger swipe + the blur it causes), so
+    // count at most one capture per 2.5s. Desktop key paths are unaffected.
+    function flashMobileShot() {
+      if (!activeRef.current) return;
+      if (Date.now() - lastShotAtRef.current < 2500) return;
+      flashShotBlock();
+    }
+
+    function onTouchStart(e) {
+      if (!activeRef.current || !isTouchFirst()) return;
+      if ((e.touches?.length || 0) >= 3) flashMobileShot();
     }
 
     function isPrintScreen(e) {
@@ -166,6 +199,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
     }
 
     function onHide() {
+      if (document.hidden) hiddenSinceBlurRef.current = true;
       if (activeRef.current && document.hidden) setAwayBlur(true);
     }
 
@@ -177,10 +211,19 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
     // window focus without hiding the document. Blurring instantly here is
     // what makes the captured frame come out blurred.
     function onWindowBlur() {
+      blurAtRef.current = Date.now();
+      hiddenSinceBlurRef.current = !!document.hidden;
       if (activeRef.current) setAwayBlur(true);
     }
 
     function onWindowFocus() {
+      // Mobile screenshot heuristic: focus came straight back (<2s) and the
+      // page was never hidden, so this was not an app/tab switch.
+      const awayMs = Date.now() - blurAtRef.current;
+      if (blurAtRef.current && awayMs < 2000 && !hiddenSinceBlurRef.current && isTouchFirst()) {
+        flashMobileShot();
+      }
+      blurAtRef.current = 0;
       try {
         if (!document.hidden) setAwayBlur(false);
       } catch {
@@ -205,6 +248,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
 
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("keyup", onKeyUp);
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("copy", onCopy);
     document.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("visibilitychange", onHide);
@@ -216,6 +260,7 @@ export function useGameplayProtection({ active, requireFullscreen = false, onCap
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("visibilitychange", onHide);
