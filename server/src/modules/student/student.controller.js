@@ -801,7 +801,14 @@ export async function getStudentQuiz(req, res) {
       try { lockedAnswers[q.id] = safeJson(row.answer_json) ?? null; } catch { lockedAnswers[q.id] = null; }
     }
   }
-  res.json({ quiz, questions, progress: { opened, locked, lockedAnswers }, serverNowMs: nowMs });
+  // Questions stay hidden until opened, so tell the client up front whether any
+  // question needs two answers (drives the pre-start notice).
+  const hasTwoAnswerQuestions = questionRows.some((row) => {
+    let cfg = row?.config_json;
+    if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch { cfg = null; } }
+    return String(cfg?.answerMode || "").toUpperCase() === "TWO";
+  });
+  res.json({ quiz, questions, progress: { opened, locked, lockedAnswers }, serverNowMs: nowMs, hasTwoAnswerQuestions });
 }
 
 

@@ -16,6 +16,7 @@ import { AntiCheatModal, ExperienceControls } from "./student-play/experienceChr
 import { useTabOutTracking } from "./student-play/useTabOutTracking";
 import { useGameplayProtection } from "./student-play/useGameplayProtection";
 import { AnswerWaitOverlay } from "./student-play/AnswerWaitOverlay";
+import { TwoAnswerNoticeOverlay } from "./student-play/TwoAnswerNoticeOverlay";
 import { CaptureWatermark, FullscreenGate } from "./student-play/CaptureWatermark";
 import { useStudentSocket } from "./student-play/useStudentSocket";
 import { useStudentSound } from "./student-play/useStudentSound";
@@ -31,6 +32,9 @@ export default function StudentPlay() {
   const { dark, toggleTheme } = useTheme();
 
   const [state, setState] = useState(null);
+  // Pre-start "2 answers" notice: shown once in the lobby, then dismissed.
+  const [twoNoticeSeen, setTwoNoticeSeen] = useState(false);
+  const dismissTwoNotice = useCallback(() => setTwoNoticeSeen(true), []);
   const [questions, setQuestions] = useState([]);
   const [scores, setScores] = useState([]);
   const [liveLeaderboard, setLiveLeaderboard] = useState({ top5: [], myRank: 0, myScore: null });
@@ -328,6 +332,9 @@ export default function StudentPlay() {
   if (!state || state.status === "LOBBY" || state.status === "PAUSED") {
     return (
       <>
+      {state?.status === "LOBBY" && state?.has_two_answer_questions && !twoNoticeSeen && (
+        <TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC} onDone={dismissTwoNotice} />
+      )}
       <WaitingRoomView
         dark={dark} waitExperienceBgStyle={waitExperienceBgStyle}
         experienceControls={experienceControls} antiCheatOverlay={antiCheatOverlay} explanationOverlay={explanationOverlay}

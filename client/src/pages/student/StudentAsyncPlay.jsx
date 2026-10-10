@@ -25,6 +25,7 @@ import { normalizeTemplateType, TEMPLATE_TYPES } from "../../lib/templateTypes";
 
 import soundManager from "../../utils/soundmanager";
 import { useGameplayProtection } from "./student-play/useGameplayProtection";
+import { TwoAnswerNoticeOverlay } from "./student-play/TwoAnswerNoticeOverlay";
 import { CaptureWatermark, FullscreenGate } from "./student-play/CaptureWatermark";
 import "./StudentPlay.css";
 
@@ -77,6 +78,7 @@ export default function StudentAsyncPlay() {
   const nav = useNavigate();
   const { dark, toggleTheme } = useTheme();
   const [quiz, setQuiz] = useState(null);
+  const [hasTwoAnswerQuestions, setHasTwoAnswerQuestions] = useState(false);
   const [questions, setQuestions] = useState([]);
   const [idx, setIdx] = useState(0);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -144,6 +146,7 @@ export default function StudentAsyncPlay() {
       if (!alive) return;
       const fetchedQuestions = data.questions || [];
       setQuiz(data.quiz); setQuestions(fetchedQuestions);
+      setHasTwoAnswerQuestions(!!data.hasTwoAnswerQuestions);
       const progress = data.progress || {};
       const serverLocked = progress.locked || [];
       const serverOpened = progress.opened || [];
@@ -232,7 +235,12 @@ export default function StudentAsyncPlay() {
 
   function handleStartAssignment() {
     if (lobbyPhase !== "ready") return;
-    setEntryStage("beware");
+    // Two-answer questions: show the blurred notice first, then the usual
+    // "beware" card, then the assignment starts.
+    const NOTICE_MS = 3500;
+    const startBeware = () => setEntryStage("beware");
+    if (hasTwoAnswerQuestions) { setEntryStage("two-answer-notice"); scheduleTransient(startBeware, NOTICE_MS); }
+    else startBeware();
     scheduleTransient(() => {
       setEntryStage("beware-exit");
       scheduleTransient(async () => {
@@ -241,7 +249,7 @@ export default function StudentAsyncPlay() {
         // Open the first question on the server clock.
         await openQuestionByIdx(0);
       }, 380);
-    }, 2000);
+    }, 2000 + (hasTwoAnswerQuestions ? NOTICE_MS : 0));
   }
 
   useEffect(() => {
@@ -609,6 +617,7 @@ export default function StudentAsyncPlay() {
         {lobbyPhase==="ready"&&<TeacherPressButton tone="blue" className="sp-assignment-start tw-tutorial-fade-line" onClick={handleStartAssignment}>Start</TeacherPressButton>}
       </div>
     </div>}
+    {entryStage==="two-answer-notice"&&<TwoAnswerNoticeOverlay dark={dark} cardBg={cardBg} cardBor={cardBor} textC={textC} mutedC={mutedC}/>}
     {(entryStage==="beware"||entryStage==="beware-exit")&&<div className="sp-anticheat-backdrop">
       <div className={`sp-assignment-intro sp-page-enter${entryStage==="beware-exit"?" is-leaving":""}`} style={{background:cardBg,borderColor:cardBor,color:textC}}>
         <div className="sp-anticheat-icon sp-assignment-intro-icon"><TwIcon name="calendar" size={42}/></div>

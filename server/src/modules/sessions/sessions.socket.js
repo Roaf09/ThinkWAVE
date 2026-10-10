@@ -2038,6 +2038,13 @@ async function broadcastState(io, sessionId) {
   state.question_deadline_at = state.question_deadline_at_ms != null ? new Date(state.question_deadline_at_ms).toISOString() : null;
   delete state.question_started_unix;
   delete state.server_now_unix;
+  // Student questions are placeholders until live, so flag two-answer questions
+  // here for the pre-start notice.
+  state.has_two_answer_questions = Array.isArray(qs) && qs.some((q) => {
+    let cfg = q?.config_json;
+    if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch { cfg = null; } }
+    return String(cfg?.answerMode || "").toUpperCase() === "TWO";
+  });
   io.to(roomSession(sessionId)).emit("session:state", { state, questions: studentQs });
   io.to(roomTeacher(sessionId)).emit("session:state", { state, questions: qs });
   await broadcastScores(io, sessionId);
