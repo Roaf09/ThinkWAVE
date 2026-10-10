@@ -14,6 +14,7 @@ import { hasDatabaseColumn } from "../../utils/schemaCompat.js";
 import { attachCompetitiveTotals, sortCompetitiveRows } from "./leaderboard.js";
 import { SESSION_BACKGROUND_KEY_PATTERN, getRememberedSessionBackground, normalizeSessionBackgroundKey, rememberSessionBackground } from "./sessionBackground.runtime.js";
 import { parsePagination, pagedOrArray } from "../../utils/pagination.js";
+import { ensureOfflineTable } from "./offlineEvents.js";
 import { GUEST_REPEAT_THRESHOLD, countPreviousGuestVisits, guestDeviceHash, guestNameKey, isGuestDeviceKicked, recordGuestJoin } from "./guestJoins.js";
 
 // Helper used throughout session logic because many DB fields store JSON as text.
@@ -302,11 +303,14 @@ async function buildTeacherState(sessionId, teacherId) {
   // These four reads are independent of each other (session already loaded
   // above), so they run together: 1 round-trip wave instead of 4 in a row.
   // On loopback DBs each trip costs tens of ms, which used to total ~400ms.
+  await ensureOfflineTable();
   const participantsPromise = pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
             p.kicked_at, p.kick_reason, COALESCE(stp.profile_image, u.profile_image) AS profile_image,
             gm.group_id, sg.display_name AS assigned_group_name, sg.default_name AS assigned_group_default_name,
-            COUNT(te.id) AS tab_out_count
+            COUNT(te.id) AS tab_out_count,
+            (SELECT COUNT(*) FROM offline_events oe WHERE oe.session_id=p.session_id AND oe.participant_id=p.id) AS offline_count,
+            (SELECT GROUP_CONCAT(oe.question_order ORDER BY oe.id SEPARATOR ',') FROM offline_events oe WHERE oe.session_id=p.session_id AND oe.participant_id=p.id) AS offline_questions
      FROM session_participants p
      LEFT JOIN users u ON u.id=p.student_user_id
      LEFT JOIN student_profiles stp ON stp.user_id=p.student_user_id
@@ -815,6 +819,8 @@ export async function deleteTeacherSession(req, res) {
   const [[session]] = await pool.query(`SELECT * FROM sessions WHERE id=:sid AND teacher_id=:tid`, { sid, tid: req.user.sub });
   if (!session) return res.status(404).json({ message: "Session not found" });
   await pool.query(`DELETE FROM tab_events WHERE session_id=:sid`, { sid });
+  await ensureOfflineTable();
+  await pool.query(`DELETE FROM offline_events WHERE session_id=:sid`, { sid });
   await pool.query(`DELETE gav FROM group_answer_votes gav JOIN group_answer_proposals gap ON gap.id = gav.proposal_id WHERE gap.session_id=:sid`, { sid });
   await pool.query(`DELETE FROM group_answer_proposals WHERE session_id=:sid`, { sid });
   await pool.query(`DELETE FROM responses WHERE session_id=:sid`, { sid });

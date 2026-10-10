@@ -327,11 +327,22 @@ function Scoreboard({ C, scores, tone, analytics, tabMonitoring = [], expandedSt
       const shotCount = isGroup
         ? (tabMonitoring || []).filter((row) => memberIds.includes(Number(row.participant_id))).reduce((sum, row) => sum + Number(row.screenshot_count || 0), 0)
         : Number(((tabMonitoring || []).find((row) => Number(row.participant_id) === Number(score.participant_id))?.screenshot_count) ?? 0);
+      const offlineRows = isGroup
+        ? (tabMonitoring || []).filter((row) => memberIds.includes(Number(row.participant_id)))
+        : (tabMonitoring || []).filter((row) => Number(row.participant_id) === Number(score.participant_id));
+      const offlineCount = offlineRows.reduce((sum, row) => sum + Number(row.offline_count || 0), 0);
+      const offlineQuestions = offlineRows
+        .flatMap((row) => String(row.offline_questions || "").split(",").map(Number))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .sort((a, b) => a - b)
+        .map((n) => `Q${n}`)
+        .join(", ");
       const detailStudent = isGroup ? { responses: group?.responses || [] } : student;
       return <article key={score.key} className={`tw-analytics-student-card${expanded ? " is-expanded" : ""}`} style={{ borderColor: index === 0 ? tone.border : C.border, background: index === 0 ? tone.softBg : C.cardBg2, color: C.text }}>
         <button type="button" className="tw-analytics-student-button" disabled={basic} onClick={() => !basic && setExpandedStudentId(expanded ? null : score.key)} aria-expanded={expanded}>
           <span className="tw-analytics-student-identity"><RankIcon rank={index + 1} /><span className="tw-analytics-student-name">{score.label}</span>{isGroup ? <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>{score.member_count} member{Number(score.member_count) === 1 ? "" : "s"}</span> : student?.participant_type === "GUEST" && <span style={{ ...pill(C), padding: "3px 7px", fontSize: 10 }}>Guest</span>}</span>
           <TabShotBadge C={C} tabOutCount={tabOutCount} shotCount={shotCount} />
+          <span title={offlineCount > 0 ? `Went offline during: ${offlineQuestions || "unknown question"}` : "Did not go offline during the live session"} style={{ ...pill(C), padding: "3px 9px", fontSize: 11, color: offlineCount > 0 ? "#f97316" : C.muted, borderColor: offlineCount > 0 ? "#f97316" : C.border, background: C.cardBg }}>{offlineCount} offline{offlineQuestions ? ` · ${offlineQuestions}` : ""}</span>
           <span className="tw-analytics-student-points" style={{ color: tone.accent, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}><span>{score.total_points} pts</span> {!basic && <TwIcon name={expanded ? "chevronUp" : "chevronDown"} size={16} />}</span>
         </button>
         {!basic && detailStudent && <div className={`tw-student-analytics-collapse${expanded ? " is-open" : ""}`} aria-hidden={!expanded}><div>{isGroup && group?.members?.length ? <div className="flex flex-wrap gap-[8px]" style={{ marginBottom: 10 }}>{group.members.map((m) => <span key={m.participant_id} style={{ ...pill(C), padding: "8px 11px" }}>{`${m.first_name || ""} ${m.last_name || ""}`.trim() || "Member"}</span>)}</div> : null}<StudentQuestionAnalytics C={C} tone={tone} templateType={analytics?.session?.template_type} student={detailStudent} questions={analytics.questions || []} /></div></div>}

@@ -313,6 +313,7 @@ export default function HostLive({ guestMode = false }) {
       });
     });
     socket.on("tab:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, tab_out_count: count } : row)));
+    socket.on("offline:updated", ({ participantId, count, questions }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, offline_count: Number(count || 0), offline_questions: (questions || []).join(",") } : row)));
     socket.on("screenshot:updated", ({ participantId, count }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, screenshot_count: count } : row)));
     socket.on("presence:interrupted", ({ participantId }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, presenceInterrupted: true } : row)));
     socket.on("presence:screens", ({ participantId, extended }) => setRoster((rows) => rows.map((row) => Number(row.id) === Number(participantId) ? { ...row, extendedScreens: !!extended } : row)));
@@ -368,9 +369,12 @@ export default function HostLive({ guestMode = false }) {
     const active = roster.filter((row) => !row.kicked_at);
     const connectedCount = active.filter((row) => Number(row.connected) === 1).length;
     const unassignedRows = active.filter((row) => !row.group_id);
-    return { active, connectedCount, unassignedRows };
+    const offlineTotal = roster.reduce((sum, row) => sum + Number(row.offline_count || 0), 0);
+    return { active, connectedCount, unassignedRows, offlineTotal };
   }, [roster]);
   const activeRoster = rosterStats.active;
+  // Running offline log for the whole session, shown beside the joined count.
+  const offlineLogLabel = ` · ${rosterStats.offlineTotal} offline log${rosterStats.offlineTotal === 1 ? "" : "s"}`;
   const connected = rosterStats.connectedCount;
   const unassigned = rosterStats.unassignedRows;
   const canStart = joinMode !== "GROUP" || (groups.length > 0 && unassigned.length === 0);
@@ -823,12 +827,12 @@ export default function HostLive({ guestMode = false }) {
         <div className={`tw-host-right-stack${hostIsMobile ? " is-mobile-hidden" : ""}`}>
           {joinMode === "GROUP" ? (
             <section data-tutorial="host-panel-groups" className="tw-host-attendance" style={{ ...card(C), border: `3px solid ${sideBorder}` }}>
-              <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> Groupings</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+              <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> Groupings</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined{offlineLogLabel}</span></div>
               <div className="tw-host-attendance-scroll"><GroupingsPanel groups={groups} roster={displayRoster} canAdd={state.status === "LOBBY"} onAddGroup={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} onDeleteGroup={(group) => setDeleteGroupTarget(group)} C={C} /></div>
             </section>
           ) : (
             <section data-tutorial="host-panel-participants" className="tw-host-attendance" style={{ ...card(C), border: `3px solid ${sideBorder}` }}>
-              <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+              <div className="tw-host-section-title"><h3><TwIcon name="users" size={21}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="text-[12px]" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined{offlineLogLabel}</span></div>
               <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No participants have joined yet.</div>}</div>
             </section>
           )}
@@ -860,12 +864,12 @@ export default function HostLive({ guestMode = false }) {
               </div>
             ) : joinMode === "GROUP" ? (
               <div className="tw-host-mobile-sheet-body">
-                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> Groupings</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> Groupings</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined{offlineLogLabel}</span></div>
                 <div className="tw-host-attendance-scroll"><GroupingsPanel groups={groups} roster={displayRoster} canAdd={state.status === "LOBBY"} onAddGroup={() => socketRef.current?.emit("teacher:addGroup", { sessionId: Number(id) })} onDeleteGroup={(group) => setDeleteGroupTarget(group)} C={C} /></div>
               </div>
             ) : (
               <div className="tw-host-mobile-sheet-body">
-                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined</span></div>
+                <div className="tw-host-section-title"><h3><TwIcon name="users" size={28}/> {isGuestHost ? "Participants" : "Student Attendance"}</h3><span className="tw-host-joined-count" style={{ color: C.muted }}>{tutorialDemo ? displayRoster.filter((row) => !row.kicked_at).length : activeRoster.length} joined{offlineLogLabel}</span></div>
                 <div className="tw-host-attendance-scroll">{sortedDisplayRoster.map((row) => <AttendanceRow key={row.id} row={row} score={displayScoreByParticipant.get(Number(row.id)) || 0} C={C}/>)}{!sortedDisplayRoster.length && <div className="p-[24px] text-center" style={{ color: C.muted }}>No participants have joined yet.</div>}</div>
               </div>
             )}
@@ -944,7 +948,11 @@ const Podium = memo(function Podium({ leaders, scoreMode = "competitive", onTogg
     </div>;
   })}</div>;
 });
-const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const tabCount = Number(row.tab_out_count || 0); const shotCount = Number(row.screenshot_count || 0); const integrityCount = Number(row.integrity_count || 0); const [showShots, setShowShots] = useState(false); const kicked = !!row.kicked_at; const indicator = row.presenceInterrupted ? "#f97316" : kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = tabCount >= 3 ? "#ef4444" : tabCount === 2 ? "#f97316" : "#94a3b8"; const shownCount = showShots ? shotCount : tabCount; const shownColor = tabColor; const shownLabel = showShots ? `screen capture${shotCount === 1 ? "" : "s"}` : `tab out${tabCount === 1 ? "" : "s"}`; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2, gridTemplateColumns: "10px minmax(0,1fr) auto" }}><span className="tw-host-online-dot" style={{ background: indicator }} title={row.presenceInterrupted ? "Monitoring interrupted — no heartbeat for 15s+ while connected" : undefined}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}{row.is_guest ? <em title={row.guest_repeat ? `Guest for the ${ordinal(row.guest_visits)} time in this class — records aren't saved to an account.` : "Joined as a guest (no student account)."} className="ml-[4px] text-[11px] not-italic" style={row.guest_repeat ? { color: "#f97316", fontWeight: 800 } : { opacity: 0.7 }}>{row.guest_repeat ? `(Guest · ${ordinal(row.guest_visits)} visit)` : "(Guest)"}</em> : null}{integrityCount > 0 ? <em title="Answers in a shape the quiz screen can't produce — sent by a modified page or script. Scored 0." className="ml-[4px] text-[11px] not-italic" style={{ color: "#ef4444", fontWeight: 800 }}>(⚠ {integrityCount} tampered)</em> : null}{row.extendedScreens ? <em title="Student device reports multiple displays — could be a projector, not proof of anything." className="ml-[4px] text-[11px] not-italic opacity-70">(2 screens)</em> : null}{row.presenceInterrupted ? <em title="No presence heartbeat for 15s+ while connected — tab may be frozen or messages blocked." className="ml-[4px] text-[11px] not-italic opacity-70">(signal lost)</em> : null}</span><span style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "end", whiteSpace: "nowrap" }}><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : null}<button type="button" data-tutorial="host-tab-out" onClick={() => setShowShots((v) => !v)} title={showShots ? "Screen captures (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show screen-capture count"} className="text-[12px] font-extrabold" style={{ color: shownColor, background: "transparent", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "right" }}>{shownCount} {shownLabel}</button></span></div>; });
+// "3,5" -> "Q3, Q5" for the host panel's offline log.
+function offlineQuestionsLabel(value) {
+  return String(value || "").split(",").map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0).map((n) => `Q${n}`).join(", ");
+}
+const AttendanceRow = memo(function AttendanceRow({ row, score, C }) { const offlineCount = Number(row.offline_count || 0); const offlineQs = offlineQuestionsLabel(row.offline_questions); const tabCount = Number(row.tab_out_count || 0); const shotCount = Number(row.screenshot_count || 0); const integrityCount = Number(row.integrity_count || 0); const [showShots, setShowShots] = useState(false); const kicked = !!row.kicked_at; const indicator = row.presenceInterrupted ? "#f97316" : kicked ? "#ef4444" : Number(row.connected) === 1 ? "#22c55e" : "#94a3b8"; const tabColor = tabCount >= 3 ? "#ef4444" : tabCount === 2 ? "#f97316" : "#94a3b8"; const shownCount = showShots ? shotCount : tabCount; const shownColor = tabColor; const shownLabel = showShots ? `screen capture${shotCount === 1 ? "" : "s"}` : `tab out${tabCount === 1 ? "" : "s"}`; const isPracticeBot = Number(row.id) < 0; return <div className="tw-host-attendance-row" style={{ borderColor: C.border, background: C.cardBg2, gridTemplateColumns: "10px minmax(0,1fr) auto" }}><span className="tw-host-online-dot" style={{ background: indicator }} title={row.presenceInterrupted ? "Monitoring interrupted — no heartbeat for 15s+ while connected" : undefined}/><span className="tw-host-student-name">{row.first_name} {row.last_name}{isPracticeBot ? <em title="Practice bot — not a real student, doesn't count toward class results." className="ml-[4px] text-[11px] not-italic opacity-70">(Practice)</em> : null}{row.is_guest ? <em title={row.guest_repeat ? `Guest for the ${ordinal(row.guest_visits)} time in this class — records aren't saved to an account.` : "Joined as a guest (no student account)."} className="ml-[4px] text-[11px] not-italic" style={row.guest_repeat ? { color: "#f97316", fontWeight: 800 } : { opacity: 0.7 }}>{row.guest_repeat ? `(Guest · ${ordinal(row.guest_visits)} visit)` : "(Guest)"}</em> : null}{integrityCount > 0 ? <em title="Answers in a shape the quiz screen can't produce — sent by a modified page or script. Scored 0." className="ml-[4px] text-[11px] not-italic" style={{ color: "#ef4444", fontWeight: 800 }}>(⚠ {integrityCount} tampered)</em> : null}{row.extendedScreens ? <em title="Student device reports multiple displays — could be a projector, not proof of anything." className="ml-[4px] text-[11px] not-italic opacity-70">(2 screens)</em> : null}{row.presenceInterrupted ? <em title="No presence heartbeat for 15s+ while connected — tab may be frozen or messages blocked." className="ml-[4px] text-[11px] not-italic opacity-70">(signal lost)</em> : null}</span><span style={{ display: "flex", alignItems: "center", gap: 10, justifySelf: "end", whiteSpace: "nowrap" }}><span className="tw-host-attendance-score" title="Normal quiz points">{formatHostScore(score, "normal")} pts</span>{kicked ? <span className="tw-host-kicked">Kicked</span> : null}<span title={offlineCount > 0 ? `Went offline during: ${offlineQs || "unknown question"}` : "Has not gone offline during this live session"} className="text-[12px] font-extrabold" style={{ color: offlineCount > 0 ? "#f97316" : "#94a3b8" }}>{offlineCount} offline{offlineQs ? ` (${offlineQs})` : ""}</span><button type="button" data-tutorial="host-tab-out" onClick={() => setShowShots((v) => !v)} title={showShots ? "Screen captures (0 does not mean no screenshots were taken) — click to show tab-out count" : "Click to show screen-capture count"} className="text-[12px] font-extrabold" style={{ color: shownColor, background: "transparent", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "right" }}>{shownCount} {shownLabel}</button></span></div>; });
 function ordinal(n) {
   const v = Number(n) || 0;
   const s = ["th", "st", "nd", "rd"];
@@ -981,6 +989,11 @@ const GroupingsPanel = memo(function GroupingsPanel({ groups, roster, canAdd, on
     for (const row of roster || []) map.set(Number(row.id), Number(row.tab_out_count || 0));
     return map;
   }, [roster]);
+  const offlineById = useMemo(() => {
+    const map = new Map();
+    for (const row of roster || []) map.set(Number(row.id), { count: Number(row.offline_count || 0), questions: offlineQuestionsLabel(row.offline_questions) });
+    return map;
+  }, [roster]);
   return (
     <div className="tw-host-groupings">
     <div className={`tw-host-group-list${expandedId !== null ? " has-expanded" : ""}`}>
@@ -1002,11 +1015,12 @@ const GroupingsPanel = memo(function GroupingsPanel({ groups, roster, canAdd, on
                   {members.map((member) => {
                     const count = Number(tabById.get(Number(member.id)) || 0);
                     const tabColor = count >= 3 ? "#ef4444" : count === 2 ? "#f97316" : "#94a3b8";
+                    const off = offlineById.get(Number(member.id)) || { count: 0, questions: "" };
                     return (
                       <div key={member.id} className="tw-host-group-member" style={{ color: C.text }}>
                         <span className="tw-host-online-dot" style={{ background: Number(member.connected) === 1 ? "#22c55e" : "#94a3b8" }} />
                         <span className="tw-host-student-name">{member.first_name} {member.last_name}</span>
-                        <span className="text-[12px] font-extrabold" style={{ color: tabColor }}>{count} tab out{count === 1 ? "" : "s"}</span>
+                        <span title={off.count > 0 ? `Went offline during: ${off.questions || "unknown question"}` : "Has not gone offline during this live session"} className="text-[12px] font-extrabold" style={{ color: off.count > 0 ? "#f97316" : "#94a3b8", marginRight: 8 }}>{off.count} offline{off.questions ? ` (${off.questions})` : ""}</span><span className="text-[12px] font-extrabold" style={{ color: tabColor }}>{count} tab out{count === 1 ? "" : "s"}</span>
                       </div>
                     );
                   })}

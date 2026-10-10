@@ -13,6 +13,7 @@ import { toStudentQuestion, toCanonicalMatchingAnswer, liveScope } from "../quiz
 import { getRememberedSessionBackground, normalizeSessionBackgroundKey } from "./sessionBackground.runtime.js";
 import { attachCompetitiveTotals, calculateCompetitivePoints, competitiveSpeedMultiplier, sortCompetitiveRows, withCompetitiveMeta } from "./leaderboard.js";
 import { ensureIntegrityTable, recordIntegrityEvent, countIntegrityEvents } from "./integrityEvents.js";
+import { ensureOfflineTable, loadOfflineContext, recordOfflineEvent } from "./offlineEvents.js";
 import { ensureGuestJoinTable, GUEST_REPEAT_THRESHOLD } from "./guestJoins.js";
 
 
@@ -895,11 +896,18 @@ export function registerSessionSockets(io) {
           participantConnectionCounts.delete(participantId);
           const existingTimer = studentDisconnectTimers.get(participantId);
           if (existingTimer) clearTimeout(existingTimer);
+          // Which question was live when the socket dropped. Started now (not
+          // awaited) so the grace timer below is still armed synchronously.
+          const offlineContextPromise = loadOfflineContext(sessionId, participantId);
           const timer = setTimeout(async () => {
             studentDisconnectTimers.delete(participantId);
             disconnectingParticipants.delete(participantId);
             try {
               await pool.query(`UPDATE session_participants SET connected=0, left_at=NOW() WHERE id=:pid`, { pid: participantId });
+              // The grace window passed without a reconnect: a real offline.
+              // Log it against the question and tell the host panel.
+              const offline = await recordOfflineEvent({ sessionId, participantId, context: await offlineContextPromise });
+              if (offline) io.to(roomTeacher(sessionId)).emit("offline:updated", { participantId: Number(participantId), count: offline.count, questions: offline.questions });
               const [pending] = await pool.query(`SELECT gap.id FROM group_answer_proposals gap JOIN session_group_members gm ON gm.group_id=gap.group_id WHERE gm.participant_id=:pid AND gap.status='PENDING'`, { pid: participantId });
               for (const row of pending) await resolveGroupProposalIfReady(io, row.id, sessionId);
               await broadcastRoster(io, sessionId);
@@ -1118,7 +1126,7 @@ export function stripKickReason(row) {
 // Student copy of a roster row: classmates see names and photos, never
 // monitoring data (tab-outs, capture keys, tamper flags, guest history) or
 // kick reasons.
-const TEACHER_ONLY_ROSTER_FIELDS = ["kick_reason", "tab_out_count", "screenshot_count", "integrity_count", "guest_visits", "guest_repeat"];
+const TEACHER_ONLY_ROSTER_FIELDS = ["kick_reason", "tab_out_count", "screenshot_count", "integrity_count", "offline_count", "offline_questions", "guest_visits", "guest_repeat"];
 export function toStudentRosterRow(row) {
   if (!row || typeof row !== "object") return row;
   const out = { ...row };
@@ -1795,6 +1803,7 @@ export async function broadcastRoster(io, sessionId) {
   // counting from them so fresh databases never error here.
   await ensureScreenshotTable();
   await ensureIntegrityTable();
+  await ensureOfflineTable();
   await ensureGuestJoinTable();
   const [participants] = await pool.query(
     `SELECT p.id, p.first_name, p.last_name, p.connected, p.join_type, p.group_name,
@@ -1804,7 +1813,9 @@ export async function broadcastRoster(io, sessionId) {
             gj.visit_number AS guest_visits,
             (SELECT COUNT(*) FROM tab_events te WHERE te.session_id=p.session_id AND te.participant_id=p.id) AS tab_out_count,
             (SELECT COUNT(*) FROM screenshot_events se WHERE se.session_id=p.session_id AND se.participant_id=p.id) AS screenshot_count,
-            (SELECT COUNT(*) FROM integrity_events ie WHERE ie.session_id=p.session_id AND ie.participant_id=p.id) AS integrity_count
+            (SELECT COUNT(*) FROM integrity_events ie WHERE ie.session_id=p.session_id AND ie.participant_id=p.id) AS integrity_count,
+            (SELECT COUNT(*) FROM offline_events oe WHERE oe.session_id=p.session_id AND oe.participant_id=p.id) AS offline_count,
+            (SELECT GROUP_CONCAT(oe.question_order ORDER BY oe.id SEPARATOR ',') FROM offline_events oe WHERE oe.session_id=p.session_id AND oe.participant_id=p.id) AS offline_questions
      FROM session_participants p
      LEFT JOIN users u ON u.id = p.student_user_id
      LEFT JOIN student_profiles stp ON stp.user_id = p.student_user_id
