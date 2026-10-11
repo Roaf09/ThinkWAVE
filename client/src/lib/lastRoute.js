@@ -7,7 +7,8 @@
 
 const KEY = "tw_last_route";
 
-// Public/auth pages are never resume targets.
+// Public/auth pages are never resume targets. /play is never a resume target:
+// a stale live-session link should not pull a fresh login back into a lobby.
 const SKIP_PREFIXES = [
   "/enter",
   "/login",
@@ -18,6 +19,7 @@ const SKIP_PREFIXES = [
   "/verify",
   "/forgot-password",
   "/plan",
+  "/play",
 ];
 
 function isSkipped(path) {
@@ -85,7 +87,7 @@ export function consumeLastRoute(role) {
     role === "TEACHER"
       ? ["/teacher"]
       : role === "STUDENT"
-        ? ["/student", "/play"]
+        ? ["/student"]
         : role === "ADMIN"
           ? ["/admin"]
           : role === "SUPERADMIN"

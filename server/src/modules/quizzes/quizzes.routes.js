@@ -25,6 +25,8 @@ import {
 
 export const quizzesRouter = Router();
 
+const SHORT_TIMER_TEMPLATES = new Set(["MCQ", "TRUE_FALSE", "TYPE_ANSWER"]);
+
 const QuizSchema = z.object({
   title:              z.string().min(1),
   category:           z.enum(["K12","COLLEGE"]),
@@ -37,6 +39,12 @@ const QuizSchema = z.object({
   deliveryMode:       z.enum(["SYNCHRONOUS","ASYNCHRONOUS"]).default("SYNCHRONOUS"),
   availableFrom:      z.string().optional().nullable(),
   availableUntil:     z.string().optional().nullable(),
+}).superRefine((val, ctx) => {
+  const t = String(val.templateType || "").toUpperCase();
+  const max = SHORT_TIMER_TEMPLATES.has(t) ? 300 : 600;
+  if (Number(val.timeLimitSec) > max) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["timeLimitSec"], message: `Time limit for ${val.templateType} is max ${max / 60} minutes.` });
+  }
 });
 
 const QuestionsSchema = z.object({

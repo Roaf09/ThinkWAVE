@@ -283,7 +283,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
       onPointerCancel={() => { downRef.current = false; setActive(null); setCursor(null); }}
       onTouchMove={(e) => { const t = e.touches?.[0]; if (t) handlePointerMove(t); }}
       onTouchEnd={(e) => { const t = e.changedTouches?.[0]; if (t) handlePointerUp(t); }}
-      style={{ touchAction: "none" }}
+      style={{ touchAction: "pan-y" }}
     >
       <svg className="match-connect-lines" aria-hidden="true">
         {lines.map(({ key, start, end }) => <line key={key} x1={start.x} y1={start.y} x2={end.x} y2={end.y} />)}
@@ -295,7 +295,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderA.map((index) => {
             const item = colA[index] || {};
             const paired = valueMap?.[index] !== undefined;
-            return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "A", index)} onClick={(event) => handlePressClick(event, "A", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
+            return <div key={`a-${index}`} data-match-side="A" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "A", index)} onClick={(event) => handlePressClick(event, "A", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("A", index); } }} style={{ touchAction: "pan-y", cursor: disabled ? "default" : "grab" }}>
               <div className={`match-connect-content${item.image ? " has-img" : ""}`}>
                 {textOf(item, `Item ${index + 1}`) ? <span>{textOf(item, `Item ${index + 1}`)}</span> : null}
                 {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" /> : null}
@@ -311,7 +311,7 @@ function MatchingConnectorGame({ config = {}, valueMap = {}, onChange, disabled 
           {orderB.map((index) => {
             const item = colB[index] || {};
             const paired = usedB.has(index);
-            return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "B", index)} onClick={(event) => handlePressClick(event, "B", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "none", cursor: disabled ? "default" : "grab" }}>
+            return <div key={`b-${index}`} data-match-side="B" data-match-index={index} className={`match-connect-card${paired ? " is-paired" : ""}`} role="button" tabIndex={disabled ? -1 : 0} onPointerDown={(event) => handleCardPress(event, "B", index)} onClick={(event) => handlePressClick(event, "B", index)} onKeyDown={(event) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); handleEndpoint("B", index); } }} style={{ touchAction: "pan-y", cursor: disabled ? "default" : "grab" }}>
               <button type="button" data-match-side="B" data-match-index={index} className="match-connect-dot is-left" ref={(node) => node ? endpointRefs.current.set(`B-${index}`, node) : endpointRefs.current.delete(`B-${index}`)} onPointerDown={(event) => handleDotPress(event, "B", index)} onClick={() => handleDotClick("B", index)} disabled={disabled} aria-label={`Connect Column B item ${index + 1}`} style={{ touchAction: "none" }} />
               <div className={`match-connect-content${item.image ? " has-img" : ""}`}>
                 {textOf(item, `Answer ${index + 1}`) ? <span>{textOf(item, `Answer ${index + 1}`)}</span> : null}

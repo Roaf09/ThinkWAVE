@@ -233,8 +233,8 @@ export default function GuestBuilder() {
               <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
                 <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                   <label style={{ fontSize:12, opacity:0.7, fontWeight:600 }}>Time limit (sec)</label>
-                  <input type="number" min={5} max={600} value={currentQ.timeLimitSec??30}
-                    onChange={e=>updateQ({timeLimitSec:Number(e.target.value)})}
+                  <input type="number" min={5} max={["MCQ","TRUE_FALSE","TYPE_ANSWER"].includes(String(quiz?.template_type||"").toUpperCase()) ? 300 : 600} value={currentQ.timeLimitSec??30}
+                    onChange={e=>updateQ({timeLimitSec:Math.max(5, Math.min(Number(e.target.value), ["MCQ","TRUE_FALSE","TYPE_ANSWER"].includes(String(quiz?.template_type||"").toUpperCase()) ? 300 : 600))})}
                     style={{ width:90, padding:"8px 10px", borderRadius:10, border:"1px solid #2a3b73", background:"#0d1b2e", color:"#e7e9ee", fontSize:14 }} />
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:4 }}>

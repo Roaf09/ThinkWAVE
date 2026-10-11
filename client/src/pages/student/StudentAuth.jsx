@@ -7,7 +7,7 @@ import PublicHeader from "../../components/PublicHeader";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, setAuthToken } from "../../lib/api";
 import { setRole, setToken } from "../../lib/auth";
-import { consumeLastRoute } from "../../lib/lastRoute";
+import { clearLastRoute, consumeLastRoute } from "../../lib/lastRoute";
 import { useColors, useTheme } from "../../context/ThemeContext";
 import { TwIcon } from "../../components/TwUI";
 
@@ -95,6 +95,8 @@ export default function StudentAuth({ onLoginSuccess }) {
         if (!isStrong) return setMsg("Please use a stronger password.");
         if (!matches) return setMsg("Passwords do not match.");
         const { data } = await api.post("/auth/register", { firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password, role: "STUDENT" });
+        // Fresh register must never resume a stale live-session lobby link.
+        try { clearLastRoute(); } catch {}
         const otpNote = data.emailSent ? "OTP sent to your email." : `OTP email was not sent. ${data.devOtp ? `Use dev OTP: ${data.devOtp}` : (data.deliveryWarning || "Check server email settings.")}`;
         setMsg(data.resumedVerification ? `✓ Verification resumed for Student. ${otpNote}` : `✓ Registered as Student. ${otpNote}`);
         setTimeout(() => nav(`/verify?mode=student`, { state: { email: form.email, loginMode: "student" } }), data.emailSent ? 850 : 2600);

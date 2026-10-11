@@ -13,10 +13,27 @@ function formatTimeLimit(seconds) {
 
 export { formatTimeLimit };
 
-// Whole-minute options (30 sec kept); the current value is appended when a
-// legacy question carries a half-minute limit so the select never blanks.
-export function buildTimeOptions(current) {
-  const options = [30, ...Array.from({ length: 10 }, (_, i) => (i + 1) * 60)];
+// Per-template cap: MCQ / True-False / Identification (TYPE_ANSWER) max 5 min,
+// everything else max 10 min. Whole-minute options (30 sec kept).
+export function getMaxTimeSecForTemplate(templateType) {
+  const t = normalizeTemplateType(String(templateType || ""));
+  if (t === "MCQ" || t === "TRUE_FALSE" || t === "TYPE_ANSWER") return 300;
+  return 600;
+}
+
+// Supports both buildTimeOptions(templateType, current) and legacy buildTimeOptions(current).
+export function buildTimeOptions(templateOrCurrent, currentMaybe) {
+  let templateType = null;
+  let current = 30;
+  if (typeof templateOrCurrent === "string" || currentMaybe !== undefined) {
+    templateType = templateOrCurrent;
+    current = currentMaybe ?? 30;
+  } else {
+    current = templateOrCurrent ?? 30;
+  }
+  const max = getMaxTimeSecForTemplate(templateType);
+  const count = Math.min(10, Math.floor(max / 60));
+  const options = [30, ...Array.from({ length: count }, (_, i) => (i + 1) * 60)];
   const value = Number(current ?? 30);
   if (!options.includes(value)) options.push(value);
   return options.sort((a, b) => a - b);
@@ -60,8 +77,8 @@ export function QuestionEditor({ ui, c, quiz, currentQ, updateQ, isMobile, toolb
         <div className="tw-builder-meta-card-3d" style={ui.metaCard}>
           <div style={{ ...ui.metaLabel, display: "flex", alignItems: "center", gap: 6 }}><TwIcon name="clock" size={18} /><span>Time limit</span></div>
           <div style={ui.metaRow}>
-            <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Number(e.target.value) })} style={{ ...ui.metaInput, width: "100%", maxWidth: 140, fontSize: 16 }} className="tw-builder-time-select">
-              {buildTimeOptions(currentQ.timeLimitSec).map((seconds) => <option key={seconds} value={seconds}>{formatTimeLimit(seconds)}</option>)}
+            <select value={currentQ.timeLimitSec ?? 30} onChange={(e) => updateQ({ timeLimitSec: Math.min(Number(e.target.value), getMaxTimeSecForTemplate(quiz?.template_type)) })} style={{ ...ui.metaInput, width: "100%", maxWidth: 140, fontSize: 16 }} className="tw-builder-time-select">
+              {buildTimeOptions(quiz?.template_type, currentQ.timeLimitSec).map((seconds) => <option key={seconds} value={seconds}>{formatTimeLimit(seconds)}</option>)}
             </select>
           </div>
         </div>

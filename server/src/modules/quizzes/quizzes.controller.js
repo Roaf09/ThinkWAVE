@@ -126,6 +126,16 @@ export async function upsertQuestions(req, res) {
     if (Number.isFinite(n) && n > 3) return 3;
     return 1;
   };
+  // Per-template timer cap: MCQ / True-False / Identification max 5 min (300s),
+  // everything else max 10 min (600s). Coerce here so crafted payloads can
+  // never persist outside that range.
+  const normalizedForTimer = normalizeTemplateType(q[0].template_type);
+  const maxTimeSec = ["MCQ", "TRUE_FALSE", "TYPE_ANSWER"].includes(String(normalizedForTimer || "").toUpperCase()) ? 300 : 600;
+  const coerceTimeLimit = (value) => {
+    const n = Math.round(Number(value ?? 30));
+    if (!Number.isFinite(n)) return 30;
+    return Math.max(5, Math.min(n, maxTimeSec));
+  };
   // The array position is the authoritative builder order. Normalizing it here
   // also prevents a malformed/retried client request from creating duplicate
   // active question_order values.
@@ -133,6 +143,7 @@ export async function upsertQuestions(req, res) {
     const next = { ...item, order: index };
     if (next?.config && typeof next.config === "object") {
       next.config = { ...next.config, points: coerceQuestionPoints(next.config.points ?? next.points) };
+      if (next.config.timeLimitSec !== undefined) next.config.timeLimitSec = coerceTimeLimit(next.config.timeLimitSec);
     }
     if (next?.points !== undefined) next.points = coerceQuestionPoints(next.points);
     return next;

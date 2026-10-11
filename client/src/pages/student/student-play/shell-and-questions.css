@@ -486,29 +486,36 @@ body::before {
   }
 
   .quiz-shell-new .qn-prompt-box {
-    min-height: 140px;
-    font-size: 24px;
-    padding: 28px 18px;
+    min-height: 110px;
+    font-size: 20px;
+    padding: 20px 14px;
   }
 
   .quiz-shell-new .choice-btn {
-    min-height: 64px;
-    font-size: 18px;
+    min-height: 54px;
+    font-size: 15px;
+    padding-right: 12px;
+    gap: 10px;
   }
 
   .quiz-shell-new .choice-badge {
-    width: 56px;
-    height: 56px;
-    font-size: 24px;
+    width: 42px;
+    height: 42px;
+    font-size: 18px;
   }
 
   .quiz-shell-new .choice-content {
     gap: 8px;
+    padding: 6px 0;
   }
 
   .quiz-shell-new .choice-img {
-    width: 72px;
-    height: 54px;
+    width: 56px;
+    height: 42px;
+  }
+
+  .quiz-shell-new .choice-text {
+    font-size: 15px;
   }
 }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TwIcon } from "../../../components/TwUI";
 import { TeacherPressButton } from "../TeacherUI";
 import { clampQuestionPoints } from "./quizBuilderUtils";
-import { buildTimeOptions, formatTimeLimit } from "./QuestionEditor";
+import { buildTimeOptions, formatTimeLimit, getMaxTimeSecForTemplate } from "./QuestionEditor";
 
 const headerSelect = {
   background: "#fff",
@@ -141,11 +141,11 @@ export function BuilderTopBar({
             <select
               value={timeValue}
               disabled={!currentQ}
-              onChange={(e) => updateQ?.({ timeLimitSec: Number(e.target.value) })}
+              onChange={(e) => updateQ?.({ timeLimitSec: Math.min(Number(e.target.value), getMaxTimeSecForTemplate(quiz?.template_type)) })}
               aria-label="Time limit"
               style={headerSelect}
             >
-              {buildTimeOptions(currentQ?.timeLimitSec).map((seconds) => <option key={seconds} value={seconds} style={{ color: "#0f172a" }}>{formatTimeLimit(seconds)}</option>)}
+              {buildTimeOptions(quiz?.template_type, currentQ?.timeLimitSec).map((seconds) => <option key={seconds} value={seconds} style={{ color: "#0f172a" }}>{formatTimeLimit(seconds)}</option>)}
             </select>
           </label>
           <label className="flex gap-1 items-center" title="Points for this question">
