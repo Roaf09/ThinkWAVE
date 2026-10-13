@@ -81,6 +81,22 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
   const correctChoices = (answerMode === "TWO" ? rawCorrect.slice(0, 2) : rawCorrect.slice(0, 1)).filter(Boolean);
   const mcqImagesEnabled = cfg.mcqImagesEnabled ?? baseOptions.some((o) => trimText(o?.image));
 
+  // Duplicate detection — mirrors CrosswordEditor's red-outline pattern:
+  // exact (case-insensitive) text matches + exact image matches both flag.
+  // Empty values are ignored so blank choice slots never highlight.
+  const textCounts = {};
+  const imageCounts = {};
+  opts.forEach((opt) => {
+    const t = trimText(opt?.text).toLowerCase();
+    if (t) textCounts[t] = (textCounts[t] || 0) + 1;
+    const im = trimText(opt?.image);
+    if (im) imageCounts[im] = (imageCounts[im] || 0) + 1;
+  });
+  const duplicateTextSet = new Set(Object.entries(textCounts).filter(([, n]) => n > 1).map(([k]) => k));
+  const duplicateImageSet = new Set(Object.entries(imageCounts).filter(([, n]) => n > 1).map(([k]) => k));
+  const hasDuplicateText = mcqMode !== "MODIFIED" && duplicateTextSet.size > 0;
+  const hasDuplicateImages = (mcqMode === "MODIFIED" || mcqImagesEnabled) && duplicateImageSet.size > 0;
+
   function emitOptions(nextOptions, nextCorrect = cor, extraConfig = {}) {
     onChange({ config: { ...cfg, mcqImagesEnabled, ...extraConfig, options: nextOptions, answerMode, mcqMode }, correct: nextCorrect });
   }
@@ -243,6 +259,21 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
           const gameTile = mcqMode === "NORMAL";
           const pal = GAME_CHOICE_PALETTE[i % GAME_CHOICE_PALETTE.length];
           const spanCentered = gameTile && !isMobile && opts.length % 2 === 1 && i === opts.length - 1;
+          // Same duplicate treatment as CrosswordEditor: any choice whose
+          // text (case-insensitive) or image exactly matches another choice
+          // gets the red outline + red badge + warning below.
+          const normText = trimText(opt?.text).toLowerCase();
+          const normImage = trimText(opt?.image);
+          const isTextDup = !!normText && duplicateTextSet.has(normText) && mcqMode !== "MODIFIED";
+          const isImageDup = !!normImage && duplicateImageSet.has(normImage) && (mcqMode === "MODIFIED" || mcqImagesEnabled);
+          const isDup = isTextDup || isImageDup;
+          const dupTitle = isTextDup && isImageDup
+            ? "Duplicate choice — text and image must each be unique"
+            : isTextDup
+              ? "Duplicate choice — all choices must be unique"
+              : isImageDup
+                ? "Duplicate image — each image must be unique"
+                : undefined;
           // Whole-card grab: any press on the choice arms the drag except on
           // controls (answer circle, text field, upload/voice buttons). The
           // text field keeps full typing + text-selection, the circle keeps
@@ -262,9 +293,9 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
             setMcqDragOver(i);
           };
           if (mcqMode === "MODIFIED") {
-            return <div key={opt.id || i} className={`tw-mcq-image-choice${isCorrect ? " is-correct" : ""}`} style={{ border: `4px solid ${pal.border}`, borderRadius: 20, background: pal.face, color: pal.ink, boxShadow: isCorrect ? `0 1px 0 ${pal.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${pal.base}, 0 16px 28px rgba(15,23,42,.16)`, transform: isCorrect ? "translateY(5px)" : "translateY(-3px)", transition: "transform .13s ease, filter .16s ease, box-shadow .13s ease" }}>
-              <button type="button" className={`tw-mcq-correct-dot tw-mcq-image-correct-letter${answerMode === "TWO" ? " is-two-answer" : ""}`} title={`Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ border: `4px solid ${pal.border}`, borderRadius: answerMode === "TWO" ? 12 : "50%", background: pal.badge, color: pal.ink, boxShadow: `0 3px 0 ${pal.base}`, transition: "border-radius .28s cubic-bezier(.22,1,.36,1), transform .24s ease, background .22s ease, border-color .22s ease" }}>{isCorrect ? <TwIcon name="check" size={30} /> : letter}</button>
-              <ImageUploadTile value={opt.image} label={`Upload image ${letter}`} onChange={(value) => updateImage(i, value)} c={c} accent={pal.border} />
+            return <div key={opt.id || i} title={dupTitle} className={`tw-mcq-image-choice${isCorrect ? " is-correct" : ""}`} style={{ border: `4px solid ${isDup ? "#ef4444" : pal.border}`, borderRadius: 20, background: isDup ? "rgba(239,68,68,.12)" : pal.face, color: isDup ? "#991b1b" : pal.ink, boxShadow: isDup ? `0 8px 0 #991b1b, 0 16px 28px rgba(15,23,42,.16)` : isCorrect ? `0 1px 0 ${pal.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${pal.base}, 0 16px 28px rgba(15,23,42,.16)`, transform: isCorrect ? "translateY(5px)" : "translateY(-3px)", transition: "transform .13s ease, filter .16s ease, box-shadow .13s ease" }}>
+              <button type="button" className={`tw-mcq-correct-dot tw-mcq-image-correct-letter${answerMode === "TWO" ? " is-two-answer" : ""}`} title={dupTitle || `Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={{ border: `4px solid ${isDup ? "#ef4444" : pal.border}`, borderRadius: answerMode === "TWO" ? 12 : "50%", background: isDup ? "#fecaca" : pal.badge, color: isDup ? "#991b1b" : pal.ink, boxShadow: `0 3px 0 ${isDup ? "#991b1b" : pal.base}`, transition: "border-radius .28s cubic-bezier(.22,1,.36,1), transform .24s ease, background .22s ease, border-color .22s ease" }}>{isCorrect ? <TwIcon name="check" size={30} /> : letter}</button>
+              <ImageUploadTile value={opt.image} label={`Upload image ${letter}`} onChange={(value) => updateImage(i, value)} c={c} accent={isImageDup ? "#ef4444" : pal.border} invalid={isImageDup} />
             </div>;
           }
           return <div
@@ -387,11 +418,11 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
               setMcqDragOver(null);
             }}
             style={gameTile ? {
-              border: `4px solid ${pal.border}`,
+              border: `4px solid ${isDup ? "#ef4444" : pal.border}`,
               borderRadius: 20,
-              background: pal.face,
-              color: pal.ink,
-              boxShadow: isCorrect ? `0 1px 0 ${pal.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${pal.base}, 0 16px 28px rgba(15,23,42,.16)`,
+              background: isDup ? "rgba(239,68,68,.12)" : pal.face,
+              color: isDup ? "#991b1b" : pal.ink,
+              boxShadow: isDup ? `0 8px 0 #991b1b, 0 16px 28px rgba(15,23,42,.16)` : isCorrect ? `0 1px 0 ${pal.base}, 0 8px 18px rgba(15,23,42,.18)` : `0 8px 0 ${pal.base}, 0 16px 28px rgba(15,23,42,.16)`,
               transform: isCorrect ? "translateY(5px)" : "translateY(-3px)",
               transition: "transform .13s ease, filter .16s ease, box-shadow .13s ease",
               touchAction: "pan-y",
@@ -402,11 +433,12 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
               padding: 22,
               ...(spanCentered ? { gridColumn: "1 / -1", justifySelf: "center", width: "calc(50% - 6px)", boxSizing: "border-box" } : null),
             } : { borderColor: isCorrect ? c.accent : c.border, background: isCorrect ? `${c.accent}12` : c.cardBg, touchAction: "pan-y" }}
+            title={dupTitle}
           >
-            <button type="button" className={`tw-mcq-correct-dot tw-mcq-letter-selector${answerMode === "TWO" ? " is-two-answer" : ""}${gameTile ? " tw-mcq-game-badge" : ""}`} title={`Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={gameTile ? {
+            <button type="button" className={`tw-mcq-correct-dot tw-mcq-letter-selector${answerMode === "TWO" ? " is-two-answer" : ""}${gameTile ? " tw-mcq-game-badge" : ""}`} title={dupTitle || `Mark choice ${letter} as correct`} onClick={() => toggleCorrect(opt)} disabled={!hasContent} style={gameTile ? {
               width: 56, height: 56, flex: "none", borderRadius: answerMode === "TWO" ? 12 : "50%",
-              border: `4px solid ${pal.border}`, background: pal.badge, color: pal.ink,
-              boxShadow: `0 3px 0 ${pal.base}`, fontWeight: 1000, fontSize: 24,
+              border: `4px solid ${isDup ? "#ef4444" : pal.border}`, background: isDup ? "#fecaca" : pal.badge, color: isDup ? "#991b1b" : pal.ink,
+              boxShadow: `0 3px 0 ${isDup ? "#991b1b" : pal.base}`, fontWeight: 1000, fontSize: 24,
               display: "grid", placeItems: "center", cursor: hasContent ? "pointer" : "not-allowed",
             } : { borderRadius: answerMode === "TWO" ? 8 : "50%", transition: "border-radius .28s cubic-bezier(.22,1,.36,1), transform .24s ease, background .22s ease, border-color .22s ease", borderColor: isCorrect ? c.accent : c.textMuted, background: isCorrect ? c.accent : "transparent", color: isCorrect ? "#fff" : c.text }}>{isCorrect ? <TwIcon name="check" size={gameTile ? 22 : 16} /> : letter}</button>
             <div className="tw-mcq-normal-content" style={gameTile ? { flex: "1 1 auto", minWidth: 0 } : undefined}>
@@ -422,13 +454,14 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
                 style={gameTile ? {
                   background: "transparent", border: "none", outline: "none", resize: "none", overflow: "hidden",
                   width: "100%", boxSizing: "border-box", lineHeight: 1.45,
-                  color: pal.ink, fontWeight: 900, fontSize: 18, fontFamily: "inherit", padding: 0,
+                  color: isDup ? "#991b1b" : pal.ink, fontWeight: 900, fontSize: 18, fontFamily: "inherit", padding: 0,
                   textAlign: "center",
                 } : { ...ui.input, resize: "none", overflow: "hidden", lineHeight: 1.45, minHeight: 38, textAlign: "center" }}
+                title={dupTitle}
               />
               {(mcqImagesEnabled || cfg.voiceRecord) && (
                 <div className={`tw-mcq-option-media-row${mcqImagesEnabled && cfg.voiceRecord ? " is-dual" : " is-single"}`}>
-                  {mcqImagesEnabled && <span className="tw-mcq-media-fixed-square"><ImageUploadTile compact value={opt.image} label={`Upload option ${letter} image`} onChange={(value) => updateImage(i, value)} c={c} accent={pal.border} /></span>}
+                  {mcqImagesEnabled && <span className="tw-mcq-media-fixed-square" title={isImageDup ? "Duplicate image — each image must be unique" : undefined}><ImageUploadTile compact value={opt.image} label={`Upload option ${letter} image`} onChange={(value) => updateImage(i, value)} c={c} accent={isImageDup ? "#ef4444" : pal.border} invalid={isImageDup} /></span>}
                   {cfg.voiceRecord && <div className="tw-builder-choice-record"><span>Choice {letter} recording</span><VoiceRecorderButton value={(Array.isArray(cfg.voiceAnswers) ? cfg.voiceAnswers : [])[i] || ""} onChange={(value) => updateRecording(i, value)} /></div>}
                 </div>
               )}
@@ -440,10 +473,12 @@ export function McqEditor({ category, q, onChange, ui, c, isMobile = false }) { 
               aria-label="Choice grip (drag from anywhere on the choice)"
               tabIndex={-1}
             >☰</button>
-            {gameTile && <span style={{ position: "absolute", right: 12, bottom: 8, fontSize: 11, fontWeight: 800, color: pal.ink, opacity: 0.65 }}>{opt.text.length}/255</span>}
+            {gameTile && <span style={{ position: "absolute", right: 12, bottom: 8, fontSize: 11, fontWeight: 800, color: isDup ? "#991b1b" : pal.ink, opacity: 0.65 }}>{opt.text.length}/255</span>}
           </div>;
         })}
       </div>
+      {hasDuplicateText && <div className="text-[12px] font-extrabold mt-[6px]" style={{ color: "#dc2626" }}>Duplicate choices are not allowed — all choices must be unique.</div>}
+      {hasDuplicateImages && <div className="text-[12px] font-extrabold mt-[6px]" style={{ color: "#dc2626" }}>Duplicate images are not allowed — each image must be unique.</div>}
       <div ref={dragFollowerRef} aria-hidden="true" style={{ display: "none", position: "fixed", left: 0, top: 0, zIndex: 9999, pointerEvents: "none", margin: 0 }} />
 
       {answerMode === "TWO" && <div className="mt-[14px] text-[12px]" style={{ color: c.textMuted }}>Two-answer mode gives 50% of the question points for each correct selected answer.</div>}

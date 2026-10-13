@@ -51,7 +51,7 @@ export function MediaInput({ label, value, placeholder, onChange, ui, c }) {
   );
 }
 
-export function ImageUploadTile({ value, label = "Upload image", onChange, c, accent = "#2b6cff", compact = false, hideRemove = false, solid = null }) {
+export function ImageUploadTile({ value, label = "Upload image", onChange, c, accent = "#2b6cff", compact = false, hideRemove = false, solid = null, invalid = false, invalidTitle = "Duplicate image — each image must be unique" }) {
   const [dragOver, setDragOver] = useState(false);
   async function handleFile(file) {
     if (!file || !/^image\//.test(file.type || "")) return;
@@ -71,11 +71,13 @@ export function ImageUploadTile({ value, label = "Upload image", onChange, c, ac
   return (
     <div
       className={`tw-builder-image-tile${compact ? " is-compact" : ""}`}
+      title={invalid ? invalidTitle : undefined}
       style={{
-        borderColor: dragOver ? accent : `${accent}99`,
-        background: value ? c.cardBg : dragOver ? `${accent}22` : `${accent}0e`,
+        borderColor: dragOver && !invalid ? accent : `${(invalid ? "#ef4444" : accent)}99`,
+        background: value ? (invalid ? "rgba(239,68,68,.12)" : c.cardBg) : dragOver ? `${accent}22` : `${accent}0e`,
         ...(solidStyle || {}),
-        ...((!value && !solid) ? { borderStyle: "dashed", borderWidth: 2, borderRadius: 8 } : null),
+        ...((!value && !solid && !invalid) ? { borderStyle: "dashed", borderWidth: 2, borderRadius: 8 } : null),
+        ...(invalid ? { borderStyle: "solid", borderWidth: 3, borderColor: "#ef4444", borderRadius: 12, background: value ? "rgba(239,68,68,.12)" : "rgba(239,68,68,.12)", boxShadow: "0 5px 0 #991b1b, 0 12px 24px rgba(15,23,42,.14)" } : null),
       }}
       onDragOver={(e) => { e.preventDefault(); if (!value) setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
