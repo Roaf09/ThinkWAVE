@@ -4,9 +4,9 @@
 -- Use this for a full reset instead of running separate migrations.
 -- ============================================================
 
-DROP DATABASE IF EXISTS thinkwave;
-CREATE DATABASE thinkwave CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE thinkwave;
+DROP DATABASE IF EXISTS defaultdb;
+CREATE DATABASE defaultdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE defaultdb;
 
 -- -----------------------------------------------------------
 -- 1. users

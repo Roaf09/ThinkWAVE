@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { templateTone } from "../../../../lib/templatePalette";
 import { TwIcon } from "../../../../components/TwUI";
 import { TeacherPressButton } from "../../TeacherUI";
@@ -25,12 +25,12 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
   // "Start now": stamps the schedule start with the moment of the click so the
   // assignment opens right away. The end time is kept if it is still valid
   // (in the future and within the 1-week limit from now); otherwise it
-  // defaults to 3 days from now, the same length the schedule editor suggests.
+  // defaults to a day from now, the same length the schedule editor suggests.
   function startNow() {
     const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
     const now = new Date();
     const currentEnd = form.availableUntil ? new Date(form.availableUntil) : null;
-    let until = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd > now ? currentEnd : new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    let until = currentEnd && !Number.isNaN(currentEnd.getTime()) && currentEnd > now ? currentEnd : new Date(now.getTime() + 24 * 60 * 60 * 1000);
     if (until.getTime() - now.getTime() > WEEK_MS) until = new Date(now.getTime() + WEEK_MS);
     setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(now), availableUntil: toLocalDateTimeValue(until) }));
     if (tutorialStage === "assign_schedule") onTutorialStage?.("assign_class");
@@ -82,20 +82,32 @@ export function AssignModal({ quiz, folders, c, dark, onClose, onSubmit, tutoria
 
 function ScheduleEditor({ c, accent, form, setForm, onClose, onApply }) {
   const MAX_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
   const startDefault = parseScheduleDate(form.availableFrom, new Date());
-  const endDefault = parseScheduleDate(form.availableUntil, addDaysAtNoon(startDefault, 3));
+  const endDefault = parseScheduleDate(form.availableUntil, new Date(startDefault.getTime() + DAY_MS));
   const [draft, setDraft] = useState({ availableFrom: toLocalDateTimeValue(startDefault), availableUntil: toLocalDateTimeValue(endDefault) });
   const [activeField, setActiveField] = useState("availableFrom");
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
+  const [timeText, setTimeText] = useState(() => clockText(startDefault));
+  useEffect(() => { setTimeText(clockText(activeDate)); }, [activeField]);
   const [viewDate, setViewDate] = useState(() => new Date(startDefault.getFullYear(), startDefault.getMonth(), 1));
   const activeDate = parseScheduleDate(draft[activeField], activeField === "availableFrom" ? startDefault : endDefault);
   const fromDate = parseScheduleDate(draft.availableFrom, startDefault);
   const days = buildCalendarDays(viewDate);
-  const timeOptions = buildTimeOptions();
 
   useEffect(() => { const date = parseScheduleDate(draft[activeField], activeDate); setViewDate(new Date(date.getFullYear(), date.getMonth(), 1)); }, [activeField]);
 
   function setDatePart(day) { const next = new Date(activeDate); next.setFullYear(viewDate.getFullYear(), viewDate.getMonth(), day); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
   function setTimePart(value) { const [hour, minute] = value.split(":").map(Number); const next = new Date(activeDate); next.setHours(hour, minute, 0, 0); setDraft((current) => ({ ...current, [activeField]: toLocalDateTimeValue(next) })); }
+  function typeTime(raw) {
+    const clean = raw.replace(/[^0-9:]/g, "").slice(0, 5);
+    setTimeText(clean);
+    const parsed = parseTimeText(clean);
+    if (parsed) setTimePart(`${pad2(parsed.hour)}:${pad2(parsed.minute)}`);
+  }
+  function setHourPart(hour) { const value = `${pad2(hour)}:${pad2(activeDate.getMinutes())}`; setTimePart(value); setTimeText(value); }
+  function setMinutePart(minute) { const value = `${pad2(activeDate.getHours())}:${pad2(minute)}`; setTimePart(value); setTimeText(value); }
+  function toggleTimePicker(event) { event.preventDefault(); setTimePickerOpen((open) => !open); }
   function isEndDayTooFar(day) {
     if (activeField !== "availableUntil" || !day) return false;
     const candidate = new Date(activeDate);
@@ -110,7 +122,6 @@ function ScheduleEditor({ c, accent, form, setForm, onClose, onApply }) {
     setForm((current) => ({ ...current, availableFrom: toLocalDateTimeValue(from), availableUntil: toLocalDateTimeValue(until) })); onClose(); onApply?.();
   }
 
-  const selectedTime = minutesToTimeValue(activeDate.getHours() * 60 + activeDate.getMinutes());
   const acc = accent || c.accent;
   return <div className="tw-schedule-overlay" style={calendarOverlay(c)} onClick={onClose} onPointerDown={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
     <div role="dialog" aria-modal="true" className="tw-schedule-dialog w-[min(94vw,440px)] rounded-[12px] overflow-hidden" style={{ background: solidModalBg(c), color: c.text, boxShadow: "0 24px 60px rgba(0,0,0,.28)", border: `1px solid ${acc}` }} onClick={(event) => event.stopPropagation()}>
@@ -121,19 +132,54 @@ function ScheduleEditor({ c, accent, form, setForm, onClose, onApply }) {
         <div className="grid grid-cols-[repeat(7,1fr)] text-center font-[800] gap-y-[10px] mb-[8px]" style={{ color: c.textMuted }}>{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => <div key={day}>{day}</div>)}</div>
         <div className="tw-schedule-days grid grid-cols-[repeat(7,1fr)] gap-[8px] text-center">{days.map((day, index) => { const selected = day && sameCalendarDay(activeDate, viewDate, day); const tooFar = isEndDayTooFar(day); return <button key={`${day || "blank"}-${index}`} type="button" disabled={!day || tooFar} title={tooFar ? "Up to 1 week from start only" : undefined} onClick={() => setDatePart(day)} style={{ ...calendarDayBtn(c, selected, !day, acc), ...(tooFar && day ? { opacity: 0.35, cursor: "not-allowed" } : {}) }}>{day || ""}</button>; })}</div>
       </div>
-      <div className="px-[20px] pt-[18px] pb-[16px]" style={{ borderTop: `1px solid ${c.border}` }}><div className="font-[900] text-[17px] mb-[8px]">Time</div><select value={selectedTime} onChange={(event) => setTimePart(event.target.value)} className="h-[46px] font-[700]" style={{ ...inputStyle(c), borderColor: acc }}>{timeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+      <div className="px-[20px] pt-[18px] pb-[16px]" style={{ borderTop: `1px solid ${c.border}` }}><div className="font-[900] text-[17px] mb-[8px]">Time</div>
+        <div className="relative">
+          {timePickerOpen && <div role="dialog" aria-label="Pick time" className="tw-time-picker rounded-[12px] p-[10px] mb-[8px] grid grid-cols-2 gap-[8px]" style={{ position: "absolute", left: 0, right: 0, bottom: "calc(100% + 8px)", zIndex: 30, background: solidModalBg(c), border: `1px solid ${acc}`, boxShadow: "0 18px 44px rgba(0,0,0,.30)" }}>
+            <WheelColumn c={c} acc={acc} label="Hour" count={24} value={activeDate.getHours()} onChange={setHourPart} />
+            <WheelColumn c={c} acc={acc} label="Minute" count={60} value={activeDate.getMinutes()} onChange={setMinutePart} />
+          </div>}
+          <input type="text" inputMode="numeric" aria-label="Time" placeholder="HH:MM" maxLength={5} value={timeText} onChange={(event) => typeTime(event.target.value)} onBlur={() => setTimeText(clockText(activeDate))} onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} className="h-[46px] w-full font-[700] text-center tw-time-input" style={{ ...inputStyle(c), borderColor: acc, paddingLeft: 48, paddingRight: 48 }} />
+          <button type="button" aria-label="Toggle time picker" aria-haspopup="dialog" aria-expanded={timePickerOpen} onClick={toggleTimePicker} style={{ position: "absolute", top: "50%", right: 7, transform: "translateY(-50%)", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, border: "none", background: c.cardBg2, color: acc, cursor: "pointer" }}><TwIcon name="clock" size={18} /></button>
+        </div>
+      </div>
       <div className="px-[20px] pt-0 pb-[22px] flex justify-end items-center gap-[14px]"><button type="button" onClick={onClose} className="tw-teacher-text-cancel">Cancel</button><TeacherPressButton type="button" tone="blue" style={{ "--tw-press-face": acc, "--tw-press-base": `color-mix(in srgb, ${acc} 62%, #000)`, "--tw-press-border": acc }} onClick={apply}>Set</TeacherPressButton></div>
     </div>
   </div>;
 }
 
 function parseScheduleDate(value, fallback) { const date = value ? new Date(value) : new Date(fallback); return Number.isNaN(date.getTime()) ? new Date(fallback) : date; }
-function addDaysAtNoon(base, days) { const date = new Date(base); date.setDate(date.getDate() + days); date.setHours(12, 0, 0, 0); return date; }
 function toLocalDateTimeValue(date) { const value = new Date(date); const pad = (number) => String(number).padStart(2, "0"); return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`; }
 function buildCalendarDays(viewDate) { const firstDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay(); const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate(); return [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)]; }
 function sameCalendarDay(date, viewDate, day) { return date.getFullYear() === viewDate.getFullYear() && date.getMonth() === viewDate.getMonth() && date.getDate() === day; }
-function buildTimeOptions() { const rows = []; for (let hour = 0; hour < 24; hour += 1) rows.push({ value: `${String(hour).padStart(2, "0")}:00`, label: new Date(2026, 0, 1, hour, 0).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }); return rows; }
-function minutesToTimeValue(minutes) { const rounded = Math.round(minutes / 60) * 60; const hour = Math.floor((rounded % 1440) / 60); const minute = 0; return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`; }
+const TIME_WHEEL_ITEM_H = 36;
+const TIME_WHEEL_VIEW_H = 180;
+
+const pad2 = (number) => String(number).padStart(2, "0");
+function clockText(date) { return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`; }
+function parseTimeText(text) {
+  const match = /^(\d{1,2})(?::(\d{0,2}))?/.exec(text);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = match[2] ? Number(match[2]) : 0;
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function WheelColumn({ c, acc, label, count, value, onChange }) {
+  const ref = useRef(null);
+  useEffect(() => { const node = ref.current; if (node) node.scrollTop = value * TIME_WHEEL_ITEM_H - (TIME_WHEEL_VIEW_H - TIME_WHEEL_ITEM_H) / 2; }, [value, count]);
+  return <div>
+    <div className="text-center text-[11px] font-[800] uppercase tracking-[.08em] mb-[6px]" style={{ color: c.textMuted }}>{label}</div>
+    <div ref={ref} className="overflow-y-auto rounded-[8px]" style={{ height: TIME_WHEEL_VIEW_H, background: c.cardBg2, scrollbarWidth: "thin" }}>
+      <div style={{ height: (TIME_WHEEL_VIEW_H - TIME_WHEEL_ITEM_H) / 2 }} />
+      {Array.from({ length: count }, (_, index) => {
+        const selected = index === value;
+        return <button key={index} type="button" onClick={() => onChange(index)} className="w-full text-center" style={{ height: TIME_WHEEL_ITEM_H, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: selected ? 900 : 700, color: selected ? acc : c.text, background: selected ? `color-mix(in srgb, ${acc} 14%, transparent)` : "transparent", cursor: "pointer" }}>{String(index).padStart(2, "0")}</button>;
+      })}
+      <div style={{ height: (TIME_WHEEL_VIEW_H - TIME_WHEEL_ITEM_H) / 2 }} />
+    </div>
+  </div>;
+}
 function calendarNavBtn(c) { return { width: 42, height: 42, borderRadius: 8, border: "none", background: c.cardBg2, color: c.text, fontSize: 28, fontWeight: 900, lineHeight: 1, cursor: "pointer" }; }
 function calendarDayBtn(c, selected, blank, accent) { const acc = accent || c.accent; return { height: 42, borderRadius: 6, border: selected ? `2px solid ${acc}` : "none", background: selected ? acc : "transparent", color: blank ? "transparent" : selected ? "#fff" : c.text, fontSize: 17, fontWeight: selected ? 900 : 600, cursor: blank ? "default" : "pointer", opacity: blank ? 0 : 1, boxShadow: selected ? `0 0 0 3px color-mix(in srgb, ${acc} 25%, transparent)` : "none" }; }
 function segmentBtn(c, active, accent) { const acc = accent || c.accent; return { border: `1px solid ${active ? acc : c.border}`, background: active ? `${acc}18` : c.cardBg2, color: active ? acc : c.text, borderRadius: 12, padding: "10px 12px", textAlign: "left", fontWeight: 900, cursor: "pointer", lineHeight: 1.35, boxShadow: active ? `0 0 0 3px color-mix(in srgb, ${acc} 18%, transparent)` : "none" }; }
